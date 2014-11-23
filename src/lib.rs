@@ -23,6 +23,13 @@ pub struct Error {
     e: ffi::DBusError,
 }
 
+fn c_str_to_slice(c: & *const libc::c_char) -> Option<&str> {
+    if *c == ptr::null() { None }
+    else { std::str::from_utf8( unsafe { std::mem::transmute::<_,&[u8]>(
+        std::raw::Slice { data: *c as *const u8, len: libc::strlen(*c) as uint }
+    )})}
+}
+
 impl Error {
 
     pub fn new(e: ffi::DBusError) -> Error {
@@ -43,16 +50,12 @@ impl Error {
 
     pub fn get(&self) -> &ffi::DBusError { &self.e }
 
-    pub fn name(&self) -> Option<String> {
-        if self.e.name == ptr::null() { return None; }
-        let c = unsafe { CString::new(self.e.name, false) };
-        c.as_str().map(|x| x.to_string())
+    pub fn name(&self) -> Option<&str> {
+        c_str_to_slice(&self.e.name)
     }
 
-    pub fn message(&self) -> Option<String> {
-        if self.e.message == ptr::null() { return None; }
-        let c = unsafe { CString::new(self.e.message, false) };
-        c.as_str().map(|x| x.to_string())
+    pub fn message(&self) -> Option<&str> {
+        c_str_to_slice(&self.e.message)
     }
 
     fn get_mut(&mut self) -> &mut ffi::DBusError { &mut self.e }
@@ -67,14 +70,14 @@ impl Drop for Error {
 
 impl std::fmt::Show for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::FormatError> {
-        write!(f, "DBus error: {} (type: {})", self.message().unwrap_or("".to_string()),
-            self.name().unwrap_or("".to_string()))
+        write!(f, "DBus error: {} (type: {})", self.message().unwrap_or(""),
+            self.name().unwrap_or(""))
     }
 }
 
 impl std::error::Error for Error {
     fn description(&self) -> &str { "DBus error" }
-    fn detail(&self) -> Option<String> { self.message() }
+    fn detail(&self) -> Option<String> { self.message().map(|x| x.to_string()) }
 }
 
 fn new_dbus_message_iter() -> ffi::DBusMessageIter {
@@ -198,18 +201,18 @@ impl MessageItems {
         match self {
             &Str(ref s) => unsafe {
                 let c = s.to_c_str();
-                let p: *const libc::c_void = std::mem::transmute(&c);
+                let p = std::mem::transmute(&c);
                 ffi::dbus_message_iter_append_basic(i, ffi::DBUS_TYPE_STRING, p);
             },
-            &Bool(ref b) => self.iter_append_basic(i, *b as i64),
-            &Byte(ref b) => self.iter_append_basic(i, *b as i64),
-            &Int16(ref b) => self.iter_append_basic(i, *b as i64),
-            &Int32(ref b) => self.iter_append_basic(i, *b as i64),
-            &Int64(ref b) => self.iter_append_basic(i, *b as i64),
-            &UInt16(ref b) => self.iter_append_basic(i, *b as i64),
-            &UInt32(ref b) => self.iter_append_basic(i, *b as i64),
-            &UInt64(ref b) => self.iter_append_basic(i, *b as i64),
-            &Array(ref b, ref t) => iter_append_array(i, b, *t),
+            &Bool(b) => self.iter_append_basic(i, b as i64),
+            &Byte(b) => self.iter_append_basic(i, b as i64),
+            &Int16(b) => self.iter_append_basic(i, b as i64),
+            &Int32(b) => self.iter_append_basic(i, b as i64),
+            &Int64(b) => self.iter_append_basic(i, b as i64),
+            &UInt16(b) => self.iter_append_basic(i, b as i64),
+            &UInt32(b) => self.iter_append_basic(i, b as i64),
+            &UInt64(b) => self.iter_append_basic(i, b as i64),
+            &Array(ref b, t) => iter_append_array(i, b, t),
         }
     }
 
@@ -414,7 +417,7 @@ mod test {
         let mut c = Connection::get_private(BusType::Session).unwrap();
         let m = Message::new_method_call("foo.bar", "/", "foo.bar", "FooBar").unwrap();
         let e = c.send_with_reply_and_block(m, 2000).err().unwrap();
-        assert!(e.name().unwrap().as_slice() == "org.freedesktop.DBus.Error.ServiceUnknown");
+        assert!(e.name().unwrap() == "org.freedesktop.DBus.Error.ServiceUnknown");
     }
 
     #[test]
@@ -452,14 +455,14 @@ mod test {
         spawn(proc() {
             let mut c = Connection::get_private(BusType::Session).unwrap();
             c.register_object_path("/hello").unwrap();
-            println!("Waiting...");
+            // println!("Waiting...");
             tx.send(c.unique_name());
             loop {
                 let n = c.iter(1000).next();
                 if n.is_none() { break; }
                 let n = n.unwrap();
 
-                println!("Found message... ({})", n);
+                // println!("Found message... ({})", n);
                 match n {
                     ConnectionItem::Msg(ref m) => {
                         let reply = Message::new_method_return(m).unwrap();
