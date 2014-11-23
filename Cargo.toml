@@ -1,0 +1,6 @@
+[package]
+
+name = "rust-dbus-sys"
+version = "0.0.1"
+authors = ["David Henningsson <david.henningsson@canonical.com>"]
+# link = "dbus-1"
