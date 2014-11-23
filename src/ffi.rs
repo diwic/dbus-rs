@@ -100,11 +100,13 @@ pub struct DBusMessageIter {
     pub pad3: *mut (),
 }
 
+pub type DBusHandleMessageFunction = Option<
+        extern fn(conn: *mut DBusConnection, msg: *mut DBusMessage, user_data: *mut c_void) -> DBusHandlerResult>;
+
 #[repr(C)]
 pub struct DBusObjectPathVTable {
     pub unregister_function: Option<extern fn(conn: *mut DBusConnection, user_data: *mut c_void)>,
-    pub message_function: Option<
-        extern fn(conn: *mut DBusConnection, msg: *mut DBusMessage, user_data: *mut c_void) -> DBusHandlerResult>,
+    pub message_function: DBusHandleMessageFunction,
     pub dbus_internal_pad1: Option<extern fn()>,
     pub dbus_internal_pad2: Option<extern fn()>,
     pub dbus_internal_pad3: Option<extern fn()>,
@@ -119,6 +121,10 @@ extern "C" {
         flags: c_uint, error: *mut DBusError) -> c_int;
     pub fn dbus_bus_release_name(conn: *mut DBusConnection, name: *const c_char,
         error: *mut DBusError) -> c_int;
+    pub fn dbus_bus_add_match(conn: *mut DBusConnection, rule: *const c_char,
+        error: *mut DBusError);
+    pub fn dbus_bus_remove_match(conn: *mut DBusConnection, rule: *const c_char,
+        error: *mut DBusError);
 
     pub fn dbus_connection_close(conn: *mut DBusConnection);
     pub fn dbus_connection_dispatch(conn: *mut DBusConnection) -> DBusDispatchStatus;
@@ -136,6 +142,10 @@ extern "C" {
         error: *mut DBusError) -> u32;
     pub fn dbus_connection_unregister_object_path(conn: *mut DBusConnection,
         path: *const c_char) -> u32;
+    pub fn dbus_connection_add_filter(conn: *mut DBusConnection, function: DBusHandleMessageFunction,
+        user_data: *mut c_void, free_data_function: Option<extern fn(memory: *mut c_void)>) -> u32;
+    pub fn dbus_connection_remove_filter(conn: *mut DBusConnection, function: DBusHandleMessageFunction,
+        user_data: *mut c_void) -> u32;
 
     pub fn dbus_error_init(error: *mut DBusError);
     pub fn dbus_error_free(error: *mut DBusError);
@@ -143,9 +153,15 @@ extern "C" {
     pub fn dbus_message_new_method_call(destination: *const c_char, path: *const c_char,
         iface: *const c_char, method: *const c_char) -> *mut DBusMessage;
     pub fn dbus_message_new_method_return(message: *mut DBusMessage) -> *mut DBusMessage;
+    pub fn dbus_message_new_signal(path: *const c_char,
+        iface: *const c_char, name: *const c_char) -> *mut DBusMessage;
     pub fn dbus_message_ref(message: *mut DBusMessage) -> *mut DBusMessage;
     pub fn dbus_message_unref(message: *mut DBusMessage);
     pub fn dbus_message_get_type(message: *mut DBusMessage) -> c_int;
+    pub fn dbus_message_is_method_call(message: *mut DBusMessage, iface: *const c_char, method: *const c_char) -> u32;
+    pub fn dbus_message_is_signal(message: *mut DBusMessage, iface: *const c_char, signal_name: *const c_char) -> u32;
+    pub fn dbus_message_get_interface(message: *mut DBusMessage) -> *const c_char;
+    pub fn dbus_message_get_member(message: *mut DBusMessage) -> *const c_char;
 
     pub fn dbus_message_iter_append_basic(iter: *mut DBusMessageIter, t: c_int, value: *const c_void) -> u32;
     pub fn dbus_message_iter_init(message: *mut DBusMessage, iter: *mut DBusMessageIter) -> u32;

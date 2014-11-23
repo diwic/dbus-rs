@@ -4,6 +4,7 @@ pub use ffi::DBusBusType as BusType;
 pub use ffi::DBusNameFlag as NameFlag;
 pub use ffi::DBusRequestNameReply as RequestNameReply;
 pub use ffi::DBusReleaseNameReply as ReleaseNameReply;
+pub use ffi::DBusMessageType as MessageType;
 
 use std::c_str::CString;
 use std::ptr;
@@ -240,7 +241,17 @@ impl Message {
         if ptr == ptr::null_mut() { None } else { Some(Message { msg: ptr} ) }
     }
 
+    pub fn new_signal(path: &str, iface: &str, method: &str) -> Option<Message> {
+        init_dbus();
+        let (p, i, m) = (path.to_c_str(), iface.to_c_str(), method.to_c_str());
+        let ptr = unsafe {
+            ffi::dbus_message_new_signal(p.as_ptr(), i.as_ptr(), m.as_ptr())
+        };
+        if ptr == ptr::null_mut() { None } else { Some(Message { msg: ptr} ) }
+    }
+
     pub fn new_method_return(m: &Message) -> Option<Message> {
+        init_dbus();
         let ptr = unsafe { ffi::dbus_message_new_method_return(m.msg) };
         if ptr == ptr::null_mut() { None } else { Some(Message { msg: ptr} ) }
     }
@@ -265,6 +276,17 @@ impl Message {
         unsafe { ffi::dbus_message_iter_init_append(self.msg, &mut i) };
         MessageItems::copy_to_iter(&mut i, v);
     }
+
+    pub fn msg_type(&self) -> MessageType {
+        unsafe { std::mem::transmute(ffi::dbus_message_get_type(self.msg)) }
+    }
+
+    pub fn headers(&self) -> (MessageType, Option<String>, Option<String>) {
+        let i = unsafe { ffi::dbus_message_get_interface(self.msg) };
+        let m = unsafe { ffi::dbus_message_get_member(self.msg) };
+        (self.msg_type(), c_str_to_slice(&i).map(|s| s.to_string()), c_str_to_slice(&m).map(|s| s.to_string()))
+    }
+
 }
 
 impl Drop for Message {
@@ -277,15 +299,15 @@ impl Drop for Message {
 
 impl std::fmt::Show for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::FormatError> {
-        let r:ffi::DBusMessageType = unsafe { std::mem::transmute(ffi::dbus_message_get_type(self.msg)) };
-        write!(f, "{}", r)
+        write!(f, "{}", self.headers())
     }
 }
 
 #[deriving(Show)]
 pub enum ConnectionItem {
     Nothing,
-    Msg(Message),
+    MethodCall(Message),
+    Signal(Message),
 }
 
 pub struct ConnectionItems<'a> {
@@ -296,11 +318,11 @@ pub struct ConnectionItems<'a> {
 impl<'a> Iterator<ConnectionItem> for ConnectionItems<'a> {
     fn next(&mut self) -> Option<ConnectionItem> {
         loop {
-            let i = self.c.pending_items.pop_front();
+            let i = self.c.i.pending_items.pop_front();
             if i.is_some() { return i; }
 
-            let r = unsafe { ffi::dbus_connection_read_write_dispatch(self.c.conn, self.timeout_ms as libc::c_int) };
-            if !self.c.pending_items.is_empty() { continue };
+            let r = unsafe { ffi::dbus_connection_read_write_dispatch(self.c.i.conn, self.timeout_ms as libc::c_int) };
+            if !self.c.i.pending_items.is_empty() { continue };
 
             if r == 0 { return None; }
             return Some(Nothing);
@@ -308,21 +330,58 @@ impl<'a> Iterator<ConnectionItem> for ConnectionItems<'a> {
     }
 }
 
-pub struct Connection {
+/* Since we register callbacks with userdata pointers,
+   we need to make sure the connection pointer does not move around.
+   Hence this extra indirection. */
+struct IConnection {
     conn: *mut ffi::DBusConnection,
     pending_items: DList<ConnectionItem>,
 }
 
+pub struct Connection {
+    i: Box<IConnection>,
+}
+
+
+extern "C" fn filter_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::DBusMessage,
+    user_data: *mut libc::c_void) -> ffi::DBusHandlerResult {
+
+    let m = Message::from_ptr(msg, true);
+//    println!("Got message: {}", m);
+
+    let mut c = Connection { i: unsafe { std::mem::transmute(user_data) } };
+    assert_eq!(c.i.conn, conn);
+
+    let mtype: ffi::DBusMessageType = unsafe { std::mem::transmute(ffi::dbus_message_get_type(msg)) };
+    match mtype {
+        ffi::DBusMessageType::MethodCall => c.i.pending_items.push_back(MethodCall(m)),
+        ffi::DBusMessageType::Signal => c.i.pending_items.push_back(Signal(m)),
+        _ => {},
+    };
+
+    unsafe { std::mem::forget(c) };
+    ffi::DBusHandlerResult::Handled
+}
+
+extern "C" fn object_path_message_cb(_: *mut ffi::DBusConnection, _: *mut ffi::DBusMessage,
+    _: *mut libc::c_void) -> ffi::DBusHandlerResult {
+
+    /* Everything is handled by the filter, so this is just a dummy function now. */
+    ffi::DBusHandlerResult::NotYetHandled
+}
+
+/*
 extern "C" fn object_path_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::DBusMessage,
     user_data: *mut libc::c_void) -> ffi::DBusHandlerResult {
 
     let m = Message::from_ptr(msg, true);
-    let c: &mut Connection = unsafe { std::mem::transmute(user_data) };
-    assert!(c.conn == conn);
-    c.pending_items.push_back(Msg(m));
+    let mut c = Connection { i: unsafe { std::mem::transmute(user_data) } };
+    assert!(c.i.conn == conn);
+    c.i.pending_items.push_back(Msg(m));
+    unsafe { std::mem::forget(c) };
     ffi::DBusHandlerResult::Handled
 }
-
+*/
 impl Connection {
     pub fn get_private(bus: BusType) -> Result<Connection, Error> {
         let mut e = Error::empty();
@@ -330,16 +389,20 @@ impl Connection {
         if conn == ptr::null_mut() {
             return Err(e)
         }
+        let c = Connection { i: box IConnection { conn: conn, pending_items: DList::new() } };
+
         /* No, we don't want our app to suddenly quit if dbus goes down */
         unsafe { ffi::dbus_connection_set_exit_on_disconnect(conn, 0) };
-
-        Ok(Connection { conn: conn, pending_items: DList::new() })
+        assert!(unsafe {
+            ffi::dbus_connection_add_filter(c.i.conn, Some(filter_message_cb), std::mem::transmute(&*c.i), None)
+        } != 0);
+        Ok(c)
     }
 
     pub fn send_with_reply_and_block(&mut self, message: Message, timeout_ms: int) -> Result<Message, Error> {
         let mut e = Error::empty();
         let response = unsafe {
-            ffi::dbus_connection_send_with_reply_and_block(self.conn, message.msg, timeout_ms as libc::c_int, e.get_mut())
+            ffi::dbus_connection_send_with_reply_and_block(self.i.conn, message.msg, timeout_ms as libc::c_int, e.get_mut())
         };
         if response == ptr::null_mut() {
             return Err(e);
@@ -348,14 +411,14 @@ impl Connection {
     }
 
     pub fn send(&mut self, message: Message) -> Result<(),()> {
-        let r = unsafe { ffi::dbus_connection_send(self.conn, message.msg, ptr::null_mut()) };
+        let r = unsafe { ffi::dbus_connection_send(self.i.conn, message.msg, ptr::null_mut()) };
         if r == 0 { return Err(()); }
-        unsafe { ffi::dbus_connection_flush(self.conn) };
+        unsafe { ffi::dbus_connection_flush(self.i.conn) };
         Ok(())
     }
 
     pub fn unique_name(&self) -> String {
-        let c = unsafe { ffi::dbus_bus_get_unique_name(self.conn) };
+        let c = unsafe { ffi::dbus_bus_get_unique_name(self.i.conn) };
         if c == ptr::null() {
             return "".to_string();
         }
@@ -381,38 +444,53 @@ impl Connection {
             dbus_internal_pad4: None,
         };
         let r = unsafe {
-            let user_data: *mut libc::c_void = std::mem::transmute(&*self);
-            ffi::dbus_connection_try_register_object_path(self.conn, p.as_ptr(), &vtable, user_data, e.get_mut())
+            let user_data: *mut libc::c_void = std::mem::transmute(&*self.i);
+            ffi::dbus_connection_try_register_object_path(self.i.conn, p.as_ptr(), &vtable, user_data, e.get_mut())
         };
         if r == 0 { Err(e) } else { Ok(()) }
     }
 
     pub fn unregister_object_path(&mut self, path: &str) {
         let p = path.to_c_str();
-        let r = unsafe { ffi::dbus_connection_unregister_object_path(self.conn, p.as_ptr()) };
+        let r = unsafe { ffi::dbus_connection_unregister_object_path(self.i.conn, p.as_ptr()) };
         if r == 0 { panic!("Out of memory"); }
     }
 
     pub fn register_name(&mut self, name: &str, flags: u32) -> Result<RequestNameReply, Error> {
         let mut e = Error::empty();
         let n = name.to_c_str();
-        let r = unsafe { ffi::dbus_bus_request_name(self.conn, n.as_ptr(), flags, e.get_mut()) };
+        let r = unsafe { ffi::dbus_bus_request_name(self.i.conn, n.as_ptr(), flags, e.get_mut()) };
         if r == -1 { Err(e) } else { Ok(unsafe { std::mem::transmute(r) }) }
     }
 
     pub fn release_name(&mut self, name: &str) -> Result<ReleaseNameReply, Error> {
         let mut e = Error::empty();
         let n = name.to_c_str();
-        let r = unsafe { ffi::dbus_bus_release_name(self.conn, n.as_ptr(), e.get_mut()) };
+        let r = unsafe { ffi::dbus_bus_release_name(self.i.conn, n.as_ptr(), e.get_mut()) };
         if r == -1 { Err(e) } else { Ok(unsafe { std::mem::transmute(r) }) }
     }
+
+    pub fn add_match(&mut self, rule: &str) -> Result<(), Error> {
+        let mut e = Error::empty();
+        let n = rule.to_c_str();
+        unsafe { ffi::dbus_bus_add_match(self.i.conn, n.as_ptr(), e.get_mut()) };
+        if e.name().is_some() { Err(e) } else { Ok(()) }
+    }
+
+    pub fn remove_match(&mut self, rule: &str) -> Result<(), Error> {
+        let mut e = Error::empty();
+        let n = rule.to_c_str();
+        unsafe { ffi::dbus_bus_remove_match(self.i.conn, n.as_ptr(), e.get_mut()) };
+        if e.name().is_some() { Err(e) } else { Ok(()) }
+    }
+
 }
 
 impl Drop for Connection {
     fn drop(&mut self) {
         unsafe {
-            ffi::dbus_connection_close(self.conn);
-            ffi::dbus_connection_unref(self.conn);
+            ffi::dbus_connection_close(self.i.conn);
+            ffi::dbus_connection_unref(self.i.conn);
         }
     }
 }
@@ -459,15 +537,6 @@ mod test {
     }
 
     #[test]
-    fn simple_timeout() {
-        let mut c = Connection::get_private(BusType::Session).unwrap();
-        match c.iter(500).next() {
-            Some(ConnectionItem::Nothing) => {},
-            _ => { panic!("Unexpected message"); }
-        }
-    }
-
-    #[test]
     fn object_path() {
         let (tx, rx) = channel();
         spawn(proc() {
@@ -482,7 +551,7 @@ mod test {
 
                 // println!("Found message... ({})", n);
                 match n {
-                    ConnectionItem::Msg(ref m) => {
+                    ConnectionItem::MethodCall(ref m) => {
                         let reply = Message::new_method_return(m).unwrap();
                         c.send(reply).unwrap();
                         break;
@@ -520,7 +589,7 @@ mod test {
 
         for n in c.iter(1000) {
             match n {
-                ConnectionItem::Msg(mut m) => {
+                ConnectionItem::MethodCall(mut m) => {
                     let receiving = format!("{}", m.get_items());
                     println!("Receiving {}", receiving);
                     assert_eq!(sending, receiving);
@@ -535,9 +604,32 @@ mod test {
     fn register_name() {
         use std::rand;
         let mut c = Connection::get_private(BusType::Session).unwrap();
-        let n = format!("com.example.hello.{}", rand::random::<i32>());
+        let n = format!("com.example.hello.test{}", rand::random::<u32>());
         assert_eq!(c.register_name(n.as_slice(), NameFlag::ReplaceExisting as u32).unwrap(), RequestNameReply::PrimaryOwner);
         assert_eq!(c.release_name(n.as_slice()).unwrap(), ReleaseNameReply::Released);
+    }
+
+    #[test]
+    fn signal() {
+        let mut c = Connection::get_private(BusType::Session).unwrap();
+        let iface = "com.example.signaltest";
+        let mstr = format!("interface='{}',member='ThisIsASignal'", iface);
+        c.add_match(mstr.as_slice()).unwrap();
+        let m = Message::new_signal("/mysignal", iface, "ThisIsASignal").unwrap();
+        c.send(m).unwrap();
+        for n in c.iter(1000) {
+            match n {
+                ConnectionItem::Signal(s) => {
+                    let (_, i, m) = s.headers();
+                    match (i.unwrap().as_slice(), m.unwrap().as_slice()) {
+                        ("com.example.signaltest", "ThisIsASignal") => break,
+                        (_, _) => println!("Other signal: {}", s.headers()),
+                    }
+                }
+                _ => {},
+            }
+        }
+        c.remove_match(mstr.as_slice()).unwrap();
     }
 
 }
