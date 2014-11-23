@@ -24,6 +24,30 @@ pub const DBUS_TYPE_UINT32: c_int = 'u' as c_int;
 pub const DBUS_TYPE_INT64: c_int = 'x' as c_int;
 pub const DBUS_TYPE_UINT64: c_int = 't' as c_int;
 
+#[repr(C)]
+#[deriving(Show, PartialEq)]
+pub enum DBusNameFlag {
+    AllowReplacement = 1i,
+    ReplaceExisting = 2i,
+    DoNotQueue = 4i,
+}
+
+#[repr(C)]
+#[deriving(Show, PartialEq)]
+pub enum DBusRequestNameReply {
+    PrimaryOwner = 1i,
+    InQueue = 2i,
+    Exists = 3i,
+    AlreadyOwner = 4i,
+}
+
+#[repr(C)]
+#[deriving(Show, PartialEq)]
+pub enum DBusReleaseNameReply {
+    Released = 1i,
+    NonExistent = 2i,
+    NotOwner = 3i,
+}
 
 #[repr(C)]
 pub enum DBusHandlerResult {
@@ -91,6 +115,10 @@ pub struct DBusObjectPathVTable {
 extern "C" {
     pub fn dbus_bus_get_private(t: DBusBusType, error: *mut DBusError) -> *mut DBusConnection;
     pub fn dbus_bus_get_unique_name(conn: *mut DBusConnection) -> *const c_char;
+    pub fn dbus_bus_request_name(conn: *mut DBusConnection, name: *const c_char,
+        flags: c_uint, error: *mut DBusError) -> c_int;
+    pub fn dbus_bus_release_name(conn: *mut DBusConnection, name: *const c_char,
+        error: *mut DBusError) -> c_int;
 
     pub fn dbus_connection_close(conn: *mut DBusConnection);
     pub fn dbus_connection_dispatch(conn: *mut DBusConnection) -> DBusDispatchStatus;

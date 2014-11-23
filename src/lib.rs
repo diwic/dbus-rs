@@ -1,6 +1,9 @@
 extern crate libc;
 
 pub use ffi::DBusBusType as BusType;
+pub use ffi::DBusNameFlag as NameFlag;
+pub use ffi::DBusRequestNameReply as RequestNameReply;
+pub use ffi::DBusReleaseNameReply as ReleaseNameReply;
 
 use std::c_str::CString;
 use std::ptr;
@@ -389,6 +392,20 @@ impl Connection {
         let r = unsafe { ffi::dbus_connection_unregister_object_path(self.conn, p.as_ptr()) };
         if r == 0 { panic!("Out of memory"); }
     }
+
+    pub fn register_name(&mut self, name: &str, flags: u32) -> Result<RequestNameReply, Error> {
+        let mut e = Error::empty();
+        let n = name.to_c_str();
+        let r = unsafe { ffi::dbus_bus_request_name(self.conn, n.as_ptr(), flags, e.get_mut()) };
+        if r == -1 { Err(e) } else { Ok(unsafe { std::mem::transmute(r) }) }
+    }
+
+    pub fn release_name(&mut self, name: &str) -> Result<ReleaseNameReply, Error> {
+        let mut e = Error::empty();
+        let n = name.to_c_str();
+        let r = unsafe { ffi::dbus_bus_release_name(self.conn, n.as_ptr(), e.get_mut()) };
+        if r == -1 { Err(e) } else { Ok(unsafe { std::mem::transmute(r) }) }
+    }
 }
 
 impl Drop for Connection {
@@ -402,7 +419,8 @@ impl Drop for Connection {
 
 #[cfg(test)]
 mod test {
-    use super::{Connection, Message, BusType, MessageItems, ConnectionItem};
+    use super::{Connection, Message, BusType, MessageItems, ConnectionItem, NameFlag,
+        RequestNameReply, ReleaseNameReply};
 
     #[test]
     fn connection() {
@@ -511,6 +529,15 @@ mod test {
                 _ => println!("Got {}", n),
             }
         }
+    }
+
+    #[test]
+    fn register_name() {
+        use std::rand;
+        let mut c = Connection::get_private(BusType::Session).unwrap();
+        let n = format!("com.example.hello.{}", rand::random::<i32>());
+        assert_eq!(c.register_name(n.as_slice(), NameFlag::ReplaceExisting as u32).unwrap(), RequestNameReply::PrimaryOwner);
+        assert_eq!(c.release_name(n.as_slice()).unwrap(), ReleaseNameReply::Released);
     }
 
 }
