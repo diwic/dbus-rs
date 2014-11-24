@@ -73,7 +73,7 @@ impl Drop for Error {
 }
 
 impl std::fmt::Show for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::FormatError> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         write!(f, "DBus error: {} (type: {})", self.message().unwrap_or(""),
             self.name().unwrap_or(""))
     }
@@ -142,16 +142,16 @@ impl MessageItems {
 
     pub fn array_type(&self) -> int {
         let s = match self {
-            &Str(_) => ffi::DBUS_TYPE_STRING,
-            &Bool(_) => ffi::DBUS_TYPE_BOOLEAN,
-            &Byte(_) => ffi::DBUS_TYPE_BYTE,
-            &Int16(_) => ffi::DBUS_TYPE_INT16,
-            &Int32(_) => ffi::DBUS_TYPE_INT32,
-            &Int64(_) => ffi::DBUS_TYPE_INT64,
-            &UInt16(_) => ffi::DBUS_TYPE_UINT16,
-            &UInt32(_) => ffi::DBUS_TYPE_UINT32,
-            &UInt64(_) => ffi::DBUS_TYPE_UINT64,
-            &Array(_,_) => ffi::DBUS_TYPE_ARRAY,
+            &MessageItems::Str(_) => ffi::DBUS_TYPE_STRING,
+            &MessageItems::Bool(_) => ffi::DBUS_TYPE_BOOLEAN,
+            &MessageItems::Byte(_) => ffi::DBUS_TYPE_BYTE,
+            &MessageItems::Int16(_) => ffi::DBUS_TYPE_INT16,
+            &MessageItems::Int32(_) => ffi::DBUS_TYPE_INT32,
+            &MessageItems::Int64(_) => ffi::DBUS_TYPE_INT64,
+            &MessageItems::UInt16(_) => ffi::DBUS_TYPE_UINT16,
+            &MessageItems::UInt32(_) => ffi::DBUS_TYPE_UINT32,
+            &MessageItems::UInt64(_) => ffi::DBUS_TYPE_UINT64,
+            &MessageItems::Array(_,_) => ffi::DBUS_TYPE_ARRAY,
         };
         s as int
     }
@@ -167,7 +167,7 @@ impl MessageItems {
                     unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
                     let a = MessageItems::from_iter(&mut subiter);
                     let t = if a.len() > 0 { a[0].array_type() } else { 0 };
-                    v.push(Array(a, t));
+                    v.push(MessageItems::Array(a, t));
                 },
                 ffi::DBUS_TYPE_STRING => {
                     let mut c: *const libc::c_char = ptr::null();
@@ -176,16 +176,16 @@ impl MessageItems {
                         ffi::dbus_message_iter_get_basic(i, p);
                         CString::new(c, false)
                     };
-                    v.push(Str(s.to_string()));
+                    v.push(MessageItems::Str(s.to_string()));
                 },
-                ffi::DBUS_TYPE_BOOLEAN => v.push(Bool((iter_get_basic(i) as u32) != 0)),
-                ffi::DBUS_TYPE_BYTE => v.push(Byte(iter_get_basic(i) as u8)),
-                ffi::DBUS_TYPE_INT16 => v.push(Int16(iter_get_basic(i) as i16)),
-                ffi::DBUS_TYPE_INT32 => v.push(Int32(iter_get_basic(i) as i32)),
-                ffi::DBUS_TYPE_INT64 => v.push(Int64(iter_get_basic(i) as i64)),
-                ffi::DBUS_TYPE_UINT16 => v.push(UInt16(iter_get_basic(i) as u16)),
-                ffi::DBUS_TYPE_UINT32 => v.push(UInt32(iter_get_basic(i) as u32)),
-                ffi::DBUS_TYPE_UINT64 => v.push(UInt64(iter_get_basic(i) as u64)),
+                ffi::DBUS_TYPE_BOOLEAN => v.push(MessageItems::Bool((iter_get_basic(i) as u32) != 0)),
+                ffi::DBUS_TYPE_BYTE => v.push(MessageItems::Byte(iter_get_basic(i) as u8)),
+                ffi::DBUS_TYPE_INT16 => v.push(MessageItems::Int16(iter_get_basic(i) as i16)),
+                ffi::DBUS_TYPE_INT32 => v.push(MessageItems::Int32(iter_get_basic(i) as i32)),
+                ffi::DBUS_TYPE_INT64 => v.push(MessageItems::Int64(iter_get_basic(i) as i64)),
+                ffi::DBUS_TYPE_UINT16 => v.push(MessageItems::UInt16(iter_get_basic(i) as u16)),
+                ffi::DBUS_TYPE_UINT32 => v.push(MessageItems::UInt32(iter_get_basic(i) as u32)),
+                ffi::DBUS_TYPE_UINT64 => v.push(MessageItems::UInt64(iter_get_basic(i) as u64)),
 
                 _ => { panic!("DBus unsupported message type {} ({})", t, t as u8 as char); }
             }
@@ -203,20 +203,20 @@ impl MessageItems {
 
     fn iter_append(&self, i: &mut ffi::DBusMessageIter) {
         match self {
-            &Str(ref s) => unsafe {
+            &MessageItems::Str(ref s) => unsafe {
                 let c = s.to_c_str();
                 let p = std::mem::transmute(&c);
                 ffi::dbus_message_iter_append_basic(i, ffi::DBUS_TYPE_STRING, p);
             },
-            &Bool(b) => self.iter_append_basic(i, b as i64),
-            &Byte(b) => self.iter_append_basic(i, b as i64),
-            &Int16(b) => self.iter_append_basic(i, b as i64),
-            &Int32(b) => self.iter_append_basic(i, b as i64),
-            &Int64(b) => self.iter_append_basic(i, b as i64),
-            &UInt16(b) => self.iter_append_basic(i, b as i64),
-            &UInt32(b) => self.iter_append_basic(i, b as i64),
-            &UInt64(b) => self.iter_append_basic(i, b as i64),
-            &Array(ref b, t) => iter_append_array(i, b, t),
+            &MessageItems::Bool(b) => self.iter_append_basic(i, b as i64),
+            &MessageItems::Byte(b) => self.iter_append_basic(i, b as i64),
+            &MessageItems::Int16(b) => self.iter_append_basic(i, b as i64),
+            &MessageItems::Int32(b) => self.iter_append_basic(i, b as i64),
+            &MessageItems::Int64(b) => self.iter_append_basic(i, b as i64),
+            &MessageItems::UInt16(b) => self.iter_append_basic(i, b as i64),
+            &MessageItems::UInt32(b) => self.iter_append_basic(i, b as i64),
+            &MessageItems::UInt64(b) => self.iter_append_basic(i, b as i64),
+            &MessageItems::Array(ref b, t) => iter_append_array(i, b, t),
         }
     }
 
@@ -298,7 +298,7 @@ impl Drop for Message {
 }
 
 impl std::fmt::Show for Message {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::FormatError> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         write!(f, "{}", self.headers())
     }
 }
@@ -325,7 +325,7 @@ impl<'a> Iterator<ConnectionItem> for ConnectionItems<'a> {
             if !self.c.i.pending_items.is_empty() { continue };
 
             if r == 0 { return None; }
-            return Some(Nothing);
+            return Some(ConnectionItem::Nothing);
         }
     }
 }
@@ -354,8 +354,8 @@ extern "C" fn filter_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::D
 
     let mtype: ffi::DBusMessageType = unsafe { std::mem::transmute(ffi::dbus_message_get_type(msg)) };
     match mtype {
-        ffi::DBusMessageType::MethodCall => c.i.pending_items.push_back(MethodCall(m)),
-        ffi::DBusMessageType::Signal => c.i.pending_items.push_back(Signal(m)),
+        ffi::DBusMessageType::MethodCall => c.i.pending_items.push_back(ConnectionItem::MethodCall(m)),
+        ffi::DBusMessageType::Signal => c.i.pending_items.push_back(ConnectionItem::Signal(m)),
         _ => {},
     };
 

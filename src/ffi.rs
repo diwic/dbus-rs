@@ -71,7 +71,7 @@ pub enum DBusMessageType {
 pub enum DBusDispatchStatus {
     DataRemains = 0i,
     Complete = 1i,
-    NeedMemory_ = 2i,
+    NeedMemory = 2i,
 }
 
 #[repr(C)]
