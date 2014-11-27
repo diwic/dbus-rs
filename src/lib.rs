@@ -142,10 +142,22 @@ fn iter_get_basic(i: &mut ffi::DBusMessageIter) -> i64 {
 
 fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &Vec<MessageItem>, t: int) {
     let mut subiter = new_dbus_message_iter();
-    let atype = format!("{}", t as u8 as char).to_c_str();
+
+    // TODO: This works for simple dictionaries. Not so well for dictionaries of dictionaries, probably.
+    let atype =
+        if t <= 0 {
+            match &a[0] {
+                &MessageItem::DictEntry(ref k, ref v) => format!("{{{}{}}}",
+                    k.array_type() as u8 as char, v.array_type() as u8 as char),
+                _ => format!("{}", a[0].array_type() as u8 as char),
+            }
+        }
+        else { format!("{}", t as u8 as char) }
+        .to_c_str();
+
     assert!(unsafe { ffi::dbus_message_iter_open_container(i, ffi::DBUS_TYPE_ARRAY, atype.as_ptr(), &mut subiter) } != 0);
     for item in a.iter() {
-        assert!(item.array_type() == t as int);
+        assert!(t < 0 || item.array_type() == t as int);
         item.iter_append(&mut subiter);
     }
     assert!(unsafe { ffi::dbus_message_iter_close_container(i, &mut subiter) } != 0);
@@ -633,10 +645,13 @@ mod test {
         let mut m = Message::new_method_call(c.unique_name().as_slice(), "/hello", "com.example.hello", "Hello").unwrap();
         m.append_items(&vec!(
             MessageItem::UInt16(2000),
-            MessageItem::Array(vec!(MessageItem::Byte(129)), MessageItem::Byte(0).array_type()),
+            MessageItem::Array(vec!(MessageItem::Byte(129)), -1),
             MessageItem::UInt64(987654321),
             MessageItem::Int32(-1),
             MessageItem::Str("Hello world".to_string()),
+            MessageItem::Array(vec!(
+                MessageItem::DictEntry(box MessageItem::UInt32(123543), box MessageItem::Bool(true))
+            ), -1)
         ));
         let sending = format!("{}", m.get_items());
         println!("Sending {}", sending);
