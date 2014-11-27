@@ -1,3 +1,5 @@
+#![feature(if_let)]
+
 extern crate libc;
 
 pub use ffi::DBusBusType as BusType;
@@ -11,6 +13,8 @@ use std::ptr;
 use std::collections::DList;
 
 mod ffi;
+
+pub mod prop;
 
 static INITDBUS: std::sync::Once = std::sync::ONCE_INIT;
 
@@ -111,10 +115,11 @@ fn new_dbus_message_iter() -> ffi::DBusMessageIter {
     }
 }
 
-#[deriving(Show, PartialEq, Clone)]
-pub enum MessageItems {
-    Array(Vec<MessageItems>, int),
-    Variant(Box<MessageItems>),
+#[deriving(Show, PartialEq, PartialOrd, Clone)]
+pub enum MessageItem {
+    Array(Vec<MessageItem>, int),
+    Variant(Box<MessageItem>),
+    DictEntry(Box<MessageItem>, Box<MessageItem>),
     Str(String),
     Bool(bool),
     Byte(u8),
@@ -135,8 +140,7 @@ fn iter_get_basic(i: &mut ffi::DBusMessageIter) -> i64 {
     c
 }
 
-
-fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &Vec<MessageItems>, t: int) {
+fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &Vec<MessageItem>, t: int) {
     let mut subiter = new_dbus_message_iter();
     let atype = format!("{}", t as u8 as char).to_c_str();
     assert!(unsafe { ffi::dbus_message_iter_open_container(i, ffi::DBUS_TYPE_ARRAY, atype.as_ptr(), &mut subiter) } != 0);
@@ -147,7 +151,7 @@ fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &Vec<MessageItems>, t: int
     assert!(unsafe { ffi::dbus_message_iter_close_container(i, &mut subiter) } != 0);
 }
 
-fn iter_append_variant(i: &mut ffi::DBusMessageIter, a: &MessageItems) {
+fn iter_append_variant(i: &mut ffi::DBusMessageIter, a: &MessageItem) {
     let mut subiter = new_dbus_message_iter();
     let atype = format!("{}", a.array_type() as u8 as char).to_c_str();
     assert!(unsafe { ffi::dbus_message_iter_open_container(i, ffi::DBUS_TYPE_VARIANT, atype.as_ptr(), &mut subiter) } != 0);
@@ -155,44 +159,63 @@ fn iter_append_variant(i: &mut ffi::DBusMessageIter, a: &MessageItems) {
     assert!(unsafe { ffi::dbus_message_iter_close_container(i, &mut subiter) } != 0);
 }
 
-impl MessageItems {
+fn iter_append_dict(i: &mut ffi::DBusMessageIter, k: &MessageItem, v: &MessageItem) {
+    let mut subiter = new_dbus_message_iter();
+    assert!(unsafe { ffi::dbus_message_iter_open_container(i, ffi::DBUS_TYPE_DICT_ENTRY, ptr::null(), &mut subiter) } != 0);
+    k.iter_append(&mut subiter);
+    v.iter_append(&mut subiter);
+    assert!(unsafe { ffi::dbus_message_iter_close_container(i, &mut subiter) } != 0);
+}
+
+impl MessageItem {
 
     pub fn array_type(&self) -> int {
         let s = match self {
-            &MessageItems::Str(_) => ffi::DBUS_TYPE_STRING,
-            &MessageItems::Bool(_) => ffi::DBUS_TYPE_BOOLEAN,
-            &MessageItems::Byte(_) => ffi::DBUS_TYPE_BYTE,
-            &MessageItems::Int16(_) => ffi::DBUS_TYPE_INT16,
-            &MessageItems::Int32(_) => ffi::DBUS_TYPE_INT32,
-            &MessageItems::Int64(_) => ffi::DBUS_TYPE_INT64,
-            &MessageItems::UInt16(_) => ffi::DBUS_TYPE_UINT16,
-            &MessageItems::UInt32(_) => ffi::DBUS_TYPE_UINT32,
-            &MessageItems::UInt64(_) => ffi::DBUS_TYPE_UINT64,
-            &MessageItems::Array(_,_) => ffi::DBUS_TYPE_ARRAY,
-            &MessageItems::Variant(_) => ffi::DBUS_TYPE_VARIANT,
+            &MessageItem::Str(_) => ffi::DBUS_TYPE_STRING,
+            &MessageItem::Bool(_) => ffi::DBUS_TYPE_BOOLEAN,
+            &MessageItem::Byte(_) => ffi::DBUS_TYPE_BYTE,
+            &MessageItem::Int16(_) => ffi::DBUS_TYPE_INT16,
+            &MessageItem::Int32(_) => ffi::DBUS_TYPE_INT32,
+            &MessageItem::Int64(_) => ffi::DBUS_TYPE_INT64,
+            &MessageItem::UInt16(_) => ffi::DBUS_TYPE_UINT16,
+            &MessageItem::UInt32(_) => ffi::DBUS_TYPE_UINT32,
+            &MessageItem::UInt64(_) => ffi::DBUS_TYPE_UINT64,
+            &MessageItem::Array(_,_) => ffi::DBUS_TYPE_ARRAY,
+            &MessageItem::Variant(_) => ffi::DBUS_TYPE_VARIANT,
+            &MessageItem::DictEntry(_,_) => ffi::DBUS_TYPE_DICT_ENTRY,
         };
         s as int
     }
 
-    fn from_iter(i: &mut ffi::DBusMessageIter) -> Vec<MessageItems> {
+    fn from_iter(i: &mut ffi::DBusMessageIter) -> Vec<MessageItem> {
         let mut v = Vec::new();
         loop {
             let t = unsafe { ffi::dbus_message_iter_get_arg_type(i) };
             match t {
                 ffi::DBUS_TYPE_INVALID => { return v },
+                ffi::DBUS_TYPE_DICT_ENTRY => {
+                    let mut subiter = new_dbus_message_iter();
+                    unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
+                    let a = MessageItem::from_iter(&mut subiter);
+                    if a.len() != 2 { panic!("DBus dict entry error"); }
+                    let mut a = a.into_iter();
+                    let key = box a.next().unwrap();
+                    let value = box a.next().unwrap();
+                    v.push(MessageItem::DictEntry(key, value));
+                }
                 ffi::DBUS_TYPE_VARIANT => {
                     let mut subiter = new_dbus_message_iter();
                     unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
-                    let a = MessageItems::from_iter(&mut subiter);
+                    let a = MessageItem::from_iter(&mut subiter);
                     if a.len() != 1 { panic!("DBus variant error"); }
-                    v.push(MessageItems::Variant(box a.into_iter().next().unwrap()));
+                    v.push(MessageItem::Variant(box a.into_iter().next().unwrap()));
                 }
                 ffi::DBUS_TYPE_ARRAY => {
                     let mut subiter = new_dbus_message_iter();
                     unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
-                    let a = MessageItems::from_iter(&mut subiter);
+                    let a = MessageItem::from_iter(&mut subiter);
                     let t = if a.len() > 0 { a[0].array_type() } else { 0 };
-                    v.push(MessageItems::Array(a, t));
+                    v.push(MessageItem::Array(a, t));
                 },
                 ffi::DBUS_TYPE_STRING => {
                     let mut c: *const libc::c_char = ptr::null();
@@ -201,16 +224,16 @@ impl MessageItems {
                         ffi::dbus_message_iter_get_basic(i, p);
                         CString::new(c, false)
                     };
-                    v.push(MessageItems::Str(s.to_string()));
+                    v.push(MessageItem::Str(s.to_string()));
                 },
-                ffi::DBUS_TYPE_BOOLEAN => v.push(MessageItems::Bool((iter_get_basic(i) as u32) != 0)),
-                ffi::DBUS_TYPE_BYTE => v.push(MessageItems::Byte(iter_get_basic(i) as u8)),
-                ffi::DBUS_TYPE_INT16 => v.push(MessageItems::Int16(iter_get_basic(i) as i16)),
-                ffi::DBUS_TYPE_INT32 => v.push(MessageItems::Int32(iter_get_basic(i) as i32)),
-                ffi::DBUS_TYPE_INT64 => v.push(MessageItems::Int64(iter_get_basic(i) as i64)),
-                ffi::DBUS_TYPE_UINT16 => v.push(MessageItems::UInt16(iter_get_basic(i) as u16)),
-                ffi::DBUS_TYPE_UINT32 => v.push(MessageItems::UInt32(iter_get_basic(i) as u32)),
-                ffi::DBUS_TYPE_UINT64 => v.push(MessageItems::UInt64(iter_get_basic(i) as u64)),
+                ffi::DBUS_TYPE_BOOLEAN => v.push(MessageItem::Bool((iter_get_basic(i) as u32) != 0)),
+                ffi::DBUS_TYPE_BYTE => v.push(MessageItem::Byte(iter_get_basic(i) as u8)),
+                ffi::DBUS_TYPE_INT16 => v.push(MessageItem::Int16(iter_get_basic(i) as i16)),
+                ffi::DBUS_TYPE_INT32 => v.push(MessageItem::Int32(iter_get_basic(i) as i32)),
+                ffi::DBUS_TYPE_INT64 => v.push(MessageItem::Int64(iter_get_basic(i) as i64)),
+                ffi::DBUS_TYPE_UINT16 => v.push(MessageItem::UInt16(iter_get_basic(i) as u16)),
+                ffi::DBUS_TYPE_UINT32 => v.push(MessageItem::UInt32(iter_get_basic(i) as u32)),
+                ffi::DBUS_TYPE_UINT64 => v.push(MessageItem::UInt64(iter_get_basic(i) as u64)),
 
                 _ => { panic!("DBus unsupported message type {} ({})", t, t as u8 as char); }
             }
@@ -228,25 +251,26 @@ impl MessageItems {
 
     fn iter_append(&self, i: &mut ffi::DBusMessageIter) {
         match self {
-            &MessageItems::Str(ref s) => unsafe {
+            &MessageItem::Str(ref s) => unsafe {
                 let c = s.to_c_str();
                 let p = std::mem::transmute(&c);
                 ffi::dbus_message_iter_append_basic(i, ffi::DBUS_TYPE_STRING, p);
             },
-            &MessageItems::Bool(b) => self.iter_append_basic(i, b as i64),
-            &MessageItems::Byte(b) => self.iter_append_basic(i, b as i64),
-            &MessageItems::Int16(b) => self.iter_append_basic(i, b as i64),
-            &MessageItems::Int32(b) => self.iter_append_basic(i, b as i64),
-            &MessageItems::Int64(b) => self.iter_append_basic(i, b as i64),
-            &MessageItems::UInt16(b) => self.iter_append_basic(i, b as i64),
-            &MessageItems::UInt32(b) => self.iter_append_basic(i, b as i64),
-            &MessageItems::UInt64(b) => self.iter_append_basic(i, b as i64),
-            &MessageItems::Array(ref b, t) => iter_append_array(i, b, t),
-            &MessageItems::Variant(ref b) => iter_append_variant(i, &**b),
+            &MessageItem::Bool(b) => self.iter_append_basic(i, b as i64),
+            &MessageItem::Byte(b) => self.iter_append_basic(i, b as i64),
+            &MessageItem::Int16(b) => self.iter_append_basic(i, b as i64),
+            &MessageItem::Int32(b) => self.iter_append_basic(i, b as i64),
+            &MessageItem::Int64(b) => self.iter_append_basic(i, b as i64),
+            &MessageItem::UInt16(b) => self.iter_append_basic(i, b as i64),
+            &MessageItem::UInt32(b) => self.iter_append_basic(i, b as i64),
+            &MessageItem::UInt64(b) => self.iter_append_basic(i, b as i64),
+            &MessageItem::Array(ref b, t) => iter_append_array(i, b, t),
+            &MessageItem::Variant(ref b) => iter_append_variant(i, &**b),
+            &MessageItem::DictEntry(ref k, ref v) => iter_append_dict(i, &**k, &**v),
         }
     }
 
-    fn copy_to_iter(i: &mut ffi::DBusMessageIter, v: &Vec<MessageItems>) {
+    fn copy_to_iter(i: &mut ffi::DBusMessageIter, v: &Vec<MessageItem>) {
         for item in v.iter() {
             item.iter_append(i);
         }
@@ -289,18 +313,18 @@ impl Message {
         Message { msg: ptr }
     }
 
-    pub fn get_items(&mut self) -> Vec<MessageItems> {
+    pub fn get_items(&mut self) -> Vec<MessageItem> {
         let mut i = new_dbus_message_iter();
         match unsafe { ffi::dbus_message_iter_init(self.msg, &mut i) } {
             0 => Vec::new(),
-            _ => MessageItems::from_iter(&mut i)
+            _ => MessageItem::from_iter(&mut i)
         }
     }
 
-    pub fn append_items(&mut self, v: &Vec<MessageItems>) {
+    pub fn append_items(&mut self, v: &Vec<MessageItem>) {
         let mut i = new_dbus_message_iter();
         unsafe { ffi::dbus_message_iter_init_append(self.msg, &mut i) };
-        MessageItems::copy_to_iter(&mut i, v);
+        MessageItem::copy_to_iter(&mut i, v);
     }
 
     pub fn msg_type(&self) -> MessageType {
@@ -528,7 +552,7 @@ impl Drop for Connection {
 
 #[cfg(test)]
 mod test {
-    use super::{Connection, Message, BusType, MessageItems, ConnectionItem, NameFlag,
+    use super::{Connection, Message, BusType, MessageItem, ConnectionItem, NameFlag,
         RequestNameReply, ReleaseNameReply};
 
     #[test]
@@ -560,11 +584,11 @@ mod test {
     fn message_namehasowner() {
         let mut c = Connection::get_private(BusType::Session).unwrap();
         let mut m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "NameHasOwner").unwrap();
-        m.append_items(&vec!(MessageItems::Str("org.freedesktop.DBus".to_string())));
+        m.append_items(&vec!(MessageItem::Str("org.freedesktop.DBus".to_string())));
         let mut r = c.send_with_reply_and_block(m, 2000).unwrap();
         let reply = r.get_items();
         println!("{}", reply);
-        assert_eq!(reply, vec!(MessageItems::Bool(true)));
+        assert_eq!(reply, vec!(MessageItem::Bool(true)));
     }
 
     #[test]
@@ -608,11 +632,11 @@ mod test {
         c.register_object_path("/hello").unwrap();
         let mut m = Message::new_method_call(c.unique_name().as_slice(), "/hello", "com.example.hello", "Hello").unwrap();
         m.append_items(&vec!(
-            MessageItems::UInt16(2000),
-            MessageItems::Array(vec!(MessageItems::Byte(129)), MessageItems::Byte(0).array_type()),
-            MessageItems::UInt64(987654321),
-            MessageItems::Int32(-1),
-            MessageItems::Str("Hello world".to_string()),
+            MessageItem::UInt16(2000),
+            MessageItem::Array(vec!(MessageItem::Byte(129)), MessageItem::Byte(0).array_type()),
+            MessageItem::UInt64(987654321),
+            MessageItem::Int32(-1),
+            MessageItem::Str("Hello world".to_string()),
         ));
         let sending = format!("{}", m.get_items());
         println!("Sending {}", sending);

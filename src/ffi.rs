@@ -17,6 +17,7 @@ pub const DBUS_TYPE_VARIANT: c_int = 'v' as c_int;
 pub const DBUS_TYPE_BOOLEAN: c_int = 'b' as c_int;
 pub const DBUS_TYPE_INVALID: c_int = 0;
 pub const DBUS_TYPE_STRING: c_int = 's' as c_int;
+pub const DBUS_TYPE_DICT_ENTRY: c_int = 'e' as c_int;
 pub const DBUS_TYPE_BYTE: c_int = 'y' as c_int;
 pub const DBUS_TYPE_INT16: c_int = 'n' as c_int;
 pub const DBUS_TYPE_UINT16: c_int = 'q' as c_int;
