@@ -13,6 +13,7 @@ pub enum DBusBusType {
 }
 
 pub const DBUS_TYPE_ARRAY: c_int = 'a' as c_int;
+pub const DBUS_TYPE_VARIANT: c_int = 'v' as c_int;
 pub const DBUS_TYPE_BOOLEAN: c_int = 'b' as c_int;
 pub const DBUS_TYPE_INVALID: c_int = 0;
 pub const DBUS_TYPE_STRING: c_int = 's' as c_int;
@@ -149,6 +150,8 @@ extern "C" {
 
     pub fn dbus_error_init(error: *mut DBusError);
     pub fn dbus_error_free(error: *mut DBusError);
+    pub fn dbus_set_error(error: *mut DBusError, name: *const c_char, message: *const c_char, ...);
+    pub fn dbus_set_error_from_message(error: *mut DBusError, message: *mut DBusMessage) -> u32;
 
     pub fn dbus_message_new_method_call(destination: *const c_char, path: *const c_char,
         iface: *const c_char, method: *const c_char) -> *mut DBusMessage;

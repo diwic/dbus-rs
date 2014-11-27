@@ -1,6 +1,5 @@
 [package]
 
-name = "rust-dbus-sys"
+name = "dbus-rs"
 version = "0.0.1"
-authors = ["David Henningsson <david.henningsson@canonical.com>"]
-# link = "dbus-1"
+authors = ["David Henningsson <diwic@ubuntu.com>"]

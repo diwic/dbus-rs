@@ -40,6 +40,15 @@ impl Error {
         Error { e: e }
     }
 
+    pub fn new_custom(name: &str, message: &str) -> Error {
+        let n = name.to_c_str();
+        let m = message.replace("%","%%").to_c_str();
+        let mut e = Error::empty();
+
+        unsafe { ffi::dbus_set_error(e.get_mut(), n.as_ptr(), m.as_ptr()) };
+        e
+    }
+
     fn empty() -> Error {
         init_dbus();
         let mut e = ffi::DBusError {
@@ -63,7 +72,6 @@ impl Error {
     }
 
     fn get_mut(&mut self) -> &mut ffi::DBusError { &mut self.e }
-
 }
 
 impl Drop for Error {
@@ -74,7 +82,7 @@ impl Drop for Error {
 
 impl std::fmt::Show for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        write!(f, "DBus error: {} (type: {})", self.message().unwrap_or(""),
+        write!(f, "DBus error: {} ({})", self.message().unwrap_or(""),
             self.name().unwrap_or(""))
     }
 }
@@ -106,6 +114,7 @@ fn new_dbus_message_iter() -> ffi::DBusMessageIter {
 #[deriving(Show, PartialEq, Clone)]
 pub enum MessageItems {
     Array(Vec<MessageItems>, int),
+    Variant(Box<MessageItems>),
     Str(String),
     Bool(bool),
     Byte(u8),
@@ -138,6 +147,14 @@ fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &Vec<MessageItems>, t: int
     assert!(unsafe { ffi::dbus_message_iter_close_container(i, &mut subiter) } != 0);
 }
 
+fn iter_append_variant(i: &mut ffi::DBusMessageIter, a: &MessageItems) {
+    let mut subiter = new_dbus_message_iter();
+    let atype = format!("{}", a.array_type() as u8 as char).to_c_str();
+    assert!(unsafe { ffi::dbus_message_iter_open_container(i, ffi::DBUS_TYPE_VARIANT, atype.as_ptr(), &mut subiter) } != 0);
+    a.iter_append(&mut subiter);
+    assert!(unsafe { ffi::dbus_message_iter_close_container(i, &mut subiter) } != 0);
+}
+
 impl MessageItems {
 
     pub fn array_type(&self) -> int {
@@ -152,6 +169,7 @@ impl MessageItems {
             &MessageItems::UInt32(_) => ffi::DBUS_TYPE_UINT32,
             &MessageItems::UInt64(_) => ffi::DBUS_TYPE_UINT64,
             &MessageItems::Array(_,_) => ffi::DBUS_TYPE_ARRAY,
+            &MessageItems::Variant(_) => ffi::DBUS_TYPE_VARIANT,
         };
         s as int
     }
@@ -162,6 +180,13 @@ impl MessageItems {
             let t = unsafe { ffi::dbus_message_iter_get_arg_type(i) };
             match t {
                 ffi::DBUS_TYPE_INVALID => { return v },
+                ffi::DBUS_TYPE_VARIANT => {
+                    let mut subiter = new_dbus_message_iter();
+                    unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
+                    let a = MessageItems::from_iter(&mut subiter);
+                    if a.len() != 1 { panic!("DBus variant error"); }
+                    v.push(MessageItems::Variant(box a.into_iter().next().unwrap()));
+                }
                 ffi::DBUS_TYPE_ARRAY => {
                     let mut subiter = new_dbus_message_iter();
                     unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
@@ -217,6 +242,7 @@ impl MessageItems {
             &MessageItems::UInt32(b) => self.iter_append_basic(i, b as i64),
             &MessageItems::UInt64(b) => self.iter_append_basic(i, b as i64),
             &MessageItems::Array(ref b, t) => iter_append_array(i, b, t),
+            &MessageItems::Variant(ref b) => iter_append_variant(i, &**b),
         }
     }
 
@@ -287,6 +313,11 @@ impl Message {
         (self.msg_type(), c_str_to_slice(&i).map(|s| s.to_string()), c_str_to_slice(&m).map(|s| s.to_string()))
     }
 
+    pub fn as_result(&mut self) -> Result<&mut Message, Error> {
+        let mut e = Error::empty();
+        if unsafe { ffi::dbus_set_error_from_message(e.get_mut(), self.msg) } != 0 { Err(e) }
+        else { Ok(self) }
+    }
 }
 
 impl Drop for Message {
