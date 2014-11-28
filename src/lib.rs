@@ -343,6 +343,11 @@ impl Message {
         unsafe { std::mem::transmute(ffi::dbus_message_get_type(self.msg)) }
     }
 
+    pub fn sender(&self) -> Option<String> {
+        let s = unsafe { ffi::dbus_message_get_sender(self.msg) };
+        c_str_to_slice(&s).map(|s| s.to_string())
+    }
+
     pub fn headers(&self) -> (MessageType, Option<String>, Option<String>) {
         let i = unsafe { ffi::dbus_message_get_interface(self.msg) };
         let m = unsafe { ffi::dbus_message_get_member(self.msg) };
@@ -686,13 +691,17 @@ mod test {
         let mstr = format!("interface='{}',member='ThisIsASignal'", iface);
         c.add_match(mstr.as_slice()).unwrap();
         let m = Message::new_signal("/mysignal", iface, "ThisIsASignal").unwrap();
+        let uname = c.unique_name();
         c.send(m).unwrap();
         for n in c.iter(1000) {
             match n {
                 ConnectionItem::Signal(s) => {
                     let (_, i, m) = s.headers();
                     match (i.unwrap().as_slice(), m.unwrap().as_slice()) {
-                        ("com.example.signaltest", "ThisIsASignal") => break,
+                        ("com.example.signaltest", "ThisIsASignal") => {
+                            assert_eq!(s.sender().unwrap(), uname);
+                            break;
+                        },
                         (_, _) => println!("Other signal: {}", s.headers()),
                     }
                 }
