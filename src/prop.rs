@@ -21,10 +21,10 @@ impl Props {
     pub fn get(&self, conn: &mut Connection, propname: &str) -> Result<MessageItem, Error> {
         let mut m = Message::new_method_call(self.name.as_slice(), self.path.as_slice(),
             "org.freedesktop.DBus.Properties", "Get").unwrap();
-        m.append_items(&vec!(
+        m.append_items(&[
             MessageItem::Str(self.interface.clone()),
             MessageItem::Str(propname.to_string())
-        ));
+        ]);
         let mut r = try!(conn.send_with_reply_and_block(m, self.timeout_ms));
         let reply = try!(r.as_result()).get_items();
         if reply.len() == 1 {
@@ -40,11 +40,11 @@ impl Props {
     pub fn set(&self, conn: &mut Connection, propname: &str, value: MessageItem) -> Result<(), Error> {
         let mut m = Message::new_method_call(self.name.as_slice(), self.path.as_slice(),
             "org.freedesktop.DBus.Properties", "Set").unwrap();
-        m.append_items(&vec!(
+        m.append_items(&[
             MessageItem::Str(self.interface.clone()),
             MessageItem::Str(propname.to_string()),
             MessageItem::Variant(box value),
-        ));
+        ]);
         let mut r = try!(conn.send_with_reply_and_block(m, self.timeout_ms));
         try!(r.as_result());
         Ok(())
@@ -53,7 +53,7 @@ impl Props {
     pub fn get_all(&self, conn: &mut Connection) -> Result<TreeMap<String, MessageItem>, Error> {
         let mut m = Message::new_method_call(self.name.as_slice(), self.path.as_slice(),
             "org.freedesktop.DBus.Properties", "GetAll").unwrap();
-        m.append_items(&vec!(MessageItem::Str(self.interface.clone())));
+        m.append_items(&[MessageItem::Str(self.interface.clone())]);
         let mut r = try!(conn.send_with_reply_and_block(m, self.timeout_ms));
         let reply = try!(r.as_result()).get_items();
         if reply.len() == 1 {
