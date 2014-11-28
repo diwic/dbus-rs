@@ -140,7 +140,7 @@ fn iter_get_basic(i: &mut ffi::DBusMessageIter) -> i64 {
     c
 }
 
-fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &Vec<MessageItem>, t: int) {
+fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &[MessageItem], t: int) {
     let mut subiter = new_dbus_message_iter();
 
     // TODO: This works for simple dictionaries. Not so well for dictionaries of dictionaries, probably.
@@ -276,13 +276,13 @@ impl MessageItem {
             &MessageItem::UInt16(b) => self.iter_append_basic(i, b as i64),
             &MessageItem::UInt32(b) => self.iter_append_basic(i, b as i64),
             &MessageItem::UInt64(b) => self.iter_append_basic(i, b as i64),
-            &MessageItem::Array(ref b, t) => iter_append_array(i, b, t),
+            &MessageItem::Array(ref b, t) => iter_append_array(i, b.as_slice(), t),
             &MessageItem::Variant(ref b) => iter_append_variant(i, &**b),
             &MessageItem::DictEntry(ref k, ref v) => iter_append_dict(i, &**k, &**v),
         }
     }
 
-    fn copy_to_iter(i: &mut ffi::DBusMessageIter, v: &Vec<MessageItem>) {
+    fn copy_to_iter(i: &mut ffi::DBusMessageIter, v: &[MessageItem]) {
         for item in v.iter() {
             item.iter_append(i);
         }
@@ -333,7 +333,7 @@ impl Message {
         }
     }
 
-    pub fn append_items(&mut self, v: &Vec<MessageItem>) {
+    pub fn append_items(&mut self, v: &[MessageItem]) {
         let mut i = new_dbus_message_iter();
         unsafe { ffi::dbus_message_iter_init_append(self.msg, &mut i) };
         MessageItem::copy_to_iter(&mut i, v);
@@ -596,7 +596,7 @@ mod test {
     fn message_namehasowner() {
         let mut c = Connection::get_private(BusType::Session).unwrap();
         let mut m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "NameHasOwner").unwrap();
-        m.append_items(&vec!(MessageItem::Str("org.freedesktop.DBus".to_string())));
+        m.append_items(&[MessageItem::Str("org.freedesktop.DBus".to_string())]);
         let mut r = c.send_with_reply_and_block(m, 2000).unwrap();
         let reply = r.get_items();
         println!("{}", reply);
@@ -643,7 +643,7 @@ mod test {
         let mut c = Connection::get_private(BusType::Session).unwrap();
         c.register_object_path("/hello").unwrap();
         let mut m = Message::new_method_call(c.unique_name().as_slice(), "/hello", "com.example.hello", "Hello").unwrap();
-        m.append_items(&vec!(
+        m.append_items(&[
             MessageItem::UInt16(2000),
             MessageItem::Array(vec!(MessageItem::Byte(129)), -1),
             MessageItem::UInt64(987654321),
@@ -652,7 +652,7 @@ mod test {
             MessageItem::Array(vec!(
                 MessageItem::DictEntry(box MessageItem::UInt32(123543), box MessageItem::Bool(true))
             ), -1)
-        ));
+        ]);
         let sending = format!("{}", m.get_items());
         println!("Sending {}", sending);
         c.send(m).unwrap();
