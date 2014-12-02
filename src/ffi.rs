@@ -157,6 +157,8 @@ extern "C" {
     pub fn dbus_message_new_method_call(destination: *const c_char, path: *const c_char,
         iface: *const c_char, method: *const c_char) -> *mut DBusMessage;
     pub fn dbus_message_new_method_return(message: *mut DBusMessage) -> *mut DBusMessage;
+    pub fn dbus_message_new_error(message: *mut DBusMessage,
+        error_name: *const c_char, error_message: *const c_char) -> *mut DBusMessage;
     pub fn dbus_message_new_signal(path: *const c_char,
         iface: *const c_char, name: *const c_char) -> *mut DBusMessage;
     pub fn dbus_message_ref(message: *mut DBusMessage) -> *mut DBusMessage;
@@ -164,6 +166,7 @@ extern "C" {
     pub fn dbus_message_get_type(message: *mut DBusMessage) -> c_int;
     pub fn dbus_message_is_method_call(message: *mut DBusMessage, iface: *const c_char, method: *const c_char) -> u32;
     pub fn dbus_message_is_signal(message: *mut DBusMessage, iface: *const c_char, signal_name: *const c_char) -> u32;
+    pub fn dbus_message_get_path(message: *mut DBusMessage) -> *const c_char;
     pub fn dbus_message_get_interface(message: *mut DBusMessage) -> *const c_char;
     pub fn dbus_message_get_member(message: *mut DBusMessage) -> *const c_char;
     pub fn dbus_message_get_sender(message: *mut DBusMessage) -> *const c_char;

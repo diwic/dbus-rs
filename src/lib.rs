@@ -313,8 +313,13 @@ impl Message {
     }
 
     pub fn new_method_return(m: &Message) -> Option<Message> {
-        init_dbus();
         let ptr = unsafe { ffi::dbus_message_new_method_return(m.msg) };
+        if ptr == ptr::null_mut() { None } else { Some(Message { msg: ptr} ) }
+    }
+
+    pub fn new_error(m: &Message, error_name: &str, error_message: &str) -> Option<Message> {
+        let (en, em) = (error_name.to_c_str(), error_message.to_c_str());
+        let ptr = unsafe { ffi::dbus_message_new_error(m.msg, en.as_ptr(), em.as_ptr()) };
         if ptr == ptr::null_mut() { None } else { Some(Message { msg: ptr} ) }
     }
 
@@ -348,10 +353,14 @@ impl Message {
         c_str_to_slice(&s).map(|s| s.to_string())
     }
 
-    pub fn headers(&self) -> (MessageType, Option<String>, Option<String>) {
+    pub fn headers(&self) -> (MessageType, Option<String>, Option<String>, Option<String>) {
+        let p = unsafe { ffi::dbus_message_get_path(self.msg) };
         let i = unsafe { ffi::dbus_message_get_interface(self.msg) };
         let m = unsafe { ffi::dbus_message_get_member(self.msg) };
-        (self.msg_type(), c_str_to_slice(&i).map(|s| s.to_string()), c_str_to_slice(&m).map(|s| s.to_string()))
+        (self.msg_type(),
+         c_str_to_slice(&p).map(|s| s.to_string()),
+         c_str_to_slice(&i).map(|s| s.to_string()),
+         c_str_to_slice(&m).map(|s| s.to_string()))
     }
 
     pub fn as_result(&mut self) -> Result<&mut Message, Error> {
@@ -696,13 +705,13 @@ mod test {
         for n in c.iter(1000) {
             match n {
                 ConnectionItem::Signal(s) => {
-                    let (_, i, m) = s.headers();
-                    match (i.unwrap().as_slice(), m.unwrap().as_slice()) {
-                        ("com.example.signaltest", "ThisIsASignal") => {
+                    let (_, p, i, m) = s.headers();
+                    match (p.unwrap().as_slice(), i.unwrap().as_slice(), m.unwrap().as_slice()) {
+                        ("/mysignal", "com.example.signaltest", "ThisIsASignal") => {
                             assert_eq!(s.sender().unwrap(), uname);
                             break;
                         },
-                        (_, _) => println!("Other signal: {}", s.headers()),
+                        (_, _, _) => println!("Other signal: {}", s.headers()),
                     }
                 }
                 _ => {},
