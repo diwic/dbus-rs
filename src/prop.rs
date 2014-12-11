@@ -28,9 +28,8 @@ impl Props {
         let mut r = try!(conn.send_with_reply_and_block(m, self.timeout_ms));
         let reply = try!(r.as_result()).get_items();
         if reply.len() == 1 {
-            match &reply[0] {
-                &MessageItem::Variant(ref v) => return Ok(*v.deref().clone()),
-                _ => {},
+            if let &MessageItem::Variant(ref v) = &reply[0] {
+                return Ok(*v.deref().clone())
             }
        }
        let f = format!("Invalid reply for property get {}: '{}'", propname, reply);
@@ -57,26 +56,17 @@ impl Props {
         let mut r = try!(conn.send_with_reply_and_block(m, self.timeout_ms));
         let reply = try!(r.as_result()).get_items();
         if reply.len() == 1 {
-            match &reply[0] {
-                &MessageItem::Array(ref a, _) => {
-                    let mut t = TreeMap::new();
-                    let mut haserr = false;
-                    for p in a.iter() {
-                        match p {
-                            &MessageItem::DictEntry(ref k, ref v) => {
-                                match &**k {
-                                    &MessageItem::Str(ref ks) => { t.insert(ks.to_string(), *v.deref().clone()); },
-                                    _ => { haserr = true; }
-                                }
-                            }
-                            _ => { haserr = true; }
-                        }
-                    }
-                    if !haserr {
-                        return Ok(t)
-                    };
+            if let &MessageItem::Array(ref a, _) = &reply[0] {
+                let mut t = TreeMap::new();
+                let mut haserr = false;
+                for p in a.iter() {
+                    if let &MessageItem::DictEntry(ref k, ref v) = p {
+                        if let &MessageItem::Str(ref ks) = &**k {
+                            t.insert(ks.to_string(), *v.deref().clone());
+                        } else { haserr = true; };
+                    } else { haserr = true; };
                 }
-                _ => {},
+                if !haserr { return Ok(t) };
             }
         }
         let f = format!("Invalid reply for property GetAll: '{}'", reply);
