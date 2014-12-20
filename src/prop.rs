@@ -1,31 +1,33 @@
 use super::{Connection, Message, MessageItem, Error};
 use std::collections::TreeMap;
 
-pub struct Props {
+pub struct Props<'a> {
     name: String,
     path: String,
     interface: String,
     timeout_ms: int,
+    conn: &'a Connection,
 }
 
-impl Props {
-    pub fn new(name: &str, path: &str, interface: &str, timeout_ms: int) -> Props {
+impl<'a> Props<'a> {
+    pub fn new(conn: &'a Connection, name: &str, path: &str, interface: &str, timeout_ms: int) -> Props<'a> {
         Props {
             name: name.to_string(),
             path: path.to_string(),
             interface: interface.to_string(),
-            timeout_ms: timeout_ms
+            timeout_ms: timeout_ms,
+            conn: conn,
         }
     }
 
-    pub fn get(&self, conn: &Connection, propname: &str) -> Result<MessageItem, Error> {
+    pub fn get(&self, propname: &str) -> Result<MessageItem, Error> {
         let mut m = Message::new_method_call(self.name.as_slice(), self.path.as_slice(),
             "org.freedesktop.DBus.Properties", "Get").unwrap();
         m.append_items(&[
             MessageItem::Str(self.interface.clone()),
             MessageItem::Str(propname.to_string())
         ]);
-        let mut r = try!(conn.send_with_reply_and_block(m, self.timeout_ms));
+        let mut r = try!(self.conn.send_with_reply_and_block(m, self.timeout_ms));
         let reply = try!(r.as_result()).get_items();
         if reply.len() == 1 {
             if let &MessageItem::Variant(ref v) = &reply[0] {
@@ -36,7 +38,7 @@ impl Props {
        return Err(Error::new_custom("InvalidReply", f.as_slice()));
     }
 
-    pub fn set(&self, conn: &Connection, propname: &str, value: MessageItem) -> Result<(), Error> {
+    pub fn set(&self, propname: &str, value: MessageItem) -> Result<(), Error> {
         let mut m = Message::new_method_call(self.name.as_slice(), self.path.as_slice(),
             "org.freedesktop.DBus.Properties", "Set").unwrap();
         m.append_items(&[
@@ -44,16 +46,16 @@ impl Props {
             MessageItem::Str(propname.to_string()),
             MessageItem::Variant(box value),
         ]);
-        let mut r = try!(conn.send_with_reply_and_block(m, self.timeout_ms));
+        let mut r = try!(self.conn.send_with_reply_and_block(m, self.timeout_ms));
         try!(r.as_result());
         Ok(())
     }
 
-    pub fn get_all(&self, conn: &Connection) -> Result<TreeMap<String, MessageItem>, Error> {
+    pub fn get_all(&self) -> Result<TreeMap<String, MessageItem>, Error> {
         let mut m = Message::new_method_call(self.name.as_slice(), self.path.as_slice(),
             "org.freedesktop.DBus.Properties", "GetAll").unwrap();
         m.append_items(&[MessageItem::Str(self.interface.clone())]);
-        let mut r = try!(conn.send_with_reply_and_block(m, self.timeout_ms));
+        let mut r = try!(self.conn.send_with_reply_and_block(m, self.timeout_ms));
         let reply = try!(r.as_result()).get_items();
         if reply.len() == 1 {
             if let &MessageItem::Array(ref a, _) = &reply[0] {
@@ -74,32 +76,32 @@ impl Props {
     }
 }
 
-pub struct PropHandler {
-    p: Props,
+pub struct PropHandler<'a> {
+    p: Props<'a>,
     map: TreeMap<String, MessageItem>,
 }
 
-impl PropHandler {
+impl<'a> PropHandler<'a> {
     pub fn new(p: Props) -> PropHandler {
         PropHandler { p: p, map: TreeMap::new() }
     }
 
-    pub fn get_all(&mut self, conn: &Connection) -> Result<(), Error> {
-        self.map = try!(self.p.get_all(conn));
+    pub fn get_all(&mut self) -> Result<(), Error> {
+        self.map = try!(self.p.get_all());
         Ok(())
     }
 
     pub fn map_mut(&mut self) -> &mut TreeMap<String, MessageItem> { &mut self.map }
     pub fn map(&self) -> &TreeMap<String, MessageItem> { &self.map }
 
-    pub fn get(&mut self, conn: &Connection, propname: &str) -> Result<&MessageItem, Error> {
-        let v = try!(self.p.get(conn, propname));
+    pub fn get(&mut self, propname: &str) -> Result<&MessageItem, Error> {
+        let v = try!(self.p.get(propname));
         self.map.insert(propname.to_string(), v);
         Ok(self.map.get(propname).unwrap())
     }
 
-    pub fn set(&mut self, conn: &Connection, propname: &str, value: MessageItem) -> Result<(), Error> {
-        try!(self.p.set(conn, propname, value.clone()));
+    pub fn set(&mut self, propname: &str, value: MessageItem) -> Result<(), Error> {
+        try!(self.p.set(propname, value.clone()));
         self.map.insert(propname.to_string(), value);
         Ok(())
     }
@@ -131,7 +133,7 @@ impl PropHandler {
        None => not handled,
        Some(Err(())) => message reply send failed,
        Some(Ok()) => message reply send ok */
-    pub fn handle_message(&mut self, conn: &Connection, msg: &mut Message) -> Option<Result<(), ()>> {
+    pub fn handle_message(&mut self, msg: &mut Message) -> Option<Result<(), ()>> {
         let (_, path, iface, method) = msg.headers();
         if iface.is_none() || iface.unwrap().as_slice() != "org.freedesktop.DBus.Properties" { return None; }
         if path.is_none() || path.unwrap() != self.p.path { return None; }
@@ -151,7 +153,7 @@ impl PropHandler {
             "GetAll" => self.handle_getall(msg),
             _ => PropHandler::invalid_args(msg)
         };
-        Some(conn.send(reply))
+        Some(self.p.conn.send(reply))
     }
 }
 
@@ -160,13 +162,13 @@ impl PropHandler {
 #[test]
 fn test_get_policykit_version() {
     use super::BusType;
-    let mut c = Connection::get_private(BusType::System).unwrap();
-    let p = Props::new("org.freedesktop.PolicyKit1", "/org/freedesktop/PolicyKit1/Authority",
+    let c = Connection::get_private(BusType::System).unwrap();
+    let p = Props::new(&c, "org.freedesktop.PolicyKit1", "/org/freedesktop/PolicyKit1/Authority",
         "org.freedesktop.PolicyKit1.Authority", 10000);
 
     /* Let's use both the get and getall methods and see if we get the same result */
-    let v = p.get(&mut c, "BackendVersion").unwrap();
-    let vall = p.get_all(&mut c).unwrap();
+    let v = p.get("BackendVersion").unwrap();
+    let vall = p.get_all().unwrap();
 
     let v2 = match vall.get("BackendVersion").unwrap() {
         &MessageItem::Variant(ref q) => &**q,
@@ -183,18 +185,18 @@ fn test_get_policykit_version() {
 
 #[test]
 fn test_prop_server() {
-    let mut c = Connection::get_private(super::BusType::Session).unwrap();
+    let c = Connection::get_private(super::BusType::Session).unwrap();
     let busname = format!("com.example.prophandler.test{}", ::std::rand::random::<u32>());
     assert_eq!(c.register_name(busname.as_slice(), super::NameFlag::ReplaceExisting as u32).unwrap(), super::RequestNameReply::PrimaryOwner);
 
-    let mut p = PropHandler::new(Props::new(&*busname, "/propserver", &*busname, 5000));
+    let mut p = PropHandler::new(Props::new(&c, &*busname, "/propserver", &*busname, 5000));
     c.register_object_path("/propserver").unwrap();
     p.map_mut().insert("Foo".to_string(), super::MessageItem::Int16(-15));
 
     spawn(move || {
-        let mut c = Connection::get_private(super::BusType::Session).unwrap();
-        let mut pr = PropHandler::new(Props::new(&*busname, "/propserver", &*busname, 5000));
-        assert_eq!(pr.get(&mut c, "Foo").unwrap(), &super::MessageItem::Int16(-15));
+        let c = Connection::get_private(super::BusType::Session).unwrap();
+        let mut pr = PropHandler::new(Props::new(&c, &*busname, "/propserver", &*busname, 5000));
+        assert_eq!(pr.get("Foo").unwrap(), &super::MessageItem::Int16(-15));
     });
 
     loop {
@@ -203,7 +205,7 @@ fn test_prop_server() {
             Some(n) => n,
         };
         if let super::ConnectionItem::MethodCall(mut msg) = n {
-            let q = p.handle_message(&mut c, &mut msg);
+            let q = p.handle_message(&mut msg);
             if q.is_none() {
                 println!("Non-matching message {}", msg);
                 c.send(super::Message::new_error(&msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method").unwrap()).unwrap();
