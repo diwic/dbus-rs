@@ -10,7 +10,7 @@ Client
 
 This example opens a connection to the session bus and asks for a list of all names currently present.
 
-    let mut c = Connection::get_private(BusType::Session).unwrap();
+    let c = Connection::get_private(BusType::Session).unwrap();
     let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
     let mut r = c.send_with_reply_and_block(m, 2000).unwrap();
     let reply = r.get_items();
@@ -21,7 +21,7 @@ Server
 
 This example grabs the com.example.test bus name and listens to method calls on the /hello path.
 
-    let mut c = Connection::get_private(BusType::Session).unwrap();
+    let c = Connection::get_private(BusType::Session).unwrap();
     c.register_name("com.example.test", NameFlag::ReplaceExisting as u32).unwrap();
     c.register_object_path("/hello").unwrap();
     for n in c.iter(1000) {
@@ -37,10 +37,10 @@ Properties
 
 This example gets the current version of the Policykit backend.
 
-    let mut c = Connection::get_private(BusType::System).unwrap();
+    let c = Connection::get_private(BusType::System).unwrap();
     let p = Props::new("org.freedesktop.PolicyKit1", "/org/freedesktop/PolicyKit1/Authority",
         "org.freedesktop.PolicyKit1.Authority", 10000);
-    let v = p.get(&mut c, "BackendVersion").unwrap();
+    let v = p.get(&c, "BackendVersion").unwrap();
 
 License
 =======

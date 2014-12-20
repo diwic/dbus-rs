@@ -18,7 +18,7 @@ impl Props {
         }
     }
 
-    pub fn get(&self, conn: &mut Connection, propname: &str) -> Result<MessageItem, Error> {
+    pub fn get(&self, conn: &Connection, propname: &str) -> Result<MessageItem, Error> {
         let mut m = Message::new_method_call(self.name.as_slice(), self.path.as_slice(),
             "org.freedesktop.DBus.Properties", "Get").unwrap();
         m.append_items(&[
@@ -36,7 +36,7 @@ impl Props {
        return Err(Error::new_custom("InvalidReply", f.as_slice()));
     }
 
-    pub fn set(&self, conn: &mut Connection, propname: &str, value: MessageItem) -> Result<(), Error> {
+    pub fn set(&self, conn: &Connection, propname: &str, value: MessageItem) -> Result<(), Error> {
         let mut m = Message::new_method_call(self.name.as_slice(), self.path.as_slice(),
             "org.freedesktop.DBus.Properties", "Set").unwrap();
         m.append_items(&[
@@ -49,7 +49,7 @@ impl Props {
         Ok(())
     }
 
-    pub fn get_all(&self, conn: &mut Connection) -> Result<TreeMap<String, MessageItem>, Error> {
+    pub fn get_all(&self, conn: &Connection) -> Result<TreeMap<String, MessageItem>, Error> {
         let mut m = Message::new_method_call(self.name.as_slice(), self.path.as_slice(),
             "org.freedesktop.DBus.Properties", "GetAll").unwrap();
         m.append_items(&[MessageItem::Str(self.interface.clone())]);
@@ -84,7 +84,7 @@ impl PropHandler {
         PropHandler { p: p, map: TreeMap::new() }
     }
 
-    pub fn get_all(&mut self, conn: &mut Connection) -> Result<(), Error> {
+    pub fn get_all(&mut self, conn: &Connection) -> Result<(), Error> {
         self.map = try!(self.p.get_all(conn));
         Ok(())
     }
@@ -92,13 +92,13 @@ impl PropHandler {
     pub fn map_mut(&mut self) -> &mut TreeMap<String, MessageItem> { &mut self.map }
     pub fn map(&self) -> &TreeMap<String, MessageItem> { &self.map }
 
-    pub fn get(&mut self, conn: &mut Connection, propname: &str) -> Result<&MessageItem, Error> {
+    pub fn get(&mut self, conn: &Connection, propname: &str) -> Result<&MessageItem, Error> {
         let v = try!(self.p.get(conn, propname));
         self.map.insert(propname.to_string(), v);
         Ok(self.map.get(propname).unwrap())
     }
 
-    pub fn set(&mut self, conn: &mut Connection, propname: &str, value: MessageItem) -> Result<(), Error> {
+    pub fn set(&mut self, conn: &Connection, propname: &str, value: MessageItem) -> Result<(), Error> {
         try!(self.p.set(conn, propname, value.clone()));
         self.map.insert(propname.to_string(), value);
         Ok(())
@@ -131,7 +131,7 @@ impl PropHandler {
        None => not handled,
        Some(Err(())) => message reply send failed,
        Some(Ok()) => message reply send ok */
-    pub fn handle_message(&mut self, conn: &mut Connection, msg: &mut Message) -> Option<Result<(), ()>> {
+    pub fn handle_message(&mut self, conn: &Connection, msg: &mut Message) -> Option<Result<(), ()>> {
         let (_, path, iface, method) = msg.headers();
         if iface.is_none() || iface.unwrap().as_slice() != "org.freedesktop.DBus.Properties" { return None; }
         if path.is_none() || path.unwrap() != self.p.path { return None; }
