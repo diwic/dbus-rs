@@ -1,5 +1,5 @@
 use super::{Connection, Message, MessageItem, Error};
-use std::collections::TreeMap;
+use std::collections::BTreeMap;
 
 pub struct Props<'a> {
     name: String,
@@ -51,7 +51,7 @@ impl<'a> Props<'a> {
         Ok(())
     }
 
-    pub fn get_all(&self) -> Result<TreeMap<String, MessageItem>, Error> {
+    pub fn get_all(&self) -> Result<BTreeMap<String, MessageItem>, Error> {
         let mut m = Message::new_method_call(self.name.as_slice(), self.path.as_slice(),
             "org.freedesktop.DBus.Properties", "GetAll").unwrap();
         m.append_items(&[MessageItem::Str(self.interface.clone())]);
@@ -59,7 +59,7 @@ impl<'a> Props<'a> {
         let reply = try!(r.as_result()).get_items();
         if reply.len() == 1 {
             if let &MessageItem::Array(ref a, _) = &reply[0] {
-                let mut t = TreeMap::new();
+                let mut t = BTreeMap::new();
                 let mut haserr = false;
                 for p in a.iter() {
                     if let &MessageItem::DictEntry(ref k, ref v) = p {
@@ -78,12 +78,12 @@ impl<'a> Props<'a> {
 
 pub struct PropHandler<'a> {
     p: Props<'a>,
-    map: TreeMap<String, MessageItem>,
+    map: BTreeMap<String, MessageItem>,
 }
 
 impl<'a> PropHandler<'a> {
     pub fn new(p: Props) -> PropHandler {
-        PropHandler { p: p, map: TreeMap::new() }
+        PropHandler { p: p, map: BTreeMap::new() }
     }
 
     pub fn get_all(&mut self) -> Result<(), Error> {
@@ -91,8 +91,8 @@ impl<'a> PropHandler<'a> {
         Ok(())
     }
 
-    pub fn map_mut(&mut self) -> &mut TreeMap<String, MessageItem> { &mut self.map }
-    pub fn map(&self) -> &TreeMap<String, MessageItem> { &self.map }
+    pub fn map_mut(&mut self) -> &mut BTreeMap<String, MessageItem> { &mut self.map }
+    pub fn map(&self) -> &BTreeMap<String, MessageItem> { &self.map }
 
     pub fn get(&mut self, propname: &str) -> Result<&MessageItem, Error> {
         let v = try!(self.p.get(propname));
