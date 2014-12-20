@@ -188,9 +188,10 @@ fn test_prop_server() {
     assert_eq!(c.register_name(busname.as_slice(), super::NameFlag::ReplaceExisting as u32).unwrap(), super::RequestNameReply::PrimaryOwner);
 
     let mut p = PropHandler::new(Props::new(&*busname, "/propserver", &*busname, 5000));
+    c.register_object_path("/propserver").unwrap();
     p.map_mut().insert("Foo".to_string(), super::MessageItem::Int16(-15));
 
-    spawn(proc() {
+    spawn(move || {
         let mut c = Connection::get_private(super::BusType::Session).unwrap();
         let mut pr = PropHandler::new(Props::new(&*busname, "/propserver", &*busname, 5000));
         assert_eq!(pr.get(&mut c, "Foo").unwrap(), &super::MessageItem::Int16(-15));

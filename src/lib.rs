@@ -426,41 +426,43 @@ extern "C" fn filter_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::D
     user_data: *mut libc::c_void) -> ffi::DBusHandlerResult {
 
     let m = Message::from_ptr(msg, true);
-//    println!("Got message: {}", m);
-
     let mut c = Connection { i: unsafe { std::mem::transmute(user_data) } };
     assert_eq!(c.i.conn, conn);
 
     let mtype: ffi::DBusMessageType = unsafe { std::mem::transmute(ffi::dbus_message_get_type(msg)) };
-    match mtype {
-        ffi::DBusMessageType::MethodCall => c.i.pending_items.push_back(ConnectionItem::MethodCall(m)),
-        ffi::DBusMessageType::Signal => c.i.pending_items.push_back(ConnectionItem::Signal(m)),
-        _ => {},
+    let r = match mtype {
+        ffi::DBusMessageType::Signal => {
+            c.i.pending_items.push_back(ConnectionItem::Signal(m));
+            ffi::DBusHandlerResult::Handled
+        }
+        _ => ffi::DBusHandlerResult::NotYetHandled,
     };
 
     unsafe { std::mem::forget(c) };
-    ffi::DBusHandlerResult::Handled
+    r
 }
-
+/*
 extern "C" fn object_path_message_cb(_: *mut ffi::DBusConnection, _: *mut ffi::DBusMessage,
     _: *mut libc::c_void) -> ffi::DBusHandlerResult {
+
+    ffi::DBusMessageType::MethodCall => c.i.pending_items.push_back(ConnectionItem::MethodCall(m)),
 
     /* Everything is handled by the filter, so this is just a dummy function now. */
     ffi::DBusHandlerResult::NotYetHandled
 }
+*/
 
-/*
 extern "C" fn object_path_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::DBusMessage,
     user_data: *mut libc::c_void) -> ffi::DBusHandlerResult {
 
     let m = Message::from_ptr(msg, true);
     let mut c = Connection { i: unsafe { std::mem::transmute(user_data) } };
     assert!(c.i.conn == conn);
-    c.i.pending_items.push_back(Msg(m));
+    c.i.pending_items.push_back(ConnectionItem::MethodCall(m));
     unsafe { std::mem::forget(c) };
     ffi::DBusHandlerResult::Handled
 }
-*/
+
 impl Connection {
     pub fn get_private(bus: BusType) -> Result<Connection, Error> {
         let mut e = Error::empty();
@@ -618,7 +620,7 @@ mod test {
     #[test]
     fn object_path() {
         let (tx, rx) = channel();
-        spawn(proc() {
+        spawn(move || {
             let mut c = Connection::get_private(BusType::Session).unwrap();
             c.register_object_path("/hello").unwrap();
             // println!("Waiting...");

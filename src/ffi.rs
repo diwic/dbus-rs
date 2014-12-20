@@ -6,6 +6,7 @@ pub type DBusConnection = c_void;
 pub type DBusMessage = c_void;
 
 #[repr(C)]
+#[deriving(Show, PartialEq, Copy)]
 pub enum DBusBusType {
     Session = 0i,
     System = 1i,
@@ -27,7 +28,7 @@ pub const DBUS_TYPE_INT64: c_int = 'x' as c_int;
 pub const DBUS_TYPE_UINT64: c_int = 't' as c_int;
 
 #[repr(C)]
-#[deriving(Show, PartialEq)]
+#[deriving(Show, PartialEq, Copy)]
 pub enum DBusNameFlag {
     AllowReplacement = 1i,
     ReplaceExisting = 2i,
@@ -35,7 +36,7 @@ pub enum DBusNameFlag {
 }
 
 #[repr(C)]
-#[deriving(Show, PartialEq)]
+#[deriving(Show, PartialEq, Copy)]
 pub enum DBusRequestNameReply {
     PrimaryOwner = 1i,
     InQueue = 2i,
@@ -44,7 +45,7 @@ pub enum DBusRequestNameReply {
 }
 
 #[repr(C)]
-#[deriving(Show, PartialEq)]
+#[deriving(Show, PartialEq, Copy)]
 pub enum DBusReleaseNameReply {
     Released = 1i,
     NonExistent = 2i,
@@ -52,14 +53,15 @@ pub enum DBusReleaseNameReply {
 }
 
 #[repr(C)]
+#[deriving(Show, PartialEq, Copy)]
 pub enum DBusHandlerResult {
     Handled = 0i,
     NotYetHandled = 1i,
     NeedMemory = 2i,
 }
 
-#[deriving(Show)]
 #[repr(C)]
+#[deriving(Show, PartialEq, Copy)]
 pub enum DBusMessageType {
     Invalid = 0i,
     MethodCall = 1i,
@@ -68,8 +70,8 @@ pub enum DBusMessageType {
     Signal = 4i,
 }
 
-#[deriving(Show, PartialEq)]
 #[repr(C)]
+#[deriving(Show, PartialEq, Copy)]
 pub enum DBusDispatchStatus {
     DataRemains = 0i,
     Complete = 1i,
