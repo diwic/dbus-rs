@@ -4,6 +4,7 @@ use libc::{c_void, c_char, c_uint, c_int};
 
 pub type DBusConnection = c_void;
 pub type DBusMessage = c_void;
+pub type DBusCallback = extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> DBusHandlerResult;
 
 #[repr(C)]
 #[deriving(Show, PartialEq, Copy)]

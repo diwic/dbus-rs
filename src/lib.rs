@@ -34,7 +34,7 @@ fn c_str_to_slice(c: & *const libc::c_char) -> Option<&str> {
     if *c == ptr::null() { None }
     else { std::str::from_utf8( unsafe { std::mem::transmute::<_,&[u8]>(
         std::raw::Slice { data: *c as *const u8, len: libc::strlen(*c) as uint }
-    )})}
+    )}).ok() }
 }
 
 impl Error {
@@ -481,7 +481,7 @@ impl Connection {
         /* No, we don't want our app to suddenly quit if dbus goes down */
         unsafe { ffi::dbus_connection_set_exit_on_disconnect(conn, 0) };
         assert!(unsafe {
-            ffi::dbus_connection_add_filter(c.conn(), Some(filter_message_cb), std::mem::transmute(&*c.i), None)
+            ffi::dbus_connection_add_filter(c.conn(), Some(filter_message_cb as ffi::DBusCallback), std::mem::transmute(&*c.i), None)
         } != 0);
         Ok(c)
     }
@@ -524,7 +524,7 @@ impl Connection {
         let p = path.to_c_str();
         let vtable = ffi::DBusObjectPathVTable {
             unregister_function: None,
-            message_function: Some(object_path_message_cb),
+            message_function: Some(object_path_message_cb as ffi::DBusCallback),
             dbus_internal_pad1: None,
             dbus_internal_pad2: None,
             dbus_internal_pad3: None,
