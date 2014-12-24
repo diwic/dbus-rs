@@ -16,6 +16,11 @@ This example opens a connection to the session bus and asks for a list of all na
     let reply = r.get_items();
     println!("{}", reply);
 
+You can try a similar example by running:
+
+    cargo run --example client
+
+
 Server
 ------
 
@@ -26,10 +31,14 @@ This example grabs the com.example.test bus name and listens to method calls on 
     c.register_object_path("/hello").unwrap();
     for n in c.iter(1000) {
         match n {
-            ConnectionItem::Msg(mut m) => /* Handle incoming message m */,
+            ConnectionItem::MethodCall(mut m) => /* Handle incoming method call */,
             _ => {},
         }
     }
+
+You can try a similar example by running:
+
+    cargo run --example server
 
 
 Properties
@@ -38,9 +47,13 @@ Properties
 This example gets the current version of the Policykit backend.
 
     let c = Connection::get_private(BusType::System).unwrap();
-    let p = Props::new("org.freedesktop.PolicyKit1", "/org/freedesktop/PolicyKit1/Authority",
+    let p = Props::new(&c, "org.freedesktop.PolicyKit1", "/org/freedesktop/PolicyKit1/Authority",
         "org.freedesktop.PolicyKit1.Authority", 10000);
-    let v = p.get(&c, "BackendVersion").unwrap();
+    let v = p.get("BackendVersion").unwrap();
+
+You can try a this example by running:
+
+    cargo run --example properties
 
 License
 =======
