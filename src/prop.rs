@@ -193,11 +193,11 @@ fn test_prop_server() {
     c.register_object_path("/propserver").unwrap();
     p.map_mut().insert("Foo".to_string(), super::MessageItem::Int16(-15));
 
-    spawn(move || {
+    ::std::thread::Thread::spawn(move || {
         let c = Connection::get_private(super::BusType::Session).unwrap();
         let mut pr = PropHandler::new(Props::new(&c, &*busname, "/propserver", &*busname, 5000));
         assert_eq!(pr.get("Foo").unwrap(), &super::MessageItem::Int16(-15));
-    });
+    }).detach();
 
     loop {
         let n = match c.iter(1000).next() {

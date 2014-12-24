@@ -626,7 +626,7 @@ mod test {
     #[test]
     fn object_path() {
         let (tx, rx) = channel();
-        spawn(move || {
+        ::std::thread::Thread::spawn(move || {
             let c = Connection::get_private(BusType::Session).unwrap();
             c.register_object_path("/hello").unwrap();
             // println!("Waiting...");
@@ -643,7 +643,7 @@ mod test {
                 }
             }
             c.unregister_object_path("/hello");
-        });
+        }).detach();
 
         let c = Connection::get_private(BusType::Session).unwrap();
         let n = rx.recv();
