@@ -1,3 +1,5 @@
+#![feature(unsafe_destructor)]
+
 extern crate libc;
 
 pub use ffi::DBusBusType as BusType;
@@ -5,6 +7,10 @@ pub use ffi::DBusNameFlag as NameFlag;
 pub use ffi::DBusRequestNameReply as RequestNameReply;
 pub use ffi::DBusReleaseNameReply as ReleaseNameReply;
 pub use ffi::DBusMessageType as MessageType;
+
+pub use prop::PropHandler;
+pub use prop::Props;
+pub use objpath::ObjectPath;
 
 use std::c_str::CString;
 use std::ptr;
@@ -14,6 +20,7 @@ use std::cell::{Cell, RefCell};
 mod ffi;
 
 pub mod prop;
+pub mod objpath;
 
 static INITDBUS: std::sync::Once = std::sync::ONCE_INIT;
 
