@@ -55,6 +55,10 @@ You can try a this example by running:
 
     cargo run --example properties
 
+For an extended example, which also uses non-panicing error handling, see
+
+    examples/rtkit.rs
+
 License
 =======
 
