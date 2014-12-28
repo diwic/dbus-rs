@@ -9,6 +9,8 @@ pub struct Argument<'a> {
 }
 
 pub type MethodResult<'a> = Result<Vec<MessageItem>, (&'a str, String)>;
+pub type PropertyGetResult = Result<MessageItem, (&'static str, String)>;
+pub type PropertySetResult = Result<(), (&'static str, String)>;
 
 pub trait MethodHandler<'a> {
     fn handle(&self, &mut Message) -> MethodResult;
@@ -20,9 +22,34 @@ pub struct Method<'a> {
     cb: Box<MethodHandler<'a>+'a>,
 }
 
+pub trait PropertyHandler {
+    fn get(&self) -> PropertyGetResult;
+    fn set(&self, &MessageItem) -> PropertySetResult;
+}
+
+pub trait PropertyGetHandler {
+    fn get(&self) -> PropertyGetResult;
+}
+
+pub trait PropertySetHandler {
+    fn set(&self, &MessageItem) -> PropertySetResult;
+}
+
+pub enum PropertyAccess<'a> {
+    RO(Box<PropertyGetHandler+'a>),
+    RW(Box<PropertyHandler+'a>),
+    WO(Box<PropertySetHandler+'a>),
+}
+
+pub struct Property<'a> {
+    sig: &'a str,
+    access: PropertyAccess<'a>,
+}
+
 pub struct Interface<'a> {
     methods: BTreeMap<String, Method<'a>>,
-//  TODO: properties and signals
+    properties: BTreeMap<String, Property<'a>>,
+//  TODO: signals
 }
 
 struct IObjectPath<'a> {
@@ -60,19 +87,26 @@ impl<'a> IObjectPath<'a> {
     fn introspect<'b>(&self, _: &mut Message) -> MethodResult<'b> {
         let ifacestr = self.interfaces.borrow().iter().fold("".to_string(), |ia, (ik, iv)| {
             format!(r##"{}  <interface name="{}">
-{}  </interface>
+{}{}  </interface>
 "##,
                 ia, ik, iv.methods.iter().fold("".to_string(), |ma, (mk, mv)| {
                 format!(r##"{}    <method name="{}">
 {}{}    </method>
 "##, ma, mk,
                     mv.in_args.iter().fold("".to_string(), |aa, az| {
-                       format!(r##"{}     <arg name="{}" type="{}" direction="in"/>
+                       format!(r##"{}      <arg name="{}" type="{}" direction="in"/>
 "##, aa, az.name, az.sig)
                     }), mv.out_args.iter().fold("".to_string(), |aa, az| {
-                       format!(r##"{}     <arg name="{}" type="{}" direction="out"/>
+                       format!(r##"{}      <arg name="{}" type="{}" direction="out"/>
 "##, aa, az.name, az.sig)
                 }))
+            }), iv.properties.iter().fold("".to_string(), |pa, (pk, pv)| {
+                       format!(r##"{}    <property name="{}" type="{}" access="{}"/>
+"##, pa, pk, pv.sig, match pv.access {
+                PropertyAccess::RO(_) => "read",
+                PropertyAccess::RW(_) => "readwrite",
+                PropertyAccess::WO(_) => "write",
+            })
             }))
         });
 
@@ -82,7 +116,6 @@ impl<'a> IObjectPath<'a> {
 
         Ok(vec!(MessageItem::Str(nodestr)))
     }
-
 }
 
 struct Introspecter<'a> {
@@ -94,6 +127,117 @@ impl<'a> MethodHandler<'a> for Introspecter<'a> {
         self.objpath.upgrade().unwrap().introspect(m)
     }
 }
+
+fn parse_msg_str(a: Option<&MessageItem>) -> Result<&str,(&'static str, String)> {
+    let name = if let Some(s) = a { s } else {
+        return Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {}", a)))
+    };
+    if let &MessageItem::Str(ref s) = name {
+        Ok(s.as_slice())
+    } else { Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {}", a))) }
+}
+
+fn parse_msg_variant(a: Option<&MessageItem>) -> Result<&MessageItem,(&'static str, String)> {
+    let name = if let Some(s) = a { s } else {
+        return Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {}", a)))
+    };
+    if let &MessageItem::Variant(ref s) = name {
+        Ok(&**s)
+    } else { Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {}", a))) }
+}
+
+impl PropertyGetHandler for MessageItem {
+    fn get(&self) -> PropertyGetResult {
+        Ok(self.clone())
+    }
+}
+
+struct PropertyGet<'a> {
+    objpath: Weak<IObjectPath<'a>>,
+}
+
+impl<'a> MethodHandler<'a> for PropertyGet<'a> {
+    fn handle(&self, msg: &mut Message) -> MethodResult {
+        let items = msg.get_items();
+        let iface_name = try!(parse_msg_str(items.get(0)));
+        let prop_name = try!(parse_msg_str(items.get(1)));
+
+        let istmp = self.objpath.upgrade().unwrap();
+        let is = istmp.interfaces.borrow();
+        let i = if let Some(s) = is.get(iface_name) { s } else {
+            return Err(("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", iface_name)))
+        };
+        let p = if let Some(s) = i.properties.get(prop_name) { s } else {
+            return Err(("org.freedesktop.DBus.Error.UnknownProperty", format!("Unknown property {}", prop_name)))
+        };
+        let v = try!(match p.access {
+            PropertyAccess::RO(ref cb) => cb.get(),
+            PropertyAccess::RW(ref cb) => cb.get(),
+            PropertyAccess::WO(_) => {
+                return Err(("org.freedesktop.DBus.Error.Failed", format!("Property {} is write only", prop_name)))
+            }
+        });
+        Ok(vec!(MessageItem::Variant(box v)))
+    }
+}
+
+struct PropertyGetAll<'a> {
+    objpath: Weak<IObjectPath<'a>>,
+}
+
+impl<'a> MethodHandler<'a> for PropertyGetAll<'a> {
+    fn handle(&self, msg: &mut Message) -> MethodResult {
+        let items = msg.get_items();
+        let iface_name = try!(parse_msg_str(items.get(0)));
+
+        let istmp = self.objpath.upgrade().unwrap();
+        let is = istmp.interfaces.borrow();
+        let i = if let Some(s) = is.get(iface_name) { s } else {
+            return Err(("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", iface_name)))
+        };
+        let mut result = Vec::new();
+        for (pname, pv) in i.properties.iter() {
+            let v = try!(match pv.access {
+                PropertyAccess::RO(ref cb) => cb.get(),
+                PropertyAccess::RW(ref cb) => cb.get(),
+                PropertyAccess::WO(_) => { continue }
+            });
+            result.push(MessageItem::DictEntry(box MessageItem::Str(pname.clone()), box v));
+        }
+        Ok(result)
+    }
+}
+
+struct PropertySet<'a> {
+    objpath: Weak<IObjectPath<'a>>,
+}
+
+impl<'a> MethodHandler<'a> for PropertySet<'a> {
+    fn handle(&self, msg: &mut Message) -> MethodResult {
+        let items = msg.get_items();
+        let iface_name = try!(parse_msg_str(items.get(0)));
+        let prop_name = try!(parse_msg_str(items.get(1)));
+        let value = try!(parse_msg_variant(items.get(2)));
+
+        let istmp = self.objpath.upgrade().unwrap();
+        let is = istmp.interfaces.borrow();
+        let i = if let Some(s) = is.get(iface_name) { s } else {
+            return Err(("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", iface_name)))
+        };
+        let p = if let Some(s) = i.properties.get(prop_name) { s } else {
+            return Err(("org.freedesktop.DBus.Error.UnknownProperty", format!("Unknown property {}", prop_name)))
+        };
+        try!(match p.access {
+            PropertyAccess::WO(ref cb) => cb.set(value),
+            PropertyAccess::RW(ref cb) => cb.set(value),
+            PropertyAccess::RO(_) => {
+                return Err(("org.freedesktop.DBus.Error.PropertyReadOnly", format!("Property {} is read only", prop_name)))
+            }
+        });
+        Ok(vec!())
+    }
+}
+
 
 impl<'a> ObjectPath<'a> {
     pub fn new(conn: &'a Connection, path: &str, introspectable: bool) -> ObjectPath<'a> {
@@ -112,13 +256,45 @@ impl<'a> ObjectPath<'a> {
                 out_args: vec!(Argument { name: "xml_data", sig: "s" }),
                 cb: box Introspecter { objpath: o.i.downgrade() },
             });
-            o.i.interfaces.borrow_mut().insert("org.freedesktop.DBus.Introspectable".to_string(), Interface { methods: m });
-        };
+            o.i.interfaces.borrow_mut().insert("org.freedesktop.DBus.Introspectable".to_string(), Interface {
+                methods: m,
+                properties: BTreeMap::new()
+            });
+        }
         o
+    }
+
+    fn add_property_handler(&mut self) {
+        if self.i.interfaces.borrow().contains_key("org.freedesktop.DBus.Properties") { return };
+
+        let mut m = BTreeMap::new();
+        m.insert("Get".to_string(), Method {
+            in_args: vec!(Argument { name: "interface_name", sig: "s" }, Argument { name: "property_name", sig: "s" }),
+            out_args: vec!(Argument { name: "value", sig: "v" }),
+            cb: box PropertyGet { objpath: self.i.downgrade() },
+        });
+        m.insert("GetAll".to_string(), Method {
+            in_args: vec!(Argument { name: "interface_name", sig: "s" }),
+            out_args: vec!(Argument { name: "props", sig: "a{sv}" }),
+            cb: box PropertyGetAll { objpath: self.i.downgrade() },
+        });
+        m.insert("Set".to_string(), Method {
+            in_args: vec!(Argument { name: "interface_name", sig: "s" }, Argument { name: "property_name", sig: "s" },
+                Argument { name: "value", sig: "v" }),
+            out_args: vec!(),
+            cb: box PropertySet { objpath: self.i.downgrade() },
+        });
+        self.insert_interface("org.freedesktop.DBus.Properties".to_string(), Interface {
+            methods: m,
+            properties: BTreeMap::new()
+        });
     }
 
     // Note: This function can not be called from inside a MethodHandler callback.
     pub fn insert_interface(&mut self, name: String, i: Interface<'a>) {
+        if !i.properties.is_empty() {
+            self.add_property_handler();
+        }
         self.i.interfaces.borrow_mut().insert(name, i);
     }
 
@@ -139,7 +315,7 @@ impl<'a> ObjectPath<'a> {
         let (_, path, iface, method) = msg.headers();
         if path.is_none() || path.unwrap() != self.i.path { return None; }
         if iface.is_none() { return None; }
-        let reply = 
+        let reply =
             if let Some(i) = self.i.interfaces.borrow().get(&iface.unwrap()) {
                 if let Some(Some(m)) = method.map(|m| i.methods.get(&m)) {
                     match m.cb.handle(msg) {
@@ -166,18 +342,52 @@ impl<'a> MethodHandler<'a> for int {
     }
 }
 
-#[test]
-fn test_introspect() {
+#[cfg(test)]
+fn make_objpath<'a>(c: &'a Connection) -> ObjectPath<'a> {
     let mut im = BTreeMap::new();
     im.insert("Echo".to_string(), Method {
         in_args: vec!( Argument { name: "request", sig: "s"} ),  
         out_args: vec!( Argument { name: "reply", sig: "s"} ),
         cb: box 3i,
     });
+    let mut ip = BTreeMap::new();
+    ip.insert("EchoCount".to_string(), Property { sig: "i", access: PropertyAccess::RO(box MessageItem::Int32(7))});
+    let mut o = ObjectPath::new(c, "/echo", true);
+    o.insert_interface("com.example.echo".to_string(), Interface { methods: im, properties: ip });
+    o
+}
 
+#[test]
+fn test_objpath() {
     let c = Connection::get_private(super::BusType::Session).unwrap();
-    let mut o = ObjectPath::new(&c, "/echo", true);
-    o.insert_interface("com.example.echo".to_string(), Interface { methods: im });
+    let mut o = make_objpath(&c);
+    o.set_registered(true).unwrap();
+    let busname = format!("com.example.objpath.test{}", ::std::rand::random::<u32>());
+    assert_eq!(c.register_name(busname.as_slice(), super::NameFlag::ReplaceExisting as u32).unwrap(), super::RequestNameReply::PrimaryOwner);
+
+    let thread = ::std::thread::Thread::spawn(move || {
+        let c = Connection::get_private(super::BusType::Session).unwrap();
+        let pr = super::Props::new(&c, &*busname, "/echo", "com.example.echo", 5000);
+        assert_eq!(pr.get("EchoCount").unwrap(), super::MessageItem::Int32(7));
+    });
+
+    for n in c.iter(1000) {
+        println!("objpath msg {}", n);
+        if let super::ConnectionItem::MethodCall(mut m) = n {
+            if let Some(msg) = o.handle_message(&mut m) {
+                msg.unwrap();
+                break;
+            }
+        }
+    }
+
+    thread.join().ok().expect("failed to join thread");
+}
+
+#[test]
+fn test_introspect() {
+    let c = Connection::get_private(super::BusType::Session).unwrap();
+    let o = make_objpath(&c);
     let mut msg = Message::new_method_call("com.example.echoserver", "/echo", "org.freedesktop.DBus.Introspectable", "Introspect").unwrap();
 
     println!("Introspect result: {}", o.i.introspect(&mut msg));
@@ -186,13 +396,30 @@ fn test_introspect() {
 <node name="/echo">
   <interface name="com.example.echo">
     <method name="Echo">
-     <arg name="request" type="s" direction="in"/>
-     <arg name="reply" type="s" direction="out"/>
+      <arg name="request" type="s" direction="in"/>
+      <arg name="reply" type="s" direction="out"/>
     </method>
+    <property name="EchoCount" type="i" access="read"/>
   </interface>
   <interface name="org.freedesktop.DBus.Introspectable">
     <method name="Introspect">
-     <arg name="xml_data" type="s" direction="out"/>
+      <arg name="xml_data" type="s" direction="out"/>
+    </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Properties">
+    <method name="Get">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg name="property_name" type="s" direction="in"/>
+      <arg name="value" type="v" direction="out"/>
+    </method>
+    <method name="GetAll">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg name="props" type="a{sv}" direction="out"/>
+    </method>
+    <method name="Set">
+      <arg name="interface_name" type="s" direction="in"/>
+      <arg name="property_name" type="s" direction="in"/>
+      <arg name="value" type="v" direction="in"/>
     </method>
   </interface>
 </node>)]"##;
