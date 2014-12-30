@@ -37,6 +37,8 @@ pub struct Error {
     e: ffi::DBusError,
 }
 
+unsafe impl Send for Error {}
+
 fn c_str_to_slice(c: & *const libc::c_char) -> Option<&str> {
     if *c == ptr::null() { None }
     else { std::str::from_utf8( unsafe { std::mem::transmute::<_,&[u8]>(
