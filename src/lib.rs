@@ -27,7 +27,7 @@ static INITDBUS: std::sync::Once = std::sync::ONCE_INIT;
 fn init_dbus() {
     INITDBUS.doit(|| {
         if unsafe { ffi::dbus_threads_init_default() } == 0 {
-            panic!("Out of memory when trying to initialize DBus library!");
+            panic!("Out of memory when trying to initialize D-Bus library!");
         }
     });
 }
@@ -94,13 +94,13 @@ impl Drop for Error {
 
 impl std::fmt::Show for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        write!(f, "DBus error: {} ({})", self.message().unwrap_or(""),
+        write!(f, "D-Bus error: {} ({})", self.message().unwrap_or(""),
             self.name().unwrap_or(""))
     }
 }
 
 impl std::error::Error for Error {
-    fn description(&self) -> &str { "DBus error" }
+    fn description(&self) -> &str { "D-Bus error" }
     fn detail(&self) -> Option<String> { self.message().map(|x| x.to_string()) }
 }
 
@@ -217,7 +217,7 @@ impl MessageItem {
                     let mut subiter = new_dbus_message_iter();
                     unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
                     let a = MessageItem::from_iter(&mut subiter);
-                    if a.len() != 2 { panic!("DBus dict entry error"); }
+                    if a.len() != 2 { panic!("D-Bus dict entry error"); }
                     let mut a = a.into_iter();
                     let key = box a.next().unwrap();
                     let value = box a.next().unwrap();
@@ -227,7 +227,7 @@ impl MessageItem {
                     let mut subiter = new_dbus_message_iter();
                     unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
                     let a = MessageItem::from_iter(&mut subiter);
-                    if a.len() != 1 { panic!("DBus variant error"); }
+                    if a.len() != 1 { panic!("D-Bus variant error"); }
                     v.push(MessageItem::Variant(box a.into_iter().next().unwrap()));
                 }
                 ffi::DBUS_TYPE_ARRAY => {
@@ -255,7 +255,7 @@ impl MessageItem {
                 ffi::DBUS_TYPE_UINT32 => v.push(MessageItem::UInt32(iter_get_basic(i) as u32)),
                 ffi::DBUS_TYPE_UINT64 => v.push(MessageItem::UInt64(iter_get_basic(i) as u64)),
 
-                _ => { panic!("DBus unsupported message type {} ({})", t, t as u8 as char); }
+                _ => { panic!("D-Bus unsupported message type {} ({})", t, t as u8 as char); }
             }
             unsafe { ffi::dbus_message_iter_next(i) };
         }
