@@ -19,7 +19,7 @@ pub trait MethodHandler<'a> {
 pub struct Method<'a> {
     in_args: Vec<Argument<'a>>,
     out_args: Vec<Argument<'a>>,
-    cb: Box<MethodHandler<'a>+'a>,
+    cb: Rc<Box<MethodHandler<'a>+'a>>,
 }
 
 pub trait PropertyHandler {
@@ -254,7 +254,7 @@ impl<'a> ObjectPath<'a> {
             m.insert("Introspect".to_string(), Method {
                 in_args: vec!(),
                 out_args: vec!(Argument { name: "xml_data", sig: "s" }),
-                cb: box Introspecter { objpath: o.i.downgrade() },
+                cb: Rc::new(box Introspecter { objpath: o.i.downgrade() } as Box<MethodHandler>),
             });
             o.i.interfaces.borrow_mut().insert("org.freedesktop.DBus.Introspectable".to_string(), Interface {
                 methods: m,
@@ -271,18 +271,18 @@ impl<'a> ObjectPath<'a> {
         m.insert("Get".to_string(), Method {
             in_args: vec!(Argument { name: "interface_name", sig: "s" }, Argument { name: "property_name", sig: "s" }),
             out_args: vec!(Argument { name: "value", sig: "v" }),
-            cb: box PropertyGet { objpath: self.i.downgrade() },
+            cb: Rc::new(box PropertyGet { objpath: self.i.downgrade() } as Box<MethodHandler>),
         });
         m.insert("GetAll".to_string(), Method {
             in_args: vec!(Argument { name: "interface_name", sig: "s" }),
             out_args: vec!(Argument { name: "props", sig: "a{sv}" }),
-            cb: box PropertyGetAll { objpath: self.i.downgrade() },
+            cb: Rc::new(box PropertyGetAll { objpath: self.i.downgrade() } as Box<MethodHandler>),
         });
         m.insert("Set".to_string(), Method {
             in_args: vec!(Argument { name: "interface_name", sig: "s" }, Argument { name: "property_name", sig: "s" },
                 Argument { name: "value", sig: "v" }),
             out_args: vec!(),
-            cb: box PropertySet { objpath: self.i.downgrade() },
+            cb: Rc::new(box PropertySet { objpath: self.i.downgrade() } as Box<MethodHandler>),
         });
         self.insert_interface("org.freedesktop.DBus.Properties".to_string(), Interface {
             methods: m,
@@ -290,7 +290,6 @@ impl<'a> ObjectPath<'a> {
         });
     }
 
-    // Note: This function can not be called from inside a MethodHandler callback.
     pub fn insert_interface(&mut self, name: String, i: Interface<'a>) {
         if !i.properties.is_empty() {
             self.add_property_handler();
@@ -315,22 +314,32 @@ impl<'a> ObjectPath<'a> {
         let (_, path, iface, method) = msg.headers();
         if path.is_none() || path.unwrap() != self.i.path { return None; }
         if iface.is_none() { return None; }
-        let reply =
+
+        let method = {
+            // This is because we don't want to hold the refcell lock when we call the
+            // callback - maximum flexibility for clients.
             if let Some(i) = self.i.interfaces.borrow().get(&iface.unwrap()) {
                 if let Some(Some(m)) = method.map(|m| i.methods.get(&m)) {
-                    match m.cb.handle(msg) {
-                        Ok(r) => {
-                            let mut z = Message::new_method_return(msg).unwrap();
-                            z.append_items(r.as_slice());
-                            z
-                        }
-                        Err((aa,bb)) => Message::new_error(msg, aa, bb.as_slice()).unwrap(),
-                    }
-                }            
-                else { Message::new_error(msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unkown method").unwrap() }
+                    m.cb.clone()
+                } else {
+                    return Some(self.i.conn.send(Message::new_error(
+                        msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method").unwrap()));
+                }
+            } else {
+                return Some(self.i.conn.send(Message::new_error(msg,
+                    "org.freedesktop.DBus.Error.UnknownInterface", "Unknown interface").unwrap()));
             }
-            else { Message::new_error(msg, "org.freedesktop.DBus.Error.UnknownInterface", "Unkown interface").unwrap() }
-        ;
+        };
+
+        let reply = match method.handle(msg) {
+            Ok(r) => {
+                let mut z = Message::new_method_return(msg).unwrap();
+                z.append_items(r.as_slice());
+                z
+            },
+            Err((aa,bb)) => Message::new_error(msg, aa, bb.as_slice()).unwrap(),
+        };
+
         Some(self.i.conn.send(reply))
     }
 }
@@ -348,7 +357,7 @@ fn make_objpath<'a>(c: &'a Connection) -> ObjectPath<'a> {
     im.insert("Echo".to_string(), Method {
         in_args: vec!( Argument { name: "request", sig: "s"} ),  
         out_args: vec!( Argument { name: "reply", sig: "s"} ),
-        cb: box 3i,
+        cb: Rc::new(box 3i as Box<MethodHandler>),
     });
     let mut ip = BTreeMap::new();
     ip.insert("EchoCount".to_string(), Property { sig: "i", access: PropertyAccess::RO(box MessageItem::Int32(7))});
