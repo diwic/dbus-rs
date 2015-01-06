@@ -7,7 +7,7 @@ pub type DBusMessage = c_void;
 pub type DBusCallback = extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> DBusHandlerResult;
 
 #[repr(C)]
-#[deriving(Show, PartialEq, Copy)]
+#[derive(Show, PartialEq, Copy)]
 pub enum DBusBusType {
     Session = 0i,
     System = 1i,
@@ -29,7 +29,7 @@ pub const DBUS_TYPE_INT64: c_int = 'x' as c_int;
 pub const DBUS_TYPE_UINT64: c_int = 't' as c_int;
 
 #[repr(C)]
-#[deriving(Show, PartialEq, Copy)]
+#[derive(Show, PartialEq, Copy)]
 pub enum DBusNameFlag {
     AllowReplacement = 1i,
     ReplaceExisting = 2i,
@@ -37,7 +37,7 @@ pub enum DBusNameFlag {
 }
 
 #[repr(C)]
-#[deriving(Show, PartialEq, Copy)]
+#[derive(Show, PartialEq, Copy)]
 pub enum DBusRequestNameReply {
     PrimaryOwner = 1i,
     InQueue = 2i,
@@ -46,7 +46,7 @@ pub enum DBusRequestNameReply {
 }
 
 #[repr(C)]
-#[deriving(Show, PartialEq, Copy)]
+#[derive(Show, PartialEq, Copy)]
 pub enum DBusReleaseNameReply {
     Released = 1i,
     NonExistent = 2i,
@@ -54,7 +54,7 @@ pub enum DBusReleaseNameReply {
 }
 
 #[repr(C)]
-#[deriving(Show, PartialEq, Copy)]
+#[derive(Show, PartialEq, Copy)]
 pub enum DBusHandlerResult {
     Handled = 0i,
     NotYetHandled = 1i,
@@ -62,7 +62,7 @@ pub enum DBusHandlerResult {
 }
 
 #[repr(C)]
-#[deriving(Show, PartialEq, Copy)]
+#[derive(Show, PartialEq, Copy)]
 pub enum DBusMessageType {
     Invalid = 0i,
     MethodCall = 1i,
@@ -72,7 +72,7 @@ pub enum DBusMessageType {
 }
 
 #[repr(C)]
-#[deriving(Show, PartialEq, Copy)]
+#[derive(Show, PartialEq, Copy)]
 pub enum DBusDispatchStatus {
     DataRemains = 0i,
     Complete = 1i,

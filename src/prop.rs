@@ -31,7 +31,7 @@ impl<'a> Props<'a> {
         let reply = try!(r.as_result()).get_items();
         if reply.len() == 1 {
             if let &MessageItem::Variant(ref v) = &reply[0] {
-                return Ok(v.deref().clone())
+                return Ok((**v).clone())
             }
        }
        let f = format!("Invalid reply for property get {}: '{}'", propname, reply);
@@ -64,7 +64,7 @@ impl<'a> Props<'a> {
                 for p in a.iter() {
                     if let &MessageItem::DictEntry(ref k, ref v) = p {
                         if let &MessageItem::Str(ref ks) = &**k {
-                            t.insert(ks.to_string(), v.deref().clone());
+                            t.insert(ks.to_string(), (**v).clone());
                         } else { haserr = true; };
                     } else { haserr = true; };
                 }

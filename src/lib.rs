@@ -1,4 +1,4 @@
-#![feature(unsafe_destructor)]
+#![feature(unsafe_destructor, associated_types)]
 
 extern crate libc;
 
@@ -12,7 +12,7 @@ pub use prop::PropHandler;
 pub use prop::Props;
 pub use objpath::ObjectPath;
 
-use std::c_str::CString;
+use std::c_str::{CString, ToCStr};
 use std::ptr;
 use std::collections::DList;
 use std::cell::{Cell, RefCell};
@@ -25,7 +25,7 @@ pub mod objpath;
 static INITDBUS: std::sync::Once = std::sync::ONCE_INIT;
 
 fn init_dbus() {
-    INITDBUS.doit(|| {
+    INITDBUS.call_once(|| {
         if unsafe { ffi::dbus_threads_init_default() } == 0 {
             panic!("Out of memory when trying to initialize D-Bus library!");
         }
@@ -123,7 +123,7 @@ fn new_dbus_message_iter() -> ffi::DBusMessageIter {
     }
 }
 
-#[deriving(Show, PartialEq, PartialOrd, Clone)]
+#[derive(Show, PartialEq, PartialOrd, Clone)]
 pub enum MessageItem {
     Array(Vec<MessageItem>, int),
     Variant(Box<MessageItem>),
@@ -392,7 +392,7 @@ impl std::fmt::Show for Message {
     }
 }
 
-#[deriving(Show)]
+#[derive(Show)]
 pub enum ConnectionItem {
     Nothing,
     MethodCall(Message),
@@ -404,7 +404,8 @@ pub struct ConnectionItems<'a> {
     timeout_ms: int,
 }
 
-impl<'a> Iterator<ConnectionItem> for ConnectionItems<'a> {
+impl<'a> Iterator for ConnectionItems<'a> {
+    type Item = ConnectionItem;
     fn next(&mut self) -> Option<ConnectionItem> {
         loop {
             let i = self.c.i.pending_items.borrow_mut().pop_front();
