@@ -635,12 +635,13 @@ mod test {
 
     #[test]
     fn object_path() {
-        let (tx, rx) = channel();
+        use  std::sync::mpsc;
+        let (tx, rx) = mpsc::channel();
         ::std::thread::Thread::spawn(move || {
             let c = Connection::get_private(BusType::Session).unwrap();
             c.register_object_path("/hello").unwrap();
             // println!("Waiting...");
-            tx.send(c.unique_name());
+            tx.send(c.unique_name()).unwrap();
             for n in c.iter(1000) {
                 // println!("Found message... ({})", n);
                 match n {
@@ -656,7 +657,7 @@ mod test {
         }).detach();
 
         let c = Connection::get_private(BusType::Session).unwrap();
-        let n = rx.recv();
+        let n = rx.recv().unwrap();
         let m = Message::new_method_call(n.as_slice(), "/hello", "com.example.hello", "Hello").unwrap();
         println!("Sending...");
         let mut r = c.send_with_reply_and_block(m, 8000).unwrap();
