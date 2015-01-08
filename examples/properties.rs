@@ -1,8 +1,6 @@
 extern crate "dbus-rs" as dbus;
 
-use dbus::{Connection, BusType};
-use dbus::prop::Props;
-
+use dbus::{Connection, BusType, Props};
 
 fn main() {
     let c = Connection::get_private(BusType::System).unwrap();

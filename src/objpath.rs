@@ -16,10 +16,24 @@ pub trait MethodHandler<'a> {
     fn handle(&self, &mut Message) -> MethodResult;
 }
 
-pub struct Method<'a> {
+struct IMethod<'a> {
     in_args: Vec<Argument<'a>>,
     out_args: Vec<Argument<'a>>,
     cb: Rc<Box<MethodHandler<'a>+'a>>,
+}
+
+pub struct Method<'a> {
+    name: String,
+    i: IMethod<'a>
+}
+
+impl<'a> Method<'a> {
+    pub fn new<N: ToString>(name: N, in_args: Vec<Argument<'a>>,
+            out_args: Vec<Argument<'a>>, cb: Box<MethodHandler<'a>+'a>) -> Method<'a> {
+        Method { name: name.to_string(), i: IMethod {
+            in_args: in_args, out_args: out_args, cb: Rc::new(cb) }
+        }
+    }
 }
 
 pub trait PropertyHandler {
@@ -41,15 +55,43 @@ pub enum PropertyAccess<'a> {
     WO(Box<PropertySetHandler+'a>),
 }
 
-pub struct Property<'a> {
+struct IProperty<'a> {
     sig: &'a str,
     access: PropertyAccess<'a>,
 }
 
+pub struct Property<'a> {
+    name: String,
+    i: IProperty<'a>
+}
+
+impl<'a> Property<'a> {
+    fn new<N: ToString>(name: N, sig: &'a str, a: PropertyAccess<'a>) -> Property<'a> {
+        Property { name: name.to_string(), i: IProperty { sig: sig, access: a } }
+    }
+    pub fn new_ro<N: ToString>(name: N, sig: &'a str, h: Box<PropertyGetHandler+'a>) -> Property<'a> {
+        Property::new(name, sig, PropertyAccess::RO(h))
+    }
+    pub fn new_rw<N: ToString>(name: N, sig: &'a str, h: Box<PropertyHandler+'a>) -> Property<'a> {
+        Property::new(name, sig, PropertyAccess::RW(h))
+    }
+    pub fn new_wo<N: ToString>(name: N, sig: &'a str, h: Box<PropertySetHandler+'a>) -> Property<'a> {
+        Property::new(name, sig, PropertyAccess::WO(h))
+    }
+}
+
 pub struct Interface<'a> {
-    methods: BTreeMap<String, Method<'a>>,
-    properties: BTreeMap<String, Property<'a>>,
+    methods: BTreeMap<String, IMethod<'a>>,
+    properties: BTreeMap<String, IProperty<'a>>,
 //  TODO: signals
+}
+
+impl<'a> Interface<'a> {
+    pub fn new(m: Vec<Method<'a>>, p: Vec<Property<'a>>) -> Interface<'a> {
+        Interface {
+           methods: m.into_iter().map(|m| (m.name, m.i)).collect(),
+           properties: p.into_iter().map(|p| (p.name, p.i)).collect() }
+    }
 }
 
 struct IObjectPath<'a> {
@@ -247,54 +289,42 @@ impl<'a> ObjectPath<'a> {
             registered: Cell::new(false),
             interfaces: RefCell::new(BTreeMap::new()),
         };
-        let o = ObjectPath { i: Rc::new(i) };
+        let mut o = ObjectPath { i: Rc::new(i) };
 
         if introspectable {
-            let mut m = BTreeMap::new();
-            m.insert("Introspect".to_string(), Method {
-                in_args: vec!(),
-                out_args: vec!(Argument { name: "xml_data", sig: "s" }),
-                cb: Rc::new(box Introspecter { objpath: o.i.downgrade() } as Box<MethodHandler>),
-            });
-            o.i.interfaces.borrow_mut().insert("org.freedesktop.DBus.Introspectable".to_string(), Interface {
-                methods: m,
-                properties: BTreeMap::new()
-            });
+            let i = Interface::new(vec!(
+                Method::new("Introspect", vec!(), vec!(Argument { name: "xml_data", sig: "s" }),
+                    box Introspecter { objpath: o.i.downgrade() })), vec!());
+            o.insert_interface("org.freedesktop.DBus.Introspectable", i);
         }
         o
     }
 
     fn add_property_handler(&mut self) {
         if self.i.interfaces.borrow().contains_key("org.freedesktop.DBus.Properties") { return };
-
-        let mut m = BTreeMap::new();
-        m.insert("Get".to_string(), Method {
-            in_args: vec!(Argument { name: "interface_name", sig: "s" }, Argument { name: "property_name", sig: "s" }),
-            out_args: vec!(Argument { name: "value", sig: "v" }),
-            cb: Rc::new(box PropertyGet { objpath: self.i.downgrade() } as Box<MethodHandler>),
-        });
-        m.insert("GetAll".to_string(), Method {
-            in_args: vec!(Argument { name: "interface_name", sig: "s" }),
-            out_args: vec!(Argument { name: "props", sig: "a{sv}" }),
-            cb: Rc::new(box PropertyGetAll { objpath: self.i.downgrade() } as Box<MethodHandler>),
-        });
-        m.insert("Set".to_string(), Method {
-            in_args: vec!(Argument { name: "interface_name", sig: "s" }, Argument { name: "property_name", sig: "s" },
-                Argument { name: "value", sig: "v" }),
-            out_args: vec!(),
-            cb: Rc::new(box PropertySet { objpath: self.i.downgrade() } as Box<MethodHandler>),
-        });
-        self.insert_interface("org.freedesktop.DBus.Properties".to_string(), Interface {
-            methods: m,
-            properties: BTreeMap::new()
-        });
+        let i = Interface::new(vec!(
+            Method::new("Get",
+                vec!(Argument { name: "interface_name", sig: "s" }, Argument { name: "property_name", sig: "s" }),
+                vec!(Argument { name: "value", sig: "v" }),
+                box PropertyGet { objpath: self.i.downgrade() }),
+            Method::new("GetAll",
+                vec!(Argument { name: "interface_name", sig: "s" }),
+                vec!(Argument { name: "props", sig: "a{sv}" }),
+                box PropertyGetAll { objpath: self.i.downgrade() }),
+            Method::new("Set",
+                vec!(Argument { name: "interface_name", sig: "s" }, Argument { name: "property_name", sig: "s" },
+                    Argument { name: "value", sig: "v" }),
+                vec!(),
+                box PropertySet { objpath: self.i.downgrade() })),
+            vec!());
+        self.insert_interface("org.freedesktop.DBus.Properties", i);
     }
 
-    pub fn insert_interface(&mut self, name: String, i: Interface<'a>) {
+    pub fn insert_interface<N: ToString>(&mut self, name: N, i: Interface<'a>) {
         if !i.properties.is_empty() {
             self.add_property_handler();
         }
-        self.i.interfaces.borrow_mut().insert(name, i);
+        self.i.interfaces.borrow_mut().insert(name.to_string(), i);
     }
 
     pub fn is_registered(&self) -> bool {
@@ -353,16 +383,12 @@ impl<'a> MethodHandler<'a> for int {
 
 #[cfg(test)]
 fn make_objpath<'a>(c: &'a Connection) -> ObjectPath<'a> {
-    let mut im = BTreeMap::new();
-    im.insert("Echo".to_string(), Method {
-        in_args: vec!( Argument { name: "request", sig: "s"} ),  
-        out_args: vec!( Argument { name: "reply", sig: "s"} ),
-        cb: Rc::new(box 3i as Box<MethodHandler>),
-    });
-    let mut ip = BTreeMap::new();
-    ip.insert("EchoCount".to_string(), Property { sig: "i", access: PropertyAccess::RO(box MessageItem::Int32(7))});
     let mut o = ObjectPath::new(c, "/echo", true);
-    o.insert_interface("com.example.echo".to_string(), Interface { methods: im, properties: ip });
+    o.insert_interface("com.example.echo", Interface::new(
+        vec!(Method::new("Echo",
+            vec!( Argument { name: "request", sig: "s"} ),
+            vec!( Argument { name: "reply", sig: "s"} ), box 3i)),
+        vec!(Property::new_ro("EchoCount", "i", box MessageItem::Int32(7)))));
     o
 }
 

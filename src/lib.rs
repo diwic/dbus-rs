@@ -10,7 +10,7 @@ pub use ffi::DBusMessageType as MessageType;
 
 pub use prop::PropHandler;
 pub use prop::Props;
-pub use objpath::ObjectPath;
+pub use objpath::{ObjectPath, Interface, Property, Method};
 
 use std::c_str::{CString, ToCStr};
 use std::ptr;
@@ -18,9 +18,8 @@ use std::collections::DList;
 use std::cell::{Cell, RefCell};
 
 mod ffi;
-
-pub mod prop;
-pub mod objpath;
+mod prop;
+mod objpath;
 
 static INITDBUS: std::sync::Once = std::sync::ONCE_INIT;
 
