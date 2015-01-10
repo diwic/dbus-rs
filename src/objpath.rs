@@ -172,20 +172,20 @@ impl<'a> MethodHandler<'a> for Introspecter<'a> {
 
 fn parse_msg_str(a: Option<&MessageItem>) -> Result<&str,(&'static str, String)> {
     let name = if let Some(s) = a { s } else {
-        return Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {}", a)))
+        return Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a)))
     };
     if let &MessageItem::Str(ref s) = name {
         Ok(s.as_slice())
-    } else { Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {}", a))) }
+    } else { Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a))) }
 }
 
 fn parse_msg_variant(a: Option<&MessageItem>) -> Result<&MessageItem,(&'static str, String)> {
     let name = if let Some(s) = a { s } else {
-        return Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {}", a)))
+        return Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a)))
     };
     if let &MessageItem::Variant(ref s) = name {
         Ok(&**s)
-    } else { Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {}", a))) }
+    } else { Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a))) }
 }
 
 impl PropertyGetHandler for MessageItem {
@@ -375,7 +375,7 @@ impl<'a> ObjectPath<'a> {
 }
 
 #[cfg(test)]
-impl<'a> MethodHandler<'a> for int {
+impl<'a> MethodHandler<'a> for i16 {
     fn handle(&self, _: &mut Message) -> MethodResult {
         Err(("dummy", "dummy".to_string()))
     }
@@ -387,7 +387,7 @@ fn make_objpath<'a>(c: &'a Connection) -> ObjectPath<'a> {
     o.insert_interface("com.example.echo", Interface::new(
         vec!(Method::new("Echo",
             vec!( Argument { name: "request", sig: "s"} ),
-            vec!( Argument { name: "reply", sig: "s"} ), box 3i)),
+            vec!( Argument { name: "reply", sig: "s"} ), box 3i16)),
         vec!(Property::new_ro("EchoCount", "i", box MessageItem::Int32(7)))));
     o
 }
@@ -400,14 +400,14 @@ fn test_objpath() {
     let busname = format!("com.example.objpath.test{}", ::std::rand::random::<u32>());
     assert_eq!(c.register_name(busname.as_slice(), super::NameFlag::ReplaceExisting as u32).unwrap(), super::RequestNameReply::PrimaryOwner);
 
-    let thread = ::std::thread::Thread::spawn(move || {
+    let thread = ::std::thread::Thread::scoped(move || {
         let c = Connection::get_private(super::BusType::Session).unwrap();
         let pr = super::Props::new(&c, &*busname, "/echo", "com.example.echo", 5000);
         assert_eq!(pr.get("EchoCount").unwrap(), super::MessageItem::Int32(7));
     });
 
     for n in c.iter(1000) {
-        println!("objpath msg {}", n);
+        println!("objpath msg {:?}", n);
         if let super::ConnectionItem::MethodCall(mut m) = n {
             if let Some(msg) = o.handle_message(&mut m) {
                 msg.unwrap();
@@ -425,9 +425,9 @@ fn test_introspect() {
     let o = make_objpath(&c);
     let mut msg = Message::new_method_call("com.example.echoserver", "/echo", "org.freedesktop.DBus.Introspectable", "Introspect").unwrap();
 
-    println!("Introspect result: {}", o.i.introspect(&mut msg));
+    println!("Introspect result: {:?}", o.i.introspect(&mut msg));
 
-    let result = r##"[Str(<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+    let result = r##"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node name="/echo">
   <interface name="com.example.echo">
     <method name="Echo">
@@ -457,9 +457,9 @@ fn test_introspect() {
       <arg name="value" type="v" direction="in"/>
     </method>
   </interface>
-</node>)]"##;
+</node>"##;
 
-    assert_eq!(result, format!("{}", o.i.introspect(&mut msg).unwrap()));
+    assert_eq!(result, parse_msg_str(o.i.introspect(&mut msg).unwrap().get(0)).unwrap());
 
 }
 

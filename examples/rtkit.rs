@@ -3,6 +3,7 @@
    RLIMIT_RTTIME correctly, hence the syscalls. */
 
 #![feature(old_orphan_check)]
+#![allow(unstable)]
 
 extern crate "dbus-rs" as dbus;
 extern crate libc;
@@ -41,7 +42,7 @@ struct MyError(String);
 
 impl<T: std::fmt::Show> std::error::FromError<T> for MyError {
     fn from_error(err: T) -> MyError {
-        MyError(format!("{}", err))
+        MyError(format!("{:?}", err))
     }
 }
 
@@ -49,7 +50,7 @@ fn item_as_i64(i: MessageItem) -> Result<i64, String> {
     match i {
         MessageItem::Int32(i) => Ok(i as i64),
         MessageItem::Int64(i) => Ok(i),
-        _ => Err(format!("Property is not integer ({})", i))
+        _ => Err(format!("Property is not integer ({:?})", i))
     }
 }
 

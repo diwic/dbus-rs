@@ -9,9 +9,9 @@ pub type DBusCallback = extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> 
 #[repr(C)]
 #[derive(Show, PartialEq, Copy)]
 pub enum DBusBusType {
-    Session = 0i,
-    System = 1i,
-    Starter = 2i,
+    Session = 0,
+    System = 1,
+    Starter = 2,
 }
 
 pub const DBUS_TYPE_ARRAY: c_int = 'a' as c_int;
@@ -31,52 +31,52 @@ pub const DBUS_TYPE_UINT64: c_int = 't' as c_int;
 #[repr(C)]
 #[derive(Show, PartialEq, Copy)]
 pub enum DBusNameFlag {
-    AllowReplacement = 1i,
-    ReplaceExisting = 2i,
-    DoNotQueue = 4i,
+    AllowReplacement = 1,
+    ReplaceExisting = 2,
+    DoNotQueue = 4,
 }
 
 #[repr(C)]
 #[derive(Show, PartialEq, Copy)]
 pub enum DBusRequestNameReply {
-    PrimaryOwner = 1i,
-    InQueue = 2i,
-    Exists = 3i,
-    AlreadyOwner = 4i,
+    PrimaryOwner = 1,
+    InQueue = 2,
+    Exists = 3,
+    AlreadyOwner = 4,
 }
 
 #[repr(C)]
 #[derive(Show, PartialEq, Copy)]
 pub enum DBusReleaseNameReply {
-    Released = 1i,
-    NonExistent = 2i,
-    NotOwner = 3i,
+    Released = 1,
+    NonExistent = 2,
+    NotOwner = 3,
 }
 
 #[repr(C)]
 #[derive(Show, PartialEq, Copy)]
 pub enum DBusHandlerResult {
-    Handled = 0i,
-    NotYetHandled = 1i,
-    NeedMemory = 2i,
+    Handled = 0,
+    NotYetHandled = 1,
+    NeedMemory = 2,
 }
 
 #[repr(C)]
 #[derive(Show, PartialEq, Copy)]
 pub enum DBusMessageType {
-    Invalid = 0i,
-    MethodCall = 1i,
-    MethodReturn = 2i,
-    Error = 3i,
-    Signal = 4i,
+    Invalid = 0,
+    MethodCall = 1,
+    MethodReturn = 2,
+    Error = 3,
+    Signal = 4,
 }
 
 #[repr(C)]
 #[derive(Show, PartialEq, Copy)]
 pub enum DBusDispatchStatus {
-    DataRemains = 0i,
-    Complete = 1i,
-    NeedMemory = 2i,
+    DataRemains = 0,
+    Complete = 1,
+    NeedMemory = 2,
 }
 
 #[repr(C)]

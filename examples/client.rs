@@ -8,6 +8,6 @@ fn main() {
     let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
     let mut r = c.send_with_reply_and_block(m, 2000).unwrap();
     let reply = r.get_items();
-    println!("{}", reply);
+    println!("{:?}", reply);
 }
 

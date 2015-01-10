@@ -5,12 +5,12 @@ pub struct Props<'a> {
     name: String,
     path: String,
     interface: String,
-    timeout_ms: int,
+    timeout_ms: i32,
     conn: &'a Connection,
 }
 
 impl<'a> Props<'a> {
-    pub fn new(conn: &'a Connection, name: &str, path: &str, interface: &str, timeout_ms: int) -> Props<'a> {
+    pub fn new(conn: &'a Connection, name: &str, path: &str, interface: &str, timeout_ms: i32) -> Props<'a> {
         Props {
             name: name.to_string(),
             path: path.to_string(),
@@ -34,7 +34,7 @@ impl<'a> Props<'a> {
                 return Ok((**v).clone())
             }
        }
-       let f = format!("Invalid reply for property get {}: '{}'", propname, reply);
+       let f = format!("Invalid reply for property get {}: '{:?}'", propname, reply);
        return Err(Error::new_custom("InvalidReply", f.as_slice()));
     }
 
@@ -71,7 +71,7 @@ impl<'a> Props<'a> {
                 if !haserr { return Ok(t) };
             }
         }
-        let f = format!("Invalid reply for property GetAll: '{}'", reply);
+        let f = format!("Invalid reply for property GetAll: '{:?}'", reply);
         return Err(Error::new_custom("InvalidReply", f.as_slice()));
     }
 }
@@ -172,13 +172,13 @@ fn test_get_policykit_version() {
 
     let v2 = match vall.get("BackendVersion").unwrap() {
         &MessageItem::Variant(ref q) => &**q,
-        _ => { panic!("Invalid GetAll: {}", vall); }
+        _ => { panic!("Invalid GetAll: {:?}", vall); }
     };
 
     assert_eq!(&v, &*v2);
     match v {
         MessageItem::Str(ref s) => { println!("Policykit Backend version is {}", s); }
-        _ => { panic!("Invalid Get: {}", v); }
+        _ => { panic!("Invalid Get: {:?}", v); }
     };
     
 }
@@ -193,11 +193,11 @@ fn test_prop_server() {
     c.register_object_path("/propserver").unwrap();
     p.map_mut().insert("Foo".to_string(), super::MessageItem::Int16(-15));
 
-    ::std::thread::Thread::spawn(move || {
+    let thread = ::std::thread::Thread::scoped(move || {
         let c = Connection::get_private(super::BusType::Session).unwrap();
         let mut pr = PropHandler::new(Props::new(&c, &*busname, "/propserver", &*busname, 5000));
         assert_eq!(pr.get("Foo").unwrap(), &super::MessageItem::Int16(-15));
-    }).detach();
+    });
 
     loop {
         let n = match c.iter(1000).next() {
@@ -207,7 +207,7 @@ fn test_prop_server() {
         if let super::ConnectionItem::MethodCall(mut msg) = n {
             let q = p.handle_message(&mut msg);
             if q.is_none() {
-                println!("Non-matching message {}", msg);
+                println!("Non-matching message {:?}", msg);
                 c.send(super::Message::new_error(&msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method").unwrap()).unwrap();
                 continue;
             }
@@ -215,4 +215,5 @@ fn test_prop_server() {
             break;
         }
     }
+    thread.join().ok().expect("failed to join thread");
 }

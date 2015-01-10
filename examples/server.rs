@@ -13,10 +13,10 @@ fn main() {
             ConnectionItem::MethodCall(m) => {
                 c.send(Message::new_error(&m, DBUS_ERROR_FAILED, "Method not found").unwrap())
                     .ok().expect("Failed to send reply");
-                println!("MethodCall: {}", m);
+                println!("MethodCall: {:?}", m);
             },
             ConnectionItem::Signal(m) => {
-                println!("Signal: {}", m);
+                println!("Signal: {:?}", m);
             },
             ConnectionItem::Nothing => (),
         }

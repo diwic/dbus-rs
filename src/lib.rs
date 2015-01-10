@@ -1,4 +1,5 @@
-#![feature(unsafe_destructor, associated_types)]
+#![feature(unsafe_destructor, box_syntax)]
+#![allow(unstable)]
 
 extern crate libc;
 
@@ -12,7 +13,8 @@ pub use prop::PropHandler;
 pub use prop::Props;
 pub use objpath::{ObjectPath, Interface, Property, Method};
 
-use std::c_str::{CString, ToCStr};
+use std::ffi as cstr;
+use std::ffi::CString;
 use std::ptr;
 use std::collections::DList;
 use std::cell::{Cell, RefCell};
@@ -40,10 +42,10 @@ unsafe impl Send for Error {}
 
 fn c_str_to_slice(c: & *const libc::c_char) -> Option<&str> {
     if *c == ptr::null() { None }
-    else { std::str::from_utf8( unsafe { std::mem::transmute::<_,&[u8]>(
-        std::raw::Slice { data: *c as *const u8, len: libc::strlen(*c) as uint }
-    )}).ok() }
+    else { std::str::from_utf8( unsafe { cstr::c_str_to_bytes(c) }).ok() }
 }
+
+fn to_c_str<S: Str>(n: S) -> CString { CString::from_slice(n.as_slice().as_bytes()) }
 
 impl Error {
 
@@ -52,8 +54,8 @@ impl Error {
     }
 
     pub fn new_custom(name: &str, message: &str) -> Error {
-        let n = name.to_c_str();
-        let m = message.replace("%","%%").to_c_str();
+        let n = to_c_str(name);
+        let m = to_c_str(message.replace("%","%%"));
         let mut e = Error::empty();
 
         unsafe { ffi::dbus_set_error(e.get_mut(), n.as_ptr(), m.as_ptr()) };
@@ -124,7 +126,7 @@ fn new_dbus_message_iter() -> ffi::DBusMessageIter {
 
 #[derive(Show, PartialEq, PartialOrd, Clone)]
 pub enum MessageItem {
-    Array(Vec<MessageItem>, int),
+    Array(Vec<MessageItem>, i32),
     Variant(Box<MessageItem>),
     DictEntry(Box<MessageItem>, Box<MessageItem>),
     Str(String),
@@ -147,11 +149,11 @@ fn iter_get_basic(i: &mut ffi::DBusMessageIter) -> i64 {
     c
 }
 
-fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &[MessageItem], t: int) {
+fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &[MessageItem], t: i32) {
     let mut subiter = new_dbus_message_iter();
 
     // TODO: This works for simple dictionaries. Not so well for dictionaries of dictionaries, probably.
-    let atype =
+    let atype = to_c_str(
         if t <= 0 {
             match &a[0] {
                 &MessageItem::DictEntry(ref k, ref v) => format!("{{{}{}}}",
@@ -160,11 +162,11 @@ fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &[MessageItem], t: int) {
             }
         }
         else { format!("{}", t as u8 as char) }
-        .to_c_str();
+        );
 
     assert!(unsafe { ffi::dbus_message_iter_open_container(i, ffi::DBUS_TYPE_ARRAY, atype.as_ptr(), &mut subiter) } != 0);
     for item in a.iter() {
-        assert!(t < 0 || item.array_type() == t as int);
+        assert!(t < 0 || item.array_type() == t as i32);
         item.iter_append(&mut subiter);
     }
     assert!(unsafe { ffi::dbus_message_iter_close_container(i, &mut subiter) } != 0);
@@ -172,7 +174,7 @@ fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &[MessageItem], t: int) {
 
 fn iter_append_variant(i: &mut ffi::DBusMessageIter, a: &MessageItem) {
     let mut subiter = new_dbus_message_iter();
-    let atype = format!("{}", a.array_type() as u8 as char).to_c_str();
+    let atype = to_c_str(format!("{}", a.array_type() as u8 as char));
     assert!(unsafe { ffi::dbus_message_iter_open_container(i, ffi::DBUS_TYPE_VARIANT, atype.as_ptr(), &mut subiter) } != 0);
     a.iter_append(&mut subiter);
     assert!(unsafe { ffi::dbus_message_iter_close_container(i, &mut subiter) } != 0);
@@ -188,7 +190,7 @@ fn iter_append_dict(i: &mut ffi::DBusMessageIter, k: &MessageItem, v: &MessageIt
 
 impl MessageItem {
 
-    pub fn array_type(&self) -> int {
+    pub fn array_type(&self) -> i32 {
         let s = match self {
             &MessageItem::Str(_) => ffi::DBUS_TYPE_STRING,
             &MessageItem::Bool(_) => ffi::DBUS_TYPE_BOOLEAN,
@@ -203,7 +205,7 @@ impl MessageItem {
             &MessageItem::Variant(_) => ffi::DBUS_TYPE_VARIANT,
             &MessageItem::DictEntry(_,_) => ffi::DBUS_TYPE_DICT_ENTRY,
         };
-        s as int
+        s as i32
     }
 
     fn from_iter(i: &mut ffi::DBusMessageIter) -> Vec<MessageItem> {
@@ -238,12 +240,11 @@ impl MessageItem {
                 },
                 ffi::DBUS_TYPE_STRING => {
                     let mut c: *const libc::c_char = ptr::null();
-                    let s = unsafe {
+                    unsafe {
                         let p: *mut libc::c_void = std::mem::transmute(&mut c);
                         ffi::dbus_message_iter_get_basic(i, p);
-                        CString::new(c, false)
                     };
-                    v.push(MessageItem::Str(s.to_string()));
+                    v.push(MessageItem::Str(c_str_to_slice(&c).expect("D-Bus string error").to_string()));
                 },
                 ffi::DBUS_TYPE_BOOLEAN => v.push(MessageItem::Bool((iter_get_basic(i) as u32) != 0)),
                 ffi::DBUS_TYPE_BYTE => v.push(MessageItem::Byte(iter_get_basic(i) as u8)),
@@ -271,7 +272,7 @@ impl MessageItem {
     fn iter_append(&self, i: &mut ffi::DBusMessageIter) {
         match self {
             &MessageItem::Str(ref s) => unsafe {
-                let c = s.to_c_str();
+                let c = to_c_str(s);
                 let p = std::mem::transmute(&c);
                 ffi::dbus_message_iter_append_basic(i, ffi::DBUS_TYPE_STRING, p);
             },
@@ -303,7 +304,7 @@ pub struct Message {
 impl Message {
     pub fn new_method_call(destination: &str, path: &str, iface: &str, method: &str) -> Option<Message> {
         init_dbus();
-        let (d, p, i, m) = (destination.to_c_str(), path.to_c_str(), iface.to_c_str(), method.to_c_str());
+        let (d, p, i, m) = (to_c_str(destination), to_c_str(path), to_c_str(iface), to_c_str(method));
         let ptr = unsafe {
             ffi::dbus_message_new_method_call(d.as_ptr(), p.as_ptr(), i.as_ptr(), m.as_ptr())
         };
@@ -312,7 +313,7 @@ impl Message {
 
     pub fn new_signal(path: &str, iface: &str, method: &str) -> Option<Message> {
         init_dbus();
-        let (p, i, m) = (path.to_c_str(), iface.to_c_str(), method.to_c_str());
+        let (p, i, m) = (to_c_str(path), to_c_str(iface), to_c_str(method));
         let ptr = unsafe {
             ffi::dbus_message_new_signal(p.as_ptr(), i.as_ptr(), m.as_ptr())
         };
@@ -325,7 +326,7 @@ impl Message {
     }
 
     pub fn new_error(m: &Message, error_name: &str, error_message: &str) -> Option<Message> {
-        let (en, em) = (error_name.to_c_str(), error_message.to_c_str());
+        let (en, em) = (to_c_str(error_name), to_c_str(error_message));
         let ptr = unsafe { ffi::dbus_message_new_error(m.msg, en.as_ptr(), em.as_ptr()) };
         if ptr == ptr::null_mut() { None } else { Some(Message { msg: ptr} ) }
     }
@@ -387,7 +388,7 @@ impl Drop for Message {
 
 impl std::fmt::Show for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        write!(f, "{}", self.headers())
+        write!(f, "{:?}", self.headers())
     }
 }
 
@@ -400,7 +401,7 @@ pub enum ConnectionItem {
 
 pub struct ConnectionItems<'a> {
     c: &'a Connection,
-    timeout_ms: int,
+    timeout_ms: i32,
 }
 
 impl<'a> Iterator for ConnectionItems<'a> {
@@ -495,7 +496,7 @@ impl Connection {
         Ok(c)
     }
 
-    pub fn send_with_reply_and_block(&self, message: Message, timeout_ms: int) -> Result<Message, Error> {
+    pub fn send_with_reply_and_block(&self, message: Message, timeout_ms: i32) -> Result<Message, Error> {
         let mut e = Error::empty();
         let response = unsafe {
             ffi::dbus_connection_send_with_reply_and_block(self.conn(), message.msg, timeout_ms as libc::c_int, e.get_mut())
@@ -515,13 +516,10 @@ impl Connection {
 
     pub fn unique_name(&self) -> String {
         let c = unsafe { ffi::dbus_bus_get_unique_name(self.conn()) };
-        if c == ptr::null() {
-            return "".to_string();
-        }
-        unsafe { CString::new(c, false) }.as_str().unwrap_or("").to_string()
+        c_str_to_slice(&c).unwrap_or("").to_string()
     }
 
-    pub fn iter(&self, timeout_ms: int) -> ConnectionItems {
+    pub fn iter(&self, timeout_ms: i32) -> ConnectionItems {
         ConnectionItems {
             c: self,
             timeout_ms: timeout_ms,
@@ -530,7 +528,7 @@ impl Connection {
 
     pub fn register_object_path(&self, path: &str) -> Result<(), Error> {
         let mut e = Error::empty();
-        let p = path.to_c_str();
+        let p = to_c_str(path);
         let vtable = ffi::DBusObjectPathVTable {
             unregister_function: None,
             message_function: Some(object_path_message_cb as ffi::DBusCallback),
@@ -547,35 +545,35 @@ impl Connection {
     }
 
     pub fn unregister_object_path(&self, path: &str) {
-        let p = path.to_c_str();
+        let p = to_c_str(path);
         let r = unsafe { ffi::dbus_connection_unregister_object_path(self.conn(), p.as_ptr()) };
         if r == 0 { panic!("Out of memory"); }
     }
 
     pub fn register_name(&self, name: &str, flags: u32) -> Result<RequestNameReply, Error> {
         let mut e = Error::empty();
-        let n = name.to_c_str();
+        let n = to_c_str(name);
         let r = unsafe { ffi::dbus_bus_request_name(self.conn(), n.as_ptr(), flags, e.get_mut()) };
         if r == -1 { Err(e) } else { Ok(unsafe { std::mem::transmute(r) }) }
     }
 
     pub fn release_name(&self, name: &str) -> Result<ReleaseNameReply, Error> {
         let mut e = Error::empty();
-        let n = name.to_c_str();
+        let n = to_c_str(name);
         let r = unsafe { ffi::dbus_bus_release_name(self.conn(), n.as_ptr(), e.get_mut()) };
         if r == -1 { Err(e) } else { Ok(unsafe { std::mem::transmute(r) }) }
     }
 
     pub fn add_match(&self, rule: &str) -> Result<(), Error> {
         let mut e = Error::empty();
-        let n = rule.to_c_str();
+        let n = to_c_str(rule);
         unsafe { ffi::dbus_bus_add_match(self.conn(), n.as_ptr(), e.get_mut()) };
         if e.name().is_some() { Err(e) } else { Ok(()) }
     }
 
     pub fn remove_match(&self, rule: &str) -> Result<(), Error> {
         let mut e = Error::empty();
-        let n = rule.to_c_str();
+        let n = to_c_str(rule);
         unsafe { ffi::dbus_bus_remove_match(self.conn(), n.as_ptr(), e.get_mut()) };
         if e.name().is_some() { Err(e) } else { Ok(()) }
     }
@@ -618,7 +616,7 @@ mod test {
         let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
         let mut r = c.send_with_reply_and_block(m, 2000).unwrap();
         let reply = r.get_items();
-        println!("{}", reply);
+        println!("{:?}", reply);
     }
 
     #[test]
@@ -628,7 +626,7 @@ mod test {
         m.append_items(&[MessageItem::Str("org.freedesktop.DBus".to_string())]);
         let mut r = c.send_with_reply_and_block(m, 2000).unwrap();
         let reply = r.get_items();
-        println!("{}", reply);
+        println!("{:?}", reply);
         assert_eq!(reply, vec!(MessageItem::Bool(true)));
     }
 
@@ -636,7 +634,7 @@ mod test {
     fn object_path() {
         use  std::sync::mpsc;
         let (tx, rx) = mpsc::channel();
-        ::std::thread::Thread::spawn(move || {
+        let thread = ::std::thread::Thread::scoped(move || {
             let c = Connection::get_private(BusType::Session).unwrap();
             c.register_object_path("/hello").unwrap();
             // println!("Waiting...");
@@ -653,7 +651,7 @@ mod test {
                 }
             }
             c.unregister_object_path("/hello");
-        }).detach();
+        });
 
         let c = Connection::get_private(BusType::Session).unwrap();
         let n = rx.recv().unwrap();
@@ -661,7 +659,9 @@ mod test {
         println!("Sending...");
         let mut r = c.send_with_reply_and_block(m, 8000).unwrap();
         let reply = r.get_items();
-        println!("{}", reply);
+        println!("{:?}", reply);
+        thread.join().ok().expect("failed to join thread");
+        
     }
 
     #[test]
@@ -679,19 +679,19 @@ mod test {
                 MessageItem::DictEntry(box MessageItem::UInt32(123543), box MessageItem::Bool(true))
             ), -1)
         ]);
-        let sending = format!("{}", m.get_items());
+        let sending = format!("{:?}", m.get_items());
         println!("Sending {}", sending);
         c.send(m).unwrap();
 
         for n in c.iter(1000) {
             match n {
                 ConnectionItem::MethodCall(mut m) => {
-                    let receiving = format!("{}", m.get_items());
+                    let receiving = format!("{:?}", m.get_items());
                     println!("Receiving {}", receiving);
                     assert_eq!(sending, receiving);
                     break;
                 }
-                _ => println!("Got {}", n),
+                _ => println!("Got {:?}", n),
             }
         }
     }
@@ -723,7 +723,7 @@ mod test {
                             assert_eq!(s.sender().unwrap(), uname);
                             break;
                         },
-                        (_, _, _) => println!("Other signal: {}", s.headers()),
+                        (_, _, _) => println!("Other signal: {:?}", s.headers()),
                     }
                 }
                 _ => {},
