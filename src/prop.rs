@@ -21,7 +21,7 @@ impl<'a> Props<'a> {
     }
 
     pub fn get(&self, propname: &str) -> Result<MessageItem, Error> {
-        let mut m = Message::new_method_call(self.name.as_slice(), self.path.as_slice(),
+        let mut m = Message::new_method_call(&*self.name, &*self.path,
             "org.freedesktop.DBus.Properties", "Get").unwrap();
         m.append_items(&[
             MessageItem::Str(self.interface.clone()),
@@ -35,11 +35,11 @@ impl<'a> Props<'a> {
             }
        }
        let f = format!("Invalid reply for property get {}: '{:?}'", propname, reply);
-       return Err(Error::new_custom("InvalidReply", f.as_slice()));
+       return Err(Error::new_custom("InvalidReply", &*f));
     }
 
     pub fn set(&self, propname: &str, value: MessageItem) -> Result<(), Error> {
-        let mut m = Message::new_method_call(self.name.as_slice(), self.path.as_slice(),
+        let mut m = Message::new_method_call(&*self.name, &*self.path,
             "org.freedesktop.DBus.Properties", "Set").unwrap();
         m.append_items(&[
             MessageItem::Str(self.interface.clone()),
@@ -52,7 +52,7 @@ impl<'a> Props<'a> {
     }
 
     pub fn get_all(&self) -> Result<BTreeMap<String, MessageItem>, Error> {
-        let mut m = Message::new_method_call(self.name.as_slice(), self.path.as_slice(),
+        let mut m = Message::new_method_call(&*self.name, &*self.path,
             "org.freedesktop.DBus.Properties", "GetAll").unwrap();
         m.append_items(&[MessageItem::Str(self.interface.clone())]);
         let mut r = try!(self.conn.send_with_reply_and_block(m, self.timeout_ms));
@@ -72,7 +72,7 @@ impl<'a> Props<'a> {
             }
         }
         let f = format!("Invalid reply for property GetAll: '{:?}'", reply);
-        return Err(Error::new_custom("InvalidReply", f.as_slice()));
+        return Err(Error::new_custom("InvalidReply", &*f));
     }
 }
 
@@ -135,7 +135,7 @@ impl<'a> PropHandler<'a> {
        Some(Ok()) => message reply send ok */
     pub fn handle_message(&mut self, msg: &mut Message) -> Option<Result<(), ()>> {
         let (_, path, iface, method) = msg.headers();
-        if iface.is_none() || iface.unwrap().as_slice() != "org.freedesktop.DBus.Properties" { return None; }
+        if iface.is_none() || &*iface.unwrap() != "org.freedesktop.DBus.Properties" { return None; }
         if path.is_none() || path.unwrap() != self.p.path { return None; }
         if method.is_none() { return None; }
 
@@ -147,7 +147,7 @@ impl<'a> PropHandler<'a> {
         } else { return None }; // Hmm, invalid message
 
         // Ok, we have a match
-        let reply = match method.unwrap().as_slice() {
+        let reply = match &*method.unwrap() {
             "Get" => self.handle_get(msg),
 //            "Set" => self.handle_set(msg),
             "GetAll" => self.handle_getall(msg),
@@ -187,7 +187,7 @@ fn test_get_policykit_version() {
 fn test_prop_server() {
     let c = Connection::get_private(super::BusType::Session).unwrap();
     let busname = format!("com.example.prophandler.test{}", ::std::rand::random::<u32>());
-    assert_eq!(c.register_name(busname.as_slice(), super::NameFlag::ReplaceExisting as u32).unwrap(), super::RequestNameReply::PrimaryOwner);
+    assert_eq!(c.register_name(&*busname, super::NameFlag::ReplaceExisting as u32).unwrap(), super::RequestNameReply::PrimaryOwner);
 
     let mut p = PropHandler::new(Props::new(&c, &*busname, "/propserver", &*busname, 5000));
     c.register_object_path("/propserver").unwrap();

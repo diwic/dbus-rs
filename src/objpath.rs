@@ -175,7 +175,7 @@ fn parse_msg_str(a: Option<&MessageItem>) -> Result<&str,(&'static str, String)>
         return Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a)))
     };
     if let &MessageItem::Str(ref s) = name {
-        Ok(s.as_slice())
+        Ok(&**s)
     } else { Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a))) }
 }
 
@@ -364,10 +364,10 @@ impl<'a> ObjectPath<'a> {
         let reply = match method.handle(msg) {
             Ok(r) => {
                 let mut z = Message::new_method_return(msg).unwrap();
-                z.append_items(r.as_slice());
+                z.append_items(&*r);
                 z
             },
-            Err((aa,bb)) => Message::new_error(msg, aa, bb.as_slice()).unwrap(),
+            Err((aa,bb)) => Message::new_error(msg, aa, &*bb).unwrap(),
         };
 
         Some(self.i.conn.send(reply))
@@ -398,7 +398,7 @@ fn test_objpath() {
     let mut o = make_objpath(&c);
     o.set_registered(true).unwrap();
     let busname = format!("com.example.objpath.test{}", ::std::rand::random::<u32>());
-    assert_eq!(c.register_name(busname.as_slice(), super::NameFlag::ReplaceExisting as u32).unwrap(), super::RequestNameReply::PrimaryOwner);
+    assert_eq!(c.register_name(&*busname, super::NameFlag::ReplaceExisting as u32).unwrap(), super::RequestNameReply::PrimaryOwner);
 
     let thread = ::std::thread::Thread::scoped(move || {
         let c = Connection::get_private(super::BusType::Session).unwrap();

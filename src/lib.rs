@@ -284,7 +284,7 @@ impl MessageItem {
             &MessageItem::UInt16(b) => self.iter_append_basic(i, b as i64),
             &MessageItem::UInt32(b) => self.iter_append_basic(i, b as i64),
             &MessageItem::UInt64(b) => self.iter_append_basic(i, b as i64),
-            &MessageItem::Array(ref b, t) => iter_append_array(i, b.as_slice(), t),
+            &MessageItem::Array(ref b, t) => iter_append_array(i, &**b, t),
             &MessageItem::Variant(ref b) => iter_append_variant(i, &**b),
             &MessageItem::DictEntry(ref k, ref v) => iter_append_dict(i, &**k, &**v),
         }
@@ -598,7 +598,7 @@ mod test {
     fn connection() {
         let c = Connection::get_private(BusType::Session).unwrap();
         let n = c.unique_name();
-        assert!(n.as_slice().starts_with(":1."));
+        assert!(n.starts_with(":1."));
         println!("Connected to DBus, unique name: {}", n);
     }
 
@@ -655,7 +655,7 @@ mod test {
 
         let c = Connection::get_private(BusType::Session).unwrap();
         let n = rx.recv().unwrap();
-        let m = Message::new_method_call(n.as_slice(), "/hello", "com.example.hello", "Hello").unwrap();
+        let m = Message::new_method_call(&*n, "/hello", "com.example.hello", "Hello").unwrap();
         println!("Sending...");
         let mut r = c.send_with_reply_and_block(m, 8000).unwrap();
         let reply = r.get_items();
@@ -668,13 +668,13 @@ mod test {
     fn message_types() {
         let c = Connection::get_private(BusType::Session).unwrap();
         c.register_object_path("/hello").unwrap();
-        let mut m = Message::new_method_call(c.unique_name().as_slice(), "/hello", "com.example.hello", "Hello").unwrap();
+        let mut m = Message::new_method_call(&*c.unique_name(), "/hello", "com.example.hello", "Hello").unwrap();
         m.append_items(&[
             MessageItem::UInt16(2000),
             MessageItem::Array(vec!(MessageItem::Byte(129)), -1),
             MessageItem::UInt64(987654321),
             MessageItem::Int32(-1),
-            MessageItem::Str("Hello world".to_string()),
+            MessageItem::Str(format!("Hello world")),
             MessageItem::Array(vec!(
                 MessageItem::DictEntry(box MessageItem::UInt32(123543), box MessageItem::Bool(true))
             ), -1)
@@ -701,8 +701,8 @@ mod test {
         use std::rand;
         let c = Connection::get_private(BusType::Session).unwrap();
         let n = format!("com.example.hello.test{}", rand::random::<u32>());
-        assert_eq!(c.register_name(n.as_slice(), NameFlag::ReplaceExisting as u32).unwrap(), RequestNameReply::PrimaryOwner);
-        assert_eq!(c.release_name(n.as_slice()).unwrap(), ReleaseNameReply::Released);
+        assert_eq!(c.register_name(&*n, NameFlag::ReplaceExisting as u32).unwrap(), RequestNameReply::PrimaryOwner);
+        assert_eq!(c.release_name(&*n).unwrap(), ReleaseNameReply::Released);
     }
 
     #[test]
@@ -710,7 +710,7 @@ mod test {
         let c = Connection::get_private(BusType::Session).unwrap();
         let iface = "com.example.signaltest";
         let mstr = format!("interface='{}',member='ThisIsASignal'", iface);
-        c.add_match(mstr.as_slice()).unwrap();
+        c.add_match(&*mstr).unwrap();
         let m = Message::new_signal("/mysignal", iface, "ThisIsASignal").unwrap();
         let uname = c.unique_name();
         c.send(m).unwrap();
@@ -718,7 +718,7 @@ mod test {
             match n {
                 ConnectionItem::Signal(s) => {
                     let (_, p, i, m) = s.headers();
-                    match (p.unwrap().as_slice(), i.unwrap().as_slice(), m.unwrap().as_slice()) {
+                    match (&*p.unwrap(), &*i.unwrap(), &*m.unwrap()) {
                         ("/mysignal", "com.example.signaltest", "ThisIsASignal") => {
                             assert_eq!(s.sender().unwrap(), uname);
                             break;
@@ -729,7 +729,7 @@ mod test {
                 _ => {},
             }
         }
-        c.remove_match(mstr.as_slice()).unwrap();
+        c.remove_match(&*mstr).unwrap();
     }
 
 }
