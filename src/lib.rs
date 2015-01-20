@@ -11,13 +11,15 @@ pub use ffi::DBusMessageType as MessageType;
 
 pub use prop::PropHandler;
 pub use prop::Props;
-pub use objpath::{ObjectPath, Interface, Property, Method};
+pub use objpath::{ObjectPath, Interface, Property, Method, MethodHandler, MethodResult, Argument};
 
 use std::ffi as cstr;
 use std::ffi::CString;
 use std::ptr;
 use std::collections::DList;
 use std::cell::{Cell, RefCell};
+
+pub type TypeSig<'a> = std::string::CowString<'a>;
 
 mod ffi;
 mod prop;
@@ -138,6 +140,7 @@ pub enum MessageItem {
     UInt16(u16),
     UInt32(u32),
     UInt64(u64),
+    Double(f64),
 }
 
 fn iter_get_basic(i: &mut ffi::DBusMessageIter) -> i64 {
@@ -147,6 +150,22 @@ fn iter_get_basic(i: &mut ffi::DBusMessageIter) -> i64 {
         ffi::dbus_message_iter_get_basic(i, p);
     }
     c
+}
+
+fn iter_get_f64(i: &mut ffi::DBusMessageIter) -> f64 {
+    let mut c: f64 = 0.0;
+    unsafe {
+        let p: *mut libc::c_void = std::mem::transmute(&mut c);
+        ffi::dbus_message_iter_get_basic(i, p);
+    }
+    c
+}
+
+fn iter_append_f64(i: &mut ffi::DBusMessageIter, v: f64) {
+    unsafe {
+        let p: *const libc::c_void = std::mem::transmute(&v);
+        ffi::dbus_message_iter_append_basic(i, ffi::DBUS_TYPE_DOUBLE, p);
+    }
 }
 
 fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &[MessageItem], t: i32) {
@@ -190,6 +209,26 @@ fn iter_append_dict(i: &mut ffi::DBusMessageIter, k: &MessageItem, v: &MessageIt
 
 impl MessageItem {
 
+    pub fn type_sig(&self) -> TypeSig<'static> {
+        use std::borrow::IntoCow;
+        match self {
+            // TODO: Can we make use of the ffi constants here instead of duplicating them?
+            &MessageItem::Str(_) => "s",
+            &MessageItem::Bool(_) => "b",
+            &MessageItem::Byte(_) => "y",
+            &MessageItem::Int16(_) => "n",
+            &MessageItem::Int32(_) => "i",
+            &MessageItem::Int64(_) => "x",
+            &MessageItem::UInt16(_) => "q",
+            &MessageItem::UInt32(_) => "u",
+            &MessageItem::UInt64(_) => "t",
+            &MessageItem::Double(_) => "d",
+            &MessageItem::Array(_,_) => "a",
+            &MessageItem::Variant(_) => "v",
+            &MessageItem::DictEntry(_,_) => "e",
+        }.into_cow()
+    }
+
     pub fn array_type(&self) -> i32 {
         let s = match self {
             &MessageItem::Str(_) => ffi::DBUS_TYPE_STRING,
@@ -201,6 +240,7 @@ impl MessageItem {
             &MessageItem::UInt16(_) => ffi::DBUS_TYPE_UINT16,
             &MessageItem::UInt32(_) => ffi::DBUS_TYPE_UINT32,
             &MessageItem::UInt64(_) => ffi::DBUS_TYPE_UINT64,
+            &MessageItem::Double(_) => ffi::DBUS_TYPE_DOUBLE,
             &MessageItem::Array(_,_) => ffi::DBUS_TYPE_ARRAY,
             &MessageItem::Variant(_) => ffi::DBUS_TYPE_VARIANT,
             &MessageItem::DictEntry(_,_) => ffi::DBUS_TYPE_DICT_ENTRY,
@@ -254,6 +294,7 @@ impl MessageItem {
                 ffi::DBUS_TYPE_UINT16 => v.push(MessageItem::UInt16(iter_get_basic(i) as u16)),
                 ffi::DBUS_TYPE_UINT32 => v.push(MessageItem::UInt32(iter_get_basic(i) as u32)),
                 ffi::DBUS_TYPE_UINT64 => v.push(MessageItem::UInt64(iter_get_basic(i) as u64)),
+                ffi::DBUS_TYPE_DOUBLE => v.push(MessageItem::Double(iter_get_f64(i))),
 
                 _ => { panic!("D-Bus unsupported message type {} ({})", t, t as u8 as char); }
             }
@@ -284,6 +325,7 @@ impl MessageItem {
             &MessageItem::UInt16(b) => self.iter_append_basic(i, b as i64),
             &MessageItem::UInt32(b) => self.iter_append_basic(i, b as i64),
             &MessageItem::UInt64(b) => self.iter_append_basic(i, b as i64),
+            &MessageItem::Double(b) => iter_append_f64(i, b),
             &MessageItem::Array(ref b, t) => iter_append_array(i, &**b, t),
             &MessageItem::Variant(ref b) => iter_append_variant(i, &**b),
             &MessageItem::DictEntry(ref k, ref v) => iter_append_dict(i, &**k, &**v),
@@ -675,6 +717,7 @@ mod test {
             MessageItem::UInt64(987654321),
             MessageItem::Int32(-1),
             MessageItem::Str(format!("Hello world")),
+            MessageItem::Double(-3.14),
             MessageItem::Array(vec!(
                 MessageItem::DictEntry(box MessageItem::UInt32(123543), box MessageItem::Bool(true))
             ), -1)

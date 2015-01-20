@@ -1,11 +1,18 @@
-use super::{Connection, Message, MessageItem, Error};
+use super::{Connection, Message, MessageItem, Error, TypeSig};
 use std::collections::BTreeMap;
 use std::rc::{Rc, Weak};
 use std::cell::{Cell, RefCell};
+use std::borrow::IntoCow;
 
 pub struct Argument<'a> {
     name: &'a str,
-    sig: &'a str,
+    sig: TypeSig<'a>,
+}
+
+impl<'a> Argument<'a> {
+    pub fn new<T: IntoCow<'a, String, str>>(name: &'a str, sig: T) -> Argument<'a> {
+        Argument { name: name, sig: sig.into_cow() }
+    }
 }
 
 pub type MethodResult<'a> = Result<Vec<MessageItem>, (&'a str, String)>;
@@ -56,7 +63,7 @@ pub enum PropertyAccess<'a> {
 }
 
 struct IProperty<'a> {
-    sig: &'a str,
+    sig: TypeSig<'a>,
     access: PropertyAccess<'a>,
 }
 
@@ -66,16 +73,16 @@ pub struct Property<'a> {
 }
 
 impl<'a> Property<'a> {
-    fn new<N: ToString>(name: N, sig: &'a str, a: PropertyAccess<'a>) -> Property<'a> {
+    fn new<N: ToString>(name: N, sig: TypeSig<'a>, a: PropertyAccess<'a>) -> Property<'a> {
         Property { name: name.to_string(), i: IProperty { sig: sig, access: a } }
     }
-    pub fn new_ro<N: ToString>(name: N, sig: &'a str, h: Box<PropertyGetHandler+'a>) -> Property<'a> {
+    pub fn new_ro<N: ToString>(name: N, sig: TypeSig<'a>, h: Box<PropertyGetHandler+'a>) -> Property<'a> {
         Property::new(name, sig, PropertyAccess::RO(h))
     }
-    pub fn new_rw<N: ToString>(name: N, sig: &'a str, h: Box<PropertyHandler+'a>) -> Property<'a> {
+    pub fn new_rw<N: ToString>(name: N, sig: TypeSig<'a>, h: Box<PropertyHandler+'a>) -> Property<'a> {
         Property::new(name, sig, PropertyAccess::RW(h))
     }
-    pub fn new_wo<N: ToString>(name: N, sig: &'a str, h: Box<PropertySetHandler+'a>) -> Property<'a> {
+    pub fn new_wo<N: ToString>(name: N, sig: TypeSig<'a>, h: Box<PropertySetHandler+'a>) -> Property<'a> {
         Property::new(name, sig, PropertyAccess::WO(h))
     }
 }
@@ -293,7 +300,7 @@ impl<'a> ObjectPath<'a> {
 
         if introspectable {
             let i = Interface::new(vec!(
-                Method::new("Introspect", vec!(), vec!(Argument { name: "xml_data", sig: "s" }),
+                Method::new("Introspect", vec!(), vec!(Argument::new("xml_data", "s")),
                     box Introspecter { objpath: o.i.downgrade() })), vec!());
             o.insert_interface("org.freedesktop.DBus.Introspectable", i);
         }
@@ -304,16 +311,16 @@ impl<'a> ObjectPath<'a> {
         if self.i.interfaces.borrow().contains_key("org.freedesktop.DBus.Properties") { return };
         let i = Interface::new(vec!(
             Method::new("Get",
-                vec!(Argument { name: "interface_name", sig: "s" }, Argument { name: "property_name", sig: "s" }),
-                vec!(Argument { name: "value", sig: "v" }),
+                vec!(Argument::new("interface_name", "s"), Argument::new("property_name", "s")),
+                vec!(Argument::new("value", "v")),
                 box PropertyGet { objpath: self.i.downgrade() }),
             Method::new("GetAll",
-                vec!(Argument { name: "interface_name", sig: "s" }),
-                vec!(Argument { name: "props", sig: "a{sv}" }),
+                vec!(Argument::new("interface_name", "s")),
+                vec!(Argument::new("props", "a{sv}")),
                 box PropertyGetAll { objpath: self.i.downgrade() }),
             Method::new("Set",
-                vec!(Argument { name: "interface_name", sig: "s" }, Argument { name: "property_name", sig: "s" },
-                    Argument { name: "value", sig: "v" }),
+                vec!(Argument::new("interface_name", "s"), Argument::new("property_name", "s"),
+                    Argument::new("value", "v")),
                 vec!(),
                 box PropertySet { objpath: self.i.downgrade() })),
             vec!());
@@ -386,9 +393,9 @@ fn make_objpath<'a>(c: &'a Connection) -> ObjectPath<'a> {
     let mut o = ObjectPath::new(c, "/echo", true);
     o.insert_interface("com.example.echo", Interface::new(
         vec!(Method::new("Echo",
-            vec!( Argument { name: "request", sig: "s"} ),
-            vec!( Argument { name: "reply", sig: "s"} ), box 3i16)),
-        vec!(Property::new_ro("EchoCount", "i", box MessageItem::Int32(7)))));
+            vec!(Argument::new("request", "s")),
+            vec!(Argument::new("reply", "s")), box 3i16)),
+        vec!(Property::new_ro("EchoCount", MessageItem::Int32(7).type_sig(), box MessageItem::Int32(7)))));
     o
 }
 

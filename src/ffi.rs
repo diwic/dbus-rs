@@ -27,6 +27,9 @@ pub const DBUS_TYPE_INT32: c_int = 'i' as c_int;
 pub const DBUS_TYPE_UINT32: c_int = 'u' as c_int;
 pub const DBUS_TYPE_INT64: c_int = 'x' as c_int;
 pub const DBUS_TYPE_UINT64: c_int = 't' as c_int;
+pub const DBUS_TYPE_DOUBLE: c_int = 'd' as c_int;
+pub const DBUS_TYPE_UNIX_FD: c_int = 'h' as c_int;
+pub const DBUS_TYPE_STRUCT: c_int = 'r' as c_int;
 
 #[repr(C)]
 #[derive(Show, PartialEq, Copy)]
