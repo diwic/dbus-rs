@@ -95,7 +95,7 @@ impl Drop for Error {
     }
 }
 
-impl std::fmt::Show for Error {
+impl std::fmt::Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         write!(f, "D-Bus error: {} ({})", self.message().unwrap_or(""),
             self.name().unwrap_or(""))
@@ -104,7 +104,13 @@ impl std::fmt::Show for Error {
 
 impl std::error::Error for Error {
     fn description(&self) -> &str { "D-Bus error" }
-    fn detail(&self) -> Option<String> { self.message().map(|x| x.to_string()) }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(),std::fmt::Error> {
+        self.message().map(|x| write!(f, "{:?}", x.to_string()));
+        Ok(())
+    }
 }
 
 fn new_dbus_message_iter() -> ffi::DBusMessageIter {
@@ -428,7 +434,7 @@ impl Drop for Message {
     }
 }
 
-impl std::fmt::Show for Message {
+impl std::fmt::Debug for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
         write!(f, "{:?}", self.headers())
     }
