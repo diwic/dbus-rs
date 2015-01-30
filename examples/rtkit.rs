@@ -40,7 +40,7 @@ extern "C" {
 
 struct MyError(String);
 
-impl<T: std::fmt::Show> std::error::FromError<T> for MyError {
+impl<T: std::fmt::Debug> std::error::FromError<T> for MyError {
     fn from_error(err: T) -> MyError {
         MyError(format!("{:?}", err))
     }
