@@ -1,9 +1,8 @@
-/* This example asks the rtkit service to make our thread realtime priority. 
+/* This example asks the rtkit service to make our thread realtime priority.
    Rtkit puts a few limitations on us to let us become realtime, such as setting
    RLIMIT_RTTIME correctly, hence the syscalls. */
 
-#![feature(old_orphan_check)]
-#![allow(unstable)]
+#![feature(old_orphan_check, libc)]
 
 extern crate "dbus-rs" as dbus;
 extern crate libc;
@@ -102,4 +101,3 @@ fn main() {
         Err(e) => println!("No rtprio: {}", e.0),
     }
 }
-
