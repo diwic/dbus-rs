@@ -30,6 +30,7 @@ pub const DBUS_TYPE_UINT64: c_int = 't' as c_int;
 pub const DBUS_TYPE_DOUBLE: c_int = 'd' as c_int;
 pub const DBUS_TYPE_UNIX_FD: c_int = 'h' as c_int;
 pub const DBUS_TYPE_STRUCT: c_int = 'r' as c_int;
+pub const DBUS_TYPE_OBJECT_PATH: c_int = 'o' as c_int;
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Copy)]

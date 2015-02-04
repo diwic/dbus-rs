@@ -134,8 +134,10 @@ fn new_dbus_message_iter() -> ffi::DBusMessageIter {
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum MessageItem {
     Array(Vec<MessageItem>, i32),
+    Struct(Vec<MessageItem>),
     Variant(Box<MessageItem>),
     DictEntry(Box<MessageItem>, Box<MessageItem>),
+    ObjectPath(String),
     Str(String),
     Bool(bool),
     Byte(u8),
@@ -196,6 +198,17 @@ fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &[MessageItem], t: i32) {
     assert!(unsafe { ffi::dbus_message_iter_close_container(i, &mut subiter) } != 0);
 }
 
+fn iter_append_struct(i: &mut ffi::DBusMessageIter, a: &[MessageItem]) {
+    let mut subiter = new_dbus_message_iter();
+    let res = unsafe { ffi::dbus_message_iter_open_container(i, ffi::DBUS_TYPE_STRUCT, ptr::null(), &mut subiter) };
+    assert!(res != 0);
+    for item in a.iter() {
+        item.iter_append(&mut subiter);
+    }
+    let res2 = unsafe { ffi::dbus_message_iter_close_container(i, &mut subiter) };
+    assert!( res2!= 0);
+}
+
 fn iter_append_variant(i: &mut ffi::DBusMessageIter, a: &MessageItem) {
     let mut subiter = new_dbus_message_iter();
     let atype = to_c_str(format!("{}", a.array_type() as u8 as char));
@@ -229,8 +242,10 @@ impl MessageItem {
             &MessageItem::UInt64(_) => "t",
             &MessageItem::Double(_) => "d",
             &MessageItem::Array(_,_) => "a",
+            &MessageItem::Struct(_) => "r",
             &MessageItem::Variant(_) => "v",
             &MessageItem::DictEntry(_,_) => "e",
+            &MessageItem::ObjectPath(_) => "o",
         }.into_cow()
     }
 
@@ -247,8 +262,10 @@ impl MessageItem {
             &MessageItem::UInt64(_) => ffi::DBUS_TYPE_UINT64,
             &MessageItem::Double(_) => ffi::DBUS_TYPE_DOUBLE,
             &MessageItem::Array(_,_) => ffi::DBUS_TYPE_ARRAY,
+            &MessageItem::Struct(_) => ffi::DBUS_TYPE_STRUCT,
             &MessageItem::Variant(_) => ffi::DBUS_TYPE_VARIANT,
             &MessageItem::DictEntry(_,_) => ffi::DBUS_TYPE_DICT_ENTRY,
+            &MessageItem::ObjectPath(_) => ffi::DBUS_TYPE_OBJECT_PATH,
         };
         s as i32
     }
@@ -283,6 +300,11 @@ impl MessageItem {
                     let t = if a.len() > 0 { a[0].array_type() } else { 0 };
                     v.push(MessageItem::Array(a, t));
                 },
+                ffi::DBUS_TYPE_STRUCT => {
+                    let mut subiter = new_dbus_message_iter();
+                    unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
+                    v.push(MessageItem::Struct(MessageItem::from_iter(&mut subiter)));
+                },
                 ffi::DBUS_TYPE_STRING => {
                     let mut c: *const libc::c_char = ptr::null();
                     unsafe {
@@ -290,6 +312,14 @@ impl MessageItem {
                         ffi::dbus_message_iter_get_basic(i, p);
                     };
                     v.push(MessageItem::Str(c_str_to_slice(&c).expect("D-Bus string error").to_string()));
+                },
+                ffi::DBUS_TYPE_OBJECT_PATH => {
+                    let mut c: *const libc::c_char = ptr::null();
+                    unsafe {
+                        let p: *mut libc::c_void = std::mem::transmute(&mut c);
+                        ffi::dbus_message_iter_get_basic(i, p);
+                    };
+                    v.push(MessageItem::ObjectPath(c_str_to_slice(&c).expect("D-Bus object path error").to_string()));
                 },
                 ffi::DBUS_TYPE_BOOLEAN => v.push(MessageItem::Bool((iter_get_basic(i) as u32) != 0)),
                 ffi::DBUS_TYPE_BYTE => v.push(MessageItem::Byte(iter_get_basic(i) as u8)),
@@ -332,8 +362,14 @@ impl MessageItem {
             &MessageItem::UInt64(b) => self.iter_append_basic(i, b as i64),
             &MessageItem::Double(b) => iter_append_f64(i, b),
             &MessageItem::Array(ref b, t) => iter_append_array(i, &**b, t),
+            &MessageItem::Struct(ref v) => iter_append_struct(i, &**v),
             &MessageItem::Variant(ref b) => iter_append_variant(i, &**b),
             &MessageItem::DictEntry(ref k, ref v) => iter_append_dict(i, &**k, &**v),
+            &MessageItem::ObjectPath(ref s) => unsafe {
+                let c = to_c_str(s);
+                let p = std::mem::transmute(&c);
+                ffi::dbus_message_iter_append_basic(i, ffi::DBUS_TYPE_OBJECT_PATH, p);
+            }
         }
     }
 
