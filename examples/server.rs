@@ -1,3 +1,5 @@
+#![feature(core)]
+
 extern crate "dbus-rs" as dbus;
 
 use dbus::{Connection, BusType, NameFlag, ConnectionItem, Message};

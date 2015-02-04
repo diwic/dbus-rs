@@ -1,5 +1,4 @@
-#![feature(unsafe_destructor, box_syntax)]
-#![allow(unstable)]
+#![feature(unsafe_destructor, box_syntax, alloc, core, libc, std_misc)]
 
 extern crate libc;
 
@@ -132,7 +131,7 @@ fn new_dbus_message_iter() -> ffi::DBusMessageIter {
     }
 }
 
-#[derive(Show, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum MessageItem {
     Array(Vec<MessageItem>, i32),
     Variant(Box<MessageItem>),
@@ -440,7 +439,7 @@ impl std::fmt::Debug for Message {
     }
 }
 
-#[derive(Show)]
+#[derive(Debug)]
 pub enum ConnectionItem {
     Nothing,
     MethodCall(Message),
@@ -709,7 +708,7 @@ mod test {
         let reply = r.get_items();
         println!("{:?}", reply);
         thread.join().ok().expect("failed to join thread");
-        
+
     }
 
     #[test]
@@ -782,4 +781,3 @@ mod test {
     }
 
 }
-
