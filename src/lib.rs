@@ -517,11 +517,14 @@ impl<'a> Iterator for ConnectionItems<'a> {
 /* Since we register callbacks with userdata pointers,
    we need to make sure the connection pointer does not move around.
    Hence this extra indirection. */
+#[derive(Debug)]
+#[allow(raw_pointer_derive)]
 struct IConnection {
     conn: Cell<*mut ffi::DBusConnection>,
     pending_items: RefCell<DList<ConnectionItem>>,
 }
 
+#[derive(Debug)]
 pub struct Connection {
     i: Box<IConnection>,
 }
