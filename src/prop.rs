@@ -64,7 +64,9 @@ impl<'a> Props<'a> {
                 for p in a.iter() {
                     if let &MessageItem::DictEntry(ref k, ref v) = p {
                         if let &MessageItem::Str(ref ks) = &**k {
-                            t.insert(ks.to_string(), (**v).clone());
+                            if let &MessageItem::Variant(ref vv) = &**v {
+                                t.insert(ks.to_string(), (**vv).clone());
+                            } else { haserr = true; };
                         } else { haserr = true; };
                     } else { haserr = true; };
                 }
@@ -110,6 +112,7 @@ impl<'a> PropHandler<'a> {
         Message::new_error(m, "org.freedesktop.DBus.Error.InvalidArgs", "Invalid arguments").unwrap()
     }
 
+    #[deprecated(reason = "use objpath instead")]
     fn handle_get(&self, msg: &mut Message) -> Message {
         let items = msg.get_items();
         let name = if let Some(s) = items.get(1) { s } else { return PropHandler::invalid_args(msg) };
@@ -121,6 +124,7 @@ impl<'a> PropHandler<'a> {
         reply
     }
 
+    #[deprecated(reason = "Broken. Use objpath instead")]
     fn handle_getall(&self, msg: &mut Message) -> Message {
         let mut reply = Message::new_method_return(msg).unwrap();
         for (k, v) in self.map.iter() {
@@ -169,51 +173,12 @@ fn test_get_policykit_version() {
     /* Let's use both the get and getall methods and see if we get the same result */
     let v = p.get("BackendVersion").unwrap();
     let vall = p.get_all().unwrap();
-
-    let v2 = match vall.get("BackendVersion").unwrap() {
-        &MessageItem::Variant(ref q) => &**q,
-        _ => { panic!("Invalid GetAll: {:?}", vall); }
-    };
+    let v2 = vall.get("BackendVersion").unwrap();
 
     assert_eq!(&v, &*v2);
     match v {
         MessageItem::Str(ref s) => { println!("Policykit Backend version is {}", s); }
         _ => { panic!("Invalid Get: {:?}", v); }
     };
-    
 }
 
-#[test]
-fn test_prop_server() {
-    let c = Connection::get_private(super::BusType::Session).unwrap();
-    let busname = format!("com.example.prophandler.test{}", ::std::rand::random::<u32>());
-    assert_eq!(c.register_name(&*busname, super::NameFlag::ReplaceExisting as u32).unwrap(), super::RequestNameReply::PrimaryOwner);
-
-    let mut p = PropHandler::new(Props::new(&c, &*busname, "/propserver", &*busname, 5000));
-    c.register_object_path("/propserver").unwrap();
-    p.map_mut().insert("Foo".to_string(), super::MessageItem::Int16(-15));
-
-    let thread = ::std::thread::Thread::scoped(move || {
-        let c = Connection::get_private(super::BusType::Session).unwrap();
-        let mut pr = PropHandler::new(Props::new(&c, &*busname, "/propserver", &*busname, 5000));
-        assert_eq!(pr.get("Foo").unwrap(), &super::MessageItem::Int16(-15));
-    });
-
-    loop {
-        let n = match c.iter(1000).next() {
-            None => panic!("c.iter.next returned None"),
-            Some(n) => n,
-        };
-        if let super::ConnectionItem::MethodCall(mut msg) = n {
-            let q = p.handle_message(&mut msg);
-            if q.is_none() {
-                println!("Non-matching message {:?}", msg);
-                c.send(super::Message::new_error(&msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method").unwrap()).unwrap();
-                continue;
-            }
-            assert_eq!(q, Some(Ok(())));
-            break;
-        }
-    }
-    thread.join().ok().expect("failed to join thread");
-}

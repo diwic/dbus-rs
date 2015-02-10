@@ -270,6 +270,17 @@ impl MessageItem {
         s as i32
     }
 
+    // Creates a Array<String, Variant> from an iterator with Result passthrough (an Err will abort and return that Err)
+    pub fn from_dict<E, I: Iterator<Item=Result<(String, MessageItem),E>>>(i: I) -> Result<MessageItem,E> {
+        let mut v = Vec::new();
+        for r in i {
+            let (s, vv) = try!(r);
+            v.push(MessageItem::DictEntry(box MessageItem::Str(s), box MessageItem::Variant(
+                box vv)));
+        }
+        Ok(MessageItem::Array(v, -1))
+    }
+
     fn from_iter(i: &mut ffi::DBusMessageIter) -> Vec<MessageItem> {
         let mut v = Vec::new();
         loop {

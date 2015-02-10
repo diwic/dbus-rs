@@ -195,14 +195,14 @@ impl<'a> IObjectPath<'a> {
             return Err(("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", iface_name)))
         };
         let mut result = Vec::new();
-        for (pname, pv) in i.properties.iter() {
-            let v = try!(match pv.access {
+        result.push(try!(MessageItem::from_dict(i.properties.iter().filter_map(|(pname, pv)| {
+            let v = match pv.access {
                 PropertyAccess::RO(ref cb) => cb.get(),
                 PropertyAccess::RW(ref cb) => cb.get(),
-                PropertyAccess::WO(_) => { continue }
-            });
-            result.push(MessageItem::DictEntry(box MessageItem::Str(pname.clone()), box v));
-        }
+                PropertyAccess::WO(_) => { return None }
+            };
+            Some(v.map(|vv| (pname.clone(),vv)))
+        }))));
         Ok(result)
     }
 
@@ -372,14 +372,18 @@ fn test_objpath() {
         let c = Connection::get_private(super::BusType::Session).unwrap();
         let pr = super::Props::new(&c, &*busname, "/echo", "com.example.echo", 5000);
         assert_eq!(pr.get("EchoCount").unwrap(), super::MessageItem::Int32(7));
+        let m = pr.get_all().unwrap();
+        assert_eq!(m.get("EchoCount").unwrap(), &super::MessageItem::Int32(7));
     });
 
+    let mut i = 0;
     for n in c.iter(1000) {
         println!("objpath msg {:?}", n);
         if let super::ConnectionItem::MethodCall(mut m) = n {
             if let Some(msg) = o.handle_message(&mut m) {
                 msg.unwrap();
-                break;
+                i += 1;
+                if i >= 2 { break };
             }
         }
     }
