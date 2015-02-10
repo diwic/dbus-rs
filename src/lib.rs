@@ -683,6 +683,12 @@ impl Drop for Connection {
     }
 }
 
+impl std::fmt::Debug for Connection {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
+        write!(f, "D-Bus Connection({})", self.unique_name())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::{Connection, Message, BusType, MessageItem, ConnectionItem, NameFlag,
