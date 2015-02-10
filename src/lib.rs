@@ -1,4 +1,4 @@
-#![feature(unsafe_destructor, box_syntax, alloc, core, libc, std_misc)]
+#![feature(unsafe_destructor, alloc, core, libc, std_misc)]
 
 extern crate libc;
 
@@ -275,8 +275,8 @@ impl MessageItem {
         let mut v = Vec::new();
         for r in i {
             let (s, vv) = try!(r);
-            v.push(MessageItem::DictEntry(box MessageItem::Str(s), box MessageItem::Variant(
-                box vv)));
+            v.push(MessageItem::DictEntry(Box::new(MessageItem::Str(s)), Box::new(MessageItem::Variant(
+                Box::new(vv)))));
         }
         Ok(MessageItem::Array(v, -1))
     }
@@ -293,8 +293,8 @@ impl MessageItem {
                     let a = MessageItem::from_iter(&mut subiter);
                     if a.len() != 2 { panic!("D-Bus dict entry error"); }
                     let mut a = a.into_iter();
-                    let key = box a.next().unwrap();
-                    let value = box a.next().unwrap();
+                    let key = Box::new(a.next().unwrap());
+                    let value = Box::new(a.next().unwrap());
                     v.push(MessageItem::DictEntry(key, value));
                 }
                 ffi::DBUS_TYPE_VARIANT => {
@@ -302,7 +302,7 @@ impl MessageItem {
                     unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
                     let a = MessageItem::from_iter(&mut subiter);
                     if a.len() != 1 { panic!("D-Bus variant error"); }
-                    v.push(MessageItem::Variant(box a.into_iter().next().unwrap()));
+                    v.push(MessageItem::Variant(Box::new(a.into_iter().next().unwrap())));
                 }
                 ffi::DBUS_TYPE_ARRAY => {
                     let mut subiter = new_dbus_message_iter();
@@ -580,7 +580,7 @@ impl Connection {
         if conn == ptr::null_mut() {
             return Err(e)
         }
-        let c = Connection { i: box IConnection { conn: Cell::new(conn), pending_items: RefCell::new(DList::new()) } };
+        let c = Connection { i: Box::new(IConnection { conn: Cell::new(conn), pending_items: RefCell::new(DList::new()) })};
 
         /* No, we don't want our app to suddenly quit if dbus goes down */
         unsafe { ffi::dbus_connection_set_exit_on_disconnect(conn, 0) };
@@ -797,7 +797,7 @@ mod test {
             MessageItem::Str(format!("Hello world")),
             MessageItem::Double(-3.14),
             MessageItem::Array(vec!(
-                MessageItem::DictEntry(box MessageItem::UInt32(123543), box MessageItem::Bool(true))
+                MessageItem::DictEntry(Box::new(MessageItem::UInt32(123543)), Box::new(MessageItem::Bool(true)))
             ), -1)
         ]);
         let sending = format!("{:?}", m.get_items());

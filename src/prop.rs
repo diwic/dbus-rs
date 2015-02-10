@@ -44,7 +44,7 @@ impl<'a> Props<'a> {
         m.append_items(&[
             MessageItem::Str(self.interface.clone()),
             MessageItem::Str(propname.to_string()),
-            MessageItem::Variant(box value),
+            MessageItem::Variant(Box::new(value)),
         ]);
         let mut r = try!(self.conn.send_with_reply_and_block(m, self.timeout_ms));
         try!(r.as_result());
@@ -120,7 +120,7 @@ impl<'a> PropHandler<'a> {
         let value = if let Some(s) = self.map.get(name) { s } else { return PropHandler::invalid_args(msg) };
 
         let mut reply = Message::new_method_return(msg).unwrap();
-        reply.append_items(&[MessageItem::Variant(box value.clone())]);
+        reply.append_items(&[MessageItem::Variant(Box::new(value.clone()))]);
         reply
     }
 
@@ -128,7 +128,7 @@ impl<'a> PropHandler<'a> {
     fn handle_getall(&self, msg: &mut Message) -> Message {
         let mut reply = Message::new_method_return(msg).unwrap();
         for (k, v) in self.map.iter() {
-            reply.append_items(&[MessageItem::DictEntry(box MessageItem::Str(k.clone()), box v.clone())]);
+            reply.append_items(&[MessageItem::DictEntry(Box::new(MessageItem::Str(k.clone())), Box::new(v.clone()))]);
         }
         reply
     }

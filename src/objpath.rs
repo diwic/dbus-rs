@@ -186,7 +186,7 @@ impl<'a> IObjectPath<'a> {
                 return Err(("org.freedesktop.DBus.Error.Failed", format!("Property {} is write only", prop_name)))
             }
         });
-        Ok(vec!(MessageItem::Variant(box v)))
+        Ok(vec!(MessageItem::Variant(Box::new(v))))
     }
 
     fn property_getall(&self, msg: &mut Message) -> MethodResult {
@@ -271,7 +271,7 @@ impl<'a> ObjectPath<'a> {
             let o_weak = o.i.downgrade();
             let i = Interface::new(vec!(
                 Method::new("Introspect", vec!(), vec!(Argument::new("xml_data", "s")),
-                    box move |m| { o_weak.upgrade().unwrap().introspect(m) })), vec!());
+                    Box::new(move |m| { o_weak.upgrade().unwrap().introspect(m) }))), vec!());
             o.insert_interface("org.freedesktop.DBus.Introspectable", i);
         }
         o
@@ -284,16 +284,16 @@ impl<'a> ObjectPath<'a> {
             Method::new("Get",
                 vec!(Argument::new("interface_name", "s"), Argument::new("property_name", "s")),
                 vec!(Argument::new("value", "v")),
-                box move |m| weak1.upgrade().unwrap().property_get(m)),
+                Box::new(move |m| weak1.upgrade().unwrap().property_get(m))),
             Method::new("GetAll",
                 vec!(Argument::new("interface_name", "s")),
                 vec!(Argument::new("props", "a{sv}")),
-                box move |m| weak2.upgrade().unwrap().property_getall(m)),
+                Box::new(move |m| weak2.upgrade().unwrap().property_getall(m))),
             Method::new("Set",
                 vec!(Argument::new("interface_name", "s"), Argument::new("property_name", "s"),
                     Argument::new("value", "v")),
                 vec!(),
-                box move |m| weak3.upgrade().unwrap().property_set(m))),
+                Box::new(move |m| weak3.upgrade().unwrap().property_set(m)))),
             vec!());
         self.insert_interface("org.freedesktop.DBus.Properties", i);
     }
@@ -358,8 +358,8 @@ fn make_objpath<'a>(c: &'a Connection) -> ObjectPath<'a> {
     o.insert_interface("com.example.echo", Interface::new(
         vec!(Method::new("Echo",
             vec!(Argument::new("request", "s")),
-            vec!(Argument::new("reply", "s")), box |_| { Err(("dummy", "dummy".to_string())) } )),
-        vec!(Property::new_ro("EchoCount", MessageItem::Int32(7).type_sig(), box MessageItem::Int32(7)))));
+            vec!(Argument::new("reply", "s")), Box::new(|_| { Err(("dummy", "dummy".to_string())) } ))),
+        vec!(Property::new_ro("EchoCount", MessageItem::Int32(7).type_sig(), Box::new(MessageItem::Int32(7))))));
     o
 }
 
