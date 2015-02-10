@@ -156,10 +156,13 @@ impl<'a> IObjectPath<'a> {
             })
             }))
         });
-
+        let childstr = self.conn.list_registered_object_paths(&*self.path).iter().fold("".to_string(), |na, n|
+            format!(r##"{}  <node name="{}"/>
+"##, na, n)
+        );
         let nodestr = format!(r##"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node name="{}">
-{}</node>"##, self.path, ifacestr);
+{}{}</node>"##, self.path, ifacestr, childstr);
 
         Ok(vec!(MessageItem::Str(nodestr)))
     }
@@ -394,7 +397,10 @@ fn test_objpath() {
 #[test]
 fn test_introspect() {
     let c = Connection::get_private(super::BusType::Session).unwrap();
-    let o = make_objpath(&c);
+    let mut o = make_objpath(&c);
+    o.set_registered(true).unwrap();
+    let mut o2 = ObjectPath::new(&c, "/echo/subpath", true);
+    o2.set_registered(true).unwrap();
     let mut msg = Message::new_method_call("com.example.echoserver", "/echo", "org.freedesktop.DBus.Introspectable", "Introspect").unwrap();
 
     println!("Introspect result: {:?}", o.i.introspect(&mut msg));
@@ -429,6 +435,7 @@ fn test_introspect() {
       <arg name="value" type="v" direction="in"/>
     </method>
   </interface>
+  <node name="subpath"/>
 </node>"##;
 
     assert_eq!(result, parse_msg_str(o.i.introspect(&mut msg).unwrap().get(0)).unwrap());

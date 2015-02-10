@@ -151,6 +151,8 @@ extern "C" {
         error: *mut DBusError) -> u32;
     pub fn dbus_connection_unregister_object_path(conn: *mut DBusConnection,
         path: *const c_char) -> u32;
+    pub fn dbus_connection_list_registered(conn: *mut DBusConnection,
+        parent_path: *const c_char, child_entries: *mut *mut *mut c_char) -> u32;
     pub fn dbus_connection_add_filter(conn: *mut DBusConnection, function: DBusHandleMessageFunction,
         user_data: *mut c_void, free_data_function: Option<extern fn(memory: *mut c_void)>) -> u32;
     pub fn dbus_connection_remove_filter(conn: *mut DBusConnection, function: DBusHandleMessageFunction,
@@ -188,6 +190,8 @@ extern "C" {
     pub fn dbus_message_iter_open_container(iter: *mut DBusMessageIter, _type: c_int,
         contained_signature: *const c_char, sub: *mut DBusMessageIter) -> u32;
     pub fn dbus_message_iter_close_container(iter: *mut DBusMessageIter, sub: *mut DBusMessageIter) -> u32;
+
+    pub fn dbus_free_string_array(str_array: *mut *mut c_char) -> c_void;
 
     pub fn dbus_threads_init_default() -> c_int;
 }

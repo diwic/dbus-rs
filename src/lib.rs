@@ -14,7 +14,7 @@ pub use objpath::{ObjectPath, Interface, Property, Method, MethodHandler, Method
 
 use std::ffi as cstr;
 use std::ffi::CString;
-use std::ptr;
+use std::ptr::{self, PtrExt};
 use std::collections::DList;
 use std::cell::{Cell, RefCell};
 
@@ -642,6 +642,26 @@ impl Connection {
         let p = to_c_str(path);
         let r = unsafe { ffi::dbus_connection_unregister_object_path(self.conn(), p.as_ptr()) };
         if r == 0 { panic!("Out of memory"); }
+    }
+
+    pub fn list_registered_object_paths(&self, path: &str) -> Vec<String> {
+        let p = to_c_str(path);
+        let mut clist: *mut *mut libc::c_char = ptr::null_mut();
+        let r = unsafe { ffi::dbus_connection_list_registered(self.conn(), p.as_ptr(), &mut clist) };
+        if r == 0 { panic!("Out of memory"); }
+        let mut v = Vec::new();
+        let mut i = 0;
+        loop {
+            let s = unsafe {
+                let citer = clist.offset(i);
+                if *citer == ptr::null_mut() { break };
+                std::mem::transmute(citer)
+            };
+            v.push(format!("{}", c_str_to_slice(s).unwrap()));
+            i += 1;
+        }
+        unsafe { ffi::dbus_free_string_array(clist) };
+        v
     }
 
     pub fn register_name(&self, name: &str, flags: u32) -> Result<RequestNameReply, Error> {
