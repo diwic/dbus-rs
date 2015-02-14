@@ -2,7 +2,7 @@
    Rtkit puts a few limitations on us to let us become realtime, such as setting
    RLIMIT_RTTIME correctly, hence the syscalls. */
 
-#![feature(old_orphan_check, libc)]
+#![feature(libc)]
 
 extern crate "dbus-rs" as dbus;
 extern crate libc;
