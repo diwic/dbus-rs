@@ -819,9 +819,8 @@ mod test {
 
     #[test]
     fn register_name() {
-        use std::rand;
         let c = Connection::get_private(BusType::Session).unwrap();
-        let n = format!("com.example.hello.test{}", rand::random::<u32>());
+        let n = format!("com.example.hello.test.register_name");
         assert_eq!(c.register_name(&*n, NameFlag::ReplaceExisting as u32).unwrap(), RequestNameReply::PrimaryOwner);
         assert_eq!(c.release_name(&*n).unwrap(), ReleaseNameReply::Released);
     }

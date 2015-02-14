@@ -368,7 +368,7 @@ fn test_objpath() {
     let c = Connection::get_private(super::BusType::Session).unwrap();
     let mut o = make_objpath(&c);
     o.set_registered(true).unwrap();
-    let busname = format!("com.example.objpath.test{}", ::std::rand::random::<u32>());
+    let busname = format!("com.example.objpath.test.test_objpath");
     assert_eq!(c.register_name(&*busname, super::NameFlag::ReplaceExisting as u32).unwrap(), super::RequestNameReply::PrimaryOwner);
 
     let thread = ::std::thread::Thread::scoped(move || {
