@@ -132,6 +132,26 @@ impl<'a> Drop for IObjectPath<'a> {
     }
 }
 
+fn introspect_args(args: &Vec<Argument>, indent: &str, dir: &str) -> String {
+    args.iter().fold("".to_string(), |aa, az| {
+        format!("{}{}<arg name=\"{}\" type=\"{}\"{}/>\n", aa, indent, az.name, az.sig, dir)
+    })
+}
+
+fn introspect_map<T, C: Fn(&T) -> (String, String)>
+    (h: &BTreeMap<String, T>, name: &str, indent: &str, func: C) -> String {
+
+    h.iter().fold("".to_string(), |a, (k, v)| {
+        let (params, contents) = func(v);
+        format!("{}{}<{} name=\"{}\"{}{}>\n",
+            a, indent, name, k, params, if contents.len() > 0 {
+                format!(">\n{}{}</{}", contents, indent, name)
+            }
+            else { format!("/") }
+        )
+    })
+}
+
 impl<'a> IObjectPath<'a> {
 
     fn set_registered(&self, register: bool) -> Result<(), Error> {
@@ -146,38 +166,24 @@ impl<'a> IObjectPath<'a> {
     }
 
     fn introspect(&self, _: &mut Message) -> MethodResult {
-        let ifacestr = self.interfaces.borrow().iter().fold("".to_string(), |ia, (ik, iv)| {
-            format!(r##"{}  <interface name="{}">
-{}{}{}  </interface>
-"##,
-                ia, ik, iv.methods.iter().fold("".to_string(), |ma, (mk, mv)| {
-                format!(r##"{}    <method name="{}">
-{}{}    </method>
-"##, ma, mk,
-                    mv.in_args.iter().fold("".to_string(), |aa, az| {
-                       format!(r##"{}      <arg name="{}" type="{}" direction="in"/>
-"##, aa, az.name, az.sig)
-                    }), mv.out_args.iter().fold("".to_string(), |aa, az| {
-                       format!(r##"{}      <arg name="{}" type="{}" direction="out"/>
-"##, aa, az.name, az.sig)
-                }))
-            }), iv.properties.iter().fold("".to_string(), |pa, (pk, pv)| {
-                       format!(r##"{}    <property name="{}" type="{}" access="{}"/>
-"##, pa, pk, pv.sig, match pv.access {
-                PropertyAccess::RO(_) => "read",
-                PropertyAccess::RW(_) => "readwrite",
-                PropertyAccess::WO(_) => "write",
-            })
-            }), iv.signals.iter().fold("".to_string(), |sa, (sk, sv)| {
-                format!(r##"{}    <signal name="{}">
-{}    </signal>
-"##, sa, sk,
-                    sv.iter().fold("".to_string(), |aa, az| {
-                       format!(r##"{}      <arg name="{}" type="{}"/>
-"##, aa, az.name, az.sig)
-                }))
-            }))
-        });
+        let ifacestr = introspect_map(&*self.interfaces.borrow(), "interface", "  ", |iv|
+            (format!(""), format!("{}{}{}",
+                introspect_map(&iv.methods, "method", "    ", |m| (format!(""), format!("{}{}",
+                    introspect_args(&m.in_args, "      ", " direction=\"in\""),
+                    introspect_args(&m.out_args, "      ", " direction=\"out\"")
+                ))),
+                introspect_map(&iv.properties, "property", "    ", |p| (
+                    format!(" type=\"{}\" access=\"{}\"", p.sig, match p.access {
+                        PropertyAccess::RO(_) => "read",
+                        PropertyAccess::RW(_) => "readwrite",
+                        PropertyAccess::WO(_) => "write",
+                    }), format!("")
+                )),
+                introspect_map(&iv.signals, "signal", "    ", |s| (format!(""),
+                    introspect_args(s, "      ", "")
+                ))
+            ))
+        );
         let childstr = self.conn.list_registered_object_paths(&*self.path).iter().fold("".to_string(), |na, n|
             format!(r##"{}  <node name="{}"/>
 "##, na, n)
@@ -425,8 +431,7 @@ fn test_introspect() {
     let mut o2 = ObjectPath::new(&c, "/echo/subpath", true);
     o2.set_registered(true).unwrap();
     let mut msg = Message::new_method_call("com.example.echoserver", "/echo", "org.freedesktop.DBus.Introspectable", "Introspect").unwrap();
-
-    println!("Introspect result: {:?}", o.i.introspect(&mut msg));
+    println!("Introspect result: {}", parse_msg_str(o.i.introspect(&mut msg).unwrap().get(0)).unwrap());
 
     let result = r##"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node name="/echo">
