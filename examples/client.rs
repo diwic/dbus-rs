@@ -1,4 +1,4 @@
-extern crate "dbus-rs" as dbus;
+extern crate dbus;
 
 use dbus::{Connection, BusType, Message};
 

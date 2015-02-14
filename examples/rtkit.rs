@@ -4,7 +4,7 @@
 
 #![feature(libc)]
 
-extern crate "dbus-rs" as dbus;
+extern crate dbus;
 extern crate libc;
 
 use std::cmp;
