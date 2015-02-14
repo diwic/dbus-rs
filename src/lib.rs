@@ -10,7 +10,7 @@ pub use ffi::DBusMessageType as MessageType;
 
 pub use prop::PropHandler;
 pub use prop::Props;
-pub use objpath::{ObjectPath, Interface, Property, Method, MethodHandler, MethodResult, Argument};
+pub use objpath::{ObjectPath, Interface, Property, Method, Signal, MethodHandler, MethodResult, Argument};
 
 use std::ffi as cstr;
 use std::ffi::CString;

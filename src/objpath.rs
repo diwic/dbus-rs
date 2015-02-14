@@ -15,6 +15,18 @@ impl<'a> Argument<'a> {
     }
 }
 
+pub struct Signal<'a> {
+    name: String,
+    args: Vec<Argument<'a>>,
+}
+
+impl<'a> Signal<'a> {
+    pub fn new<N: ToString>(name: N, args: Vec<Argument<'a>>) -> Signal<'a> {
+        Signal { name: name.to_string(), args: args }
+    }
+}
+
+
 pub type MethodResult = Result<Vec<MessageItem>, (&'static str, String)>;
 pub type PropertyGetResult = Result<MessageItem, (&'static str, String)>;
 pub type PropertySetResult = Result<(), (&'static str, String)>;
@@ -88,14 +100,16 @@ impl<'a> Property<'a> {
 pub struct Interface<'a> {
     methods: BTreeMap<String, IMethod<'a>>,
     properties: BTreeMap<String, IProperty<'a>>,
-//  TODO: signals
+    signals: BTreeMap<String, Vec<Argument<'a>>>,
 }
 
 impl<'a> Interface<'a> {
-    pub fn new(m: Vec<Method<'a>>, p: Vec<Property<'a>>) -> Interface<'a> {
+    pub fn new(m: Vec<Method<'a>>, p: Vec<Property<'a>>, s: Vec<Signal<'a>>) -> Interface<'a> {
         Interface {
            methods: m.into_iter().map(|m| (m.name, m.i)).collect(),
-           properties: p.into_iter().map(|p| (p.name, p.i)).collect() }
+           properties: p.into_iter().map(|p| (p.name, p.i)).collect(),
+           signals: s.into_iter().map(|s| (s.name, s.args)).collect(),
+        }
     }
 }
 
@@ -134,7 +148,7 @@ impl<'a> IObjectPath<'a> {
     fn introspect(&self, _: &mut Message) -> MethodResult {
         let ifacestr = self.interfaces.borrow().iter().fold("".to_string(), |ia, (ik, iv)| {
             format!(r##"{}  <interface name="{}">
-{}{}  </interface>
+{}{}{}  </interface>
 "##,
                 ia, ik, iv.methods.iter().fold("".to_string(), |ma, (mk, mv)| {
                 format!(r##"{}    <method name="{}">
@@ -154,6 +168,14 @@ impl<'a> IObjectPath<'a> {
                 PropertyAccess::RW(_) => "readwrite",
                 PropertyAccess::WO(_) => "write",
             })
+            }), iv.signals.iter().fold("".to_string(), |sa, (sk, sv)| {
+                format!(r##"{}    <signal name="{}">
+{}    </signal>
+"##, sa, sk,
+                    sv.iter().fold("".to_string(), |aa, az| {
+                       format!(r##"{}      <arg name="{}" type="{}"/>
+"##, aa, az.name, az.sig)
+                }))
             }))
         });
         let childstr = self.conn.list_registered_object_paths(&*self.path).iter().fold("".to_string(), |na, n|
@@ -271,7 +293,7 @@ impl<'a> ObjectPath<'a> {
             let o_weak = o.i.downgrade();
             let i = Interface::new(vec!(
                 Method::new("Introspect", vec!(), vec!(Argument::new("xml_data", "s")),
-                    Box::new(move |m| { o_weak.upgrade().unwrap().introspect(m) }))), vec!());
+                    Box::new(move |m| { o_weak.upgrade().unwrap().introspect(m) }))), vec!(), vec!());
             o.insert_interface("org.freedesktop.DBus.Introspectable", i);
         }
         o
@@ -294,7 +316,7 @@ impl<'a> ObjectPath<'a> {
                     Argument::new("value", "v")),
                 vec!(),
                 Box::new(move |m| weak3.upgrade().unwrap().property_set(m)))),
-            vec!());
+            vec!(), vec!());
         self.insert_interface("org.freedesktop.DBus.Properties", i);
     }
 
@@ -359,7 +381,8 @@ fn make_objpath<'a>(c: &'a Connection) -> ObjectPath<'a> {
         vec!(Method::new("Echo",
             vec!(Argument::new("request", "s")),
             vec!(Argument::new("reply", "s")), Box::new(|_| { Err(("dummy", "dummy".to_string())) } ))),
-        vec!(Property::new_ro("EchoCount", MessageItem::Int32(7).type_sig(), Box::new(MessageItem::Int32(7))))));
+        vec!(Property::new_ro("EchoCount", MessageItem::Int32(7).type_sig(), Box::new(MessageItem::Int32(7)))),
+        vec!(Signal::new("Echoed", vec!(Argument::new("data", "s"))))));
     o
 }
 
@@ -413,6 +436,9 @@ fn test_introspect() {
       <arg name="reply" type="s" direction="out"/>
     </method>
     <property name="EchoCount" type="i" access="read"/>
+    <signal name="Echoed">
+      <arg name="data" type="s"/>
+    </signal>
   </interface>
   <interface name="org.freedesktop.DBus.Introspectable">
     <method name="Introspect">
