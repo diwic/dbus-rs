@@ -17,6 +17,7 @@ use std::ffi::CString;
 use std::ptr::{self, PtrExt};
 use std::collections::DList;
 use std::cell::{Cell, RefCell};
+use std::borrow::IntoCow;
 
 pub type TypeSig<'a> = std::string::CowString<'a>;
 
@@ -133,7 +134,7 @@ fn new_dbus_message_iter() -> ffi::DBusMessageIter {
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum MessageItem {
-    Array(Vec<MessageItem>, i32),
+    Array(Vec<MessageItem>, TypeSig<'static>),
     Struct(Vec<MessageItem>),
     Variant(Box<MessageItem>),
     DictEntry(Box<MessageItem>, Box<MessageItem>),
@@ -175,11 +176,10 @@ fn iter_append_f64(i: &mut ffi::DBusMessageIter, v: f64) {
     }
 }
 
-fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &[MessageItem], t: i32) {
+fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &[MessageItem], t: TypeSig<'static>) {
     let mut subiter = new_dbus_message_iter();
 
-    // TODO: This works for simple dictionaries. Not so well for dictionaries of dictionaries, probably.
-    let atype = to_c_str(
+/*    let atype = to_c_str(
         if t <= 0 {
             match &a[0] {
                 &MessageItem::DictEntry(ref k, ref v) => format!("{{{}{}}}",
@@ -188,11 +188,12 @@ fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &[MessageItem], t: i32) {
             }
         }
         else { format!("{}", t as u8 as char) }
-        );
+        ); */
+     let atype = to_c_str(t);
 
     assert!(unsafe { ffi::dbus_message_iter_open_container(i, ffi::DBUS_TYPE_ARRAY, atype.as_ptr(), &mut subiter) } != 0);
     for item in a.iter() {
-        assert!(t < 0 || item.array_type() == t as i32);
+//        assert!(item.type_sig() == t);
         item.iter_append(&mut subiter);
     }
     assert!(unsafe { ffi::dbus_message_iter_close_container(i, &mut subiter) } != 0);
@@ -228,25 +229,24 @@ fn iter_append_dict(i: &mut ffi::DBusMessageIter, k: &MessageItem, v: &MessageIt
 impl MessageItem {
 
     pub fn type_sig(&self) -> TypeSig<'static> {
-        use std::borrow::IntoCow;
         match self {
             // TODO: Can we make use of the ffi constants here instead of duplicating them?
-            &MessageItem::Str(_) => "s",
-            &MessageItem::Bool(_) => "b",
-            &MessageItem::Byte(_) => "y",
-            &MessageItem::Int16(_) => "n",
-            &MessageItem::Int32(_) => "i",
-            &MessageItem::Int64(_) => "x",
-            &MessageItem::UInt16(_) => "q",
-            &MessageItem::UInt32(_) => "u",
-            &MessageItem::UInt64(_) => "t",
-            &MessageItem::Double(_) => "d",
-            &MessageItem::Array(_,_) => "a",
-            &MessageItem::Struct(_) => "r",
-            &MessageItem::Variant(_) => "v",
-            &MessageItem::DictEntry(_,_) => "e",
-            &MessageItem::ObjectPath(_) => "o",
-        }.into_cow()
+            &MessageItem::Str(_) => "s".into_cow(),
+            &MessageItem::Bool(_) => "b".into_cow(),
+            &MessageItem::Byte(_) => "y".into_cow(),
+            &MessageItem::Int16(_) => "n".into_cow(),
+            &MessageItem::Int32(_) => "i".into_cow(),
+            &MessageItem::Int64(_) => "x".into_cow(),
+            &MessageItem::UInt16(_) => "q".into_cow(),
+            &MessageItem::UInt32(_) => "u".into_cow(),
+            &MessageItem::UInt64(_) => "t".into_cow(),
+            &MessageItem::Double(_) => "d".into_cow(),
+            &MessageItem::Array(_, ref s) => format!("a{}", s).into_cow(),
+            &MessageItem::Struct(_) => "r".into_cow(),
+            &MessageItem::Variant(_) => "v".into_cow(),
+            &MessageItem::DictEntry(ref k, ref v) => format!("{{{}{}}}", k.type_sig(), v.type_sig()).into_cow(),
+            &MessageItem::ObjectPath(_) => "o".into_cow(),
+        }
     }
 
     pub fn array_type(&self) -> i32 {
@@ -278,7 +278,14 @@ impl MessageItem {
             v.push(MessageItem::DictEntry(Box::new(MessageItem::Str(s)), Box::new(MessageItem::Variant(
                 Box::new(vv)))));
         }
-        Ok(MessageItem::Array(v, -1))
+        Ok(MessageItem::Array(v, "{sv}".into_cow()))
+    }
+
+    // Note: Will panic if the vec is empty or if there are different types in the array
+    pub fn new_array(v: Vec<MessageItem>) -> MessageItem {
+        let t = v[0].type_sig();
+        for i in &v { debug_assert!(i.type_sig() == t) };
+        MessageItem::Array(v, t)
     }
 
     fn from_iter(i: &mut ffi::DBusMessageIter) -> Vec<MessageItem> {
@@ -308,7 +315,12 @@ impl MessageItem {
                     let mut subiter = new_dbus_message_iter();
                     unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
                     let a = MessageItem::from_iter(&mut subiter);
-                    let t = if a.len() > 0 { a[0].array_type() } else { 0 };
+                    let t = if a.len() > 0 { a[0].type_sig() } else {
+                        let c = unsafe { ffi::dbus_message_iter_get_signature(&mut subiter) };
+                        let s = c_str_to_slice(&(c as *const libc::c_char)).unwrap().to_string();
+                        unsafe { ffi::dbus_free(c as *mut libc::c_void) };
+                        s.into_cow()
+                    };
                     v.push(MessageItem::Array(a, t));
                 },
                 ffi::DBUS_TYPE_STRUCT => {
@@ -372,7 +384,7 @@ impl MessageItem {
             &MessageItem::UInt32(b) => self.iter_append_basic(i, b as i64),
             &MessageItem::UInt64(b) => self.iter_append_basic(i, b as i64),
             &MessageItem::Double(b) => iter_append_f64(i, b),
-            &MessageItem::Array(ref b, t) => iter_append_array(i, &**b, t),
+            &MessageItem::Array(ref b, ref t) => iter_append_array(i, &**b, t.clone()),
             &MessageItem::Struct(ref v) => iter_append_struct(i, &**v),
             &MessageItem::Variant(ref b) => iter_append_variant(i, &**b),
             &MessageItem::DictEntry(ref k, ref v) => iter_append_dict(i, &**k, &**v),
@@ -791,18 +803,71 @@ mod test {
         let mut m = Message::new_method_call(&*c.unique_name(), "/hello", "com.example.hello", "Hello").unwrap();
         m.append_items(&[
             MessageItem::UInt16(2000),
-            MessageItem::Array(vec!(MessageItem::Byte(129)), -1),
+            MessageItem::new_array(vec!(MessageItem::Byte(129))),
             MessageItem::UInt64(987654321),
             MessageItem::Int32(-1),
             MessageItem::Str(format!("Hello world")),
             MessageItem::Double(-3.14),
-            MessageItem::Array(vec!(
+            MessageItem::new_array(vec!(
                 MessageItem::DictEntry(Box::new(MessageItem::UInt32(123543)), Box::new(MessageItem::Bool(true)))
-            ), -1)
+            ))
         ]);
         let sending = format!("{:?}", m.get_items());
         println!("Sending {}", sending);
         c.send(m).unwrap();
+
+        for n in c.iter(1000) {
+            match n {
+                ConnectionItem::MethodCall(mut m) => {
+                    let receiving = format!("{:?}", m.get_items());
+                    println!("Receiving {}", receiving);
+                    assert_eq!(sending, receiving);
+                    break;
+                }
+                _ => println!("Got {:?}", n),
+            }
+        }
+    }
+
+    #[test]
+    fn dict_of_dicts() {
+        use std::collections::BTreeMap;
+
+        let mut officeactions: BTreeMap<&'static str, MessageItem> = BTreeMap::new();
+        let mut officethings = BTreeMap::new();
+        officethings.insert("pencil", MessageItem::UInt16(2));
+        officethings.insert("paper", MessageItem::UInt16(5));
+        let mut homethings = BTreeMap::new();
+        homethings.insert("apple", MessageItem::UInt16(11));
+        let mut homeifaces = BTreeMap::new();
+        homeifaces.insert("getThings", homethings);
+        let mut officeifaces = BTreeMap::new();
+        officeifaces.insert("getThings", officethings);
+        officeifaces.insert("getActions", officeactions);
+        let mut paths = BTreeMap::new();
+        paths.insert("/hello/office", officeifaces);
+        paths.insert("/hello/home", homeifaces);
+
+        println!("Original treemap: {:?}", paths);
+        let m = MessageItem::new_array(paths.iter().map(
+            |(path, ifaces)| MessageItem::DictEntry(Box::new(MessageItem::ObjectPath(path.to_string())), Box::new(
+                MessageItem::new_array(ifaces.iter().map(
+                    |(iface, props)| MessageItem::DictEntry(Box::new(MessageItem::Str(iface.to_string())), Box::new(
+                        MessageItem::from_dict::<(),_>(props.iter().map(|(name, value)| Ok((name.to_string(), value.clone())))).unwrap()
+                    ))
+                ).collect())
+            ))
+        ).collect());
+        println!("As MessageItem: {:?}", m);
+        assert_eq!(m.type_sig(), "a{oa{sa{sv}}}");
+
+        let c = Connection::get_private(BusType::Session).unwrap();
+        c.register_object_path("/hello").unwrap();
+        let mut msg = Message::new_method_call(&*c.unique_name(), "/hello", "org.freedesktop.DBusObjectManager", "GetManagedObjects").unwrap();
+        msg.append_items(&[m]);
+        let sending = format!("{:?}", msg.get_items());
+        println!("Sending {}", sending);
+        c.send(msg).unwrap();
 
         for n in c.iter(1000) {
             match n {

@@ -25,7 +25,7 @@ fn main() {
             ConnectionItem::MethodCall(mut m) => {
                 println!("MethodCall: {:?}", m);
                 if o.handle_message(&mut m).is_none() {
-                    c.send(Message::new_error(&m, DBUS_ERROR_FAILED, "Object path not found").unwrap());
+                    c.send(Message::new_error(&m, DBUS_ERROR_FAILED, "Object path not found").unwrap()).unwrap();
                 };
             },
             ConnectionItem::Signal(m) => {
