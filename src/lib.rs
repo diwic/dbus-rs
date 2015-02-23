@@ -15,8 +15,7 @@ pub use objpath::{ObjectPath, Interface, Property, Method, Signal, MethodHandler
 
 pub type TypeSig<'a> = std::string::CowString<'a>;
 
-use std::ffi as cstr;
-use std::ffi::CString;
+use std::ffi::{CString, CStr};
 use std::ptr::{self, PtrExt};
 use std::collections::LinkedList;
 use std::cell::{Cell, RefCell};
@@ -45,10 +44,10 @@ unsafe impl Send for Error {}
 
 fn c_str_to_slice(c: & *const libc::c_char) -> Option<&str> {
     if *c == ptr::null() { None }
-    else { std::str::from_utf8( unsafe { cstr::c_str_to_bytes(c) }).ok() }
+    else { std::str::from_utf8( unsafe { CStr::from_ptr(*c).to_bytes() }).ok() }
 }
 
-fn to_c_str<S: Str>(n: S) -> CString { CString::from_slice(n.as_slice().as_bytes()) }
+fn to_c_str<S: Str>(n: S) -> CString { CString::new(n.as_slice().as_bytes()).unwrap() }
 
 impl Error {
 
@@ -373,7 +372,7 @@ mod test {
     fn object_path() {
         use  std::sync::mpsc;
         let (tx, rx) = mpsc::channel();
-        let thread = ::std::thread::Thread::scoped(move || {
+        let thread = ::std::thread::scoped(move || {
             let c = Connection::get_private(BusType::Session).unwrap();
             c.register_object_path("/hello").unwrap();
             // println!("Waiting...");
