@@ -158,19 +158,18 @@ extern "C" fn filter_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::D
     user_data: *mut libc::c_void) -> ffi::DBusHandlerResult {
 
     let m = message::message_from_ptr(msg, true);
-    let c = Connection { i: unsafe { std::mem::transmute(user_data) } };
-    assert_eq!(c.conn(), conn);
+    let i: &IConnection = unsafe { std::mem::transmute(user_data) };
+    assert!(i.conn.get() == conn);
 
     let mtype: ffi::DBusMessageType = unsafe { std::mem::transmute(ffi::dbus_message_get_type(msg)) };
     let r = match mtype {
         ffi::DBusMessageType::Signal => {
-            c.i.pending_items.borrow_mut().push_back(ConnectionItem::Signal(m));
+            i.pending_items.borrow_mut().push_back(ConnectionItem::Signal(m));
             ffi::DBusHandlerResult::Handled
         }
         _ => ffi::DBusHandlerResult::NotYetHandled,
     };
 
-    unsafe { std::mem::forget(c) };
     r
 }
 
@@ -178,10 +177,9 @@ extern "C" fn object_path_message_cb(conn: *mut ffi::DBusConnection, msg: *mut f
     user_data: *mut libc::c_void) -> ffi::DBusHandlerResult {
 
     let m = message::message_from_ptr(msg, true);
-    let c = Connection { i: unsafe { std::mem::transmute(user_data) } };
-    assert!(c.conn() == conn);
-    c.i.pending_items.borrow_mut().push_back(ConnectionItem::MethodCall(m));
-    unsafe { std::mem::forget(c) };
+    let i: &IConnection = unsafe { std::mem::transmute(user_data) };
+    assert!(i.conn.get() == conn);
+    i.pending_items.borrow_mut().push_back(ConnectionItem::MethodCall(m));
     ffi::DBusHandlerResult::Handled
 }
 
