@@ -393,7 +393,7 @@ mod test {
 
         let c = Connection::get_private(BusType::Session).unwrap();
         let n = rx.recv().unwrap();
-        let m = Message::new_method_call(&*n, "/hello", "com.example.hello", "Hello").unwrap();
+        let m = Message::new_method_call(&n, "/hello", "com.example.hello", "Hello").unwrap();
         println!("Sending...");
         let mut r = c.send_with_reply_and_block(m, 8000).unwrap();
         let reply = r.get_items();
@@ -406,8 +406,8 @@ mod test {
     fn register_name() {
         let c = Connection::get_private(BusType::Session).unwrap();
         let n = format!("com.example.hello.test.register_name");
-        assert_eq!(c.register_name(&*n, NameFlag::ReplaceExisting as u32).unwrap(), RequestNameReply::PrimaryOwner);
-        assert_eq!(c.release_name(&*n).unwrap(), ReleaseNameReply::Released);
+        assert_eq!(c.register_name(&n, NameFlag::ReplaceExisting as u32).unwrap(), RequestNameReply::PrimaryOwner);
+        assert_eq!(c.release_name(&n).unwrap(), ReleaseNameReply::Released);
     }
 
     #[test]
@@ -415,7 +415,7 @@ mod test {
         let c = Connection::get_private(BusType::Session).unwrap();
         let iface = "com.example.signaltest";
         let mstr = format!("interface='{}',member='ThisIsASignal'", iface);
-        c.add_match(&*mstr).unwrap();
+        c.add_match(&mstr).unwrap();
         let m = Message::new_signal("/mysignal", iface, "ThisIsASignal").unwrap();
         let uname = c.unique_name();
         c.send(m).unwrap();
@@ -434,7 +434,7 @@ mod test {
                 _ => {},
             }
         }
-        c.remove_match(&*mstr).unwrap();
+        c.remove_match(&mstr).unwrap();
     }
 
 }

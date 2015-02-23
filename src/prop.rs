@@ -21,7 +21,7 @@ impl<'a> Props<'a> {
     }
 
     pub fn get(&self, propname: &str) -> Result<MessageItem, Error> {
-        let mut m = Message::new_method_call(&*self.name, &*self.path,
+        let mut m = Message::new_method_call(&self.name, &self.path,
             "org.freedesktop.DBus.Properties", "Get").unwrap();
         m.append_items(&[
             MessageItem::Str(self.interface.clone()),
@@ -35,11 +35,11 @@ impl<'a> Props<'a> {
             }
        }
        let f = format!("Invalid reply for property get {}: '{:?}'", propname, reply);
-       return Err(Error::new_custom("InvalidReply", &*f));
+       return Err(Error::new_custom("InvalidReply", &f));
     }
 
     pub fn set(&self, propname: &str, value: MessageItem) -> Result<(), Error> {
-        let mut m = Message::new_method_call(&*self.name, &*self.path,
+        let mut m = Message::new_method_call(&self.name, &self.path,
             "org.freedesktop.DBus.Properties", "Set").unwrap();
         m.append_items(&[
             MessageItem::Str(self.interface.clone()),
@@ -52,7 +52,7 @@ impl<'a> Props<'a> {
     }
 
     pub fn get_all(&self) -> Result<BTreeMap<String, MessageItem>, Error> {
-        let mut m = Message::new_method_call(&*self.name, &*self.path,
+        let mut m = Message::new_method_call(&self.name, &self.path,
             "org.freedesktop.DBus.Properties", "GetAll").unwrap();
         m.append_items(&[MessageItem::Str(self.interface.clone())]);
         let mut r = try!(self.conn.send_with_reply_and_block(m, self.timeout_ms));
@@ -74,7 +74,7 @@ impl<'a> Props<'a> {
             }
         }
         let f = format!("Invalid reply for property GetAll: '{:?}'", reply);
-        return Err(Error::new_custom("InvalidReply", &*f));
+        return Err(Error::new_custom("InvalidReply", &f));
     }
 }
 

@@ -157,16 +157,16 @@ impl<'a> IObjectPath<'a> {
     fn set_registered(&self, register: bool) -> Result<(), Error> {
         if register == self.registered.get() { return Ok(()) };
         if register {
-            try!(self.conn.register_object_path(&*self.path));
+            try!(self.conn.register_object_path(&self.path));
         } else {
-            self.conn.unregister_object_path(&*self.path);
+            self.conn.unregister_object_path(&self.path);
         }
         self.registered.set(register);
         Ok(())
     }
 
     fn introspect(&self, _: &mut Message) -> MethodResult {
-        let ifacestr = introspect_map(&*self.interfaces.borrow(), "interface", "  ", |iv|
+        let ifacestr = introspect_map(&self.interfaces.borrow(), "interface", "  ", |iv|
             (format!(""), format!("{}{}{}",
                 introspect_map(&iv.methods, "method", "    ", |m| (format!(""), format!("{}{}",
                     introspect_args(&m.in_args, "      ", " direction=\"in\""),
@@ -184,7 +184,7 @@ impl<'a> IObjectPath<'a> {
                 ))
             ))
         );
-        let childstr = self.conn.list_registered_object_paths(&*self.path).iter().fold("".to_string(), |na, n|
+        let childstr = self.conn.list_registered_object_paths(&self.path).iter().fold("".to_string(), |na, n|
             format!(r##"{}  <node name="{}"/>
 "##, na, n)
         );
@@ -266,7 +266,7 @@ fn parse_msg_str(a: Option<&MessageItem>) -> Result<&str,(&'static str, String)>
         return Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a)))
     };
     if let &MessageItem::Str(ref s) = name {
-        Ok(&**s)
+        Ok(&s)
     } else { Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a))) }
 }
 
@@ -275,7 +275,7 @@ fn parse_msg_variant(a: Option<&MessageItem>) -> Result<&MessageItem,(&'static s
         return Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a)))
     };
     if let &MessageItem::Variant(ref s) = name {
-        Ok(&**s)
+        Ok(&s)
     } else { Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a))) }
 }
 
@@ -370,10 +370,10 @@ impl<'a> ObjectPath<'a> {
         let reply = match (*method)(msg) {
             Ok(r) => {
                 let mut z = Message::new_method_return(msg).unwrap();
-                z.append_items(&*r);
+                z.append_items(&r);
                 z
             },
-            Err((aa,bb)) => Message::new_error(msg, aa, &*bb).unwrap(),
+            Err((aa,bb)) => Message::new_error(msg, aa, &bb).unwrap(),
         };
 
         Some(self.i.conn.send(reply))
@@ -398,11 +398,11 @@ fn test_objpath() {
     let mut o = make_objpath(&c);
     o.set_registered(true).unwrap();
     let busname = format!("com.example.objpath.test.test_objpath");
-    assert_eq!(c.register_name(&*busname, super::NameFlag::ReplaceExisting as u32).unwrap(), super::RequestNameReply::PrimaryOwner);
+    assert_eq!(c.register_name(&busname, super::NameFlag::ReplaceExisting as u32).unwrap(), super::RequestNameReply::PrimaryOwner);
 
     let thread = ::std::thread::scoped(move || {
         let c = Connection::get_private(super::BusType::Session).unwrap();
-        let pr = super::Props::new(&c, &*busname, "/echo", "com.example.echo", 5000);
+        let pr = super::Props::new(&c, &busname, "/echo", "com.example.echo", 5000);
         assert_eq!(pr.get("EchoCount").unwrap(), super::MessageItem::Int32(7));
         let m = pr.get_all().unwrap();
         assert_eq!(m.get("EchoCount").unwrap(), &super::MessageItem::Int32(7));
