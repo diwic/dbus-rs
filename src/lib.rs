@@ -108,8 +108,9 @@ impl std::error::Error for Error {
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(),std::fmt::Error> {
-        self.message().map(|x| write!(f, "{:?}", x.to_string()));
-        Ok(())
+        if let Some(x) = self.message() {
+             write!(f, "{:?}", x.to_string())
+        } else { Ok(()) }
     }
 }
 
