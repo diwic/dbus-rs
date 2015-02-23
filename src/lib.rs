@@ -18,7 +18,7 @@ pub type TypeSig<'a> = std::string::CowString<'a>;
 use std::ffi as cstr;
 use std::ffi::CString;
 use std::ptr::{self, PtrExt};
-use std::collections::DList;
+use std::collections::LinkedList;
 use std::cell::{Cell, RefCell};
 
 mod ffi;
@@ -147,7 +147,7 @@ impl<'a> Iterator for ConnectionItems<'a> {
    Hence this extra indirection. */
 struct IConnection {
     conn: Cell<*mut ffi::DBusConnection>,
-    pending_items: RefCell<DList<ConnectionItem>>,
+    pending_items: RefCell<LinkedList<ConnectionItem>>,
 }
 
 pub struct Connection {
@@ -198,7 +198,7 @@ impl Connection {
         if conn == ptr::null_mut() {
             return Err(e)
         }
-        let c = Connection { i: Box::new(IConnection { conn: Cell::new(conn), pending_items: RefCell::new(DList::new()) })};
+        let c = Connection { i: Box::new(IConnection { conn: Cell::new(conn), pending_items: RefCell::new(LinkedList::new()) })};
 
         /* No, we don't want our app to suddenly quit if dbus goes down */
         unsafe { ffi::dbus_connection_set_exit_on_disconnect(conn, 0) };
@@ -399,7 +399,7 @@ mod test {
         let mut r = c.send_with_reply_and_block(m, 8000).unwrap();
         let reply = r.get_items();
         println!("{:?}", reply);
-        thread.join().ok().expect("failed to join thread");
+        thread.join();
 
     }
 

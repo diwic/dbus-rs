@@ -10,7 +10,7 @@ pub struct Argument<'a> {
 }
 
 impl<'a> Argument<'a> {
-    pub fn new<T: IntoCow<'a, String, str>>(name: &'a str, sig: T) -> Argument<'a> {
+    pub fn new<T: IntoCow<'a, str>>(name: &'a str, sig: T) -> Argument<'a> {
         Argument { name: name, sig: sig.into_cow() }
     }
 }
@@ -420,7 +420,7 @@ fn test_objpath() {
         }
     }
 
-    thread.join().ok().expect("failed to join thread");
+    thread.join();
 }
 
 #[test]
