@@ -1,5 +1,9 @@
 #![feature(unsafe_destructor, alloc, core, libc, std_misc)]
 
+// This is just for the unixfd test, but you can't enable features just for test,
+// so you'll get warnings one way or the other...
+// #![feature(fs, io, path, tempdir)]
+
 extern crate libc;
 
 pub use ffi::DBusBusType as BusType;
@@ -8,7 +12,7 @@ pub use ffi::DBusRequestNameReply as RequestNameReply;
 pub use ffi::DBusReleaseNameReply as ReleaseNameReply;
 pub use ffi::DBusMessageType as MessageType;
 
-pub use message::{Message, MessageItem};
+pub use message::{Message, MessageItem, OwnedFd};
 pub use prop::PropHandler;
 pub use prop::Props;
 pub use objpath::{ObjectPath, Interface, Property, Method, Signal, MethodHandler, MethodResult, Argument};

@@ -1,6 +1,7 @@
 use std::borrow::IntoCow;
 use std::{fmt, mem, ptr};
 use super::{ffi, Error, MessageType, TypeSig, libc, to_c_str, c_str_to_slice, init_dbus};
+use std::os::unix::{Fd, AsRawFd};
 
 fn new_dbus_message_iter() -> ffi::DBusMessageIter {
     ffi::DBusMessageIter {
@@ -21,6 +22,41 @@ fn new_dbus_message_iter() -> ffi::DBusMessageIter {
     }
 }
 
+#[derive(Debug, PartialEq, PartialOrd)]
+pub struct OwnedFd {
+    fd: Fd
+}
+
+impl OwnedFd {
+    pub fn new(fd: Fd) -> OwnedFd {
+        OwnedFd { fd: fd }
+    }
+
+    pub fn into_fd(self) -> Fd {
+        let s = self.fd;
+        unsafe { ::std::mem::forget(self); }
+        s
+    }
+}
+
+impl Drop for OwnedFd {
+    fn drop(&mut self) {
+        unsafe { libc::close(self.fd); }
+    }
+}
+
+impl Clone for OwnedFd {
+    fn clone(&self) -> OwnedFd {
+        OwnedFd::new(unsafe { libc::dup(self.fd) } ) // FIXME: handle errors
+    }
+}
+
+impl AsRawFd for OwnedFd {
+    fn as_raw_fd(&self) -> Fd {
+        self.fd
+    }
+}
+
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum MessageItem {
     Array(Vec<MessageItem>, TypeSig<'static>),
@@ -38,6 +74,7 @@ pub enum MessageItem {
     UInt32(u32),
     UInt64(u64),
     Double(f64),
+    UnixFd(OwnedFd),
 }
 
 fn iter_get_basic(i: &mut ffi::DBusMessageIter) -> i64 {
@@ -124,6 +161,7 @@ impl MessageItem {
             &MessageItem::Variant(_) => "v".into_cow(),
             &MessageItem::DictEntry(ref k, ref v) => format!("{{{}{}}}", k.type_sig(), v.type_sig()).into_cow(),
             &MessageItem::ObjectPath(_) => "o".into_cow(),
+            &MessageItem::UnixFd(_) => "h".into_cow(),
         }
     }
 
@@ -144,6 +182,7 @@ impl MessageItem {
             &MessageItem::Variant(_) => ffi::DBUS_TYPE_VARIANT,
             &MessageItem::DictEntry(_,_) => ffi::DBUS_TYPE_DICT_ENTRY,
             &MessageItem::ObjectPath(_) => ffi::DBUS_TYPE_OBJECT_PATH,
+            &MessageItem::UnixFd(_) => ffi::DBUS_TYPE_UNIX_FD,
         };
         s as i32
     }
@@ -222,6 +261,7 @@ impl MessageItem {
                     };
                     v.push(MessageItem::ObjectPath(c_str_to_slice(&c).expect("D-Bus object path error").to_string()));
                 },
+                ffi::DBUS_TYPE_UNIX_FD => v.push(MessageItem::UnixFd(OwnedFd::new(iter_get_basic(i) as libc::c_int))),
                 ffi::DBUS_TYPE_BOOLEAN => v.push(MessageItem::Bool((iter_get_basic(i) as u32) != 0)),
                 ffi::DBUS_TYPE_BYTE => v.push(MessageItem::Byte(iter_get_basic(i) as u8)),
                 ffi::DBUS_TYPE_INT16 => v.push(MessageItem::Int16(iter_get_basic(i) as i16)),
@@ -261,6 +301,7 @@ impl MessageItem {
             &MessageItem::UInt16(b) => self.iter_append_basic(i, b as i64),
             &MessageItem::UInt32(b) => self.iter_append_basic(i, b as i64),
             &MessageItem::UInt64(b) => self.iter_append_basic(i, b as i64),
+            &MessageItem::UnixFd(ref b) => self.iter_append_basic(i, b.as_raw_fd() as i64),
             &MessageItem::Double(b) => iter_append_f64(i, b),
             &MessageItem::Array(ref b, ref t) => iter_append_array(i, &**b, t.clone()),
             &MessageItem::Struct(ref v) => iter_append_struct(i, &**v),
@@ -382,7 +423,48 @@ pub fn get_message_ptr<'a>(m: &Message) -> *mut ffi::DBusMessage {
 
 #[cfg(test)]
 mod test {
-    use super::super::{Connection, ConnectionItem, Message, BusType, MessageItem};
+    use super::super::{Connection, ConnectionItem, Message, BusType, MessageItem, OwnedFd, libc};
+
+    #[test]
+    fn unix_fd() {
+        use std::io::prelude::*;
+        use std::io::SeekFrom;
+        use std::fs::{TempDir, OpenOptions};
+        use std::os::unix::AsRawFd;
+
+        let c = Connection::get_private(BusType::Session).unwrap();
+        c.register_object_path("/hello").unwrap();
+        let mut m = Message::new_method_call(&*c.unique_name(), "/hello", "com.example.hello", "Hello").unwrap();
+        let tempdir = TempDir::new("dbus-rs-test").unwrap();
+        let mut filename = tempdir.path().to_path_buf();
+        filename.push("test");
+        println!("Creating file {:?}", filename);
+        let mut file = OpenOptions::new().create(true).read(true).write(true).open(&filename).unwrap();
+        file.write_all(b"z").unwrap();
+        file.seek(SeekFrom::Start(0)).unwrap();
+        let ofd = OwnedFd::new(file.as_raw_fd());
+        m.append_items(&[MessageItem::UnixFd(ofd.clone())]);
+        println!("Sending {:?}", m.get_items());
+        c.send(m).unwrap();
+
+        for n in c.iter(1000) {
+            match n {
+                ConnectionItem::MethodCall(mut m) => {
+                    if let Some(&MessageItem::UnixFd(ref z)) = m.get_items().get(0) {
+                        println!("Got {:?}", m.get_items());
+                        let mut q: libc::c_char = 100;
+                        assert_eq!(1, unsafe { libc::read(z.as_raw_fd(), &mut q as *mut i8 as *mut libc::c_void, 1) });
+                        assert_eq!(q, 'z' as libc::c_char);
+                        break;
+                    }
+                    else {
+                        panic!("Expected UnixFd, got {:?}", m.get_items());
+                    }
+                }
+                _ => println!("Got {:?}", n),
+            }
+        }
+    }
 
     #[test]
     fn message_types() {
