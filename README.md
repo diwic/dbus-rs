@@ -8,6 +8,8 @@ Current state: WIP, but these things should be up and working:
  * Server side introspection
  * Server side method dispatch (boxed closures) and property get/set dispatch (trait objects)
 
+[API Documentation](http://diwic.github.io/dbus-rs-docs/dbus/)
+
 Examples
 ========
 

@@ -4,6 +4,8 @@
 //! for communication between processes. It is present by default on almost every
 //! Linux distribution out there, and runs in two instances - one per session, and one
 //! system-wide.
+//!
+//! See the examples directory for some examples to get you started.
 
 #![feature(unsafe_destructor, alloc, core, libc, std_misc)]
 

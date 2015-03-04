@@ -353,11 +353,11 @@ impl<'a> ObjectPath<'a> {
         self.i.set_registered(register)
     }
 
-    /* Return value:
-       None => not handled,
-       Some(Err(())) => message reply send failed,
-       Some(Ok()) => message reply send ok */
 
+    /// Handles a method call if the object path matches.
+    /// Return value: None => not handled (no match),
+    /// Some(Err(())) => message reply send failed,
+    /// Some(Ok()) => message reply send ok */
     pub fn handle_message(&mut self, msg: &mut Message) -> Option<Result<(), ()>> {
         let (_, path, iface, method) = msg.headers();
         if path.is_none() || path.unwrap() != self.i.path { return None; }
