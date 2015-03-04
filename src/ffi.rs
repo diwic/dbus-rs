@@ -175,6 +175,7 @@ extern "C" {
     pub fn dbus_message_get_type(message: *mut DBusMessage) -> c_int;
     pub fn dbus_message_is_method_call(message: *mut DBusMessage, iface: *const c_char, method: *const c_char) -> u32;
     pub fn dbus_message_is_signal(message: *mut DBusMessage, iface: *const c_char, signal_name: *const c_char) -> u32;
+    pub fn dbus_message_get_serial(message: *mut DBusMessage) -> u32;
     pub fn dbus_message_get_path(message: *mut DBusMessage) -> *const c_char;
     pub fn dbus_message_get_interface(message: *mut DBusMessage) -> *const c_char;
     pub fn dbus_message_get_member(message: *mut DBusMessage) -> *const c_char;

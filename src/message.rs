@@ -371,6 +371,10 @@ impl Message {
         }
     }
 
+    pub fn get_serial(&self) -> u32 {
+        unsafe { ffi::dbus_message_get_serial(self.msg) }
+    }
+
     pub fn append_items(&mut self, v: &[MessageItem]) {
         let mut i = new_dbus_message_iter();
         unsafe { ffi::dbus_message_iter_init_append(self.msg, &mut i) };
