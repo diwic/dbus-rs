@@ -1,10 +1,11 @@
 [package]
 
 name = "dbus"
-version = "0.0.5"
+version = "0.0.6"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 
 description = "D-Bus bindings"
 repository = "https://github.com/diwic/dbus-rs"
+documentation = "http://diwic.github.io/dbus-rs-docs/dbus"
 keywords = ["D-Bus"]
 license = "Apache-2.0/MIT"
