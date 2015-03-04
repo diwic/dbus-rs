@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::cell::{Cell, RefCell};
 use std::borrow::IntoCow;
 
+/// a Method has a list of Arguments.
 pub struct Argument<'a> {
     name: &'a str,
     sig: TypeSig<'a>,
@@ -15,6 +16,7 @@ impl<'a> Argument<'a> {
     }
 }
 
+/// declares that an Interface can send this signal
 pub struct Signal<'a> {
     name: String,
     args: Vec<Argument<'a>>,
@@ -26,11 +28,14 @@ impl<'a> Signal<'a> {
     }
 }
 
-
+/// A method returns either a list of MessageItems, or an error - the tuple
+/// represents the name and message of the Error.
 pub type MethodResult = Result<Vec<MessageItem>, (&'static str, String)>;
 pub type PropertyGetResult = Result<MessageItem, (&'static str, String)>;
 pub type PropertySetResult = Result<(), (&'static str, String)>;
 
+/// A boxed closure for dynamic dispatch. It is called when the method is 
+/// called by a remote application.
 pub type MethodHandler<'a> = Box<Fn(&mut Message) -> MethodResult + 'a>;
 
 struct IMethod<'a> {
@@ -39,6 +44,7 @@ struct IMethod<'a> {
     cb: Rc<MethodHandler<'a>>,
 }
 
+/// a method that can be called from another application
 pub struct Method<'a> {
     name: String,
     i: IMethod<'a>
@@ -53,23 +59,23 @@ impl<'a> Method<'a> {
     }
 }
 
-pub trait PropertyHandler {
+pub trait PropertyRWHandler {
     fn get(&self) -> PropertyGetResult;
     fn set(&self, &MessageItem) -> PropertySetResult;
 }
 
-pub trait PropertyGetHandler {
+pub trait PropertyROHandler {
     fn get(&self) -> PropertyGetResult;
 }
 
-pub trait PropertySetHandler {
+pub trait PropertyWOHandler {
     fn set(&self, &MessageItem) -> PropertySetResult;
 }
 
 pub enum PropertyAccess<'a> {
-    RO(Box<PropertyGetHandler+'a>),
-    RW(Box<PropertyHandler+'a>),
-    WO(Box<PropertySetHandler+'a>),
+    RO(Box<PropertyROHandler+'a>),
+    RW(Box<PropertyRWHandler+'a>),
+    WO(Box<PropertyWOHandler+'a>),
 }
 
 struct IProperty<'a> {
@@ -77,6 +83,7 @@ struct IProperty<'a> {
     access: PropertyAccess<'a>,
 }
 
+/// Properties that a remote application can get/set.
 pub struct Property<'a> {
     name: String,
     i: IProperty<'a>
@@ -86,17 +93,21 @@ impl<'a> Property<'a> {
     fn new<N: ToString>(name: N, sig: TypeSig<'a>, a: PropertyAccess<'a>) -> Property<'a> {
         Property { name: name.to_string(), i: IProperty { sig: sig, access: a } }
     }
-    pub fn new_ro<N: ToString>(name: N, sig: TypeSig<'a>, h: Box<PropertyGetHandler+'a>) -> Property<'a> {
+    /// Creates a new read-only Property
+    pub fn new_ro<N: ToString>(name: N, sig: TypeSig<'a>, h: Box<PropertyROHandler+'a>) -> Property<'a> {
         Property::new(name, sig, PropertyAccess::RO(h))
     }
-    pub fn new_rw<N: ToString>(name: N, sig: TypeSig<'a>, h: Box<PropertyHandler+'a>) -> Property<'a> {
+    /// Creates a new read-write Property
+    pub fn new_rw<N: ToString>(name: N, sig: TypeSig<'a>, h: Box<PropertyRWHandler+'a>) -> Property<'a> {
         Property::new(name, sig, PropertyAccess::RW(h))
     }
-    pub fn new_wo<N: ToString>(name: N, sig: TypeSig<'a>, h: Box<PropertySetHandler+'a>) -> Property<'a> {
+    /// Creates a new write-only Property
+    pub fn new_wo<N: ToString>(name: N, sig: TypeSig<'a>, h: Box<PropertyWOHandler+'a>) -> Property<'a> {
         Property::new(name, sig, PropertyAccess::WO(h))
     }
 }
 
+/// Interfaces can contain Methods, Properties, and Signals.
 pub struct Interface<'a> {
     methods: BTreeMap<String, IMethod<'a>>,
     properties: BTreeMap<String, IProperty<'a>>,
@@ -120,6 +131,7 @@ struct IObjectPath<'a> {
     interfaces: RefCell<BTreeMap<String, Interface<'a>>>,
 }
 
+/// Represents a D-Bus object path, which can in turn contain Interfaces.
 pub struct ObjectPath<'a> {
     // We need a weak ref for the introspector, hence this extra boxing
     i: Rc<IObjectPath<'a>>,
@@ -279,7 +291,7 @@ fn parse_msg_variant(a: Option<&MessageItem>) -> Result<&MessageItem,(&'static s
     } else { Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a))) }
 }
 
-impl PropertyGetHandler for MessageItem {
+impl PropertyROHandler for MessageItem {
     fn get(&self) -> PropertyGetResult {
         Ok(self.clone())
     }
@@ -359,11 +371,11 @@ impl<'a> ObjectPath<'a> {
                     m.cb.clone()
                 } else {
                     return Some(self.i.conn.send(Message::new_error(
-                        msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method").unwrap()));
+                        msg, "org.freedesktop.DBus.Error.UnknownMethod", "Unknown method").unwrap()).map(|_| ()));
                 }
             } else {
                 return Some(self.i.conn.send(Message::new_error(msg,
-                    "org.freedesktop.DBus.Error.UnknownInterface", "Unknown interface").unwrap()));
+                    "org.freedesktop.DBus.Error.UnknownInterface", "Unknown interface").unwrap()).map(|_| ()));
             }
         };
 
@@ -376,7 +388,7 @@ impl<'a> ObjectPath<'a> {
             Err((aa,bb)) => Message::new_error(msg, aa, &bb).unwrap(),
         };
 
-        Some(self.i.conn.send(reply))
+        Some(self.i.conn.send(reply).map(|_| ()))
     }
 }
 

@@ -1,3 +1,10 @@
+//! D-Bus bindings for Rust
+//!
+//! [D-Bus](http://dbus.freedesktop.org/) is a message bus, and is mainly used in Linux
+//! for communication between processes. It is present by default on almost every
+//! Linux distribution out there, and runs in two instances - one per session, and one
+//! system-wide.
+
 #![feature(unsafe_destructor, alloc, core, libc, std_misc)]
 
 // This is just for the unixfd test, but you can't enable features just for test,
@@ -15,8 +22,8 @@ pub use ffi::DBusMessageType as MessageType;
 pub use message::{Message, MessageItem, OwnedFd};
 pub use prop::PropHandler;
 pub use prop::Props;
-pub use objpath::{ObjectPath, Interface, Property, Method, Signal, MethodHandler, MethodResult, Argument};
 
+/// A TypeSig describes the type of a MessageItem.
 pub type TypeSig<'a> = std::string::CowString<'a>;
 
 use std::ffi::{CString, CStr};
@@ -29,6 +36,15 @@ mod message;
 mod prop;
 mod objpath;
 
+
+/// Contains functionality for the "server" of a D-Bus object. A remote application can
+/// introspect this object and call methods on it.
+pub mod obj {
+    pub use objpath::{ObjectPath, Interface, Property, Signal, Argument};
+    pub use objpath::{Method, MethodHandler, MethodResult};
+    pub use objpath::{PropertyROHandler, PropertyRWHandler, PropertyWOHandler, PropertyGetResult, PropertySetResult};
+}
+
 static INITDBUS: std::sync::Once = std::sync::ONCE_INIT;
 
 fn init_dbus() {
@@ -39,7 +55,7 @@ fn init_dbus() {
     });
 }
 
-
+/// D-Bus Error wrapper
 pub struct Error {
     e: ffi::DBusError,
 }
@@ -55,9 +71,9 @@ fn to_c_str<S: Str>(n: S) -> CString { CString::new(n.as_slice().as_bytes()).unw
 
 impl Error {
 
-    pub fn new(e: ffi::DBusError) -> Error {
+/*    fn new(e: ffi::DBusError) -> Error {
         Error { e: e }
-    }
+    }*/
 
     pub fn new_custom(name: &str, message: &str) -> Error {
         let n = to_c_str(name);
@@ -80,12 +96,14 @@ impl Error {
         Error{ e: e }
     }
 
-    pub fn get(&self) -> &ffi::DBusError { &self.e }
+/*    fn get(&self) -> &ffi::DBusError { &self.e } */
 
+    /// Error name/type, e g 'org.freedesktop.DBus.Error.Failed'
     pub fn name(&self) -> Option<&str> {
         c_str_to_slice(&self.e.name)
     }
 
+    /// Custom message, e g 'Could not find a matching object path'
     pub fn message(&self) -> Option<&str> {
         c_str_to_slice(&self.e.message)
     }
@@ -118,6 +136,8 @@ impl std::fmt::Display for Error {
     }
 }
 
+/// When listening for incoming events on the D-Bus, this enum will tell you what type
+/// of incoming event has happened.
 #[derive(Debug)]
 pub enum ConnectionItem {
     Nothing,
@@ -125,6 +145,7 @@ pub enum ConnectionItem {
     Signal(Message),
 }
 
+/// ConnectionItem iterator
 pub struct ConnectionItems<'a> {
     c: &'a Connection,
     timeout_ms: i32,
@@ -154,6 +175,7 @@ struct IConnection {
     pending_items: RefCell<LinkedList<ConnectionItem>>,
 }
 
+/// A D-Bus connection. Start here if you want to get on the D-Bus!
 pub struct Connection {
     i: Box<IConnection>,
 }
@@ -194,6 +216,7 @@ impl Connection {
         self.i.conn.get()
     }
 
+    /// Creates a new D-Bus connection.
     pub fn get_private(bus: BusType) -> Result<Connection, Error> {
         let mut e = Error::empty();
         let conn = unsafe { ffi::dbus_bus_get_private(bus, e.get_mut()) };
@@ -210,6 +233,8 @@ impl Connection {
         Ok(c)
     }
 
+    /// Sends a message over the D-Bus and waits for a reply.
+    /// This is usually used for method calls.
     pub fn send_with_reply_and_block(&self, msg: Message, timeout_ms: i32) -> Result<Message, Error> {
         let mut e = Error::empty();
         let response = unsafe {
@@ -222,11 +247,13 @@ impl Connection {
         Ok(message::message_from_ptr(response, false))
     }
 
-    pub fn send(&self, msg: Message) -> Result<(),()> {
-        let r = unsafe { ffi::dbus_connection_send(self.conn(), message::get_message_ptr(&msg), ptr::null_mut()) };
+    /// Sends a message over the D-Bus without waiting. Useful for sending replies to a method call.
+    pub fn send(&self, msg: Message) -> Result<u32,()> {
+        let mut serial = 0u32;
+        let r = unsafe { ffi::dbus_connection_send(self.conn(), message::get_message_ptr(&msg), &mut serial) };
         if r == 0 { return Err(()); }
         unsafe { ffi::dbus_connection_flush(self.conn()) };
-        Ok(())
+        Ok(serial)
     }
 
     pub fn unique_name(&self) -> String {
@@ -234,6 +261,7 @@ impl Connection {
         c_str_to_slice(&c).unwrap_or("").to_string()
     }
 
+    // Check if there are new incoming events
     pub fn iter(&self, timeout_ms: i32) -> ConnectionItems {
         ConnectionItems {
             c: self,

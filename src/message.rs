@@ -22,6 +22,8 @@ fn new_dbus_message_iter() -> ffi::DBusMessageIter {
     }
 }
 
+/// An RAII wrapper around Fd to ensure that file descriptor is closed
+/// when the scope ends.
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct OwnedFd {
     fd: Fd
@@ -57,6 +59,8 @@ impl AsRawFd for OwnedFd {
     }
 }
 
+/// MessageItem - used as parameters and return values from
+/// method calls, or as data added to a signal.
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum MessageItem {
     Array(Vec<MessageItem>, TypeSig<'static>),
@@ -187,7 +191,7 @@ impl MessageItem {
         s as i32
     }
 
-    // Creates a Array<String, Variant> from an iterator with Result passthrough (an Err will abort and return that Err)
+    /// Creates an Array<String, Variant> from an iterator with Result passthrough (an Err will abort and return that Err)
     pub fn from_dict<E, I: Iterator<Item=Result<(String, MessageItem),E>>>(i: I) -> Result<MessageItem,E> {
         let mut v = Vec::new();
         for r in i {
@@ -198,7 +202,8 @@ impl MessageItem {
         Ok(MessageItem::Array(v, "{sv}".into_cow()))
     }
 
-    // Note: Will panic if the vec is empty or if there are different types in the array
+    /// Creates an MessageItem::Array from a list of MessageItems.
+    /// Note: Will panic if the vec is empty or if there are different types in the array
     pub fn new_array(v: Vec<MessageItem>) -> MessageItem {
         let t = v[0].type_sig();
         for i in &v { debug_assert!(i.type_sig() == t) };
@@ -322,6 +327,8 @@ impl MessageItem {
     }
 }
 
+/// A D-Bus message. A message contains some headers (e g sender and destination address)
+/// and a list of MessageItems.
 pub struct Message {
     msg: *mut ffi::DBusMessage,
 }

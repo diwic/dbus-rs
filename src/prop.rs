@@ -1,6 +1,7 @@
 use super::{Connection, Message, MessageItem, Error};
 use std::collections::BTreeMap;
 
+/// Client side properties - get and set properties on a remote application.
 pub struct Props<'a> {
     name: String,
     path: String,
@@ -78,6 +79,7 @@ impl<'a> Props<'a> {
     }
 }
 
+/// Wrapper around Props that keeps a map of fetched properties.
 pub struct PropHandler<'a> {
     p: Props<'a>,
     map: BTreeMap<String, MessageItem>,
@@ -157,7 +159,7 @@ impl<'a> PropHandler<'a> {
             "GetAll" => self.handle_getall(msg),
             _ => PropHandler::invalid_args(msg)
         };
-        Some(self.p.conn.send(reply))
+        Some(self.p.conn.send(reply).map(|_| ()))
     }
 }
 
