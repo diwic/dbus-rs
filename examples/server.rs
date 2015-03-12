@@ -1,7 +1,7 @@
 extern crate dbus;
 
 use dbus::{Connection, BusType, NameFlag, ConnectionItem, Message, MessageItem};
-use dbus::{ObjectPath, Argument, Method, Interface};
+use dbus::obj::{ObjectPath, Argument, Method, Interface};
 
 static DBUS_ERROR_FAILED: &'static str = "org.freedesktop.DBus.Error.Failed";
 

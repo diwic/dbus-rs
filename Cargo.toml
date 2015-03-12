@@ -9,3 +9,6 @@ repository = "https://github.com/diwic/dbus-rs"
 documentation = "http://diwic.github.io/dbus-rs-docs/dbus"
 keywords = ["D-Bus"]
 license = "Apache-2.0/MIT"
+
+[dev-dependencies]
+tempdir = "*"

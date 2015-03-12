@@ -11,7 +11,7 @@
 
 // This is just for the unixfd test, but you can't enable features just for test,
 // so you'll get warnings one way or the other...
-// #![feature(fs, io, path, tempdir)]
+// #![feature(io, path)]
 
 extern crate libc;
 
@@ -26,7 +26,7 @@ pub use prop::PropHandler;
 pub use prop::Props;
 
 /// A TypeSig describes the type of a MessageItem.
-pub type TypeSig<'a> = std::string::CowString<'a>;
+pub type TypeSig<'a> = std::borrow::Cow<'a, str>;
 
 use std::ffi::{CString, CStr};
 use std::ptr::{self, PtrExt};

@@ -434,19 +434,21 @@ pub fn get_message_ptr<'a>(m: &Message) -> *mut ffi::DBusMessage {
 
 #[cfg(test)]
 mod test {
+    extern crate tempdir;
+
     use super::super::{Connection, ConnectionItem, Message, BusType, MessageItem, OwnedFd, libc};
 
     #[test]
     fn unix_fd() {
         use std::io::prelude::*;
         use std::io::SeekFrom;
-        use std::fs::{TempDir, OpenOptions};
+        use std::fs::OpenOptions;
         use std::os::unix::AsRawFd;
 
         let c = Connection::get_private(BusType::Session).unwrap();
         c.register_object_path("/hello").unwrap();
         let mut m = Message::new_method_call(&*c.unique_name(), "/hello", "com.example.hello", "Hello").unwrap();
-        let tempdir = TempDir::new("dbus-rs-test").unwrap();
+        let tempdir = tempdir::TempDir::new("dbus-rs-test").unwrap();
         let mut filename = tempdir.path().to_path_buf();
         filename.push("test");
         println!("Creating file {:?}", filename);
