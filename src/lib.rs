@@ -8,10 +8,7 @@
 //! See the examples directory for some examples to get you started.
 
 #![feature(unsafe_destructor, alloc, core, libc, std_misc)]
-
-// This is just for the unixfd test, but you can't enable features just for test,
-// so you'll get warnings one way or the other...
-// #![feature(io, path)]
+#![cfg_attr(test, feature(io, path))]
 
 extern crate libc;
 
