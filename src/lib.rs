@@ -8,7 +8,7 @@
 //! See the examples directory for some examples to get you started.
 
 #![feature(unsafe_destructor, alloc, core, libc, std_misc)]
-#![cfg_attr(test, feature(io, path))]
+#![cfg_attr(test, feature(io))]
 
 extern crate libc;
 
@@ -66,7 +66,7 @@ fn c_str_to_slice(c: & *const libc::c_char) -> Option<&str> {
     else { std::str::from_utf8( unsafe { CStr::from_ptr(*c).to_bytes() }).ok() }
 }
 
-fn to_c_str<S: Str>(n: S) -> CString { CString::new(n.as_slice().as_bytes()).unwrap() }
+fn to_c_str(n: &str) -> CString { CString::new(n.as_bytes()).unwrap() }
 
 impl Error {
 
@@ -76,7 +76,7 @@ impl Error {
 
     pub fn new_custom(name: &str, message: &str) -> Error {
         let n = to_c_str(name);
-        let m = to_c_str(message.replace("%","%%"));
+        let m = to_c_str(&message.replace("%","%%"));
         let mut e = Error::empty();
 
         unsafe { ffi::dbus_set_error(e.get_mut(), n.as_ptr(), m.as_ptr()) };
