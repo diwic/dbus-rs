@@ -1,7 +1,7 @@
 use std::borrow::IntoCow;
 use std::{fmt, mem, ptr};
 use super::{ffi, Error, MessageType, TypeSig, libc, to_c_str, c_str_to_slice, init_dbus};
-use std::os::unix::{Fd, AsRawFd};
+use std::os::unix::io::{Fd, AsRawFd};
 
 fn new_dbus_message_iter() -> ffi::DBusMessageIter {
     ffi::DBusMessageIter {
@@ -443,7 +443,7 @@ mod test {
         use std::io::prelude::*;
         use std::io::SeekFrom;
         use std::fs::OpenOptions;
-        use std::os::unix::AsRawFd;
+        use std::os::unix::io::AsRawFd;
 
         let c = Connection::get_private(BusType::Session).unwrap();
         c.register_object_path("/hello").unwrap();

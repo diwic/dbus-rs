@@ -7,7 +7,7 @@
 //!
 //! See the examples directory for some examples to get you started.
 
-#![feature(unsafe_destructor, alloc, core, libc, std_misc)]
+#![feature(unsafe_destructor, alloc, core, libc, io_ext)]
 #![cfg_attr(test, feature(io))]
 
 extern crate libc;
@@ -26,7 +26,7 @@ pub use prop::Props;
 pub type TypeSig<'a> = std::borrow::Cow<'a, str>;
 
 use std::ffi::{CString, CStr};
-use std::ptr::{self, PtrExt};
+use std::ptr::{self};
 use std::collections::LinkedList;
 use std::cell::{Cell, RefCell};
 
