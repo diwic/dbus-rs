@@ -133,7 +133,7 @@ struct IObjectPath<'a> {
 
 /// Represents a D-Bus object path, which can in turn contain Interfaces.
 pub struct ObjectPath<'a> {
-    // We need a weak ref for the introspector, hence this extra boxing
+    // We need extra references for the introspector and property handlers, hence this extra boxing
     i: Rc<IObjectPath<'a>>,
 }
 
@@ -308,10 +308,10 @@ impl<'a> ObjectPath<'a> {
         let mut o = ObjectPath { i: Rc::new(i) };
 
         if introspectable {
-            let o_weak = o.i.clone();
+            let o_cl = o.i.clone();
             let i = Interface::new(vec!(
                 Method::new("Introspect", vec!(), vec!(Argument::new("xml_data", "s")),
-                    Box::new(move |m| { o_weak.introspect(m) }))), vec!(), vec!());
+                    Box::new(move |m| { o_cl.introspect(m) }))), vec!(), vec!());
             o.insert_interface("org.freedesktop.DBus.Introspectable", i);
         }
         o
@@ -319,21 +319,21 @@ impl<'a> ObjectPath<'a> {
 
     fn add_property_handler(&mut self) {
         if self.i.interfaces.borrow().contains_key("org.freedesktop.DBus.Properties") { return };
-        let (weak1, weak2, weak3) = (self.i.clone(), self.i.clone(), self.i.clone());
+        let (cl1, cl2, cl3) = (self.i.clone(), self.i.clone(), self.i.clone());
         let i = Interface::new(vec!(
             Method::new("Get",
                 vec!(Argument::new("interface_name", "s"), Argument::new("property_name", "s")),
                 vec!(Argument::new("value", "v")),
-                Box::new(move |m| weak1.property_get(m))),
+                Box::new(move |m| cl1.property_get(m))),
             Method::new("GetAll",
                 vec!(Argument::new("interface_name", "s")),
                 vec!(Argument::new("props", "a{sv}")),
-                Box::new(move |m| weak2.property_getall(m))),
+                Box::new(move |m| cl2.property_getall(m))),
             Method::new("Set",
                 vec!(Argument::new("interface_name", "s"), Argument::new("property_name", "s"),
                     Argument::new("value", "v")),
                 vec!(),
-                Box::new(move |m| weak3.property_set(m)))),
+                Box::new(move |m| cl3.property_set(m)))),
             vec!(), vec!());
         self.insert_interface("org.freedesktop.DBus.Properties", i);
     }
