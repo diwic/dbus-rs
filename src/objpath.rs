@@ -137,9 +137,10 @@ pub struct ObjectPath<'a> {
     i: Rc<IObjectPath<'a>>,
 }
 
-impl<'a> Drop for IObjectPath<'a> {
+impl<'a> Drop for ObjectPath<'a> {
     fn drop(&mut self) {
-        let _ = self.set_registered(false);
+        let _ = self.i.set_registered(false);
+        self.i.interfaces.borrow_mut().clear(); // This should remove all the other references to i
     }
 }
 
@@ -307,10 +308,10 @@ impl<'a> ObjectPath<'a> {
         let mut o = ObjectPath { i: Rc::new(i) };
 
         if introspectable {
-            let o_weak = o.i.downgrade();
+            let o_weak = o.i.clone();
             let i = Interface::new(vec!(
                 Method::new("Introspect", vec!(), vec!(Argument::new("xml_data", "s")),
-                    Box::new(move |m| { o_weak.upgrade().unwrap().introspect(m) }))), vec!(), vec!());
+                    Box::new(move |m| { o_weak.introspect(m) }))), vec!(), vec!());
             o.insert_interface("org.freedesktop.DBus.Introspectable", i);
         }
         o
@@ -318,21 +319,21 @@ impl<'a> ObjectPath<'a> {
 
     fn add_property_handler(&mut self) {
         if self.i.interfaces.borrow().contains_key("org.freedesktop.DBus.Properties") { return };
-        let (weak1, weak2, weak3) = (self.i.downgrade(), self.i.downgrade(), self.i.downgrade());
+        let (weak1, weak2, weak3) = (self.i.clone(), self.i.clone(), self.i.clone());
         let i = Interface::new(vec!(
             Method::new("Get",
                 vec!(Argument::new("interface_name", "s"), Argument::new("property_name", "s")),
                 vec!(Argument::new("value", "v")),
-                Box::new(move |m| weak1.upgrade().unwrap().property_get(m))),
+                Box::new(move |m| weak1.property_get(m))),
             Method::new("GetAll",
                 vec!(Argument::new("interface_name", "s")),
                 vec!(Argument::new("props", "a{sv}")),
-                Box::new(move |m| weak2.upgrade().unwrap().property_getall(m))),
+                Box::new(move |m| weak2.property_getall(m))),
             Method::new("Set",
                 vec!(Argument::new("interface_name", "s"), Argument::new("property_name", "s"),
                     Argument::new("value", "v")),
                 vec!(),
-                Box::new(move |m| weak3.upgrade().unwrap().property_set(m)))),
+                Box::new(move |m| weak3.property_set(m)))),
             vec!(), vec!());
         self.insert_interface("org.freedesktop.DBus.Properties", i);
     }
@@ -433,6 +434,20 @@ fn test_objpath() {
 
     thread.join();
 }
+
+
+/// Currently commented out because it requires feature(alloc)
+/*
+#[test]
+fn test_refcount() {
+    let c = Connection::get_private(super::BusType::Session).unwrap();
+    let i = {
+        let o = make_objpath(&c);
+        o.i.clone()
+    };
+    assert!(::std::rc::is_unique(&i));
+}
+*/
 
 #[test]
 fn test_introspect() {

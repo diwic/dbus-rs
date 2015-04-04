@@ -7,8 +7,6 @@
 //!
 //! See the examples directory for some examples to get you started.
 
-#![feature(alloc)]
-
 extern crate libc;
 
 pub use ffi::DBusBusType as BusType;
