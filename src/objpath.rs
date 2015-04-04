@@ -2,7 +2,7 @@ use super::{Connection, Message, MessageItem, Error, TypeSig};
 use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::cell::{Cell, RefCell};
-use std::borrow::IntoCow;
+use std::borrow::Cow;
 
 /// a Method has a list of Arguments.
 pub struct Argument<'a> {
@@ -11,8 +11,8 @@ pub struct Argument<'a> {
 }
 
 impl<'a> Argument<'a> {
-    pub fn new<T: IntoCow<'a, str>>(name: &'a str, sig: T) -> Argument<'a> {
-        Argument { name: name, sig: sig.into_cow() }
+    pub fn new<T: Into<Cow<'a, str>>>(name: &'a str, sig: T) -> Argument<'a> {
+        Argument { name: name, sig: sig.into() }
     }
 }
 

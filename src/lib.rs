@@ -7,7 +7,7 @@
 //!
 //! See the examples directory for some examples to get you started.
 
-#![feature(alloc, into_cow)]
+#![feature(alloc)]
 
 extern crate libc;
 
