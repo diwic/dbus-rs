@@ -137,7 +137,6 @@ pub struct ObjectPath<'a> {
     i: Rc<IObjectPath<'a>>,
 }
 
-#[unsafe_destructor]
 impl<'a> Drop for IObjectPath<'a> {
     fn drop(&mut self) {
         let _ = self.set_registered(false);

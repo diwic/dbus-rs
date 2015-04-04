@@ -7,8 +7,7 @@
 //!
 //! See the examples directory for some examples to get you started.
 
-#![feature(unsafe_destructor, alloc, core, libc, io_ext, into_cow)]
-#![cfg_attr(test, feature(io))]
+#![feature(alloc, into_cow)]
 
 extern crate libc;
 

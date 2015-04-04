@@ -1,7 +1,7 @@
 use std::borrow::IntoCow;
 use std::{fmt, mem, ptr};
 use super::{ffi, Error, MessageType, TypeSig, libc, to_c_str, c_str_to_slice, init_dbus};
-use std::os::unix::io::{Fd, AsRawFd};
+use std::os::unix::io::{RawFd, AsRawFd};
 
 fn new_dbus_message_iter() -> ffi::DBusMessageIter {
     ffi::DBusMessageIter {
@@ -26,15 +26,15 @@ fn new_dbus_message_iter() -> ffi::DBusMessageIter {
 /// when the scope ends.
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct OwnedFd {
-    fd: Fd
+    fd: RawFd
 }
 
 impl OwnedFd {
-    pub fn new(fd: Fd) -> OwnedFd {
+    pub fn new(fd: RawFd) -> OwnedFd {
         OwnedFd { fd: fd }
     }
 
-    pub fn into_fd(self) -> Fd {
+    pub fn into_fd(self) -> RawFd {
         let s = self.fd;
         unsafe { ::std::mem::forget(self); }
         s
@@ -54,7 +54,7 @@ impl Clone for OwnedFd {
 }
 
 impl AsRawFd for OwnedFd {
-    fn as_raw_fd(&self) -> Fd {
+    fn as_raw_fd(&self) -> RawFd {
         self.fd
     }
 }

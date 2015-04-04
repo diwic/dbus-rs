@@ -10,5 +10,8 @@ documentation = "http://diwic.github.io/dbus-rs-docs/dbus"
 keywords = ["D-Bus"]
 license = "Apache-2.0/MIT"
 
+[dependencies]
+libc = "*"
+
 [dev-dependencies]
 tempdir = "*"

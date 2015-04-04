@@ -2,8 +2,6 @@
    Rtkit puts a few limitations on us to let us become realtime, such as setting
    RLIMIT_RTTIME correctly, hence the syscalls. */
 
-#![feature(libc)]
-
 extern crate dbus;
 extern crate libc;
 
@@ -22,7 +20,7 @@ static RLIMIT_RTTIME: c_int = 15;
 
 #[repr(C)]
 #[cfg(target_arch = "x86_64")]
-#[derive(Copy)]
+#[derive(Copy, Clone)]
 struct rlimit {
     rlim_cur: u64,
     rlim_max: u64,
@@ -39,8 +37,8 @@ extern "C" {
 
 struct MyError(String);
 
-impl<T: std::fmt::Debug> std::error::FromError<T> for MyError {
-    fn from_error(err: T) -> MyError {
+impl<T: std::fmt::Debug> std::convert::From<T> for MyError {
+    fn from(err: T) -> MyError {
         MyError(format!("{:?}", err))
     }
 }
