@@ -1,4 +1,4 @@
-use std::borrow::IntoCow;
+use std::borrow::Cow;
 use std::{fmt, mem, ptr};
 use super::{ffi, Error, MessageType, TypeSig, libc, to_c_str, c_str_to_slice, init_dbus};
 use std::os::unix::io::{RawFd, AsRawFd};
@@ -150,22 +150,22 @@ impl MessageItem {
     pub fn type_sig(&self) -> TypeSig<'static> {
         match self {
             // TODO: Can we make use of the ffi constants here instead of duplicating them?
-            &MessageItem::Str(_) => "s".into_cow(),
-            &MessageItem::Bool(_) => "b".into_cow(),
-            &MessageItem::Byte(_) => "y".into_cow(),
-            &MessageItem::Int16(_) => "n".into_cow(),
-            &MessageItem::Int32(_) => "i".into_cow(),
-            &MessageItem::Int64(_) => "x".into_cow(),
-            &MessageItem::UInt16(_) => "q".into_cow(),
-            &MessageItem::UInt32(_) => "u".into_cow(),
-            &MessageItem::UInt64(_) => "t".into_cow(),
-            &MessageItem::Double(_) => "d".into_cow(),
-            &MessageItem::Array(_, ref s) => format!("a{}", s).into_cow(),
-            &MessageItem::Struct(_) => "r".into_cow(),
-            &MessageItem::Variant(_) => "v".into_cow(),
-            &MessageItem::DictEntry(ref k, ref v) => format!("{{{}{}}}", k.type_sig(), v.type_sig()).into_cow(),
-            &MessageItem::ObjectPath(_) => "o".into_cow(),
-            &MessageItem::UnixFd(_) => "h".into_cow(),
+            &MessageItem::Str(_) => Cow::Borrowed("s"),
+            &MessageItem::Bool(_) => Cow::Borrowed("b"),
+            &MessageItem::Byte(_) => Cow::Borrowed("y"),
+            &MessageItem::Int16(_) => Cow::Borrowed("n"),
+            &MessageItem::Int32(_) => Cow::Borrowed("i"),
+            &MessageItem::Int64(_) => Cow::Borrowed("x"),
+            &MessageItem::UInt16(_) => Cow::Borrowed("q"),
+            &MessageItem::UInt32(_) => Cow::Borrowed("u"),
+            &MessageItem::UInt64(_) => Cow::Borrowed("t"),
+            &MessageItem::Double(_) => Cow::Borrowed("d"),
+            &MessageItem::Array(_, ref s) => Cow::Owned(format!("a{}", s)),
+            &MessageItem::Struct(_) => Cow::Borrowed("r"),
+            &MessageItem::Variant(_) => Cow::Borrowed("v"),
+            &MessageItem::DictEntry(ref k, ref v) => Cow::Owned(format!("{{{}{}}}", k.type_sig(), v.type_sig())),
+            &MessageItem::ObjectPath(_) => Cow::Borrowed("o"),
+            &MessageItem::UnixFd(_) => Cow::Borrowed("h"),
         }
     }
 
@@ -199,7 +199,7 @@ impl MessageItem {
             v.push(MessageItem::DictEntry(Box::new(MessageItem::Str(s)), Box::new(MessageItem::Variant(
                 Box::new(vv)))));
         }
-        Ok(MessageItem::Array(v, "{sv}".into_cow()))
+        Ok(MessageItem::Array(v, Cow::Borrowed("{sv}")))
     }
 
     /// Creates an MessageItem::Array from a list of MessageItems.
@@ -241,7 +241,7 @@ impl MessageItem {
                         let c = unsafe { ffi::dbus_message_iter_get_signature(&mut subiter) };
                         let s = c_str_to_slice(&(c as *const libc::c_char)).unwrap().to_string();
                         unsafe { ffi::dbus_free(c as *mut libc::c_void) };
-                        s.into_cow()
+                        Cow::Owned(s)
                     };
                     v.push(MessageItem::Array(a, t));
                 },
