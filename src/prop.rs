@@ -114,7 +114,7 @@ impl<'a> PropHandler<'a> {
         Message::new_error(m, "org.freedesktop.DBus.Error.InvalidArgs", "Invalid arguments").unwrap()
     }
 
-    #[deprecated(reason = "use objpath instead")]
+    /// Deprecated: use objpath instead
     fn handle_get(&self, msg: &mut Message) -> Message {
         let items = msg.get_items();
         let name = if let Some(s) = items.get(1) { s } else { return PropHandler::invalid_args(msg) };
@@ -126,7 +126,7 @@ impl<'a> PropHandler<'a> {
         reply
     }
 
-    #[deprecated(reason = "Broken. Use objpath instead")]
+    /// Deprecated: Broken. Use objpath instead
     fn handle_getall(&self, msg: &mut Message) -> Message {
         let mut reply = Message::new_method_return(msg).unwrap();
         for (k, v) in self.map.iter() {
