@@ -135,10 +135,11 @@ impl<'a> PropHandler<'a> {
         reply
     }
 
-    /* Return value:
-       None => not handled,
-       Some(Err(())) => message reply send failed,
-       Some(Ok()) => message reply send ok */
+    /// Deprecated: Broken. Use objpath instead
+    /// Return value:
+    ///   None => not handled,
+    ///   Some(Err(())) => message reply send failed,
+    ///   Some(Ok()) => message reply send ok
     pub fn handle_message(&mut self, msg: &mut Message) -> Option<Result<(), ()>> {
         let (_, path, iface, method) = msg.headers();
         if iface.is_none() || &*iface.unwrap() != "org.freedesktop.DBus.Properties" { return None; }
