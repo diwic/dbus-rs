@@ -8,7 +8,7 @@ extern crate libc;
 use std::cmp;
 use libc::c_int;
 
-use dbus::{Connection, BusType, Error, Props, MessageItem, Message};
+use dbus::{Connection, BusType, Props, MessageItem, Message};
 
 /* External C stuff. Currently only working for x86_64 */
 
@@ -33,25 +33,15 @@ extern "C" {
     fn setrlimit(resource: c_int, rlim: *const rlimit) -> c_int;
 }
 
-/* Error handling */
-
-struct MyError(String);
-
-impl<T: std::fmt::Debug> std::convert::From<T> for MyError {
-    fn from(err: T) -> MyError {
-        MyError(format!("{:?}", err))
-    }
-}
-
-fn item_as_i64(i: MessageItem) -> Result<i64, String> {
+fn item_as_i64(i: MessageItem) -> Result<i64, Box<std::error::Error>> {
     match i {
         MessageItem::Int32(i) => Ok(i as i64),
         MessageItem::Int64(i) => Ok(i),
-        _ => Err(format!("Property is not integer ({:?})", i))
+        _ => Err(Box::from(&*format!("Property is not integer ({:?})", i)))
     }
 }
 
-fn rtkit_set_realtime(c: &Connection, thread: u64, prio: u32) -> Result<(), Error> {
+fn rtkit_set_realtime(c: &Connection, thread: u64, prio: u32) -> Result<(), ::dbus::Error> {
     let mut m = Message::new_method_call("org.freedesktop.RealtimeKit1", "/org/freedesktop/RealtimeKit1",
         "org.freedesktop.RealtimeKit1", "MakeThreadRealtime").unwrap();
     m.append_items(&[MessageItem::UInt64(thread), MessageItem::UInt32(prio)]);
@@ -59,7 +49,7 @@ fn rtkit_set_realtime(c: &Connection, thread: u64, prio: u32) -> Result<(), Erro
     r.as_result().map(|_| ())
 }
 
-fn make_realtime(prio: u32) -> Result<u32, MyError> {
+fn make_realtime(prio: u32) -> Result<u32, Box<std::error::Error>> {
     let c = try!(Connection::get_private(BusType::System));
 
     let p = Props::new(&c, "org.freedesktop.RealtimeKit1", "/org/freedesktop/RealtimeKit1",
@@ -74,10 +64,10 @@ fn make_realtime(prio: u32) -> Result<u32, MyError> {
     let new_limit = rlimit { rlim_cur: max_rttime, rlim_max: max_rttime };
     let mut old_limit = new_limit;
     if unsafe { getrlimit(RLIMIT_RTTIME, &mut old_limit) } < 0 {
-        return Err(MyError("getrlimit failed".to_string()));
+        return Err(Box::from("getrlimit failed"));
     }
     if unsafe { setrlimit(RLIMIT_RTTIME, &new_limit) } < 0 {
-        return Err(MyError("setrlimit failed".to_string()));
+        return Err(Box::from("setrlimit failed"));
     }
 
     // Finally, let's ask rtkit to make us realtime
@@ -96,6 +86,6 @@ fn make_realtime(prio: u32) -> Result<u32, MyError> {
 fn main() {
     match make_realtime(5) {
         Ok(n) => println!("Got rtprio, level {}", n),
-        Err(e) => println!("No rtprio: {}", e.0),
+        Err(e) => println!("No rtprio: {}", e),
     }
 }
