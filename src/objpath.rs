@@ -213,12 +213,10 @@ impl<'a> IObjectPath<'a> {
         let prop_name = try!(parse_msg_str(items.get(1)));
 
         let is = self.interfaces.borrow();
-        let i = if let Some(s) = is.get(iface_name) { s } else {
-            return Err(("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", iface_name)))
-        };
-        let p = if let Some(s) = i.properties.get(prop_name) { s } else {
-            return Err(("org.freedesktop.DBus.Error.UnknownProperty", format!("Unknown property {}", prop_name)))
-        };
+        let i = try!(is.get(iface_name).ok_or_else(||
+            ("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", iface_name))));
+        let p = try!(i.properties.get(prop_name).ok_or_else(||
+            ("org.freedesktop.DBus.Error.UnknownProperty", format!("Unknown property {}", prop_name))));
         let v = try!(match p.access {
             PropertyAccess::RO(ref cb) => cb.get(),
             PropertyAccess::RW(ref cb) => cb.get(),
@@ -234,9 +232,8 @@ impl<'a> IObjectPath<'a> {
         let iface_name = try!(parse_msg_str(items.get(0)));
 
         let is = self.interfaces.borrow();
-        let i = if let Some(s) = is.get(iface_name) { s } else {
-            return Err(("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", iface_name)))
-        };
+        let i = try!(is.get(iface_name).ok_or_else(||
+            ("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", iface_name))));
         let mut result = Vec::new();
         result.push(try!(MessageItem::from_dict(i.properties.iter().filter_map(|(pname, pv)| {
             let v = match pv.access {
@@ -256,12 +253,10 @@ impl<'a> IObjectPath<'a> {
         let value = try!(parse_msg_variant(items.get(2)));
 
         let is = self.interfaces.borrow();
-        let i = if let Some(s) = is.get(iface_name) { s } else {
-            return Err(("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", iface_name)))
-        };
-        let p = if let Some(s) = i.properties.get(prop_name) { s } else {
-            return Err(("org.freedesktop.DBus.Error.UnknownProperty", format!("Unknown property {}", prop_name)))
-        };
+        let i = try!(is.get(iface_name).ok_or_else(||
+            ("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", iface_name))));
+        let p = try!(i.properties.get(prop_name).ok_or_else(||
+            ("org.freedesktop.DBus.Error.UnknownProperty", format!("Unknown property {}", prop_name))));
         try!(match p.access {
             PropertyAccess::WO(ref cb) => cb.set(value),
             PropertyAccess::RW(ref cb) => cb.set(value),
@@ -274,18 +269,14 @@ impl<'a> IObjectPath<'a> {
 }
 
 fn parse_msg_str(a: Option<&MessageItem>) -> Result<&str,(&'static str, String)> {
-    let name = if let Some(s) = a { s } else {
-        return Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a)))
-    };
+    let name = try!(a.ok_or_else(|| ("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a))));
     if let &MessageItem::Str(ref s) = name {
         Ok(&s)
     } else { Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a))) }
 }
 
 fn parse_msg_variant(a: Option<&MessageItem>) -> Result<&MessageItem,(&'static str, String)> {
-    let name = if let Some(s) = a { s } else {
-        return Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a)))
-    };
+    let name = try!(a.ok_or_else(|| ("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a))));
     if let &MessageItem::Variant(ref s) = name {
         Ok(&s)
     } else { Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a))) }
