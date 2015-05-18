@@ -3,6 +3,12 @@ use std::{fmt, mem, ptr};
 use super::{ffi, Error, MessageType, TypeSig, libc, to_c_str, c_str_to_slice, init_dbus};
 use std::os::unix::io::{RawFd, AsRawFd};
 
+#[derive(Debug,Copy,Clone)]
+pub enum ArrayError {
+    EmptyArray,
+    DifferentElementTypes,
+}
+
 fn new_dbus_message_iter() -> ffi::DBusMessageIter {
     ffi::DBusMessageIter {
         dummy1: ptr::null_mut(),
@@ -203,11 +209,19 @@ impl MessageItem {
     }
 
     /// Creates an MessageItem::Array from a list of MessageItems.
-    /// Note: Will panic if the vec is empty or if there are different types in the array
-    pub fn new_array(v: Vec<MessageItem>) -> MessageItem {
+    pub fn new_array(v: Vec<MessageItem>) -> Result<MessageItem,ArrayError> {
+        if v.len() == 0 {
+            return Err(ArrayError::EmptyArray);
+        }
+
         let t = v[0].type_sig();
-        for i in &v { debug_assert!(i.type_sig() == t) };
-        MessageItem::Array(v, t)
+        for i in &v {
+            if i.type_sig() != t {
+                return Err(ArrayError::DifferentElementTypes);
+            }
+        }
+
+        Ok(MessageItem::Array(v, t))
     }
 
     fn from_iter(i: &mut ffi::DBusMessageIter) -> Vec<MessageItem> {
@@ -486,14 +500,14 @@ mod test {
         let mut m = Message::new_method_call(&*c.unique_name(), "/hello", "com.example.hello", "Hello").unwrap();
         m.append_items(&[
             MessageItem::UInt16(2000),
-            MessageItem::new_array(vec!(MessageItem::Byte(129))),
+            MessageItem::new_array(vec!(MessageItem::Byte(129))).unwrap(),
             MessageItem::UInt64(987654321),
             MessageItem::Int32(-1),
             MessageItem::Str(format!("Hello world")),
             MessageItem::Double(-3.14),
             MessageItem::new_array(vec!(
                 MessageItem::DictEntry(Box::new(MessageItem::UInt32(123543)), Box::new(MessageItem::Bool(true)))
-            ))
+            )).unwrap()
         ]);
         let sending = format!("{:?}", m.get_items());
         println!("Sending {}", sending);
@@ -538,9 +552,9 @@ mod test {
                     |(iface, props)| MessageItem::DictEntry(Box::new(MessageItem::Str(iface.to_string())), Box::new(
                         MessageItem::from_dict::<(),_>(props.iter().map(|(name, value)| Ok((name.to_string(), value.clone())))).unwrap()
                     ))
-                ).collect())
+                ).collect()).unwrap()
             ))
-        ).collect());
+        ).collect()).unwrap();
         println!("As MessageItem: {:?}", m);
         assert_eq!(m.type_sig(), "a{oa{sa{sv}}}");
 
