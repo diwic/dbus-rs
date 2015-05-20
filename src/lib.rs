@@ -399,7 +399,7 @@ mod test {
     fn object_path() {
         use  std::sync::mpsc;
         let (tx, rx) = mpsc::channel();
-        let thread = ::std::thread::scoped(move || {
+        let thread = ::std::thread::spawn(move || {
             let c = Connection::get_private(BusType::Session).unwrap();
             c.register_object_path("/hello").unwrap();
             // println!("Waiting...");
@@ -425,7 +425,7 @@ mod test {
         let mut r = c.send_with_reply_and_block(m, 8000).unwrap();
         let reply = r.get_items();
         println!("{:?}", reply);
-        thread.join();
+        thread.join().unwrap();
 
     }
 

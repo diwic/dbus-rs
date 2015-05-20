@@ -403,7 +403,7 @@ fn test_objpath() {
     let busname = format!("com.example.objpath.test.test_objpath");
     assert_eq!(c.register_name(&busname, super::NameFlag::ReplaceExisting as u32).unwrap(), super::RequestNameReply::PrimaryOwner);
 
-    let thread = ::std::thread::scoped(move || {
+    let thread = ::std::thread::spawn(move || {
         let c = Connection::get_private(super::BusType::Session).unwrap();
         let pr = super::Props::new(&c, &busname, "/echo", "com.example.echo", 5000);
         assert_eq!(pr.get("EchoCount").unwrap(), super::MessageItem::Int32(7));
@@ -423,7 +423,7 @@ fn test_objpath() {
         }
     }
 
-    thread.join();
+    thread.join().unwrap();
 }
 
 

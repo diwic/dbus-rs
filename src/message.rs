@@ -42,7 +42,7 @@ impl OwnedFd {
 
     pub fn into_fd(self) -> RawFd {
         let s = self.fd;
-        unsafe { ::std::mem::forget(self); }
+        ::std::mem::forget(self);
         s
     }
 }
