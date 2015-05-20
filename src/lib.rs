@@ -67,10 +67,6 @@ fn to_c_str(n: &str) -> CString { CString::new(n.as_bytes()).unwrap() }
 
 impl Error {
 
-/*    fn new(e: ffi::DBusError) -> Error {
-        Error { e: e }
-    }*/
-
     pub fn new_custom(name: &str, message: &str) -> Error {
         let n = to_c_str(name);
         let m = to_c_str(&message.replace("%","%%"));
@@ -91,8 +87,6 @@ impl Error {
         unsafe { ffi::dbus_error_init(&mut e); }
         Error{ e: e }
     }
-
-/*    fn get(&self) -> &ffi::DBusError { &self.e } */
 
     /// Error name/type, e g 'org.freedesktop.DBus.Error.Failed'
     pub fn name(&self) -> Option<&str> {

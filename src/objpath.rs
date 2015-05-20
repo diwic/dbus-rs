@@ -16,7 +16,7 @@ impl<'a> Argument<'a> {
     }
 }
 
-/// declares that an Interface can send this signal
+/// Declares that an Interface can send this signal
 pub struct Signal<'a> {
     name: String,
     args: Vec<Argument<'a>>,
