@@ -109,59 +109,6 @@ impl<'a> PropHandler<'a> {
         self.map.insert(propname.to_string(), value);
         Ok(())
     }
-
-    fn invalid_args(m: &Message) -> Message {
-        Message::new_error(m, "org.freedesktop.DBus.Error.InvalidArgs", "Invalid arguments").unwrap()
-    }
-
-    /// Deprecated: use objpath instead
-    fn handle_get(&self, msg: &mut Message) -> Message {
-        let items = msg.get_items();
-        let name = if let Some(s) = items.get(1) { s } else { return PropHandler::invalid_args(msg) };
-        let name = if let &MessageItem::Str(ref s) = name { s } else { return PropHandler::invalid_args(msg) };
-        let value = if let Some(s) = self.map.get(name) { s } else { return PropHandler::invalid_args(msg) };
-
-        let mut reply = Message::new_method_return(msg).unwrap();
-        reply.append_items(&[MessageItem::Variant(Box::new(value.clone()))]);
-        reply
-    }
-
-    /// Deprecated: Broken. Use objpath instead
-    fn handle_getall(&self, msg: &mut Message) -> Message {
-        let mut reply = Message::new_method_return(msg).unwrap();
-        for (k, v) in self.map.iter() {
-            reply.append_items(&[MessageItem::DictEntry(Box::new(MessageItem::Str(k.clone())), Box::new(v.clone()))]);
-        }
-        reply
-    }
-
-    /// Deprecated: Broken. Use objpath instead
-    /// Return value:
-    ///   None => not handled,
-    ///   Some(Err(())) => message reply send failed,
-    ///   Some(Ok()) => message reply send ok
-    pub fn handle_message(&mut self, msg: &mut Message) -> Option<Result<(), ()>> {
-        let (_, path, iface, method) = msg.headers();
-        if iface.is_none() || &*iface.unwrap() != "org.freedesktop.DBus.Properties" { return None; }
-        if path.is_none() || path.unwrap() != self.p.path { return None; }
-        if method.is_none() { return None; }
-
-        let items = msg.get_items();
-        if let Some(i) = items.get(0) {
-            if let &MessageItem::Str(ref s) = i {
-                if *s != self.p.interface { return None; }
-            } else { return None; } // Hmm, invalid message
-        } else { return None }; // Hmm, invalid message
-
-        // Ok, we have a match
-        let reply = match &*method.unwrap() {
-            "Get" => self.handle_get(msg),
-//            "Set" => self.handle_set(msg),
-            "GetAll" => self.handle_getall(msg),
-            _ => PropHandler::invalid_args(msg)
-        };
-        Some(self.p.conn.send(reply).map(|_| ()))
-    }
 }
 
 
