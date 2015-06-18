@@ -377,7 +377,7 @@ impl Message {
         if ptr == ptr::null_mut() { None } else { Some(Message { msg: ptr} ) }
     }
 
-    pub fn get_items(&mut self) -> Vec<MessageItem> {
+    pub fn get_items(&self) -> Vec<MessageItem> {
         let mut i = new_dbus_message_iter();
         match unsafe { ffi::dbus_message_iter_init(self.msg, &mut i) } {
             0 => Vec::new(),
@@ -476,7 +476,7 @@ mod test {
 
         for n in c.iter(1000) {
             match n {
-                ConnectionItem::MethodCall(mut m) => {
+                ConnectionItem::MethodCall(m) => {
                     if let Some(&MessageItem::UnixFd(ref z)) = m.get_items().get(0) {
                         println!("Got {:?}", m.get_items());
                         let mut q: libc::c_char = 100;
@@ -515,7 +515,7 @@ mod test {
 
         for n in c.iter(1000) {
             match n {
-                ConnectionItem::MethodCall(mut m) => {
+                ConnectionItem::MethodCall(m) => {
                     let receiving = format!("{:?}", m.get_items());
                     println!("Receiving {}", receiving);
                     assert_eq!(sending, receiving);
@@ -568,7 +568,7 @@ mod test {
 
         for n in c.iter(1000) {
             match n {
-                ConnectionItem::MethodCall(mut m) => {
+                ConnectionItem::MethodCall(m) => {
                     let receiving = format!("{:?}", m.get_items());
                     println!("Receiving {}", receiving);
                     assert_eq!(sending, receiving);

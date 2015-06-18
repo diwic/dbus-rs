@@ -373,7 +373,7 @@ mod test {
     fn message_listnames() {
         let c = Connection::get_private(BusType::Session).unwrap();
         let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
-        let mut r = c.send_with_reply_and_block(m, 2000).unwrap();
+        let r = c.send_with_reply_and_block(m, 2000).unwrap();
         let reply = r.get_items();
         println!("{:?}", reply);
     }
@@ -383,7 +383,7 @@ mod test {
         let c = Connection::get_private(BusType::Session).unwrap();
         let mut m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "NameHasOwner").unwrap();
         m.append_items(&[MessageItem::Str("org.freedesktop.DBus".to_string())]);
-        let mut r = c.send_with_reply_and_block(m, 2000).unwrap();
+        let r = c.send_with_reply_and_block(m, 2000).unwrap();
         let reply = r.get_items();
         println!("{:?}", reply);
         assert_eq!(reply, vec!(MessageItem::Bool(true)));
@@ -416,7 +416,7 @@ mod test {
         let n = rx.recv().unwrap();
         let m = Message::new_method_call(&n, "/hello", "com.example.hello", "Hello").unwrap();
         println!("Sending...");
-        let mut r = c.send_with_reply_and_block(m, 8000).unwrap();
+        let r = c.send_with_reply_and_block(m, 8000).unwrap();
         let reply = r.get_items();
         println!("{:?}", reply);
         thread.join().unwrap();
