@@ -339,7 +339,92 @@ impl MessageItem {
             item.iter_append(i);
         }
     }
+
+    pub fn inner<'a, T: FromMessageItem<'a>>(&'a self) -> Result<T, ()> {
+        T::from(self)
+    }
 }
+
+macro_rules! msgitem_convert {
+    ($t: ty, $s: ident) => {
+        impl From<$t> for MessageItem { fn from(i: $t) -> MessageItem { MessageItem::$s(i) } }
+
+        impl<'a> FromMessageItem<'a> for $t {
+            fn from(i: &'a MessageItem) -> Result<$t,()> {
+                if let &MessageItem::$s(ref b) = i { Ok(*b) } else { Err(()) }
+            }
+        }
+    }
+}
+
+msgitem_convert!(u8, Byte);
+msgitem_convert!(u64, UInt64);
+msgitem_convert!(u32, UInt32);
+msgitem_convert!(u16, UInt16);
+msgitem_convert!(i16, Int16);
+msgitem_convert!(i32, Int32);
+msgitem_convert!(i64, Int64);
+msgitem_convert!(f64, Double);
+msgitem_convert!(bool, Bool);
+
+impl From<String> for MessageItem { fn from(i: String) -> MessageItem { MessageItem::Str(i) } }
+
+impl From<OwnedFd> for MessageItem { fn from(i: OwnedFd) -> MessageItem { MessageItem::UnixFd(i) } }
+
+impl From<Box<MessageItem>> for MessageItem {
+    fn from(i: Box<MessageItem>) -> MessageItem { MessageItem::Variant(i) }
+}
+
+impl From<(MessageItem, MessageItem)> for MessageItem {
+    fn from(i: (MessageItem, MessageItem)) -> MessageItem {
+        MessageItem::DictEntry(Box::new(i.0), Box::new(i.1))
+    }
+}
+
+/// Helper trait for `MessageItem::inner()`
+pub trait FromMessageItem<'a> {
+    fn from(i: &'a MessageItem) -> Result<Self, ()>;
+}
+
+impl<'a> FromMessageItem<'a> for &'a str {
+    fn from(i: &'a MessageItem) -> Result<&'a str,()> { i.inner::<&String>().map(|s| &**s) }
+}
+
+impl<'a> FromMessageItem<'a> for &'a String {
+    fn from(i: &'a MessageItem) -> Result<&'a String,()> {
+        match i {
+            &MessageItem::Str(ref b) => { Ok(b) },
+            &MessageItem::ObjectPath(ref b) => { Ok(b) },
+            _ => { Err(()) }
+        }
+    }
+}
+
+impl<'a> FromMessageItem<'a> for &'a MessageItem {
+    fn from(i: &'a MessageItem) -> Result<&'a MessageItem,()> { if let &MessageItem::Variant(ref b) = i { Ok(&**b) } else { Err(()) } }
+}
+
+impl<'a> FromMessageItem<'a> for &'a Vec<MessageItem> {
+    fn from(i: &'a MessageItem) -> Result<&'a Vec<MessageItem>,()> {
+        if let &MessageItem::Array(ref b, _) = i { Ok(b) } else { Err(()) }
+    }
+}
+
+impl<'a> FromMessageItem<'a> for &'a [MessageItem] {
+    fn from(i: &'a MessageItem) -> Result<&'a [MessageItem],()> { i.inner::<&Vec<MessageItem>>().map(|s| &**s) }
+}
+
+
+impl<'a> FromMessageItem<'a> for &'a OwnedFd {
+    fn from(i: &'a MessageItem) -> Result<&'a OwnedFd,()> { if let &MessageItem::UnixFd(ref b) = i { Ok(b) } else { Err(()) } }
+}
+
+impl<'a> FromMessageItem<'a> for (&'a MessageItem, &'a MessageItem) {
+    fn from(i: &'a MessageItem) -> Result<(&'a MessageItem, &'a MessageItem),()> {
+        if let &MessageItem::DictEntry(ref k, ref v) = i { Ok((&**k, &**v)) } else { Err(()) }
+    }
+}
+
 
 /// A D-Bus message. A message contains some headers (e g sender and destination address)
 /// and a list of MessageItems.
@@ -499,15 +584,13 @@ mod test {
         c.register_object_path("/hello").unwrap();
         let mut m = Message::new_method_call(&*c.unique_name(), "/hello", "com.example.hello", "Hello").unwrap();
         m.append_items(&[
-            MessageItem::UInt16(2000),
-            MessageItem::new_array(vec!(MessageItem::Byte(129))).unwrap(),
-            MessageItem::UInt64(987654321),
-            MessageItem::Int32(-1),
-            MessageItem::Str(format!("Hello world")),
-            MessageItem::Double(-3.14),
-            MessageItem::new_array(vec!(
-                MessageItem::DictEntry(Box::new(MessageItem::UInt32(123543)), Box::new(MessageItem::Bool(true)))
-            )).unwrap()
+            2000u16.into(),
+            MessageItem::new_array(vec!(129u8.into())).unwrap(),
+            987654321u64.into(),
+            (-1i32).into(),
+            format!("Hello world").into(),
+            (-3.14f64).into(),
+            MessageItem::new_array(vec!((123543u32.into(), true.into()).into())).unwrap()
         ]);
         let sending = format!("{:?}", m.get_items());
         println!("Sending {}", sending);

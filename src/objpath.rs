@@ -270,16 +270,12 @@ impl<'a> IObjectPath<'a> {
 
 fn parse_msg_str(a: Option<&MessageItem>) -> Result<&str,(&'static str, String)> {
     let name = try!(a.ok_or_else(|| ("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a))));
-    if let &MessageItem::Str(ref s) = name {
-        Ok(&s)
-    } else { Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a))) }
+    name.inner().map_err(|_| ("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a)))
 }
 
 fn parse_msg_variant(a: Option<&MessageItem>) -> Result<&MessageItem,(&'static str, String)> {
     let name = try!(a.ok_or_else(|| ("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a))));
-    if let &MessageItem::Variant(ref s) = name {
-        Ok(&s)
-    } else { Err(("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a))) }
+    name.inner().map_err(|_| ("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a)))
 }
 
 impl PropertyROHandler for MessageItem {
@@ -412,9 +408,9 @@ fn test_objpath() {
     let thread = ::std::thread::spawn(move || {
         let c = Connection::get_private(super::BusType::Session).unwrap();
         let pr = super::Props::new(&c, &busname, "/echo", "com.example.echo", 5000);
-        assert_eq!(pr.get("EchoCount").unwrap(), super::MessageItem::Int32(7));
+        assert_eq!(pr.get("EchoCount").unwrap(), 7i32.into());
         let m = pr.get_all().unwrap();
-        assert_eq!(m.get("EchoCount").unwrap(), &super::MessageItem::Int32(7));
+        assert_eq!(m.get("EchoCount").unwrap(), &7i32.into());
     });
 
     let mut i = 0;

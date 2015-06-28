@@ -44,7 +44,7 @@ fn item_as_i64(i: MessageItem) -> Result<i64, Box<std::error::Error>> {
 fn rtkit_set_realtime(c: &Connection, thread: u64, prio: u32) -> Result<(), ::dbus::Error> {
     let mut m = Message::new_method_call("org.freedesktop.RealtimeKit1", "/org/freedesktop/RealtimeKit1",
         "org.freedesktop.RealtimeKit1", "MakeThreadRealtime").unwrap();
-    m.append_items(&[MessageItem::UInt64(thread), MessageItem::UInt32(prio)]);
+    m.append_items(&[thread.into(), prio.into()]);
     let mut r = try!(c.send_with_reply_and_block(m, 10000));
     r.as_result().map(|_| ())
 }

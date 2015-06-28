@@ -24,10 +24,7 @@ impl<'a> Props<'a> {
     pub fn get(&self, propname: &str) -> Result<MessageItem, Error> {
         let mut m = Message::new_method_call(&self.name, &self.path,
             "org.freedesktop.DBus.Properties", "Get").unwrap();
-        m.append_items(&[
-            MessageItem::Str(self.interface.clone()),
-            MessageItem::Str(propname.to_string())
-        ]);
+        m.append_items(&[self.interface.clone().into(), propname.to_string().into()]);
         let mut r = try!(self.conn.send_with_reply_and_block(m, self.timeout_ms));
         let reply = try!(r.as_result()).get_items();
         if reply.len() == 1 {
@@ -42,11 +39,7 @@ impl<'a> Props<'a> {
     pub fn set(&self, propname: &str, value: MessageItem) -> Result<(), Error> {
         let mut m = Message::new_method_call(&self.name, &self.path,
             "org.freedesktop.DBus.Properties", "Set").unwrap();
-        m.append_items(&[
-            MessageItem::Str(self.interface.clone()),
-            MessageItem::Str(propname.to_string()),
-            MessageItem::Variant(Box::new(value)),
-        ]);
+        m.append_items(&[self.interface.clone().into(), propname.to_string().into(), Box::new(value).into()]);
         let mut r = try!(self.conn.send_with_reply_and_block(m, self.timeout_ms));
         try!(r.as_result());
         Ok(())
@@ -55,27 +48,24 @@ impl<'a> Props<'a> {
     pub fn get_all(&self) -> Result<BTreeMap<String, MessageItem>, Error> {
         let mut m = Message::new_method_call(&self.name, &self.path,
             "org.freedesktop.DBus.Properties", "GetAll").unwrap();
-        m.append_items(&[MessageItem::Str(self.interface.clone())]);
+        m.append_items(&[self.interface.clone().into()]);
         let mut r = try!(self.conn.send_with_reply_and_block(m, self.timeout_ms));
         let reply = try!(r.as_result()).get_items();
-        if reply.len() == 1 {
-            if let &MessageItem::Array(ref a, _) = &reply[0] {
-                let mut t = BTreeMap::new();
-                let mut haserr = false;
-                for p in a.iter() {
-                    if let &MessageItem::DictEntry(ref k, ref v) = p {
-                        if let &MessageItem::Str(ref ks) = &**k {
-                            if let &MessageItem::Variant(ref vv) = &**v {
-                                t.insert(ks.to_string(), (**vv).clone());
-                            } else { haserr = true; };
-                        } else { haserr = true; };
-                    } else { haserr = true; };
-                }
-                if !haserr { return Ok(t) };
+
+        (|| {
+            if reply.len() != 1 { return Err(()) };
+            let mut t = BTreeMap::new();
+            let a: &[MessageItem] = try!(reply[0].inner());
+            for p in a.iter() {
+                let (k, v) = try!(p.inner());
+                let (k, v): (&String, &MessageItem) = (try!(k.inner()), try!(v.inner()));
+                t.insert(k.clone(), v.clone());
             }
-        }
-        let f = format!("Invalid reply for property GetAll: '{:?}'", reply);
-        return Err(Error::new_custom("InvalidReply", &f));
+            Ok(t)
+        })().map_err(|_| {
+            let f = format!("Invalid reply for property GetAll: '{:?}'", reply);
+            Error::new_custom("InvalidReply", &f)
+        })
     }
 }
 
