@@ -36,12 +36,12 @@ pub type PropertySetResult = Result<(), (&'static str, String)>;
 
 /// A boxed closure for dynamic dispatch. It is called when the method is 
 /// called by a remote application.
-pub type MethodHandler<'a> = Box<Fn(&mut Message) -> MethodResult + 'a>;
+pub type MethodHandler<'a> = Box<FnMut(&mut Message) -> MethodResult + 'a>;
 
 struct IMethod<'a> {
     in_args: Vec<Argument<'a>>,
     out_args: Vec<Argument<'a>>,
-    cb: Rc<MethodHandler<'a>>,
+    cb: Rc<RefCell<MethodHandler<'a>>>,
 }
 
 /// a method that can be called from another application
@@ -54,7 +54,7 @@ impl<'a> Method<'a> {
     pub fn new<N: ToString>(name: N, in_args: Vec<Argument<'a>>,
             out_args: Vec<Argument<'a>>, cb: MethodHandler<'a>) -> Method<'a> {
         Method { name: name.to_string(), i: IMethod {
-            in_args: in_args, out_args: out_args, cb: Rc::new(cb) }
+            in_args: in_args, out_args: out_args, cb: Rc::new(RefCell::new(cb)) }
         }
     }
 }
@@ -370,7 +370,13 @@ impl<'a> ObjectPath<'a> {
             }
         };
 
-        let reply = match (*method)(msg) {
+        let r = {
+            // Now call it
+            let mut m = method.borrow_mut();
+            (&mut **m)(msg)
+        };
+
+        let reply = match r {
             Ok(r) => {
                 let mut z = Message::new_method_return(msg).unwrap();
                 z.append_items(&r);
