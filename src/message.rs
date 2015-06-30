@@ -202,8 +202,7 @@ impl MessageItem {
         let mut v = Vec::new();
         for r in i {
             let (s, vv) = try!(r);
-            v.push(MessageItem::DictEntry(Box::new(MessageItem::Str(s)), Box::new(MessageItem::Variant(
-                Box::new(vv)))));
+            v.push((s.into(), Box::new(vv).into()).into());
         }
         Ok(MessageItem::Array(v, Cow::Borrowed("{sv}")))
     }
@@ -615,10 +614,10 @@ mod test {
 
         let officeactions: BTreeMap<&'static str, MessageItem> = BTreeMap::new();
         let mut officethings = BTreeMap::new();
-        officethings.insert("pencil", MessageItem::UInt16(2));
-        officethings.insert("paper", MessageItem::UInt16(5));
+        officethings.insert("pencil", 2u16.into());
+        officethings.insert("paper", 5u16.into());
         let mut homethings = BTreeMap::new();
-        homethings.insert("apple", MessageItem::UInt16(11));
+        homethings.insert("apple", 11u16.into());
         let mut homeifaces = BTreeMap::new();
         homeifaces.insert("getThings", homethings);
         let mut officeifaces = BTreeMap::new();
@@ -630,13 +629,15 @@ mod test {
 
         println!("Original treemap: {:?}", paths);
         let m = MessageItem::new_array(paths.iter().map(
-            |(path, ifaces)| MessageItem::DictEntry(Box::new(MessageItem::ObjectPath(path.to_string())), Box::new(
+            |(path, ifaces)| (MessageItem::ObjectPath(path.to_string()),
                 MessageItem::new_array(ifaces.iter().map(
-                    |(iface, props)| MessageItem::DictEntry(Box::new(MessageItem::Str(iface.to_string())), Box::new(
-                        MessageItem::from_dict::<(),_>(props.iter().map(|(name, value)| Ok((name.to_string(), value.clone())))).unwrap()
-                    ))
+                    |(iface, props)| (iface.to_string().into(),
+                        MessageItem::from_dict::<(),_>(props.iter().map(
+                            |(name, value)| Ok((name.to_string(), value.clone()))
+                        )).unwrap()
+                    ).into()
                 ).collect()).unwrap()
-            ))
+            ).into()
         ).collect()).unwrap();
         println!("As MessageItem: {:?}", m);
         assert_eq!(m.type_sig(), "a{oa{sa{sv}}}");
