@@ -69,10 +69,18 @@ impl AsRawFd for OwnedFd {
 /// method calls, or as data added to a signal.
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum MessageItem {
+    /// A D-Bus array requires all elements to be of the same type.
+    /// All elements must match the TypeSig.
     Array(Vec<MessageItem>, TypeSig<'static>),
+    /// A D-Bus struct allows for values of different types.
     Struct(Vec<MessageItem>),
+    /// A D-Bus variant is a wrapper around another `MessageItem`, which
+    /// can be of any type.
     Variant(Box<MessageItem>),
+    /// A D-Bus dictionary is an Array of DictEntry items.
     DictEntry(Box<MessageItem>, Box<MessageItem>),
+    /// A D-Bus objectpath requires its content to be a valid objectpath,
+    /// so not all strings are allowed here.
     ObjectPath(String),
     Str(String),
     Bool(bool),
@@ -84,6 +92,8 @@ pub enum MessageItem {
     UInt32(u32),
     UInt64(u64),
     Double(f64),
+    /// D-Bus allows for sending file descriptors, which can be used to
+    /// set up SHM, unix pipes, or other communication channels.
     UnixFd(OwnedFd),
 }
 
@@ -197,7 +207,7 @@ impl MessageItem {
         s as i32
     }
 
-    /// Creates an Array<String, Variant> from an iterator with Result passthrough (an Err will abort and return that Err)
+    /// Creates a (String, Variant) dictionary from an iterator with Result passthrough (an Err will abort and return that Err)
     pub fn from_dict<E, I: Iterator<Item=Result<(String, MessageItem),E>>>(i: I) -> Result<MessageItem,E> {
         let mut v = Vec::new();
         for r in i {
@@ -339,6 +349,15 @@ impl MessageItem {
         }
     }
 
+    /// Conveniently get the inner value of a `MessageItem`
+    ///
+    /// # Example
+    /// ```
+    /// use dbus::MessageItem;
+    /// let m: MessageItem = 5i64.into();
+    /// let s: i64 = m.inner().unwrap();
+    /// assert_eq!(s, 5i64);
+    /// ```
     pub fn inner<'a, T: FromMessageItem<'a>>(&'a self) -> Result<T, ()> {
         T::from(self)
     }
@@ -370,10 +389,12 @@ impl From<String> for MessageItem { fn from(i: String) -> MessageItem { MessageI
 
 impl From<OwnedFd> for MessageItem { fn from(i: OwnedFd) -> MessageItem { MessageItem::UnixFd(i) } }
 
+/// Create a `MessageItem::Variant`
 impl From<Box<MessageItem>> for MessageItem {
     fn from(i: Box<MessageItem>) -> MessageItem { MessageItem::Variant(i) }
 }
 
+/// Create a `MessageItem::DictEntry`
 impl From<(MessageItem, MessageItem)> for MessageItem {
     fn from(i: (MessageItem, MessageItem)) -> MessageItem {
         MessageItem::DictEntry(Box::new(i.0), Box::new(i.1))
@@ -488,6 +509,7 @@ impl Message {
         c_str_to_slice(&s).map(|s| s.to_string())
     }
 
+    /// Returns a tuple of (Message type, Path, Interface, Member) of the current message.
     pub fn headers(&self) -> (MessageType, Option<String>, Option<String>, Option<String>) {
         let p = unsafe { ffi::dbus_message_get_path(self.msg) };
         let i = unsafe { ffi::dbus_message_get_interface(self.msg) };
@@ -498,6 +520,9 @@ impl Message {
          c_str_to_slice(&m).map(|s| s.to_string()))
     }
 
+    /// When the remote end returns an error, the message itself is correct but its contents
+    /// is an error. This method will transform such an error to a D-Bus Error or otherwise
+    /// return the original message.
     pub fn as_result(&mut self) -> Result<&mut Message, Error> {
         let mut e = Error::empty();
         if unsafe { ffi::dbus_set_error_from_message(e.get_mut(), self.msg) } != 0 { Err(e) }
