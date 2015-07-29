@@ -233,6 +233,19 @@ impl MessageItem {
         Ok(MessageItem::Array(v, t))
     }
 
+
+    fn new_array2<D, I>(i: I) -> MessageItem
+    where D: Into<MessageItem>, D: Default, I: Iterator<Item=D> {
+        let v: Vec<MessageItem> = i.map(|ii| ii.into()).collect();
+        let t = if v.len() == 0 { D::default().into().type_sig() } else { v[0].type_sig() };
+        MessageItem::Array(v, t)
+    }
+
+    fn new_array3<'b, D: 'b, I>(i: I) -> MessageItem
+    where D: Into<MessageItem> + Default + Clone, I: Iterator<Item=&'b D> {
+        MessageItem::new_array2(i.map(|ii| ii.clone()))
+    }
+
     fn from_iter(i: &mut ffi::DBusMessageIter) -> Vec<MessageItem> {
         let mut v = Vec::new();
         loop {
@@ -384,6 +397,17 @@ msgitem_convert!(i32, Int32);
 msgitem_convert!(i64, Int64);
 msgitem_convert!(f64, Double);
 msgitem_convert!(bool, Bool);
+
+
+/// Create a `MessageItem::Array`.
+impl<'a, T> From<&'a [T]> for MessageItem
+where T: Into<MessageItem> + Clone + Default {
+    fn from(i: &'a [T]) -> MessageItem {
+        MessageItem::new_array3(i.iter())
+    }
+}
+
+impl<'a> From<&'a str> for MessageItem { fn from(i: &str) -> MessageItem { MessageItem::Str(i.to_string()) } }
 
 impl From<String> for MessageItem { fn from(i: String) -> MessageItem { MessageItem::Str(i) } }
 
@@ -610,6 +634,7 @@ mod test {
         m.append_items(&[
             2000u16.into(),
             MessageItem::new_array(vec!(129u8.into())).unwrap(),
+            ["Hello", "world"][..].into(),
             987654321u64.into(),
             (-1i32).into(),
             format!("Hello world").into(),
