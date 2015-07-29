@@ -553,6 +553,11 @@ impl Message {
         unsafe { ffi::dbus_message_get_serial(self.msg) }
     }
 
+    pub fn get_reply_serial(&self) -> Option<u32> {
+        let s = unsafe { ffi::dbus_message_get_reply_serial(self.msg) };
+        if s == 0 { None } else { Some(s) }
+    }
+
     pub fn append_items(&mut self, v: &[MessageItem]) {
         let mut i = new_dbus_message_iter();
         unsafe { ffi::dbus_message_iter_init_append(self.msg, &mut i) };

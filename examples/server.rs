@@ -31,7 +31,9 @@ fn main() {
             ConnectionItem::Signal(m) => {
                 println!("Signal: {:?}", m);
             },
+            ConnectionItem::MethodReturn(_) => (),
             ConnectionItem::Nothing => (),
+            ConnectionItem::WatchFd(_) => (),
         }
     }
 }

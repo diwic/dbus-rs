@@ -5,6 +5,7 @@ use libc::{c_void, c_char, c_uint, c_int};
 pub type DBusConnection = c_void;
 pub type DBusMessage = c_void;
 pub type DBusCallback = extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> DBusHandlerResult;
+pub type DBusWatch = c_void;
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -84,6 +85,15 @@ pub enum DBusDispatchStatus {
 }
 
 #[repr(C)]
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum DBusWatchEvent {
+    Readable = 1,
+    Writable = 2,
+    Error = 4,
+    Hangup = 8,
+}
+
+#[repr(C)]
 pub struct DBusError {
     pub name: *const c_char,
     pub message: *const c_char,
@@ -111,6 +121,10 @@ pub struct DBusMessageIter {
 
 pub type DBusHandleMessageFunction = Option<
         extern fn(conn: *mut DBusConnection, msg: *mut DBusMessage, user_data: *mut c_void) -> DBusHandlerResult>;
+
+pub type DBusAddWatchFunction = Option<extern fn(watch: *mut DBusWatch, user_data: *mut c_void) -> u32>;
+pub type DBusRemoveWatchFunction = Option<extern fn(watch: *mut DBusWatch, user_data: *mut c_void)>;
+pub type DBusWatchToggledFunction = Option<extern fn(watch: *mut DBusWatch, user_data: *mut c_void)>;
 
 #[repr(C)]
 pub struct DBusObjectPathVTable {
@@ -157,6 +171,9 @@ extern "C" {
         user_data: *mut c_void, free_data_function: Option<extern fn(memory: *mut c_void)>) -> u32;
     pub fn dbus_connection_remove_filter(conn: *mut DBusConnection, function: DBusHandleMessageFunction,
         user_data: *mut c_void) -> u32;
+    pub fn dbus_connection_set_watch_functions(conn: *mut DBusConnection, add_function: DBusAddWatchFunction,
+        remove_function: DBusRemoveWatchFunction, toggled_function: DBusWatchToggledFunction,
+        data: *mut c_void, free_data_function: Option<extern fn(memory: *mut c_void)>) -> u32;
 
     pub fn dbus_error_init(error: *mut DBusError);
     pub fn dbus_error_free(error: *mut DBusError);
@@ -175,6 +192,7 @@ extern "C" {
     pub fn dbus_message_get_type(message: *mut DBusMessage) -> c_int;
     pub fn dbus_message_is_method_call(message: *mut DBusMessage, iface: *const c_char, method: *const c_char) -> u32;
     pub fn dbus_message_is_signal(message: *mut DBusMessage, iface: *const c_char, signal_name: *const c_char) -> u32;
+    pub fn dbus_message_get_reply_serial(message: *mut DBusMessage) -> u32;
     pub fn dbus_message_get_serial(message: *mut DBusMessage) -> u32;
     pub fn dbus_message_get_path(message: *mut DBusMessage) -> *const c_char;
     pub fn dbus_message_get_interface(message: *mut DBusMessage) -> *const c_char;
@@ -199,4 +217,9 @@ extern "C" {
     pub fn dbus_threads_init_default() -> c_int;
 
     pub fn dbus_validate_path(path: *const c_char, error: *mut DBusError) -> u32;
+
+    pub fn dbus_watch_get_enabled(watch: *mut DBusWatch) -> u32;
+    pub fn dbus_watch_get_flags(watch: *mut DBusWatch) -> c_uint;
+    pub fn dbus_watch_get_unix_fd(watch: *mut DBusWatch) -> c_int;
+    pub fn dbus_watch_handle(watch: *mut DBusWatch, flags: c_uint) -> u32;
 }

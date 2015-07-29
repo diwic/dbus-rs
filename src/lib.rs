@@ -14,10 +14,12 @@ pub use ffi::DBusNameFlag as NameFlag;
 pub use ffi::DBusRequestNameReply as RequestNameReply;
 pub use ffi::DBusReleaseNameReply as ReleaseNameReply;
 pub use ffi::DBusMessageType as MessageType;
+pub use ffi::DBusWatchEvent as WatchEvent;
 
 pub use message::{Message, MessageItem, FromMessageItem, OwnedFd, OPath, ArrayError};
 pub use prop::PropHandler;
 pub use prop::Props;
+pub use watch::Watch;
 
 /// A TypeSig describes the type of a MessageItem.
 pub type TypeSig<'a> = std::borrow::Cow<'a, str>;
@@ -26,12 +28,14 @@ use std::ffi::{CString, CStr};
 use std::ptr::{self};
 use std::collections::LinkedList;
 use std::cell::{Cell, RefCell};
+use std::mem;
+use std::os::unix::io::RawFd;
 
 mod ffi;
 mod message;
 mod prop;
 mod objpath;
-
+mod watch;
 
 /// Contains functionality for the "server" of a D-Bus object. A remote application can
 /// introspect this object and call methods on it.
@@ -130,15 +134,23 @@ impl std::fmt::Display for Error {
 /// of incoming event has happened.
 #[derive(Debug)]
 pub enum ConnectionItem {
+    /// No event between now and timeout
     Nothing,
+    /// Incoming method call
     MethodCall(Message),
+    /// Incoming signal
     Signal(Message),
+    /// Incoming method return (mostly used for Async I/O)
+    MethodReturn(Message),
+    /// Indicates whether a file descriptor should be monitored or not.
+    /// Unless you're doing Async I/O, you can simply ignore this variant.
+    WatchFd(Watch),
 }
 
 /// ConnectionItem iterator
 pub struct ConnectionItems<'a> {
     c: &'a Connection,
-    timeout_ms: i32,
+    timeout_ms: Option<i32>,
 }
 
 impl<'a> Iterator for ConnectionItems<'a> {
@@ -148,11 +160,21 @@ impl<'a> Iterator for ConnectionItems<'a> {
             let i = self.c.i.pending_items.borrow_mut().pop_front();
             if i.is_some() { return i; }
 
-            let r = unsafe { ffi::dbus_connection_read_write_dispatch(self.c.conn(), self.timeout_ms as libc::c_int) };
-            if !self.c.i.pending_items.borrow().is_empty() { continue };
-
-            if r == 0 { return None; }
-            return Some(ConnectionItem::Nothing);
+            match self.timeout_ms {
+                Some(t) => {
+                    let r = unsafe { ffi::dbus_connection_read_write_dispatch(self.c.conn(), t as libc::c_int) };
+                    if !self.c.i.pending_items.borrow().is_empty() { continue };
+                    if r == 0 { return None; }
+                    return Some(ConnectionItem::Nothing);
+                }
+                None => {
+                    let r = unsafe { ffi::dbus_connection_dispatch(self.c.conn()) };
+                    if !self.c.i.pending_items.borrow().is_empty() { continue };
+                    if r == ffi::DBusDispatchStatus::DataRemains { continue };
+                    if r == ffi::DBusDispatchStatus::Complete { return None };
+                    panic!("dbus_connection_dispatch failed");
+                }
+            }
         }
     }
 }
@@ -163,6 +185,7 @@ impl<'a> Iterator for ConnectionItems<'a> {
 struct IConnection {
     conn: Cell<*mut ffi::DBusConnection>,
     pending_items: RefCell<LinkedList<ConnectionItem>>,
+    watches: Option<Box<watch::WatchList>>,
 }
 
 /// A D-Bus connection. Start here if you want to get on the D-Bus!
@@ -174,14 +197,18 @@ extern "C" fn filter_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::D
     user_data: *mut libc::c_void) -> ffi::DBusHandlerResult {
 
     let m = message::message_from_ptr(msg, true);
-    let i: &IConnection = unsafe { std::mem::transmute(user_data) };
+    let i: &IConnection = unsafe { mem::transmute(user_data) };
     assert!(i.conn.get() == conn);
 
-    let mtype: ffi::DBusMessageType = unsafe { std::mem::transmute(ffi::dbus_message_get_type(msg)) };
+    let mtype: ffi::DBusMessageType = unsafe { mem::transmute(ffi::dbus_message_get_type(msg)) };
     let r = match mtype {
         ffi::DBusMessageType::Signal => {
             i.pending_items.borrow_mut().push_back(ConnectionItem::Signal(m));
             ffi::DBusHandlerResult::Handled
+        }
+        ffi::DBusMessageType::MethodReturn => {
+            i.pending_items.borrow_mut().push_back(ConnectionItem::MethodReturn(m));
+            ffi::DBusHandlerResult::NotYetHandled
         }
         _ => ffi::DBusHandlerResult::NotYetHandled,
     };
@@ -193,7 +220,7 @@ extern "C" fn object_path_message_cb(conn: *mut ffi::DBusConnection, msg: *mut f
     user_data: *mut libc::c_void) -> ffi::DBusHandlerResult {
 
     let m = message::message_from_ptr(msg, true);
-    let i: &IConnection = unsafe { std::mem::transmute(user_data) };
+    let i: &IConnection = unsafe { mem::transmute(user_data) };
     assert!(i.conn.get() == conn);
     i.pending_items.borrow_mut().push_back(ConnectionItem::MethodCall(m));
     ffi::DBusHandlerResult::Handled
@@ -213,13 +240,24 @@ impl Connection {
         if conn == ptr::null_mut() {
             return Err(e)
         }
-        let c = Connection { i: Box::new(IConnection { conn: Cell::new(conn), pending_items: RefCell::new(LinkedList::new()) })};
+        let mut c = Connection { i: Box::new(IConnection {
+            conn: Cell::new(conn),
+            pending_items: RefCell::new(LinkedList::new()),
+            watches: None,
+        })};
 
         /* No, we don't want our app to suddenly quit if dbus goes down */
         unsafe { ffi::dbus_connection_set_exit_on_disconnect(conn, 0) };
         assert!(unsafe {
-            ffi::dbus_connection_add_filter(c.conn(), Some(filter_message_cb as ffi::DBusCallback), std::mem::transmute(&*c.i), None)
+            ffi::dbus_connection_add_filter(c.conn(), Some(filter_message_cb as ffi::DBusCallback), mem::transmute(&*c.i), None)
         } != 0);
+
+        let iconn: *const IConnection = &*c.i;
+        c.i.watches = Some(watch::WatchList::new(&c, Box::new(move |w| {
+            let i: &IConnection = unsafe { mem::transmute(iconn) };
+            i.pending_items.borrow_mut().push_back(ConnectionItem::WatchFd(w));
+        })));
+
         Ok(c)
     }
 
@@ -251,11 +289,11 @@ impl Connection {
         c_str_to_slice(&c).unwrap_or("").to_string()
     }
 
-    // Check if there are new incoming events
+    /// Check if there are new incoming events
     pub fn iter(&self, timeout_ms: i32) -> ConnectionItems {
         ConnectionItems {
             c: self,
-            timeout_ms: timeout_ms,
+            timeout_ms: Some(timeout_ms),
         }
     }
 
@@ -271,7 +309,7 @@ impl Connection {
             dbus_internal_pad4: None,
         };
         let r = unsafe {
-            let user_data: *mut libc::c_void = std::mem::transmute(&*self.i);
+            let user_data: *mut libc::c_void = mem::transmute(&*self.i);
             ffi::dbus_connection_try_register_object_path(self.conn(), p.as_ptr(), &vtable, user_data, e.get_mut())
         };
         if r == 0 { Err(e) } else { Ok(()) }
@@ -294,7 +332,7 @@ impl Connection {
             let s = unsafe {
                 let citer = clist.offset(i);
                 if *citer == ptr::null_mut() { break };
-                std::mem::transmute(citer)
+                mem::transmute(citer)
             };
             v.push(format!("{}", c_str_to_slice(s).unwrap()));
             i += 1;
@@ -307,14 +345,14 @@ impl Connection {
         let mut e = Error::empty();
         let n = to_c_str(name);
         let r = unsafe { ffi::dbus_bus_request_name(self.conn(), n.as_ptr(), flags, e.get_mut()) };
-        if r == -1 { Err(e) } else { Ok(unsafe { std::mem::transmute(r) }) }
+        if r == -1 { Err(e) } else { Ok(unsafe { mem::transmute(r) }) }
     }
 
     pub fn release_name(&self, name: &str) -> Result<ReleaseNameReply, Error> {
         let mut e = Error::empty();
         let n = to_c_str(name);
         let r = unsafe { ffi::dbus_bus_release_name(self.conn(), n.as_ptr(), e.get_mut()) };
-        if r == -1 { Err(e) } else { Ok(unsafe { std::mem::transmute(r) }) }
+        if r == -1 { Err(e) } else { Ok(unsafe { mem::transmute(r) }) }
     }
 
     pub fn add_match(&self, rule: &str) -> Result<(), Error> {
@@ -329,6 +367,19 @@ impl Connection {
         let n = to_c_str(rule);
         unsafe { ffi::dbus_bus_remove_match(self.conn(), n.as_ptr(), e.get_mut()) };
         if e.name().is_some() { Err(e) } else { Ok(()) }
+    }
+
+    /// Async I/O: Get an up-to-date list of file descriptors to watch.
+    pub fn watch_fds(&self) -> Vec<Watch> {
+        self.i.watches.as_ref().unwrap().get_enabled_fds()
+    }
+
+    /// Async I/O: Call this function whenever you detected an event on the Fd,
+    /// Flags are a set of WatchEvent bits.
+    /// The returned iterator will return pending items only, never block for new events.
+    pub fn watch_handle(&self, fd: RawFd, flags: libc::c_uint) -> ConnectionItems {
+        self.i.watches.as_ref().unwrap().watch_handle(fd, flags);
+        ConnectionItems { c: self, timeout_ms: None }
     }
 
 }
@@ -458,4 +509,22 @@ mod test {
         c.remove_match(&mstr).unwrap();
     }
 
+    #[test]
+    fn watch() {
+        let c = Connection::get_private(BusType::Session).unwrap();
+        let mut d = c.watch_fds();
+        assert!(d.len() > 0);
+        println!("Fds to watch: {:?}", d);
+        for n in c.iter(1000) {
+            match n {
+                ConnectionItem::WatchFd(w) => {
+                    assert!(w.readable() || w.writable());
+                    assert!(d.contains(&w));
+                    d.retain(|x| *x != w);
+                    if d.len() == 0 { break };
+                }
+                _ => {},
+            }
+        }
+    }
 }
