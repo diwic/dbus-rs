@@ -402,7 +402,7 @@ impl From<(MessageItem, MessageItem)> for MessageItem {
 }
 
 /// Helper trait for `MessageItem::inner()`
-pub trait FromMessageItem<'a> {
+pub trait FromMessageItem<'a> :Sized {
     fn from(i: &'a MessageItem) -> Result<Self, ()>;
 }
 
