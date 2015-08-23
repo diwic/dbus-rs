@@ -93,8 +93,8 @@ pub struct DBusError {
 
 #[repr(C)]
 pub struct DBusMessageIter {
-    pub dummy1: *mut (),
-    pub dummy2: *mut (),
+    pub dummy1: *mut c_void,
+    pub dummy2: *mut c_void,
     pub dummy3: u32,
     pub dummy4: c_int,
     pub dummy5: c_int,
@@ -106,7 +106,7 @@ pub struct DBusMessageIter {
     pub dummy11: c_int,
     pub pad1: c_int,
     pub pad2: c_int,
-    pub pad3: *mut (),
+    pub pad3: *mut c_void,
 }
 
 pub type DBusHandleMessageFunction = Option<
