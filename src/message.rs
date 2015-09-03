@@ -509,6 +509,8 @@ pub struct Message {
     msg: *mut ffi::DBusMessage,
 }
 
+unsafe impl Send for Message {}
+
 impl Message {
     pub fn new_method_call(destination: &str, path: &str, iface: &str, method: &str) -> Option<Message> {
         init_dbus();
