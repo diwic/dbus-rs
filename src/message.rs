@@ -1,7 +1,8 @@
 use std::borrow::Cow;
-use std::{fmt, mem, ptr};
+use std::{fmt, mem, ptr, ops, str};
 use super::{ffi, Error, MessageType, TypeSig, libc, to_c_str, c_str_to_slice, init_dbus};
 use std::os::unix::io::{RawFd, AsRawFd};
+use std::ffi::CString;
 
 #[derive(Debug,Copy,Clone)]
 pub enum ArrayError {
@@ -25,6 +26,31 @@ fn new_dbus_message_iter() -> ffi::DBusMessageIter {
         pad1: 0,
         pad2: 0,
         pad3: ptr::null_mut(),
+    }
+}
+
+/// A wrapper around a string that is guaranteed to be
+/// a valid D-Bus object path.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+pub struct OPath(CString);
+
+impl OPath {
+    pub fn new<S: Into<Vec<u8>>>(s: S) -> Result<OPath, ()> {
+        let c = try!(CString::new(s).map_err(|_| ()));
+        let b = unsafe { ffi::dbus_validate_path(c.as_ptr(), ptr::null_mut()) };
+        if b != 0 { Ok(OPath(c)) } else { Err(()) }
+    }
+}
+
+impl ops::Deref for OPath {
+    type Target = str;
+    fn deref(&self) -> &str { str::from_utf8(self.0.to_bytes()).unwrap() }
+}
+
+impl fmt::Display for OPath {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s: &str = &self;
+        (&s as &fmt::Display).fmt(f)
     }
 }
 
@@ -80,8 +106,8 @@ pub enum MessageItem {
     /// A D-Bus dictionary is an Array of DictEntry items.
     DictEntry(Box<MessageItem>, Box<MessageItem>),
     /// A D-Bus objectpath requires its content to be a valid objectpath,
-    /// so not all strings are allowed here.
-    ObjectPath(String),
+    /// so this cannot be any string.
+    ObjectPath(OPath),
     Str(String),
     Bool(bool),
     Byte(u8),
@@ -300,7 +326,8 @@ impl MessageItem {
                         let p: *mut libc::c_void = mem::transmute(&mut c);
                         ffi::dbus_message_iter_get_basic(i, p);
                     };
-                    v.push(MessageItem::ObjectPath(c_str_to_slice(&c).expect("D-Bus object path error").to_string()));
+                    let o = OPath::new(c_str_to_slice(&c).expect("D-Bus object path error")).ok().expect("D-Bus object path error");
+                    v.push(MessageItem::ObjectPath(o));
                 },
                 ffi::DBUS_TYPE_UNIX_FD => v.push(MessageItem::UnixFd(OwnedFd::new(iter_get_basic(i) as libc::c_int))),
                 ffi::DBUS_TYPE_BOOLEAN => v.push(MessageItem::Bool((iter_get_basic(i) as u32) != 0)),
@@ -349,8 +376,8 @@ impl MessageItem {
             &MessageItem::Variant(ref b) => iter_append_variant(i, &**b),
             &MessageItem::DictEntry(ref k, ref v) => iter_append_dict(i, &**k, &**v),
             &MessageItem::ObjectPath(ref s) => unsafe {
-                let c = to_c_str(s);
-                let p = mem::transmute(&c);
+                let c: &CString = &s.0;
+                let p = mem::transmute(c);
                 ffi::dbus_message_iter_append_basic(i, ffi::DBUS_TYPE_OBJECT_PATH, p);
             }
         }
@@ -411,6 +438,8 @@ impl<'a> From<&'a str> for MessageItem { fn from(i: &str) -> MessageItem { Messa
 
 impl From<String> for MessageItem { fn from(i: String) -> MessageItem { MessageItem::Str(i) } }
 
+impl From<OPath> for MessageItem { fn from(i: OPath) -> MessageItem { MessageItem::ObjectPath(i) } }
+
 impl From<OwnedFd> for MessageItem { fn from(i: OwnedFd) -> MessageItem { MessageItem::UnixFd(i) } }
 
 /// Create a `MessageItem::Variant`
@@ -431,17 +460,21 @@ pub trait FromMessageItem<'a> :Sized {
 }
 
 impl<'a> FromMessageItem<'a> for &'a str {
-    fn from(i: &'a MessageItem) -> Result<&'a str,()> { i.inner::<&String>().map(|s| &**s) }
-}
-
-impl<'a> FromMessageItem<'a> for &'a String {
-    fn from(i: &'a MessageItem) -> Result<&'a String,()> {
+    fn from(i: &'a MessageItem) -> Result<&'a str,()> {
         match i {
-            &MessageItem::Str(ref b) => { Ok(b) },
-            &MessageItem::ObjectPath(ref b) => { Ok(b) },
+            &MessageItem::Str(ref b) => { Ok(&b) },
+            &MessageItem::ObjectPath(ref b) => { Ok(&b) },
             _ => { Err(()) }
         }
     }
+}
+
+impl<'a> FromMessageItem<'a> for &'a String {
+    fn from(i: &'a MessageItem) -> Result<&'a String,()> { if let &MessageItem::Str(ref b) = i { Ok(&b) } else { Err(()) } }
+}
+
+impl<'a> FromMessageItem<'a> for &'a OPath {
+    fn from(i: &'a MessageItem) -> Result<&'a OPath,()> { if let &MessageItem::ObjectPath(ref b) = i { Ok(&b) } else { Err(()) } }
 }
 
 impl<'a> FromMessageItem<'a> for &'a MessageItem {
@@ -583,7 +616,7 @@ pub fn get_message_ptr<'a>(m: &Message) -> *mut ffi::DBusMessage {
 mod test {
     extern crate tempdir;
 
-    use super::super::{Connection, ConnectionItem, Message, BusType, MessageItem, OwnedFd, libc};
+    use super::super::{Connection, ConnectionItem, Message, BusType, MessageItem, OwnedFd, libc, OPath};
 
     #[test]
     fn unix_fd() {
@@ -639,6 +672,7 @@ mod test {
             (-1i32).into(),
             format!("Hello world").into(),
             (-3.14f64).into(),
+            OPath::new("/some/path").unwrap().into(),
             MessageItem::new_array(vec!((123543u32.into(), true.into()).into())).unwrap()
         ]);
         let sending = format!("{:?}", m.get_items());
@@ -679,7 +713,7 @@ mod test {
 
         println!("Original treemap: {:?}", paths);
         let m = MessageItem::new_array(paths.iter().map(
-            |(path, ifaces)| (MessageItem::ObjectPath(path.to_string()),
+            |(path, ifaces)| (MessageItem::ObjectPath(OPath::new(*path).unwrap()),
                 MessageItem::new_array(ifaces.iter().map(
                     |(iface, props)| (iface.to_string().into(),
                         MessageItem::from_dict::<(),_>(props.iter().map(

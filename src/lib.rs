@@ -15,7 +15,7 @@ pub use ffi::DBusRequestNameReply as RequestNameReply;
 pub use ffi::DBusReleaseNameReply as ReleaseNameReply;
 pub use ffi::DBusMessageType as MessageType;
 
-pub use message::{Message, MessageItem, FromMessageItem, OwnedFd, ArrayError};
+pub use message::{Message, MessageItem, FromMessageItem, OwnedFd, OPath, ArrayError};
 pub use prop::PropHandler;
 pub use prop::Props;
 

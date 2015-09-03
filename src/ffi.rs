@@ -197,4 +197,6 @@ extern "C" {
     pub fn dbus_free_string_array(str_array: *mut *mut c_char) -> c_void;
 
     pub fn dbus_threads_init_default() -> c_int;
+
+    pub fn dbus_validate_path(path: *const c_char, error: *mut DBusError) -> u32;
 }
