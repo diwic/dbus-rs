@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::{fmt, mem, ptr, ops, str};
+use std::{fmt, mem, ptr, ops, str, default};
 use super::{ffi, Error, MessageType, TypeSig, libc, to_c_str, c_str_to_slice, init_dbus};
 use std::os::unix::io::{RawFd, AsRawFd};
 use std::ffi::CString;
@@ -40,6 +40,10 @@ impl OPath {
         let b = unsafe { ffi::dbus_validate_path(c.as_ptr(), ptr::null_mut()) };
         if b != 0 { Ok(OPath(c)) } else { Err(()) }
     }
+}
+
+impl default::Default for OPath {
+    fn default() -> OPath { OPath(CString::new("/").unwrap()) }
 }
 
 impl ops::Deref for OPath {
