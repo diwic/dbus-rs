@@ -1,4 +1,5 @@
 A DBus binding for rust.
+========================
 
 Current state: WIP, but these things should be up and working:
  * Connect to system or session bus
@@ -18,11 +19,13 @@ Client
 
 This example opens a connection to the session bus and asks for a list of all names currently present.
 
-    let c = Connection::get_private(BusType::Session).unwrap();
-    let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
-    let r = c.send_with_reply_and_block(m, 2000).unwrap();
-    let reply = r.get_items();
-    println!("{}", reply);
+```rust
+let c = Connection::get_private(BusType::Session).unwrap();
+let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
+let r = c.send_with_reply_and_block(m, 2000).unwrap();
+let reply = r.get_items();
+println!("{}", reply);
+```
 
 You can try a similar example by running:
 
@@ -35,27 +38,29 @@ Server
 This example grabs the com.example.test bus name, registers the /hello path and adds a method which returns a string.
 It then listens for incoming D-Bus events and handles them accordingly.
 
-    let c = Connection::get_private(BusType::Session).unwrap();
-    c.register_name("com.example.test", NameFlag::ReplaceExisting as u32).unwrap();
+```rust
+let c = Connection::get_private(BusType::Session).unwrap();
+c.register_name("com.example.test", NameFlag::ReplaceExisting as u32).unwrap();
 
-    let mut o = ObjectPath::new(&c, "/hello", true);
-    o.insert_interface("com.example.test", Interface::new(
-        vec!(Method::new("Hello", vec!(),
-            vec!(Argument::new("reply", "s")),
-            Box::new(|msg| Ok(vec!(MessageItem::Str(format!("Hello {}!", msg.sender().unwrap())))))
-        )),
-        vec!(), vec!()
-    ));
-    o.set_registered(true).unwrap();
+let mut o = ObjectPath::new(&c, "/hello", true);
+o.insert_interface("com.example.test", Interface::new(
+    vec!(Method::new("Hello", vec!(),
+        vec!(Argument::new("reply", "s")),
+        Box::new(|msg| Ok(vec!(MessageItem::Str(format!("Hello {}!", msg.sender().unwrap())))))
+    )),
+    vec!(), vec!()
+));
+o.set_registered(true).unwrap();
 
-    for n in c.iter(1000) {
-        match n {
-            ConnectionItem::MethodCall(mut m) => {
-                o.handle_message(&mut m);
-            },
-            _ => {},
-        }
+for n in c.iter(1000) {
+    match n {
+        ConnectionItem::MethodCall(mut m) => {
+            o.handle_message(&mut m);
+        },
+        _ => {},
     }
+}
+```
 
 You can try a similar example by running:
 
@@ -67,10 +72,12 @@ Properties
 
 This example gets the current version of the Policykit backend.
 
-    let c = Connection::get_private(BusType::System).unwrap();
-    let p = Props::new(&c, "org.freedesktop.PolicyKit1", "/org/freedesktop/PolicyKit1/Authority",
-        "org.freedesktop.PolicyKit1.Authority", 10000);
-    let v = p.get("BackendVersion").unwrap();
+```rust
+let c = Connection::get_private(BusType::System).unwrap();
+let p = Props::new(&c, "org.freedesktop.PolicyKit1", "/org/freedesktop/PolicyKit1/Authority",
+    "org.freedesktop.PolicyKit1.Authority", 10000);
+let v = p.get("BackendVersion").unwrap();
+```
 
 You can try a this example by running:
 
