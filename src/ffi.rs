@@ -214,8 +214,14 @@ extern "C" {
     pub fn dbus_free(memory: *mut c_void);
     pub fn dbus_free_string_array(str_array: *mut *mut c_char) -> c_void;
 
+    pub fn dbus_signature_validate_single(signature: *const c_char, error: *mut DBusError) -> u32;
+
     pub fn dbus_threads_init_default() -> c_int;
 
+    pub fn dbus_validate_bus_name(busname: *const c_char, error: *mut DBusError) -> u32;
+    pub fn dbus_validate_error_name(errorname: *const c_char, error: *mut DBusError) -> u32;
+    pub fn dbus_validate_interface(interface: *const c_char, error: *mut DBusError) -> u32;
+    pub fn dbus_validate_member(member: *const c_char, error: *mut DBusError) -> u32;
     pub fn dbus_validate_path(path: *const c_char, error: *mut DBusError) -> u32;
 
     pub fn dbus_watch_get_enabled(watch: *mut DBusWatch) -> u32;

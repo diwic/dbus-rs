@@ -16,7 +16,7 @@ pub use ffi::DBusReleaseNameReply as ReleaseNameReply;
 pub use ffi::DBusMessageType as MessageType;
 pub use ffi::DBusWatchEvent as WatchEvent;
 
-pub use message::{Message, MessageItem, FromMessageItem, OwnedFd, OPath, ArrayError};
+pub use message::{Message, MessageItem, FromMessageItem, OwnedFd, ArrayError};
 pub use prop::PropHandler;
 pub use prop::Props;
 pub use watch::Watch;
@@ -36,6 +36,9 @@ mod message;
 mod prop;
 mod objpath;
 mod watch;
+
+mod strings;
+pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
 
 /// Contains functionality for the "server" of a D-Bus object. A remote application can
 /// introspect this object and call methods on it.
