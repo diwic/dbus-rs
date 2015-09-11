@@ -222,4 +222,6 @@ extern "C" {
     pub fn dbus_watch_get_flags(watch: *mut DBusWatch) -> c_uint;
     pub fn dbus_watch_get_unix_fd(watch: *mut DBusWatch) -> c_int;
     pub fn dbus_watch_handle(watch: *mut DBusWatch, flags: c_uint) -> u32;
+
+    pub fn dbus_get_local_machine_id() -> *const c_char;
 }
