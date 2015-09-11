@@ -16,15 +16,28 @@ impl<'a> Argument<'a> {
     }
 }
 
+struct Annotation {
+    name: String,
+    value: String,
+}
+
+struct ISignal<'a> {
+    args: Vec<Argument<'a>>,
+    anns: Vec<Annotation>,
+}
+
 /// Declares that an Interface can send this signal
 pub struct Signal<'a> {
     name: String,
-    args: Vec<Argument<'a>>,
+    i: ISignal<'a>,
 }
 
 impl<'a> Signal<'a> {
     pub fn new<N: ToString>(name: N, args: Vec<Argument<'a>>) -> Signal<'a> {
-        Signal { name: name.to_string(), args: args }
+        Signal { name: name.to_string(), i: ISignal { args: args, anns: vec![] } }
+    }
+    pub fn annotate<N: ToString, V: ToString>(&mut self, name: N, value: V) {
+        self.i.anns.push(Annotation { name: name.to_string(), value: value.to_string() });
     }
 }
 
@@ -42,6 +55,7 @@ struct IMethod<'a> {
     in_args: Vec<Argument<'a>>,
     out_args: Vec<Argument<'a>>,
     cb: Rc<RefCell<MethodHandler<'a>>>,
+    anns: Vec<Annotation>,
 }
 
 /// a method that can be called from another application
@@ -54,8 +68,11 @@ impl<'a> Method<'a> {
     pub fn new<N: ToString>(name: N, in_args: Vec<Argument<'a>>,
             out_args: Vec<Argument<'a>>, cb: MethodHandler<'a>) -> Method<'a> {
         Method { name: name.to_string(), i: IMethod {
-            in_args: in_args, out_args: out_args, cb: Rc::new(RefCell::new(cb)) }
+            in_args: in_args, out_args: out_args, cb: Rc::new(RefCell::new(cb)), anns: vec![] }
         }
+    }
+    pub fn annotate<N: ToString, V: ToString>(&mut self, name: N, value: V) {
+        self.i.anns.push(Annotation { name: name.to_string(), value: value.to_string() });
     }
 }
 
@@ -81,6 +98,7 @@ pub enum PropertyAccess<'a> {
 struct IProperty<'a> {
     sig: TypeSig<'a>,
     access: PropertyAccess<'a>,
+    anns: Vec<Annotation>,
 }
 
 /// Properties that a remote application can get/set.
@@ -91,7 +109,7 @@ pub struct Property<'a> {
 
 impl<'a> Property<'a> {
     fn new<N: ToString>(name: N, sig: TypeSig<'a>, a: PropertyAccess<'a>) -> Property<'a> {
-        Property { name: name.to_string(), i: IProperty { sig: sig, access: a } }
+        Property { name: name.to_string(), i: IProperty { sig: sig, access: a, anns: vec![] } }
     }
     /// Creates a new read-only Property
     pub fn new_ro<N: ToString>(name: N, sig: TypeSig<'a>, h: Box<PropertyROHandler+'a>) -> Property<'a> {
@@ -105,13 +123,17 @@ impl<'a> Property<'a> {
     pub fn new_wo<N: ToString>(name: N, sig: TypeSig<'a>, h: Box<PropertyWOHandler+'a>) -> Property<'a> {
         Property::new(name, sig, PropertyAccess::WO(h))
     }
+    /// Add an annotation to the Property
+    pub fn annotate<N: ToString, V: ToString>(&mut self, name: N, value: V) {
+        self.i.anns.push(Annotation { name: name.to_string(), value: value.to_string() })
+    }
 }
 
 /// Interfaces can contain Methods, Properties, and Signals.
 pub struct Interface<'a> {
     methods: BTreeMap<String, IMethod<'a>>,
     properties: BTreeMap<String, IProperty<'a>>,
-    signals: BTreeMap<String, Vec<Argument<'a>>>,
+    signals: BTreeMap<String, ISignal<'a>>,
 }
 
 impl<'a> Interface<'a> {
@@ -119,7 +141,7 @@ impl<'a> Interface<'a> {
         Interface {
            methods: m.into_iter().map(|m| (m.name, m.i)).collect(),
            properties: p.into_iter().map(|p| (p.name, p.i)).collect(),
-           signals: s.into_iter().map(|s| (s.name, s.args)).collect(),
+           signals: s.into_iter().map(|s| (s.name, s.i)).collect(),
         }
     }
 }
@@ -147,6 +169,12 @@ impl<'a> Drop for ObjectPath<'a> {
 fn introspect_args(args: &Vec<Argument>, indent: &str, dir: &str) -> String {
     args.iter().fold("".to_string(), |aa, az| {
         format!("{}{}<arg name=\"{}\" type=\"{}\"{}/>\n", aa, indent, az.name, az.sig, dir)
+    })
+}
+
+fn introspect_anns(anns: &Vec<Annotation>, indent: &str) -> String {
+    anns.iter().fold("".to_string(), |aa, az| {
+        format!("{}{}<annotation name=\"{}\" value=\"{}\"/>\n", aa, indent, az.name, az.value)
     })
 }
 
@@ -180,20 +208,23 @@ impl<'a> IObjectPath<'a> {
     fn introspect(&self, _: &mut Message) -> MethodResult {
         let ifacestr = introspect_map(&self.interfaces.borrow(), "interface", "  ", |iv|
             (format!(""), format!("{}{}{}",
-                introspect_map(&iv.methods, "method", "    ", |m| (format!(""), format!("{}{}",
+                introspect_map(&iv.methods, "method", "    ", |m| (format!(""), format!("{}{}{}",
                     introspect_args(&m.in_args, "      ", " direction=\"in\""),
-                    introspect_args(&m.out_args, "      ", " direction=\"out\"")
+                    introspect_args(&m.out_args, "      ", " direction=\"out\""),
+                    introspect_anns(&m.anns, "      ")
                 ))),
                 introspect_map(&iv.properties, "property", "    ", |p| (
                     format!(" type=\"{}\" access=\"{}\"", p.sig, match p.access {
                         PropertyAccess::RO(_) => "read",
                         PropertyAccess::RW(_) => "readwrite",
                         PropertyAccess::WO(_) => "write",
-                    }), format!("")
+                    }),
+                    introspect_anns(&p.anns, "      ")
                 )),
-                introspect_map(&iv.signals, "signal", "    ", |s| (format!(""),
-                    introspect_args(s, "      ", "")
-                ))
+                introspect_map(&iv.signals, "signal", "    ", |s| (format!(""), format!("{}{}",
+                    introspect_args(&s.args, "      ", ""),
+                    introspect_anns(&s.anns, "      ")
+                )))
             ))
         );
         let childstr = self.conn.list_registered_object_paths(&self.path).iter().fold("".to_string(), |na, n|
