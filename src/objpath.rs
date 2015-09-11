@@ -1,3 +1,4 @@
+use super::{ffi, c_str_to_slice};
 use super::{Connection, Message, MessageItem, Error, TypeSig};
 use std::collections::BTreeMap;
 use std::rc::Rc;
@@ -301,6 +302,18 @@ impl<'a> ObjectPath<'a> {
                     Box::new(move |m| { o_cl.introspect(m) }))), vec!(), vec!());
             o.insert_interface("org.freedesktop.DBus.Introspectable", i);
         }
+        {
+            let i = Interface::new(vec!(
+                Method::new("Ping", vec!(), vec!(),
+                    Box::new(move |_| { Ok(vec!()) })),
+                Method::new("GetMachineId", vec!(), vec!(Argument::new("uuid", "s")),
+                    Box::new(move |_| {
+                        let uuid = unsafe { ffi::dbus_get_local_machine_id() };
+                        Ok(vec!(MessageItem::Str(c_str_to_slice(&uuid).unwrap().to_string())))
+                    }))
+                ), vec!(), vec!());
+            o.insert_interface("org.freedesktop.DBus.Peer", i);
+        }
         o
     }
 
@@ -468,6 +481,12 @@ fn test_introspect() {
     <method name="Introspect">
       <arg name="xml_data" type="s" direction="out"/>
     </method>
+  </interface>
+  <interface name="org.freedesktop.DBus.Peer">
+    <method name="GetMachineId">
+      <arg name="uuid" type="s" direction="out"/>
+    </method>
+    <method name="Ping"/>
   </interface>
   <interface name="org.freedesktop.DBus.Properties">
     <method name="Get">
