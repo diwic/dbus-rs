@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::{fmt, mem, ptr};
-use super::{ffi, Error, MessageType, TypeSig, libc, to_c_str, c_str_to_slice, init_dbus, Path};
+use super::{ffi, Error, MessageType, TypeSig, libc, to_c_str, c_str_to_slice, init_dbus};
+use super::{BusName, Path, Interface, Member};
 use std::os::unix::io::{RawFd, AsRawFd};
 
 #[derive(Debug,Copy,Clone)]
@@ -466,7 +467,6 @@ impl<'a> FromMessageItem<'a> for &'a [MessageItem] {
     fn from(i: &'a MessageItem) -> Result<&'a [MessageItem],()> { i.inner::<&Vec<MessageItem>>().map(|s| &**s) }
 }
 
-
 impl<'a> FromMessageItem<'a> for &'a OwnedFd {
     fn from(i: &'a MessageItem) -> Result<&'a OwnedFd,()> { if let &MessageItem::UnixFd(ref b) = i { Ok(b) } else { Err(()) } }
 }
@@ -487,24 +487,56 @@ pub struct Message {
 unsafe impl Send for Message {}
 
 impl Message {
-    pub fn new_method_call(destination: &str, path: &str, iface: &str, method: &str) -> Option<Message> {
+    /// Creates a new method call message.
+    pub fn new_method_call<D, P, I, M>(destination: D, path: P, iface: I, method: M) -> Result<Message, String>
+    where D: Into<BusName>, P: Into<Path>, I: Into<Interface>, M: Into<Member> {
         init_dbus();
-        let (d, p, i, m) = (to_c_str(destination), to_c_str(path), to_c_str(iface), to_c_str(method));
+        let (d, p, i, m) = (destination.into(), path.into(), iface.into(), method.into());
         let ptr = unsafe {
-            ffi::dbus_message_new_method_call(d.as_ptr(), p.as_ptr(), i.as_ptr(), m.as_ptr())
+            ffi::dbus_message_new_method_call(d.as_ref().as_ptr(), p.as_ref().as_ptr(), i.as_ref().as_ptr(), m.as_ref().as_ptr())
         };
-        if ptr == ptr::null_mut() { None } else { Some(Message { msg: ptr} ) }
+        if ptr == ptr::null_mut() { Err("D-Bus error: dbus_message_new_method_call failed".into()) }
+        else { Ok(Message { msg: ptr}) }
     }
 
-    pub fn new_signal(path: &str, iface: &str, method: &str) -> Option<Message> {
+    /// Creates a new method call message.
+    pub fn method_call(destination: &BusName, path: &Path, iface: &Interface, name: &Member) -> Message {
         init_dbus();
-        let (p, i, m) = (to_c_str(path), to_c_str(iface), to_c_str(method));
         let ptr = unsafe {
-            ffi::dbus_message_new_signal(p.as_ptr(), i.as_ptr(), m.as_ptr())
+            ffi::dbus_message_new_method_call(destination.as_ref().as_ptr(), path.as_ref().as_ptr(),
+                iface.as_ref().as_ptr(), name.as_ref().as_ptr())
         };
-        if ptr == ptr::null_mut() { None } else { Some(Message { msg: ptr} ) }
+        if ptr == ptr::null_mut() { panic!("D-Bus error: dbus_message_new_signal failed") }
+        Message { msg: ptr}
     }
 
+    /// Creates a new signal message.
+    pub fn new_signal<P, I, M>(path: P, iface: I, name: M) -> Result<Message, String>
+    where P: Into<Vec<u8>>, I: Into<Vec<u8>>, M: Into<Vec<u8>> {
+        init_dbus();
+
+        let p = try!(Path::new(path));
+        let i = try!(Interface::new(iface));
+        let m = try!(Member::new(name));
+
+        let ptr = unsafe {
+            ffi::dbus_message_new_signal(p.as_ref().as_ptr(), i.as_ref().as_ptr(), m.as_ref().as_ptr())
+        };
+        if ptr == ptr::null_mut() { Err("D-Bus error: dbus_message_new_signal failed".into()) }
+        else { Ok(Message { msg: ptr}) }
+    }
+
+    /// Creates a new signal message.
+    pub fn signal(path: &Path, iface: &Interface, name: &Member) -> Message {
+        init_dbus();
+        let ptr = unsafe {
+            ffi::dbus_message_new_signal(path.as_ref().as_ptr(), iface.as_ref().as_ptr(), name.as_ref().as_ptr())
+        };
+        if ptr == ptr::null_mut() { panic!("D-Bus error: dbus_message_new_signal failed") }
+        Message { msg: ptr}
+    }
+
+    /// Creates a method return message for this method call.
     pub fn new_method_return(m: &Message) -> Option<Message> {
         let ptr = unsafe { ffi::dbus_message_new_method_return(m.msg) };
         if ptr == ptr::null_mut() { None } else { Some(Message { msg: ptr} ) }
@@ -609,7 +641,7 @@ mod test {
 
         let c = Connection::get_private(BusType::Session).unwrap();
         c.register_object_path("/hello").unwrap();
-        let mut m = Message::new_method_call(&*c.unique_name(), "/hello", "com.example.hello", "Hello").unwrap();
+        let mut m = Message::new_method_call(&c.unique_name(), "/hello", "com.example.hello", "Hello").unwrap();
         let tempdir = tempdir::TempDir::new("dbus-rs-test").unwrap();
         let mut filename = tempdir.path().to_path_buf();
         filename.push("test");
@@ -645,7 +677,7 @@ mod test {
     fn message_types() {
         let c = Connection::get_private(BusType::Session).unwrap();
         c.register_object_path("/hello").unwrap();
-        let mut m = Message::new_method_call(&*c.unique_name(), "/hello", "com.example.hello", "Hello").unwrap();
+        let mut m = Message::new_method_call(&c.unique_name(), "/hello", "com.example.hello", "Hello").unwrap();
         m.append_items(&[
             2000u16.into(),
             MessageItem::new_array(vec!(129u8.into())).unwrap(),
@@ -710,7 +742,7 @@ mod test {
 
         let c = Connection::get_private(BusType::Session).unwrap();
         c.register_object_path("/hello").unwrap();
-        let mut msg = Message::new_method_call(&*c.unique_name(), "/hello", "org.freedesktop.DBusObjectManager", "GetManagedObjects").unwrap();
+        let mut msg = Message::new_method_call(&c.unique_name(), "/hello", "org.freedesktop.DBusObjectManager", "GetManagedObjects").unwrap();
         msg.append_items(&[m]);
         let sending = format!("{:?}", msg.get_items());
         println!("Sending {}", sending);

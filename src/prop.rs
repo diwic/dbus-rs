@@ -1,30 +1,31 @@
-use super::{Connection, Message, MessageItem, Error};
+use super::{Connection, Message, MessageItem, Error, Path, Interface, BusName};
 use std::collections::BTreeMap;
 
 /// Client side properties - get and set properties on a remote application.
 pub struct Props<'a> {
-    name: String,
-    path: String,
-    interface: String,
+    name: BusName,
+    path: Path,
+    interface: Interface,
     timeout_ms: i32,
     conn: &'a Connection,
 }
 
 impl<'a> Props<'a> {
-    pub fn new(conn: &'a Connection, name: &str, path: &str, interface: &str, timeout_ms: i32) -> Props<'a> {
+    pub fn new<N, P, I>(conn: &'a Connection, name: N, path: P, interface: I, timeout_ms: i32) -> Props<'a>
+    where N: Into<BusName>, P: Into<Path>, I: Into<Interface> {
         Props {
-            name: name.to_string(),
-            path: path.to_string(),
-            interface: interface.to_string(),
+            name: name.into(),
+            path: path.into(),
+            interface: interface.into(),
             timeout_ms: timeout_ms,
             conn: conn,
         }
     }
 
     pub fn get(&self, propname: &str) -> Result<MessageItem, Error> {
-        let mut m = Message::new_method_call(&self.name, &self.path,
-            "org.freedesktop.DBus.Properties", "Get").unwrap();
-        m.append_items(&[self.interface.clone().into(), propname.to_string().into()]);
+        let mut m = Message::method_call(&self.name, &self.path,
+            &"org.freedesktop.DBus.Properties".into(), &"Get".into());
+        m.append_items(&[self.interface.to_string().into(), propname.to_string().into()]);
         let mut r = try!(self.conn.send_with_reply_and_block(m, self.timeout_ms));
         let reply = try!(r.as_result()).get_items();
         if reply.len() == 1 {
@@ -37,18 +38,18 @@ impl<'a> Props<'a> {
     }
 
     pub fn set(&self, propname: &str, value: MessageItem) -> Result<(), Error> {
-        let mut m = Message::new_method_call(&self.name, &self.path,
-            "org.freedesktop.DBus.Properties", "Set").unwrap();
-        m.append_items(&[self.interface.clone().into(), propname.to_string().into(), Box::new(value).into()]);
+        let mut m = Message::method_call(&self.name, &self.path,
+            &"org.freedesktop.DBus.Properties".into(), &"Set".into());
+        m.append_items(&[self.interface.to_string().into(), propname.to_string().into(), Box::new(value).into()]);
         let mut r = try!(self.conn.send_with_reply_and_block(m, self.timeout_ms));
         try!(r.as_result());
         Ok(())
     }
 
     pub fn get_all(&self) -> Result<BTreeMap<String, MessageItem>, Error> {
-        let mut m = Message::new_method_call(&self.name, &self.path,
-            "org.freedesktop.DBus.Properties", "GetAll").unwrap();
-        m.append_items(&[self.interface.clone().into()]);
+        let mut m = Message::method_call(&self.name, &self.path,
+            &"org.freedesktop.DBus.Properties".into(), &"GetAll".into());
+        m.append_items(&[self.interface.to_string().into()]);
         let mut r = try!(self.conn.send_with_reply_and_block(m, self.timeout_ms));
         let reply = try!(r.as_result()).get_items();
 

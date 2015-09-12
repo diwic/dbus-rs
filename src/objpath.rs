@@ -438,7 +438,7 @@ fn test_objpath() {
 
     let thread = ::std::thread::spawn(move || {
         let c = Connection::get_private(super::BusType::Session).unwrap();
-        let pr = super::Props::new(&c, &busname, "/echo", "com.example.echo", 5000);
+        let pr = super::Props::new(&c, &*busname, "/echo", "com.example.echo", 5000);
         assert_eq!(pr.get("EchoCount").unwrap(), 7i32.into());
         let m = pr.get_all().unwrap();
         assert_eq!(m.get("EchoCount").unwrap(), &7i32.into());

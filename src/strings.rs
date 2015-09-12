@@ -1,25 +1,43 @@
 // CString wrappers.
 
 use ffi;
-use std::{str, fmt, ptr, ops, default};
+use std::{str, fmt, ops, default};
 use std::ffi::{CStr, CString};
+use Error;
 
 macro_rules! cstring_wrapper {
     ($t: ident, $s: ident) => {
 
 
 impl $t {
-    pub fn new<S: Into<Vec<u8>>>(s: S) -> Result<$t, ()> {
-        let c = try!(CString::new(s).map_err(|_| ()));
-        let b = unsafe { ffi::$s(c.as_ptr(), ptr::null_mut()) };
-        if b != 0 { Ok($t(c)) } else { Err(()) }
+    pub fn new<S: Into<Vec<u8>>>(s: S) -> Result<$t, String> {
+        let c = try!(CString::new(s).map_err(|e| e.to_string()));
+        let mut e = Error::empty();
+        let b = unsafe { ffi::$s(c.as_ptr(), e.get_mut()) };
+        if b != 0 { Ok($t(c)) } else { Err(e.message().unwrap().into()) }
     }
 }
 
 /// #Panics
 ///
 /// If given string is not valid.
-impl<S: Into<Vec<u8>>> From<S> for $t { fn from(s: S) -> $t { $t::new(s).unwrap() } }
+/// impl<S: Into<Vec<u8>>> From<S> for $t { fn from(s: S) -> $t { $t::new(s).unwrap() } }
+
+/// #Panics
+///
+/// If given string is not valid.
+impl<'a> From<String> for $t { fn from(s: String) -> $t { $t::new(s).unwrap() } }
+
+/// #Panics
+///
+/// If given string is not valid.
+impl<'a> From<&'a String> for $t { fn from(s: &'a String) -> $t { $t::new(s.clone()).unwrap() } }
+
+/// #Panics
+///
+/// If given string is not valid.
+impl<'a> From<&'a str> for $t { fn from(s: &'a str) -> $t { $t::new(s).unwrap() } }
+
 
 impl ops::Deref for $t {
     type Target = str;
@@ -86,3 +104,10 @@ pub struct ErrorName(CString);
 
 cstring_wrapper!(ErrorName, dbus_validate_error_name);
 
+#[test]
+fn some_path() {
+    let p1: Path = "/valid".into();
+    let p2 = Path::new("##invalid##");
+    assert_eq!(p1, Path(CString::new("/valid").unwrap()));
+    assert_eq!(p2, Err("Object path was not valid: '##invalid##'".into()));
+}
