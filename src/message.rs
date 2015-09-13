@@ -1,8 +1,9 @@
 use std::borrow::Cow;
 use std::{fmt, mem, ptr};
 use super::{ffi, Error, MessageType, TypeSig, libc, to_c_str, c_str_to_slice, init_dbus};
-use super::{BusName, Path, Interface, Member};
+use super::{BusName, Path, Interface, Member, ErrorName};
 use std::os::unix::io::{RawFd, AsRawFd};
+use std::ffi::CStr;
 
 #[derive(Debug,Copy,Clone)]
 pub enum ArrayError {
@@ -536,16 +537,30 @@ impl Message {
         Message { msg: ptr}
     }
 
-    /// Creates a method return message for this method call.
+    /// Creates a method reply for this method call.
     pub fn new_method_return(m: &Message) -> Option<Message> {
         let ptr = unsafe { ffi::dbus_message_new_method_return(m.msg) };
         if ptr == ptr::null_mut() { None } else { Some(Message { msg: ptr} ) }
+    }
+
+    /// Creates a method return (reply) for this method call.
+    pub fn method_return(&self) -> Message {
+        let ptr = unsafe { ffi::dbus_message_new_method_return(self.msg) };
+        if ptr == ptr::null_mut() { panic!("D-Bus error: dbus_message_new_method_return failed") }
+        Message {msg: ptr}
     }
 
     pub fn new_error(m: &Message, error_name: &str, error_message: &str) -> Option<Message> {
         let (en, em) = (to_c_str(error_name), to_c_str(error_message));
         let ptr = unsafe { ffi::dbus_message_new_error(m.msg, en.as_ptr(), em.as_ptr()) };
         if ptr == ptr::null_mut() { None } else { Some(Message { msg: ptr} ) }
+    }
+
+    /// Creates a new error reply
+    pub fn error(&self, error_name: &ErrorName, error_message: &CStr) -> Message {
+        let ptr = unsafe { ffi::dbus_message_new_error(self.msg, error_name.as_ref().as_ptr(), error_message.as_ptr()) };
+        if ptr == ptr::null_mut() { panic!("D-Bus error: dbus_message_new_error failed") }
+        Message { msg: ptr}
     }
 
     pub fn get_items(&self) -> Vec<MessageItem> {
@@ -571,6 +586,15 @@ impl Message {
         MessageItem::copy_to_iter(&mut i, v);
     }
 
+    /// Appends one MessageItem to a message.
+    /// Use in builder style: e g `m.method_return().append(7i32)`
+    pub fn append<I: Into<MessageItem>>(self, v: I) -> Self {
+        let mut i = new_dbus_message_iter();
+        unsafe { ffi::dbus_message_iter_init_append(self.msg, &mut i) };
+        MessageItem::copy_to_iter(&mut i, &[v.into()]);
+        self
+    }
+
     pub fn msg_type(&self) -> MessageType {
         unsafe { mem::transmute(ffi::dbus_message_get_type(self.msg)) }
     }
@@ -589,6 +613,21 @@ impl Message {
          c_str_to_slice(&p).map(|s| s.to_string()),
          c_str_to_slice(&i).map(|s| s.to_string()),
          c_str_to_slice(&m).map(|s| s.to_string()))
+    }
+
+    pub fn path(&self) -> Option<Path> {
+        let p = unsafe { ffi::dbus_message_get_path(self.msg) };
+        c_str_to_slice(&p).map(|s| s.into())
+    }
+
+    pub fn interface(&self) -> Option<Interface> {
+        let p = unsafe { ffi::dbus_message_get_interface(self.msg) };
+        c_str_to_slice(&p).map(|s| s.into())
+    }
+
+    pub fn member(&self) -> Option<Member> {
+        let p = unsafe { ffi::dbus_message_get_member(self.msg) };
+        c_str_to_slice(&p).map(|s| s.into())
     }
 
     /// When the remote end returns an error, the message itself is correct but its contents

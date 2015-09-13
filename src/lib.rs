@@ -42,10 +42,20 @@ pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
 
 /// Contains functionality for the "server" of a D-Bus object. A remote application can
 /// introspect this object and call methods on it.
+/// The `mdisp` module supersedes this module, so this module will be deprecated
+/// once the `mdisp` module is done.
 pub mod obj {
     pub use objpath::{ObjectPath, Interface, Property, Signal, Argument};
     pub use objpath::{Method, MethodHandler, MethodResult};
     pub use objpath::{PropertyROHandler, PropertyRWHandler, PropertyWOHandler, PropertyGetResult, PropertySetResult};
+}
+
+mod methoddisp;
+
+/// Contains functionality for dispatching methods on a D-Bus "server".
+/// Supersedes the `obj` module. Still WIP.
+pub mod mdisp {
+    pub use methoddisp::{ObjectPath, Interface, Property, Signal, Method, Argument};
 }
 
 static INITDBUS: std::sync::Once = std::sync::ONCE_INIT;
