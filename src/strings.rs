@@ -18,10 +18,12 @@ impl $t {
     }
 }
 
+/*
 /// #Panics
 ///
 /// If given string is not valid.
 /// impl<S: Into<Vec<u8>>> From<S> for $t { fn from(s: S) -> $t { $t::new(s).unwrap() } }
+*/
 
 /// #Panics
 ///

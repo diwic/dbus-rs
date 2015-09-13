@@ -42,15 +42,30 @@ impl<N: Into<String>, S: Into<Signature>> From<(N, S)> for Argument {
 
 pub struct MethodErr(ErrorName, String);
 
+impl MethodErr {
+    pub fn invalid_arg<T: fmt::Debug>(a: &T) -> MethodErr {
+        ("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a)).into()
+    }
+    pub fn no_arg() -> MethodErr {
+        ("org.freedesktop.DBus.Error.InvalidArgs", "Not enough arguments").into()
+    }
+    pub fn no_interface<T: fmt::Display>(a: &T) -> MethodErr {
+        ("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", a)).into()
+    }
+    pub fn no_property<T: fmt::Display>(a: &T) -> MethodErr {
+        ("org.freedesktop.DBus.Error.UnknownProperty", format!("Unknown property {}", a)).into()
+    }
+}
+
 impl<T: Into<ErrorName>, M: Into<String>> From<(T, M)> for MethodErr {
     fn from((t, m): (T, M)) -> MethodErr { MethodErr(t.into(), m.into()) }
 }
 
 pub type MethodResult = Result<Vec<Message>, MethodErr>;
 
-pub struct MethodFn<'a>(Box<Fn(&Message, &ObjectPath<MethodFn<'a>>, &Interface<MethodFn<'a>>) -> MethodResult + 'a>);
-pub struct MethodFnMut<'a>(Box<RefCell<FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Interface<MethodFnMut<'a>>) -> MethodResult + 'a>>);
-pub struct MethodSync(Box<Fn(&Message, &ObjectPath<MethodSync>, &Interface<MethodSync>) -> MethodResult + Send + Sync + 'static>);
+struct MethodFn<'a>(Box<Fn(&Message, &ObjectPath<MethodFn<'a>>, &Interface<MethodFn<'a>>) -> MethodResult + 'a>);
+struct MethodFnMut<'a>(Box<RefCell<FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Interface<MethodFnMut<'a>>) -> MethodResult + 'a>>);
+struct MethodSync(Box<Fn(&Message, &ObjectPath<MethodSync>, &Interface<MethodSync>) -> MethodResult + Send + Sync + 'static>);
 
 trait MCall: Sized {
     fn call_method(&self, m: &Message, o: &ObjectPath<Self>, i: &Interface<Self>) -> MethodResult;
@@ -97,56 +112,13 @@ pub struct Method<M> {
     owner: Option<Arc<Interface<M>>>,
 }
 
-/*
-impl<'a> Method<MethodFn<'a>> {
-    /// Creates a new method for single-thread use.
-    pub fn new_fn<H: 'a, T>(t: T, handler: H) -> Self
-        where H: Fn(&Message) -> MethodResult, T: Into<Member> {
-        Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), owner: None,
-            cb: MethodFn(Box::new(handler))
-        }
-    }
-}
-
-impl<'a> Method<MethodSync> {
-    /// Creates a new method for multi-thread use.
-    /// This puts bounds on the callback to enable it to be called from several threads
-    /// in parallel.
-    pub fn new_sync<H: 'a, T>(t: T, handler: H) -> Self
-        where H: Fn(&Message) -> MethodResult + Send + Sync + 'static, T: Into<Member> {
-        Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), owner: None,
-            cb: MethodSync(Box::new(handler))
-        }
-    }
-}
-
-impl<'a> Method<MethodFnMut<'a>> {
-    /// Creates a new method for single-thread use.
-    /// This function can mutate its environment, so if you try to call the
-    /// callback from within the callback itself, you'll get a RefCell panic.
-    pub fn new_fnmut<H: 'a, T>(t: T, handler: H) -> Self
-        where H: FnMut(&Message) -> MethodResult, T: Into<Member> {
-        Method {name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), owner: None,
-             cb: MethodFnMut(Box::new(RefCell::new(handler)))
-        }
-    }
-}
-*/
-
 impl<M> Method<M> {
     pub fn in_arg<A: Into<Argument>>(mut self, a: A) -> Self { self.i_args.push(a.into()); self }
-/*    pub fn in_args<A: Into<Argument> + Clone>(mut self, a: &[A]) -> Self {
-        self.i_args.extend(a.iter().map(|b| b.clone().into())); self
-    }*/
     pub fn in_args<Z: Into<Argument>, A: IntoIterator<Item=Z>>(mut self, a: A) -> Self {
         self.i_args.extend(a.into_iter().map(|b| b.into())); self
     }
 
     pub fn out_arg<A: Into<Argument>>(mut self, a: A) -> Self { self.o_args.push(a.into()); self }
-
-    /*pub fn out_args<A: Into<Argument> + Clone>(&mut self, a: &[A]) -> &mut Method<M> {
-        self.o_args.extend(a.iter().map(|b| b.clone().into())); self
-    }*/
     pub fn out_args<Z: Into<Argument>, A: IntoIterator<Item=Z>>(mut self, a: A) -> Self {
         self.o_args.extend(a.into_iter().map(|b| b.into())); self
     }
@@ -155,6 +127,8 @@ impl<M> Method<M> {
     pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
         self.anns.insert(name.into(), value.into()); self
     }
+    /// Add an annotation that this entity is deprecated.
+    pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
 }
 
 impl<M: MCall> Method<M> {
@@ -168,14 +142,6 @@ pub struct Interface<M> {
     properties: ArcMap<String, Property>,
     anns: BTreeMap<String, String>,
 }
-
-/*
-#[test]
-fn test() {
-    Method::new_sync("Mooh", |_a| unreachable!() ).in_arg("s").out_arg(("foo", "b"));
-    Method::new_fnmut("EatSandwich", |_| unreachable!()).out_args(vec![("foo", "b"), ("bar", "s")]);
-}
-*/
 
 impl<M> Interface<M> {
     /// Adds a method to the interface.
@@ -203,6 +169,7 @@ impl<M> Interface<M> {
     pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
         self.anns.insert(name.into(), value.into()); self
     }
+    /// Add an annotation that this entity is deprecated.
     pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
 }
 
@@ -227,32 +194,46 @@ impl Property {
         self.value.lock().unwrap().clone()
     }
 
-/*    pub fn get_signal(&self) -> Option<Message> {
-        self.owner.lock().unwrap().map(|p, i| {
-            Message::signal(p, "org.freedesktop.DBus.Properties".into(), "PropertiesChanged".into()).append(i)
+    pub fn get_signal(&self) -> Option<Message> {
+        self.owner.lock().unwrap().as_ref().map(|&(ref p, ref i)| {
+            Message::signal(&p, &"org.freedesktop.DBus.Properties".into(), &"PropertiesChanged".into())
+                .append(String::from(&***i))
         })
     }
-*/
+
     /// Returns error if "emits" is "Const", and the property is in a tree.
     /// Returns messages to be sent over a connection, this could be the PropertiesChanged signal.
     pub fn set_value(&self, m: MessageItem) -> Result<Vec<Message>,()> {
-/*        self.owner.lock().unwrap().map(|p, i| {
-            let s = Message::signal(p, "org.freedesktop.DBus.Properties".into(), "PropertiesChanged".into()).append(i);
-            let ss = match self.emits {
-                EmitsChangedSignal::True => { s.append_items(&[(self.name, m.clone()).into()]); Ok(Some(s)) },
-                EmitsChangedSignal::Invalidates => s.append_items(&[MessageItem::( self.name.into()]),
-                EmitsChangedSignal::True => s.append_items(&[(self.name, m.clone()).into()]),
-            }
-        })
-        if let Some(ref p, ref i) = &self.owner.lock().unwrap() {
-            let s = Message::signal(p, "org.freedesktop.DBus.Properties".into(), "PropertiesChanged".into())
-                .append(i);
-        } else { Ok(vec!()) } */
+        let ss = match self.emits {
+            EmitsChangedSignal::False => None,
+            EmitsChangedSignal::Const => if self.get_signal().is_some() { return Err(()) } else { None },
+            EmitsChangedSignal::True => self.get_signal().map(|mut s| {
+                let m = MessageItem::Array(vec!(((&*self.name).clone().into(), Box::new(m.clone()).into()).into()), "{sv}".into());
+                s.append_items(&[m]);
+                s
+            }),
+            EmitsChangedSignal::Invalidates => self.get_signal().map(|mut s| {
+                let m2 = [(&*self.name).clone()][..].into();
+                s.append_items(&[MessageItem::Array(vec!(), "{sv}".into()), m2]);
+                s
+            }),
+        };
         *self.value.lock().unwrap() = m;
-        Ok(vec!())
+        Ok(ss.map(|s| vec!(s)).unwrap_or(vec!()))
     }
 
     pub fn emits_changed(mut self, e: EmitsChangedSignal) -> Self { self.emits = e; self }
+
+    pub fn remote_get(&self, _: &Message) -> Result<MessageItem, MethodErr> {
+        // TODO: We should be able to call a user-defined callback here instead...
+        Ok(self.get_value())
+    }
+
+    pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
+        self.anns.insert(name.into(), value.into()); self
+    }
+    /// Add an annotation that this entity is deprecated.
+    pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
 }
 
 pub struct Signal {
@@ -279,6 +260,12 @@ impl Signal {
     pub fn args<Z: Into<Argument>, A: IntoIterator<Item=Z>>(mut self, a: A) -> Self {
         self.arguments.extend(a.into_iter().map(|b| b.into())); self
     }
+
+    pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
+        self.anns.insert(name.into(), value.into()); self
+    }
+    /// Add an annotation that this entity is deprecated.
+    pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
 }
 
 fn introspect_anns(anns: &BTreeMap<String, String>, indent: &str) -> String {
@@ -308,14 +295,40 @@ pub struct ObjectPath<M> {
 
 impl<M: MCall> ObjectPath<M> {
 
+    fn prop_get(&self, m: &Message) -> MethodResult {
+        let items = m.get_items();
+        let iface_name: &String = try!(items.get(0).ok_or_else(|| MethodErr::no_arg())
+            .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
+        let prop_name: &String = try!(items.get(1).ok_or_else(|| MethodErr::no_arg())
+            .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
+        let iface: &Interface<M> = try!(IfaceName::new(&**iface_name).map_err(|e| MethodErr::invalid_arg(&e))
+            .and_then(|i| self.ifaces.get(&i).ok_or_else(|| MethodErr::no_interface(&i))));
+        let prop: &Property = try!(iface.properties.get(prop_name).ok_or_else(|| MethodErr::no_property(prop_name)));
+        let r = try!(prop.remote_get(m));
+        Ok(vec!(m.method_return().append(Box::new(r))))
+    }
+
+    fn prop_get_all(&self, m: &Message) -> MethodResult {
+        let items = m.get_items();
+        let iface_name: &String = try!(items.get(0).ok_or_else(|| MethodErr::no_arg())
+            .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
+        let iface: &Interface<M> = try!(IfaceName::new(&**iface_name).map_err(|e| MethodErr::invalid_arg(&e))
+            .and_then(|i| self.ifaces.get(&i).ok_or_else(|| MethodErr::no_interface(&i))));
+        let mut q: Vec<MessageItem> = vec!();
+        for v in iface.properties.values() {
+             q.push(((&**v.name).into(), try!(v.remote_get(m))).into())
+        }
+        Ok(vec!(m.method_return().append(MessageItem::Array(q, "{sv}".into()))))
+    }
+
     fn add_property_handler(&mut self) {
         let ifname = IfaceName::from("org.freedesktop.DBus.Properties");
         if self.ifaces.contains_key(&ifname) { return };
         let f: Factory<M> = Factory(PhantomData);
         let i = f.interface(ifname)
-            .add_m(f.method_sync("Get", |_,_,_| unimplemented!())
+            .add_m(f.method_sync("Get", |m,o,_| o.prop_get(m) )
                 .in_arg(("interface_name", "s")).in_arg(("property_name", "s")).out_arg(("value", "v")))
-            .add_m(f.method_sync("GetAll", |_,_,_| unimplemented!())
+            .add_m(f.method_sync("GetAll", |m,o,_| o.prop_get_all(m))
                 .in_arg(("interface_name", "s")).out_arg(("props", "a{sv}")))
             .add_m(f.method_sync("Set", |_,_,_| unimplemented!())
                 .in_args(vec!(("interface_name", "s"), ("property_name", "s"), ("value", "v"))));
@@ -355,7 +368,7 @@ impl<M: MCall> ObjectPath<M> {
 
     fn introspect(&self) -> String {
         let ifacestr = introspect_map(&self.ifaces, "interface", "  ", |iv|
-            (format!(""), format!("{}{}{}",
+            (format!(""), format!("{}{}{}{}",
                 introspect_map(&iv.methods, "method", "    ", |m| (format!(""), format!("{}{}{}",
                     Argument::introspect_all(&m.i_args, "      ", " direction=\"in\""),
                     Argument::introspect_all(&m.o_args, "      ", " direction=\"out\""),
@@ -368,7 +381,8 @@ impl<M: MCall> ObjectPath<M> {
                 introspect_map(&iv.signals, "signal", "    ", |s| (format!(""), format!("{}{}",
                     Argument::introspect_all(&s.arguments, "      ", ""),
                     introspect_anns(&s.anns, "      ")
-                )))
+                ))),
+                introspect_anns(&iv.anns, "    ")
             ))
         );
         let childstr = ""; // FIXME
@@ -379,7 +393,7 @@ impl<M: MCall> ObjectPath<M> {
     }
 }
 
-
+/// A collection of object paths.
 pub struct Tree<M> {
     paths: ArcMap<Path, ObjectPath<M>>
 }
@@ -409,10 +423,17 @@ impl<M: MCall> Tree<M> {
 }
 
 /// The factory is used to create object paths, interfaces, methods etc.
+///
+/// There are three factories:
+///  * Fn - all methods are `Fn()`.
+///  * FnMut - all methods are `FnMut()`. This means they can mutate their environment,
+///    which has the side effect that if you call it recursively, it will RefCell panic.
+///  * Sync - all methods are `Fn() + Send + Sync + 'static`. This means that the methods
+///    can be called from different threads in parallel.
 pub struct Factory<M>(PhantomData<M>);
 
 impl<'a> Factory<MethodFn<'a>> {
-    
+
     /// Creates a new factory for single-thread use.
     pub fn new_fn() -> Self { Factory(PhantomData) }
 
@@ -421,6 +442,22 @@ impl<'a> Factory<MethodFn<'a>> {
         where H: Fn(&Message, &ObjectPath<MethodFn<'a>>, &Interface<MethodFn<'a>>) -> MethodResult, T: Into<Member> {
         Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), owner: None,
             cb: MethodFn(Box::new(handler))
+        }
+    }
+}
+
+impl<'a> Factory<MethodFnMut<'a>> {
+
+    /// Creates a new factory for single-thread + mutable fns use.
+    pub fn new_fnmut() -> Self { Factory(PhantomData) }
+
+    /// Creates a new method for single-thread use.
+    /// This method can mutate its environment, so it will panic in case
+    /// it is called recursively.
+    pub fn method<H: 'a, T>(&self, t: T, handler: H) -> Method<MethodFnMut<'a>>
+        where H: FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Interface<MethodFnMut<'a>>) -> MethodResult, T: Into<Member> {
+        Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), owner: None,
+            cb: MethodFnMut(Box::new(RefCell::new(handler)))
         }
     }
 }
@@ -486,6 +523,32 @@ fn factory_test() {
     let _ = f.tree().add(f.object_path("/funghi").add(f.interface("a.b.c").deprecated()));
 }
 
+#[test]
+fn test_sync_prop() {
+    let f = Factory::new_sync();
+    let mut i = f.interface("com.example.echo");
+    let p = i.add_p_ref(f.property("EchoCount", 7i32));
+    let tree1 = Arc::new(f.tree().add(f.object_path("/echo").introspectable().add(i)));
+    let tree2 = tree1.clone();
+    ::std::thread::spawn(move || {
+        let r = p.set_value(9i32.into()).unwrap();
+        let signal = r.get(0).unwrap();
+        assert_eq!(signal.msg_type(), MessageType::Signal);
+        let mut msg = Message::new_method_call("com.example.echoserver", "/echo", "com.example", "dummy").unwrap();
+        super::message::message_set_serial(&mut msg, 3);
+        tree2.handle(&msg);
+    });
+
+    let mut msg = Message::new_method_call("com.example.echoserver", "/echo", "org.freedesktop.DBus.Properties", "Get").unwrap()
+        .append("com.example.echo").append("EchoCount");
+    super::message::message_set_serial(&mut msg, 4);
+    let r = tree1.handle(&msg).unwrap();
+    let r1 = r.get(0).unwrap();
+    let ii = r1.get_items();
+    let vv: &MessageItem = ii.get(0).unwrap().inner().unwrap();
+    let v: i32 = vv.inner().unwrap();
+    assert!(v == 7 || v == 9);
+}
 
 #[test]
 fn test_introspection() {
@@ -496,13 +559,7 @@ fn test_introspection() {
             .add_p(f.property("EchoCount", 7i32))
             .add_s(f.signal("Echoed").arg(("data", "s")))
     );
-/*    
-    let msg = Message::new_method_call("com.example.echoserver", "/echo", "org.freedesktop.DBus.Introspectable", "Introspect").unwrap();
-    let reply = t.handle(&msg);
 
-    let v: Vec<MessageItem> = reply.get(0).unwrap().get_items(); 
-    let actual_result: &str = v.get(0).unwrap().inner().unwrap();
-*/
     let actual_result = t.introspect();
     println!("\n=== Introspection XML start ===\n{}\n=== Introspection XML end ===", actual_result);
 

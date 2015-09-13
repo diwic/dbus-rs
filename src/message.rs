@@ -665,6 +665,12 @@ pub fn get_message_ptr<'a>(m: &Message) -> *mut ffi::DBusMessage {
     m.msg
 }
 
+// For purpose of testing the library only.
+#[cfg(test)]
+pub fn message_set_serial(m: &mut Message, s: u32) {
+    unsafe { ffi::dbus_message_set_serial(m.msg, s) };
+}
+
 #[cfg(test)]
 mod test {
     extern crate tempdir;

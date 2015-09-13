@@ -54,8 +54,26 @@ mod methoddisp;
 
 /// Contains functionality for dispatching methods on a D-Bus "server".
 /// Supersedes the `obj` module. Still WIP.
+///
+/// # Example
+/// ```
+/// use dbus::mdisp;
+/// let f = mdisp::Factory::new_fn();
+/// /* Add a method returning "Thanks!" on interface "com.example.dbus.rs"
+///    on object path "/example". */
+/// let tree = f.tree().add(f.object_path("/example").introspectable()
+///     .add(f.interface("com.example.dbus.rs")
+///         .add_m(f.method("CallMe", |m,_,_| {
+///             Ok(vec!(m.method_return().append("Thanks!"))) }
+///         ).out_arg("s"))
+/// ));
+/// /* The tree is now built, use tree.set_registered to register with a connection,
+/// then call tree.handle to handle incoming methods. */
+/// ```
+
 pub mod mdisp {
-    pub use methoddisp::{ObjectPath, Interface, Property, Signal, Method, Argument};
+    pub use methoddisp::{Factory, Tree, ObjectPath, Interface, Property, Signal, EmitsChangedSignal};
+    pub use methoddisp::{Method, MethodErr, MethodResult, Argument};
 }
 
 static INITDBUS: std::sync::Once = std::sync::ONCE_INIT;
