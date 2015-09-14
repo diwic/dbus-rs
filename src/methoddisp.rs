@@ -40,6 +40,7 @@ impl<N: Into<String>, S: Into<Signature>> From<(N, S)> for Argument {
     fn from((n, s): (N, S)) -> Argument { Argument(Some(n.into()), s.into()) }
 }
 
+#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 pub struct MethodErr(ErrorName, String);
 
 impl MethodErr {
@@ -66,6 +67,18 @@ pub type MethodResult = Result<Vec<Message>, MethodErr>;
 struct MethodFn<'a>(Box<Fn(&Message, &ObjectPath<MethodFn<'a>>, &Interface<MethodFn<'a>>) -> MethodResult + 'a>);
 struct MethodFnMut<'a>(Box<RefCell<FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Interface<MethodFnMut<'a>>) -> MethodResult + 'a>>);
 struct MethodSync(Box<Fn(&Message, &ObjectPath<MethodSync>, &Interface<MethodSync>) -> MethodResult + Send + Sync + 'static>);
+
+impl<'a> fmt::Debug for MethodFn<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "Method<Fn>") }
+}
+
+impl<'a> fmt::Debug for MethodFnMut<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "Method<FnMut>") }
+}
+
+impl fmt::Debug for MethodSync {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "Method<Sync>") }
+}
 
 trait MCall: Sized {
     fn call_method(&self, m: &Message, o: &ObjectPath<Self>, i: &Interface<Self>) -> MethodResult;
@@ -103,13 +116,13 @@ impl<'a> MCall for MethodFnMut<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct Method<M> {
     cb: M,
     name: Arc<Member>,
     i_args: Vec<Argument>,
     o_args: Vec<Argument>,
     anns: BTreeMap<String, String>,
-    owner: Option<Arc<Interface<M>>>,
 }
 
 impl<M> Method<M> {
@@ -135,6 +148,8 @@ impl<M: MCall> Method<M> {
     pub fn call(&self, m: &Message, o: &ObjectPath<M>, i: &Interface<M>) -> MethodResult { self.cb.call_method(m, o, i) }
 }
 
+
+#[derive(Debug)]
 pub struct Interface<M> {
     name: Arc<IfaceName>,
     methods: ArcMap<Member, Method<M>>,
@@ -181,6 +196,7 @@ pub enum EmitsChangedSignal {
     False,
 }
 
+#[derive(Debug)]
 pub struct Property {
     name: Arc<String>,
     value: Mutex<MessageItem>,
@@ -236,6 +252,7 @@ impl Property {
     pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
 }
 
+#[derive(Debug)]
 pub struct Signal {
     name: Arc<Member>,
     arguments: Vec<Argument>,
@@ -288,9 +305,11 @@ fn introspect_map<T, I: fmt::Display, C: Fn(&T) -> (String, String)>
     })
 }
 
+#[derive(Debug)]
 pub struct ObjectPath<M> {
     name: Arc<Path>,
     ifaces: ArcMap<IfaceName, Interface<M>>,
+    child_nodes: Mutex<Vec<String>>,
 }
 
 impl<M: MCall> ObjectPath<M> {
@@ -385,7 +404,10 @@ impl<M: MCall> ObjectPath<M> {
                 introspect_anns(&iv.anns, "    ")
             ))
         );
-        let childstr = ""; // FIXME
+        let childstr = self.child_nodes.lock().unwrap().iter().fold("".to_string(), |na, n|
+            format!("{}  <node name=\"{}\"/>\n", na, n)
+        );
+
         let nodestr = format!(r##"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node name="{}">
 {}{}</node>"##, self.name, ifacestr, childstr);
@@ -394,13 +416,29 @@ impl<M: MCall> ObjectPath<M> {
 }
 
 /// A collection of object paths.
+#[derive(Debug)]
 pub struct Tree<M> {
     paths: ArcMap<Path, ObjectPath<M>>
 }
 
 impl<M: MCall> Tree<M> {
+
+    fn update_child_nodes(&self, o: &ObjectPath<M>) {
+        let parent: &str = &o.name;
+        let plen = parent.len()+1;
+        *o.child_nodes.lock().unwrap() = self.paths.keys().filter_map(|k| {
+            if !k.starts_with(parent) || k.len() <= plen || &k[plen-1..plen] != "/" {None} else {
+                let child = &k[plen..];
+                if child.contains("/") {None} else {Some(child.into())}
+            }
+        }).collect();
+    }
+
     pub fn add(mut self, p: ObjectPath<M>) -> Self {
-        self.paths.insert(p.name.clone(), Arc::new(p)); self
+        let pname = p.name.clone();
+        self.paths.insert(p.name.clone(), Arc::new(p));
+        for v in self.paths.values().filter(|v| pname.starts_with(&**v.name)) { self.update_child_nodes(v) };
+        self
     }
 
     /// Registers or unregisters all object paths in the tree.
@@ -430,6 +468,7 @@ impl<M: MCall> Tree<M> {
 ///    which has the side effect that if you call it recursively, it will RefCell panic.
 ///  * Sync - all methods are `Fn() + Send + Sync + 'static`. This means that the methods
 ///    can be called from different threads in parallel.
+#[derive(Debug)]
 pub struct Factory<M>(PhantomData<M>);
 
 impl<'a> Factory<MethodFn<'a>> {
@@ -440,7 +479,7 @@ impl<'a> Factory<MethodFn<'a>> {
     /// Creates a new method for single-thread use.
     pub fn method<H: 'a, T>(&self, t: T, handler: H) -> Method<MethodFn<'a>>
         where H: Fn(&Message, &ObjectPath<MethodFn<'a>>, &Interface<MethodFn<'a>>) -> MethodResult, T: Into<Member> {
-        Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), owner: None,
+        Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(),
             cb: MethodFn(Box::new(handler))
         }
     }
@@ -456,7 +495,7 @@ impl<'a> Factory<MethodFnMut<'a>> {
     /// it is called recursively.
     pub fn method<H: 'a, T>(&self, t: T, handler: H) -> Method<MethodFnMut<'a>>
         where H: FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Interface<MethodFnMut<'a>>) -> MethodResult, T: Into<Member> {
-        Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), owner: None,
+        Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(),
             cb: MethodFnMut(Box::new(RefCell::new(handler)))
         }
     }
@@ -474,7 +513,7 @@ impl Factory<MethodSync> {
     /// in parallel.
     pub fn method<H, T>(&self, t: T, handler: H) -> Method<MethodSync>
     where H: Fn(&Message, &ObjectPath<MethodSync>, &Interface<MethodSync>) -> MethodResult + Send + Sync + 'static, T: Into<Member> {
-        Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), owner: None,
+        Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(),
             cb: MethodSync(Box::new(handler))
         }
     }
@@ -485,7 +524,7 @@ impl<M> Factory<M> {
     pub fn tree(&self) -> Tree<M> { Tree { paths: BTreeMap::new() }}
 
     pub fn object_path<T: Into<Path>>(&self, t: T) -> ObjectPath<M> {
-        ObjectPath { name: Arc::new(t.into()), ifaces: BTreeMap::new() }
+        ObjectPath { name: Arc::new(t.into()), ifaces: BTreeMap::new(), child_nodes: Mutex::new(vec!()) }
     }
 
     pub fn interface<T: Into<IfaceName>>(&self, t: T) -> Interface<M> {
@@ -508,7 +547,7 @@ impl<M: MCall> Factory<M> {
     /// Creates a new method with bounds enough to be used in all trees.
     pub fn method_sync<H, T>(&self, t: T, handler: H) -> Method<M>
     where H: Fn(&Message, &ObjectPath<M>, &Interface<M>) -> MethodResult + Send + Sync + 'static, T: Into<Member> {
-        Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), owner: None,
+        Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(),
             cb: M::box_method(handler)
         }
     }
@@ -520,7 +559,9 @@ fn factory_test() {
     f.interface("com.example.hello").deprecated();
     let b = 5i32;
     f.method("GetSomething", move |m,_,_| Ok(vec!({ let mut z = m.method_return(); z.append_items(&[b.into()]); z})));
-    let _ = f.tree().add(f.object_path("/funghi").add(f.interface("a.b.c").deprecated()));
+    let t = f.tree().add(f.object_path("/funghi").add(f.interface("a.b.c").deprecated()));
+    let t = t.add(f.object_path("/ab")).add(f.object_path("/a")).add(f.object_path("/a/b/c")).add(f.object_path("/a/b"));
+    assert_eq!(&**t.paths.get(&Path::from("/a")).unwrap().child_nodes.lock().unwrap(), &["b".to_string()]);
 }
 
 #[test]
@@ -530,6 +571,7 @@ fn test_sync_prop() {
     let p = i.add_p_ref(f.property("EchoCount", 7i32));
     let tree1 = Arc::new(f.tree().add(f.object_path("/echo").introspectable().add(i)));
     let tree2 = tree1.clone();
+    println!("{:#?}", tree2);
     ::std::thread::spawn(move || {
         let r = p.set_value(9i32.into()).unwrap();
         let signal = r.get(0).unwrap();
