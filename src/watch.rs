@@ -6,6 +6,7 @@ use std::mem;
 use std::cell::RefCell;
 use std::os::unix::io::{RawFd, AsRawFd};
 
+/// A file descriptor to watch for incoming events (for async I/O)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Watch {
     fd: RawFd,

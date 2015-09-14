@@ -1,4 +1,4 @@
-A DBus binding for rust.
+A D-Bus binding for rust.
 ========================
 
 Current state: WIP, but these things should be up and working:
@@ -35,31 +35,23 @@ You can try a similar example by running:
 Server
 ------
 
-This example grabs the com.example.test bus name, registers the /hello path and adds a method which returns a string.
+This example grabs the com.example.dbustest bus name, registers the /hello path and adds a method which returns a string.
 It then listens for incoming D-Bus events and handles them accordingly.
 
 ```rust
 let c = Connection::get_private(BusType::Session).unwrap();
-c.register_name("com.example.test", NameFlag::ReplaceExisting as u32).unwrap();
-
-let mut o = ObjectPath::new(&c, "/hello", true);
-o.insert_interface("com.example.test", Interface::new(
-    vec!(Method::new("Hello", vec!(),
-        vec!(Argument::new("reply", "s")),
-        Box::new(|msg| Ok(vec!(MessageItem::Str(format!("Hello {}!", msg.sender().unwrap())))))
-    )),
-    vec!(), vec!()
+c.register_name("com.example.dbustest", NameFlag::ReplaceExisting as u32).unwrap();
+let f = Factory::new_fn();
+let tree = f.tree().add(f.object_path("/hello").introspectable().add(
+    f.interface("com.example.dbustest").add_m(
+        f.method("Hello", |m,_,_| {
+            let s = format!("Hello {}!", m.sender().unwrap());
+            Ok(vec!(m.method_return().append(s)))
+        }).out_arg(("reply", "s"))
+    )
 ));
-o.set_registered(true).unwrap();
-
-for n in c.iter(1000) {
-    match n {
-        ConnectionItem::MethodCall(mut m) => {
-            o.handle_message(&mut m);
-        },
-        _ => {},
-    }
-}
+tree.set_registered(&c, true).unwrap();
+for _ in tree.run(&c, c.iter(1000)) {}
 ```
 
 You can try a similar example by running:

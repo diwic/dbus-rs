@@ -1,39 +1,22 @@
 extern crate dbus;
 
 use dbus::{Connection, BusType, NameFlag, ConnectionItem, Message, MessageItem};
-use dbus::obj::{ObjectPath, Argument, Method, Interface};
-
-static DBUS_ERROR_FAILED: &'static str = "org.freedesktop.DBus.Error.Failed";
+use dbus::mdisp::Factory;
 
 fn main() {
     let c = Connection::get_private(BusType::Session).unwrap();
-    c.register_name("com.example.test", NameFlag::ReplaceExisting as u32).unwrap();
+    c.register_name("com.example.dbustest", NameFlag::ReplaceExisting as u32).unwrap();
 
-    let mut o = ObjectPath::new(&c, "/hello", true);
-    o.insert_interface("com.example.test", Interface::new(
-        vec!(Method::new("Hello",
-            vec!(), // No input arguments
-            vec!(Argument::new("reply", "s")),
-            Box::new(|msg| Ok(vec!(MessageItem::Str(format!("Hello {}!", msg.sender().unwrap())))))
-        )),
-        vec!(), vec!() // No properties or signals
+    let f = Factory::new_fn();
+    let tree = f.tree().add(f.object_path("/hello").introspectable().add(
+        f.interface("com.example.dbustest").add_m(
+            f.method("Hello", |m,_,_| {
+                let s = format!("Hello {}!", m.sender().unwrap());
+                Ok(vec!(m.method_return().append(s)))
+            }).out_arg(("reply", "s")) // One output argument, no input arguments
+        )
     ));
-    o.set_registered(true).unwrap();
 
-    for n in c.iter(1000) {
-        match n {
-            ConnectionItem::MethodCall(mut m) => {
-                println!("MethodCall: {:?}", m);
-                if o.handle_message(&mut m).is_none() {
-                    c.send(Message::new_error(&m, DBUS_ERROR_FAILED, "Object path not found").unwrap()).unwrap();
-                };
-            },
-            ConnectionItem::Signal(m) => {
-                println!("Signal: {:?}", m);
-            },
-            ConnectionItem::MethodReturn(_) => (),
-            ConnectionItem::Nothing => (),
-            ConnectionItem::WatchFd(_) => (),
-        }
-    }
+    tree.set_registered(&c, true).unwrap();
+    for _ in tree.run(&c, c.iter(1000)) {}
 }

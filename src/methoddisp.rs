@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
-use {MessageItem, Message, MessageType, Connection, Error, ErrorName, Signature, Member, Path, Interface as IfaceName};
+use {MessageItem, Message, MessageType, Connection, ConnectionItem, Error, ErrorName};
+use {Signature, Member, Path, Interface as IfaceName};
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 use std::collections::BTreeMap;
@@ -146,6 +147,8 @@ impl<M> Method<M> {
 
 impl<M: MCall> Method<M> {
     pub fn call(&self, m: &Message, o: &ObjectPath<M>, i: &Interface<M>) -> MethodResult { self.cb.call_method(m, o, i) }
+
+    fn new(n: Member, cb: M) -> Self { Method { name: Arc::new(n), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), cb: cb } }
 }
 
 
@@ -415,6 +418,35 @@ impl<M: MCall> ObjectPath<M> {
     }
 }
 
+/// An iterator adapter that handles incoming method calls.
+///
+/// Method calls that match an object path in the tree are handled and consumed by this
+/// iterator. Other messages are passed through.
+pub struct TreeServer<'a, I, M: 'a> {
+    iter: I,
+    conn: &'a Connection,
+    tree: &'a Tree<M>,
+}
+
+impl<'a, I: Iterator<Item=ConnectionItem>, M: 'a + MCall> Iterator for TreeServer<'a, I, M> {
+    type Item = ConnectionItem;
+
+    fn next(&mut self) -> Option<ConnectionItem> {
+        loop {
+            let n = self.iter.next();
+            if let &Some(ConnectionItem::MethodCall(ref msg)) = &n {
+                if let Some(v) = self.tree.handle(&msg) {
+                    // Probably the wisest is to ignore any send errors here -
+                    // maybe the remote has disconnected during our processing.
+                    for m in v { let _ = self.conn.send(m); };
+                    continue;
+                }
+            }
+            return n;
+        }
+    }
+}
+
 /// A collection of object paths.
 #[derive(Debug)]
 pub struct Tree<M> {
@@ -458,6 +490,12 @@ impl<M: MCall> Tree<M> {
         else { m.path().and_then(|p| self.paths.get(&p).map(|s| s.handle(m)
             .unwrap_or_else(|e| vec!(m.error(&e.0, &CString::new(e.1).unwrap()))))) }
     }
+
+    /// This method takes an `ConnectionItem` iterator (you get it from `Connection::iter()`)
+    /// and handles all matching items. Non-matching items (e g signals) are passed through.
+    pub fn run<'a, I: Iterator<Item=ConnectionItem>>(&'a self, c: &'a Connection, i: I) -> TreeServer<'a, I, M> {
+        TreeServer { iter: i, tree: &self, conn: c }
+    }
 }
 
 /// The factory is used to create object paths, interfaces, methods etc.
@@ -478,10 +516,8 @@ impl<'a> Factory<MethodFn<'a>> {
 
     /// Creates a new method for single-thread use.
     pub fn method<H: 'a, T>(&self, t: T, handler: H) -> Method<MethodFn<'a>>
-        where H: Fn(&Message, &ObjectPath<MethodFn<'a>>, &Interface<MethodFn<'a>>) -> MethodResult, T: Into<Member> {
-        Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(),
-            cb: MethodFn(Box::new(handler))
-        }
+    where H: Fn(&Message, &ObjectPath<MethodFn<'a>>, &Interface<MethodFn<'a>>) -> MethodResult, T: Into<Member> {
+        Method::new(t.into(), MethodFn(Box::new(handler)))
     }
 }
 
@@ -494,10 +530,8 @@ impl<'a> Factory<MethodFnMut<'a>> {
     /// This method can mutate its environment, so it will panic in case
     /// it is called recursively.
     pub fn method<H: 'a, T>(&self, t: T, handler: H) -> Method<MethodFnMut<'a>>
-        where H: FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Interface<MethodFnMut<'a>>) -> MethodResult, T: Into<Member> {
-        Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(),
-            cb: MethodFnMut(Box::new(RefCell::new(handler)))
-        }
+    where H: FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Interface<MethodFnMut<'a>>) -> MethodResult, T: Into<Member> {
+        Method::new(t.into(), MethodFnMut(Box::new(RefCell::new(handler))))
     }
 }
 
@@ -513,9 +547,7 @@ impl Factory<MethodSync> {
     /// in parallel.
     pub fn method<H, T>(&self, t: T, handler: H) -> Method<MethodSync>
     where H: Fn(&Message, &ObjectPath<MethodSync>, &Interface<MethodSync>) -> MethodResult + Send + Sync + 'static, T: Into<Member> {
-        Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(),
-            cb: MethodSync(Box::new(handler))
-        }
+        Method::new(t.into(), MethodSync(Box::new(handler)))
     }
 }
 
@@ -547,9 +579,7 @@ impl<M: MCall> Factory<M> {
     /// Creates a new method with bounds enough to be used in all trees.
     pub fn method_sync<H, T>(&self, t: T, handler: H) -> Method<M>
     where H: Fn(&Message, &ObjectPath<M>, &Interface<M>) -> MethodResult + Send + Sync + 'static, T: Into<Member> {
-        Method { name: Arc::new(t.into()), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(),
-            cb: M::box_method(handler)
-        }
+        Method::new(t.into(), M::box_method(handler))
     }
 }
 

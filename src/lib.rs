@@ -67,12 +67,12 @@ mod methoddisp;
 ///             Ok(vec!(m.method_return().append("Thanks!"))) }
 ///         ).out_arg("s"))
 /// ));
-/// /* The tree is now built, use tree.set_registered to register with a connection,
-/// then call tree.handle to handle incoming methods. */
+/// /* The tree is now built, use tree.set_registered() to register with a connection,
+/// then call tree.run(connection.iter()) to handle incoming method calls. */
 /// ```
 
 pub mod mdisp {
-    pub use methoddisp::{Factory, Tree, ObjectPath, Interface, Property, Signal, EmitsChangedSignal};
+    pub use methoddisp::{Factory, Tree, TreeServer, ObjectPath, Interface, Property, Signal, EmitsChangedSignal};
     pub use methoddisp::{Method, MethodErr, MethodResult, Argument};
 }
 
