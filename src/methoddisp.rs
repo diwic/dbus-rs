@@ -65,9 +65,9 @@ impl<T: Into<ErrorName>, M: Into<String>> From<(T, M)> for MethodErr {
 
 pub type MethodResult = Result<Vec<Message>, MethodErr>;
 
-struct MethodFn<'a>(Box<Fn(&Message, &ObjectPath<MethodFn<'a>>, &Interface<MethodFn<'a>>) -> MethodResult + 'a>);
-struct MethodFnMut<'a>(Box<RefCell<FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Interface<MethodFnMut<'a>>) -> MethodResult + 'a>>);
-struct MethodSync(Box<Fn(&Message, &ObjectPath<MethodSync>, &Interface<MethodSync>) -> MethodResult + Send + Sync + 'static>);
+struct MethodFn<'a>(Box<Fn(&Message, &ObjectPath<MethodFn<'a>>, &Tree<MethodFn<'a>>) -> MethodResult + 'a>);
+struct MethodFnMut<'a>(Box<RefCell<FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Tree<MethodFnMut<'a>>) -> MethodResult + 'a>>);
+struct MethodSync(Box<Fn(&Message, &ObjectPath<MethodSync>, &Tree<MethodSync>) -> MethodResult + Send + Sync + 'static>);
 
 impl<'a> fmt::Debug for MethodFn<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "Method<Fn>") }
@@ -82,37 +82,37 @@ impl fmt::Debug for MethodSync {
 }
 
 trait MCall: Sized {
-    fn call_method(&self, m: &Message, o: &ObjectPath<Self>, i: &Interface<Self>) -> MethodResult;
+    fn call_method(&self, m: &Message, o: &ObjectPath<Self>, i: &Tree<Self>) -> MethodResult;
     fn box_method<H>(h: H) -> Self
-    where H: Fn(&Message, &ObjectPath<Self>, &Interface<Self>) -> MethodResult + Send + Sync + 'static;
+    where H: Fn(&Message, &ObjectPath<Self>, &Tree<Self>) -> MethodResult + Send + Sync + 'static;
 }
 
 impl<'a> MCall for MethodFn<'a> {
-    fn call_method(&self, m: &Message, o: &ObjectPath<MethodFn<'a>>, i: &Interface<MethodFn<'a>>) -> MethodResult { self.0(m, o, i) }
+    fn call_method(&self, m: &Message, o: &ObjectPath<MethodFn<'a>>, i: &Tree<MethodFn<'a>>) -> MethodResult { self.0(m, o, i) }
 
     fn box_method<H>(h: H) -> Self
-    where H: Fn(&Message, &ObjectPath<MethodFn<'a>>, &Interface<MethodFn<'a>>) -> MethodResult + Send + Sync + 'static {
+    where H: Fn(&Message, &ObjectPath<MethodFn<'a>>, &Tree<MethodFn<'a>>) -> MethodResult + Send + Sync + 'static {
         MethodFn(Box::new(h))
     }
 }
 
 impl MCall for MethodSync {
-    fn call_method(&self, m: &Message, o: &ObjectPath<MethodSync>, i: &Interface<MethodSync>) -> MethodResult { self.0(m, o, i) }
+    fn call_method(&self, m: &Message, o: &ObjectPath<MethodSync>, i: &Tree<MethodSync>) -> MethodResult { self.0(m, o, i) }
 
     fn box_method<H>(h: H) -> Self
-    where H: Fn(&Message, &ObjectPath<MethodSync>, &Interface<MethodSync>) -> MethodResult + Send + Sync + 'static {
+    where H: Fn(&Message, &ObjectPath<MethodSync>, &Tree<MethodSync>) -> MethodResult + Send + Sync + 'static {
         MethodSync(Box::new(h))
     }
 }
 
 impl<'a> MCall for MethodFnMut<'a> {
-    fn call_method(&self, m: &Message, o: &ObjectPath<MethodFnMut<'a>>, i: &Interface<MethodFnMut<'a>>) -> MethodResult {
+    fn call_method(&self, m: &Message, o: &ObjectPath<MethodFnMut<'a>>, i: &Tree<MethodFnMut<'a>>) -> MethodResult {
         let mut z = self.0.borrow_mut();
         (&mut *z)(m, o, i)
     }
 
     fn box_method<H>(h: H) -> Self
-    where H: Fn(&Message, &ObjectPath<MethodFnMut<'a>>, &Interface<MethodFnMut<'a>>) -> MethodResult + Send + Sync + 'static {
+    where H: Fn(&Message, &ObjectPath<MethodFnMut<'a>>, &Tree<MethodFnMut<'a>>) -> MethodResult + Send + Sync + 'static {
         MethodFnMut(Box::new(RefCell::new(h)))
     }
 }
@@ -146,7 +146,7 @@ impl<M> Method<M> {
 }
 
 impl<M: MCall> Method<M> {
-    pub fn call(&self, m: &Message, o: &ObjectPath<M>, i: &Interface<M>) -> MethodResult { self.cb.call_method(m, o, i) }
+    pub fn call(&self, m: &Message, o: &ObjectPath<M>, i: &Tree<M>) -> MethodResult { self.cb.call_method(m, o, i) }
 
     fn new(n: Member, cb: M) -> Self { Method { name: Arc::new(n), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), cb: cb } }
 }
@@ -312,7 +312,6 @@ fn introspect_map<T, I: fmt::Display, C: Fn(&T) -> (String, String)>
 pub struct ObjectPath<M> {
     name: Arc<Path>,
     ifaces: ArcMap<IfaceName, Interface<M>>,
-    child_nodes: Mutex<Vec<String>>,
 }
 
 impl<M: MCall> ObjectPath<M> {
@@ -376,19 +375,19 @@ impl<M: MCall> ObjectPath<M> {
         let f: Factory<M> = Factory(PhantomData);
         self.add(f.interface(ifname)
             .add_m(f.method_sync("Introspect",
-                |m,o,_| Ok(vec!(m.method_return().append(o.introspect()))))
+                |m,o,t| Ok(vec!(m.method_return().append(o.introspect(t)))))
                 .out_arg(("xml_data", "s"))))
     }
 
-    fn handle(&self, m: &Message) -> MethodResult {
+    fn handle(&self, m: &Message, t: &Tree<M>) -> MethodResult {
         let i = try!(m.interface().and_then(|i| self.ifaces.get(&i)).ok_or(
             ("org.freedesktop.DBus.Error.UnknownInterface", "Unknown interface")));
         let me = try!(m.member().and_then(|me| i.methods.get(&me)).ok_or(
             ("org.freedesktop.DBus.Error.UnknownMethod", "Unknown method")));
-        me.call(m, &self, i)
+        me.call(m, &self, t)
     }
 
-    fn introspect(&self) -> String {
+    fn introspect(&self, tree: &Tree<M>) -> String {
         let ifacestr = introspect_map(&self.ifaces, "interface", "  ", |iv|
             (format!(""), format!("{}{}{}{}",
                 introspect_map(&iv.methods, "method", "    ", |m| (format!(""), format!("{}{}{}",
@@ -407,14 +406,42 @@ impl<M: MCall> ObjectPath<M> {
                 introspect_anns(&iv.anns, "    ")
             ))
         );
-        let childstr = self.child_nodes.lock().unwrap().iter().fold("".to_string(), |na, n|
-            format!("{}  <node name=\"{}\"/>\n", na, n)
+        let olen = self.name.len()+1;
+        let childstr = tree.children(&self, true).iter().fold("".to_string(), |na, n|
+            format!("{}  <node name=\"{}\"/>\n", na, &n.name[olen..])
         );
 
         let nodestr = format!(r##"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node name="{}">
 {}{}</node>"##, self.name, ifacestr, childstr);
         nodestr
+    }
+
+    fn get_managed_objects(&self, t: &Tree<M>) -> MessageItem {
+        let mut paths = t.children(&self, false);
+        paths.push(&self);
+        MessageItem::Array(
+            paths.iter().map(|p| ((&**p.name).clone().into(), MessageItem::Array(
+                p.ifaces.values().map(|i| ((&**i.name).into(), MessageItem::Array(
+                    i.properties.values().map(|pp| ((&**pp.name).into(), Box::new(pp.get_value()
+                    ).into()).into()).collect(), "{sv}".into()
+                )).into()).collect(), "{sa{sv}}".into()
+            )).into()).collect(), "{oa{sa{sv}}}".into()
+        )
+    }
+
+    /// Adds ObjectManager support for this object path.
+    ///
+    /// It is not possible to add/remove interfaces while the object path belongs to a tree,
+    /// hence no InterfacesAdded / InterfacesRemoved signals are sent.
+    pub fn object_manager(self) -> Self {
+        let ifname: IfaceName = "org.freedesktop.DBus.ObjectManager".into();
+        if self.ifaces.contains_key(&ifname) { return self };
+        let f: Factory<M> = Factory(PhantomData);
+        self.add(f.interface(ifname)
+            .add_m(f.method_sync("GetManagedObjects",
+                |m,o,t| Ok(vec!(m.method_return().append(o.get_managed_objects(t)))))
+                .out_arg("a{oa{sa{sv}}}")))
     }
 }
 
@@ -455,21 +482,20 @@ pub struct Tree<M> {
 
 impl<M: MCall> Tree<M> {
 
-    fn update_child_nodes(&self, o: &ObjectPath<M>) {
+    fn children(&self, o: &ObjectPath<M>, direct_only: bool) -> Vec<&ObjectPath<M>> {
         let parent: &str = &o.name;
         let plen = parent.len()+1;
-        *o.child_nodes.lock().unwrap() = self.paths.keys().filter_map(|k| {
+        self.paths.values().filter_map(|v| {
+            let k: &str = &v.name;
             if !k.starts_with(parent) || k.len() <= plen || &k[plen-1..plen] != "/" {None} else {
                 let child = &k[plen..];
-                if child.contains("/") {None} else {Some(child.into())}
+                if direct_only && child.contains("/") {None} else {Some(&**v)}
             }
-        }).collect();
+        }).collect()
     }
 
     pub fn add(mut self, p: ObjectPath<M>) -> Self {
-        let pname = p.name.clone();
         self.paths.insert(p.name.clone(), Arc::new(p));
-        for v in self.paths.values().filter(|v| pname.starts_with(&**v.name)) { self.update_child_nodes(v) };
         self
     }
 
@@ -487,7 +513,7 @@ impl<M: MCall> Tree<M> {
     /// found, or otherwise a list of messages to be sent back.
     pub fn handle(&self, m: &Message) -> Option<Vec<Message>> {
         if m.msg_type() != MessageType::MethodCall { None }
-        else { m.path().and_then(|p| self.paths.get(&p).map(|s| s.handle(m)
+        else { m.path().and_then(|p| self.paths.get(&p).map(|s| s.handle(m, &self)
             .unwrap_or_else(|e| vec!(m.error(&e.0, &CString::new(e.1).unwrap()))))) }
     }
 
@@ -516,7 +542,7 @@ impl<'a> Factory<MethodFn<'a>> {
 
     /// Creates a new method for single-thread use.
     pub fn method<H: 'a, T>(&self, t: T, handler: H) -> Method<MethodFn<'a>>
-    where H: Fn(&Message, &ObjectPath<MethodFn<'a>>, &Interface<MethodFn<'a>>) -> MethodResult, T: Into<Member> {
+    where H: Fn(&Message, &ObjectPath<MethodFn<'a>>, &Tree<MethodFn<'a>>) -> MethodResult, T: Into<Member> {
         Method::new(t.into(), MethodFn(Box::new(handler)))
     }
 }
@@ -530,7 +556,7 @@ impl<'a> Factory<MethodFnMut<'a>> {
     /// This method can mutate its environment, so it will panic in case
     /// it is called recursively.
     pub fn method<H: 'a, T>(&self, t: T, handler: H) -> Method<MethodFnMut<'a>>
-    where H: FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Interface<MethodFnMut<'a>>) -> MethodResult, T: Into<Member> {
+    where H: FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Tree<MethodFnMut<'a>>) -> MethodResult, T: Into<Member> {
         Method::new(t.into(), MethodFnMut(Box::new(RefCell::new(handler))))
     }
 }
@@ -546,7 +572,7 @@ impl Factory<MethodSync> {
     /// This puts bounds on the callback to enable it to be called from several threads
     /// in parallel.
     pub fn method<H, T>(&self, t: T, handler: H) -> Method<MethodSync>
-    where H: Fn(&Message, &ObjectPath<MethodSync>, &Interface<MethodSync>) -> MethodResult + Send + Sync + 'static, T: Into<Member> {
+    where H: Fn(&Message, &ObjectPath<MethodSync>, &Tree<MethodSync>) -> MethodResult + Send + Sync + 'static, T: Into<Member> {
         Method::new(t.into(), MethodSync(Box::new(handler)))
     }
 }
@@ -556,7 +582,7 @@ impl<M> Factory<M> {
     pub fn tree(&self) -> Tree<M> { Tree { paths: BTreeMap::new() }}
 
     pub fn object_path<T: Into<Path>>(&self, t: T) -> ObjectPath<M> {
-        ObjectPath { name: Arc::new(t.into()), ifaces: BTreeMap::new(), child_nodes: Mutex::new(vec!()) }
+        ObjectPath { name: Arc::new(t.into()), ifaces: BTreeMap::new() }
     }
 
     pub fn interface<T: Into<IfaceName>>(&self, t: T) -> Interface<M> {
@@ -578,7 +604,7 @@ impl<M> Factory<M> {
 impl<M: MCall> Factory<M> {
     /// Creates a new method with bounds enough to be used in all trees.
     pub fn method_sync<H, T>(&self, t: T, handler: H) -> Method<M>
-    where H: Fn(&Message, &ObjectPath<M>, &Interface<M>) -> MethodResult + Send + Sync + 'static, T: Into<Member> {
+    where H: Fn(&Message, &ObjectPath<M>, &Tree<M>) -> MethodResult + Send + Sync + 'static, T: Into<Member> {
         Method::new(t.into(), M::box_method(handler))
     }
 }
@@ -591,7 +617,7 @@ fn factory_test() {
     f.method("GetSomething", move |m,_,_| Ok(vec!({ let mut z = m.method_return(); z.append_items(&[b.into()]); z})));
     let t = f.tree().add(f.object_path("/funghi").add(f.interface("a.b.c").deprecated()));
     let t = t.add(f.object_path("/ab")).add(f.object_path("/a")).add(f.object_path("/a/b/c")).add(f.object_path("/a/b"));
-    assert_eq!(&**t.paths.get(&Path::from("/a")).unwrap().child_nodes.lock().unwrap(), &["b".to_string()]);
+    assert_eq!(t.children(t.paths.get(&Path::from("/a")).unwrap(), true).len(), 1);
 }
 
 #[test]
@@ -632,7 +658,7 @@ fn test_introspection() {
             .add_s(f.signal("Echoed").arg(("data", "s")))
     );
 
-    let actual_result = t.introspect();
+    let actual_result = t.introspect(&f.tree().add(f.object_path("/echo/subpath")));
     println!("\n=== Introspection XML start ===\n{}\n=== Introspection XML end ===", actual_result);
 
     let expected_result = r##"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
@@ -668,6 +694,7 @@ fn test_introspection() {
       <arg name="value" type="v" direction="in"/>
     </method>
   </interface>
+  <node name="subpath"/>
 </node>"##;
  
     assert_eq!(expected_result, actual_result);   

@@ -1,6 +1,6 @@
 extern crate dbus;
 
-use dbus::{Connection, BusType, NameFlag, ConnectionItem, Message, MessageItem};
+use dbus::{Connection, BusType, NameFlag};
 use dbus::mdisp::Factory;
 
 fn main() {
