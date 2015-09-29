@@ -72,7 +72,8 @@ mod methoddisp;
 /// ```
 
 pub mod mdisp {
-    pub use methoddisp::{Factory, Tree, TreeServer, ObjectPath, Interface, Property, Signal, EmitsChangedSignal};
+    pub use methoddisp::{Factory, Tree, TreeServer, ObjectPath, Interface, Signal};
+    pub use methoddisp::{Property, EmitsChangedSignal, Access};
     pub use methoddisp::{Method, MethodErr, MethodResult, Argument};
 }
 

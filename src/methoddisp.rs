@@ -51,6 +51,9 @@ impl MethodErr {
     pub fn no_arg() -> MethodErr {
         ("org.freedesktop.DBus.Error.InvalidArgs", "Not enough arguments").into()
     }
+    pub fn failed<T: fmt::Display>(a: &T) -> MethodErr {
+        ("org.freedesktop.DBus.Error.Failed", a.to_string()).into()
+    }
     pub fn no_interface<T: fmt::Display>(a: &T) -> MethodErr {
         ("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", a)).into()
     }
@@ -160,7 +163,7 @@ pub struct Interface<M> {
     name: Arc<IfaceName>,
     methods: ArcMap<Member, Method<M>>,
     signals: ArcMap<Member, Signal>,
-    properties: ArcMap<String, Property>,
+    properties: ArcMap<String, Property<M>>,
     anns: BTreeMap<String, String>,
 }
 
@@ -178,10 +181,10 @@ impl<M> Interface<M> {
     }
 
     /// Adds a signal to the interface.
-    pub fn add_p(mut self, p: Property) -> Self { self.properties.insert(p.name.clone(), Arc::new(p)); self }
+    pub fn add_p(mut self, p: Property<M>) -> Self { self.properties.insert(p.name.clone(), Arc::new(p)); self }
     /// Adds a property to the interface. Returns a reference to the property
     /// (which you can use to get and set the current value of the property).
-    pub fn add_p_ref(&mut self, p: Property) -> Arc<Property> {
+    pub fn add_p_ref(&mut self, p: Property<M>) -> Arc<Property<M>> {
         let p = Arc::new(p);
         self.properties.insert(p.name.clone(), p.clone());
         p
@@ -202,16 +205,35 @@ pub enum EmitsChangedSignal {
     False,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Debug)]
+pub enum Access {
+    Read,
+    ReadWrite,
+    Write,
+}
+
+impl Access {
+    fn introspect(&self) -> &'static str {
+        match self {
+            &Access::Read => "read",
+            &Access::ReadWrite => "readwrite",
+            &Access::Write => "write",
+        }
+    }
+}
+
 #[derive(Debug)]
-pub struct Property {
+pub struct Property<M> {
     name: Arc<String>,
     value: Mutex<MessageItem>,
     emits: EmitsChangedSignal,
+    rw: Access,
+    set_cb: Option<M>,
     owner: Mutex<Option<(Arc<Path>, Arc<IfaceName>)>>,
     anns: BTreeMap<String, String>,
 }
 
-impl Property {
+impl<M: MCall> Property<M> {
     pub fn get_value(&self) -> MessageItem {
         self.value.lock().unwrap().clone()
     }
@@ -244,18 +266,45 @@ impl Property {
         Ok(ss.map(|s| vec!(s)).unwrap_or(vec!()))
     }
 
-    pub fn emits_changed(mut self, e: EmitsChangedSignal) -> Self { self.emits = e; self }
+    pub fn emits_changed(mut self, e: EmitsChangedSignal) -> Self {
+        self.emits = e;
+        assert!(self.rw == Access::Read || self.emits != EmitsChangedSignal::Const);
+        self
+    }
+
+    pub fn access(mut self, e: Access) -> Self {
+        self.rw = e;
+        assert!(self.rw == Access::Read || self.emits != EmitsChangedSignal::Const);
+        self
+    }
 
     pub fn remote_get(&self, _: &Message) -> Result<MessageItem, MethodErr> {
         // TODO: We should be able to call a user-defined callback here instead...
-        // and check that the property is not write-only...
+        if self.rw == Access::Write { return Err(MethodErr::failed(&format!("Property {} is write only", &self.name))) }
         Ok(self.get_value())
     }
 
-    pub fn remote_set(&self, _: &Message, s: MessageItem) -> Result<Vec<Message>, MethodErr> {
-        // TODO: We should be able to call a user-defined callback here instead...
-        // and check that the property is not read-only...
-        self.set_value(s).map_err(|_| MethodErr::ro_property(&self.name))
+    /// Helper method to verify and extract a MessageItem from a Set message
+    pub fn verify_remote_set(&self, m: &Message) -> Result<MessageItem, MethodErr> {
+        let items = m.get_items();
+        let s: &MessageItem = try!(items.get(2).ok_or_else(|| MethodErr::no_arg())
+            .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
+
+        if self.rw == Access::Read { Err(MethodErr::ro_property(&self.name)) }
+        else if s.type_sig() != self.value.lock().unwrap().type_sig() {
+            Err(MethodErr::failed(&format!("Property {} cannot change type to {}", &self.name, s.type_sig())))
+        }
+        else { Ok(s.clone()) }
+    }
+
+    fn remote_set(&self, m: &Message, o: &ObjectPath<M>, t: &Tree<M>) -> Result<Vec<Message>, MethodErr> {
+        if let Some(ref cb) = self.set_cb {
+            cb.call_method(m, o, t)
+        }
+        else {
+            let s = try!(self.verify_remote_set(m));
+            self.set_value(s).map_err(|_| MethodErr::ro_property(&self.name))
+        }
     }
 
     pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
@@ -263,7 +312,39 @@ impl Property {
     }
     /// Add an annotation that this entity is deprecated.
     pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
+
 }
+
+impl Property<MethodSync> {
+    /// Sets a callback to be called when a "Set" call is coming in from the remote side.
+    /// For multi-thread use.
+    pub fn on_set<H>(mut self, m: H) -> Self
+    where H: Fn(&Message, &ObjectPath<MethodSync>, &Tree<MethodSync>) -> MethodResult + Send + Sync + 'static {
+        self.set_cb = Some(MethodSync::box_method(m));
+        self
+    }
+}
+
+impl<'a> Property<MethodFn<'a>> {
+    /// Sets a callback to be called when a "Set" call is coming in from the remote side.
+    /// For single-thread use.
+    pub fn on_set<H: 'a>(mut self, m: H) -> Self
+    where H: Fn(&Message, &ObjectPath<MethodFn<'a>>, &Tree<MethodFn<'a>>) -> MethodResult {
+        self.set_cb = Some(MethodFn(Box::new(m)));
+        self
+    }
+}
+
+impl<'a> Property<MethodFnMut<'a>> {
+    /// Sets a callback to be called when a "Set" call is coming in from the remote side.
+    /// For single-thread use.
+    pub fn on_set<H: 'a>(mut self, m: H) -> Self
+    where H: Fn(&Message, &ObjectPath<MethodFnMut<'a>>, &Tree<MethodFnMut<'a>>) -> MethodResult {
+        self.set_cb = Some(MethodFnMut(Box::new(RefCell::new(m))));
+        self
+    }
+}
+
 
 #[derive(Debug)]
 pub struct Signal {
@@ -326,18 +407,16 @@ pub struct ObjectPath<M> {
 
 impl<M: MCall> ObjectPath<M> {
 
-    fn prop_set(&self, m: &Message) -> MethodResult {
+    fn prop_set(&self, m: &Message, o: &ObjectPath<M>, t: &Tree<M>) -> MethodResult {
         let items = m.get_items();
         let iface_name: &String = try!(items.get(0).ok_or_else(|| MethodErr::no_arg())
             .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
         let prop_name: &String = try!(items.get(1).ok_or_else(|| MethodErr::no_arg())
             .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
-        let value: &MessageItem = try!(items.get(2).ok_or_else(|| MethodErr::no_arg())
-            .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
         let iface: &Interface<M> = try!(IfaceName::new(&**iface_name).map_err(|e| MethodErr::invalid_arg(&e))
             .and_then(|i| self.ifaces.get(&i).ok_or_else(|| MethodErr::no_interface(&i))));
-        let prop: &Property = try!(iface.properties.get(prop_name).ok_or_else(|| MethodErr::no_property(prop_name)));
-        let mut r = try!(prop.remote_set(m, value.clone()));
+        let prop: &Property<M> = try!(iface.properties.get(prop_name).ok_or_else(|| MethodErr::no_property(prop_name)));
+        let mut r = try!(prop.remote_set(m, o, t));
         r.push(m.method_return());
         Ok(r)
     }
@@ -350,7 +429,7 @@ impl<M: MCall> ObjectPath<M> {
             .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
         let iface: &Interface<M> = try!(IfaceName::new(&**iface_name).map_err(|e| MethodErr::invalid_arg(&e))
             .and_then(|i| self.ifaces.get(&i).ok_or_else(|| MethodErr::no_interface(&i))));
-        let prop: &Property = try!(iface.properties.get(prop_name).ok_or_else(|| MethodErr::no_property(prop_name)));
+        let prop: &Property<M> = try!(iface.properties.get(prop_name).ok_or_else(|| MethodErr::no_property(prop_name)));
         let r = try!(prop.remote_get(m));
         Ok(vec!(m.method_return().append(Box::new(r))))
     }
@@ -377,7 +456,7 @@ impl<M: MCall> ObjectPath<M> {
                 .in_arg(("interface_name", "s")).in_arg(("property_name", "s")).out_arg(("value", "v")))
             .add_m(f.method_sync("GetAll", |m,o,_| o.prop_get_all(m))
                 .in_arg(("interface_name", "s")).out_arg(("props", "a{sv}")))
-            .add_m(f.method_sync("Set", |m,o,_| o.prop_set(m))
+            .add_m(f.method_sync("Set", |m,o,t| o.prop_set(m, o, t))
                 .in_args(vec!(("interface_name", "s"), ("property_name", "s"), ("value", "v"))));
         self.ifaces.insert(i.name.clone(), Arc::new(i));
     }
@@ -422,7 +501,7 @@ impl<M: MCall> ObjectPath<M> {
                     introspect_anns(&m.anns, "      ")
                 ))),
                 introspect_map(&iv.properties, "property", "    ", |p| (
-                    format!(" type=\"{}\" access=\"{}\"", p.get_value().type_sig(), "read"), // FIXME: rw/wo props too
+                    format!(" type=\"{}\" access=\"{}\"", p.get_value().type_sig(), p.rw.introspect()),
                     introspect_anns(&p.anns, "      ")
                 )),
                 introspect_map(&iv.signals, "signal", "    ", |s| (format!(""), format!("{}{}",
@@ -526,7 +605,7 @@ impl<M: MCall> Tree<M> {
     }
 
     /// Registers or unregisters all object paths in the tree.
-    /// FIXME: On error, should unregister the already registered paths.
+    /// FIXME: On error while registering, should unregister the already registered paths.
     pub fn set_registered(&self, c: &Connection, b: bool) -> Result<(), Error> {
         for p in self.paths.keys() {
             if b { try!(c.register_object_path(p)); }
@@ -621,9 +700,9 @@ impl<M> Factory<M> {
         Signal { name: Arc::new(t.into()), arguments: vec!(), owner: Mutex::new(None), anns: BTreeMap::new() }
     }
 
-    pub fn property<T: Into<String>, I: Into<MessageItem>>(&self, t: T, i: I) -> Property {
-        Property { name: Arc::new(t.into()), emits: EmitsChangedSignal::True,
-            value: Mutex::new(i.into()), owner: Mutex::new(None), anns: BTreeMap::new() }
+    pub fn property<T: Into<String>, I: Into<MessageItem>>(&self, t: T, i: I) -> Property<M> {
+        Property { name: Arc::new(t.into()), emits: EmitsChangedSignal::True, rw: Access::Read,
+            value: Mutex::new(i.into()), owner: Mutex::new(None), anns: BTreeMap::new(), set_cb: None }
     }
 }
 
@@ -672,6 +751,64 @@ fn test_sync_prop() {
     let vv: &MessageItem = ii.get(0).unwrap().inner().unwrap();
     let v: i32 = vv.inner().unwrap();
     assert!(v == 7 || v == 9);
+}
+
+#[test]
+fn prop_server() {
+    use std::rc::Rc;
+    let f = Factory::new_fnmut();
+    let mut i = f.interface("com.example.dbus.rs");
+    let count = i.add_p_ref(f.property("changes", 0i32));
+    // TODO: Figure out why we need this Rc<RefCell<Option<_>>> dance and can't just use a non-moving closure as callback
+    let setme: Rc<RefCell<Option<Arc<Property<_>>>>> = Rc::new(RefCell::new(None));
+    let count_c = count.clone();
+    let setme_c = setme.clone();
+    *setme.borrow_mut() = Some(i.add_p_ref(f.property("setme", 0u8).access(Access::ReadWrite).on_set(move |m,_,_| {
+        let q2 = setme_c.borrow_mut();
+        let q = q2.as_ref().unwrap();
+        let s = try!(q.verify_remote_set(m));
+        let r = try!(q.set_value(s).map_err(|_| MethodErr::ro_property(&q.name)));
+        let v: i32 = count_c.get_value().inner().unwrap();
+        count_c.set_value((v + 1).into()).unwrap();
+        Ok(r)
+    })));
+    let tree = f.tree().add(f.object_path("/example").add(i));
+
+    let mut msg = Message::new_method_call("com.example.dbus.rs", "/example", "org.freedesktop.DBus.Properties", "Get").unwrap()
+        .append("com.example.dbus.rs").append("changes");
+    super::message::message_set_serial(&mut msg, 10);
+    let r = tree.handle(&msg).unwrap();
+    let r1 = r.get(0).unwrap();
+    let ii = r1.get_items();
+    let vv: &MessageItem = ii.get(0).unwrap().inner().unwrap();
+    let v: i32 = vv.inner().unwrap();
+    assert_eq!(v, 0);
+
+    // Read-only
+    let mut msg = Message::new_method_call("com.example.dbus.rs", "/example", "org.freedesktop.DBus.Properties", "Set").unwrap()
+        .append("com.example.dbus.rs").append("changes").append(5i32);
+    super::message::message_set_serial(&mut msg, 20);
+    let mut r = tree.handle(&msg).unwrap();
+    assert!(r.get_mut(0).unwrap().as_result().is_err());
+
+    // Wrong type
+    let mut msg = Message::new_method_call("com.example.dbus.rs", "/example", "org.freedesktop.DBus.Properties", "Set").unwrap()
+        .append("com.example.dbus.rs").append("setme").append(8i32);
+    super::message::message_set_serial(&mut msg, 30);
+    let mut r = tree.handle(&msg).unwrap();
+    assert!(r.get_mut(0).unwrap().as_result().is_err());
+
+    // Correct!
+    let mut msg = Message::new_method_call("com.example.dbus.rs", "/example", "org.freedesktop.DBus.Properties", "Set").unwrap()
+        .append("com.example.dbus.rs").append("setme").append(Box::new(9u8.into()));
+    super::message::message_set_serial(&mut msg, 30);
+    let mut r = tree.handle(&msg).unwrap();
+
+    println!("{:?}", r[0].as_result());
+
+    let c: i32 = count.get_value().inner().unwrap();
+    assert_eq!(c, 1);
+
 }
 
 #[test]
