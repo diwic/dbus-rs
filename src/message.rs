@@ -180,7 +180,7 @@ impl MessageItem {
             &MessageItem::UInt64(_) => Cow::Borrowed("t"),
             &MessageItem::Double(_) => Cow::Borrowed("d"),
             &MessageItem::Array(_, ref s) => Cow::Owned(format!("a{}", s)),
-            &MessageItem::Struct(_) => Cow::Borrowed("r"),
+            &MessageItem::Struct(ref s) => Cow::Owned(format!("({})", s.iter().fold(String::new(), |s, i| s + &*i.type_sig()))),
             &MessageItem::Variant(_) => Cow::Borrowed("v"),
             &MessageItem::DictEntry(ref k, ref v) => Cow::Owned(format!("{{{}{}}}", k.type_sig(), v.type_sig())),
             &MessageItem::ObjectPath(_) => Cow::Borrowed("o"),
@@ -439,9 +439,9 @@ pub trait FromMessageItem<'a> :Sized {
 impl<'a> FromMessageItem<'a> for &'a str {
     fn from(i: &'a MessageItem) -> Result<&'a str,()> {
         match i {
-            &MessageItem::Str(ref b) => { Ok(&b) },
-            &MessageItem::ObjectPath(ref b) => { Ok(&b) },
-            _ => { Err(()) }
+            &MessageItem::Str(ref b) => Ok(&b),
+            &MessageItem::ObjectPath(ref b) => Ok(&b),
+            _ => Err(()),
         }
     }
 }
@@ -460,7 +460,11 @@ impl<'a> FromMessageItem<'a> for &'a MessageItem {
 
 impl<'a> FromMessageItem<'a> for &'a Vec<MessageItem> {
     fn from(i: &'a MessageItem) -> Result<&'a Vec<MessageItem>,()> {
-        if let &MessageItem::Array(ref b, _) = i { Ok(b) } else { Err(()) }
+        match i {
+            &MessageItem::Array(ref b, _) => Ok(&b),
+            &MessageItem::Struct(ref b) => Ok(&b),
+            _ => Err(()),
+        }
     }
 }
 
@@ -731,6 +735,7 @@ mod test {
             (-1i32).into(),
             format!("Hello world").into(),
             (-3.14f64).into(),
+            MessageItem::Struct(vec!(256i16.into())),
             Path::new("/some/path").unwrap().into(),
             MessageItem::new_array(vec!((123543u32.into(), true.into()).into())).unwrap()
         ]);
@@ -804,5 +809,22 @@ mod test {
                 _ => println!("Got {:?}", n),
             }
         }
+    }
+
+    #[test]
+    fn issue24() {
+        let c = Connection::get_private(BusType::Session).unwrap();
+        let mut m = Message::new_method_call("org.test.rust", "/", "org.test.rust", "Test").unwrap();
+
+        let a = MessageItem::from("test".to_string());
+        let b = MessageItem::from("test".to_string());
+        let foo = MessageItem::Struct(vec!(a, b));
+        let bar = foo.clone();
+
+        let args = [MessageItem::new_array(vec!(foo, bar)).unwrap()];
+        println!("{:?}", args);
+
+        m.append_items(&args);
+        c.send(m).unwrap();
     }
 }
