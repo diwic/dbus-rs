@@ -57,6 +57,9 @@ impl MethodErr {
     pub fn no_property<T: fmt::Display>(a: &T) -> MethodErr {
         ("org.freedesktop.DBus.Error.UnknownProperty", format!("Unknown property {}", a)).into()
     }
+    pub fn ro_property<T: fmt::Display>(a: &T) -> MethodErr {
+        ("org.freedesktop.DBus.Error.PropertyReadOnly", format!("Property {} is read only", a)).into()
+    }
 }
 
 impl<T: Into<ErrorName>, M: Into<String>> From<(T, M)> for MethodErr {
@@ -70,15 +73,15 @@ struct MethodFnMut<'a>(Box<RefCell<FnMut(&Message, &ObjectPath<MethodFnMut<'a>>,
 struct MethodSync(Box<Fn(&Message, &ObjectPath<MethodSync>, &Tree<MethodSync>) -> MethodResult + Send + Sync + 'static>);
 
 impl<'a> fmt::Debug for MethodFn<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "Method<Fn>") }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "<Fn>") }
 }
 
 impl<'a> fmt::Debug for MethodFnMut<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "Method<FnMut>") }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "<FnMut>") }
 }
 
 impl fmt::Debug for MethodSync {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "Method<Sync>") }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "<Fn + Send + Sync>") }
 }
 
 trait MCall: Sized {
@@ -245,7 +248,14 @@ impl Property {
 
     pub fn remote_get(&self, _: &Message) -> Result<MessageItem, MethodErr> {
         // TODO: We should be able to call a user-defined callback here instead...
+        // and check that the property is not write-only...
         Ok(self.get_value())
+    }
+
+    pub fn remote_set(&self, _: &Message, s: MessageItem) -> Result<Vec<Message>, MethodErr> {
+        // TODO: We should be able to call a user-defined callback here instead...
+        // and check that the property is not read-only...
+        self.set_value(s).map_err(|_| MethodErr::ro_property(&self.name))
     }
 
     pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
@@ -316,6 +326,22 @@ pub struct ObjectPath<M> {
 
 impl<M: MCall> ObjectPath<M> {
 
+    fn prop_set(&self, m: &Message) -> MethodResult {
+        let items = m.get_items();
+        let iface_name: &String = try!(items.get(0).ok_or_else(|| MethodErr::no_arg())
+            .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
+        let prop_name: &String = try!(items.get(1).ok_or_else(|| MethodErr::no_arg())
+            .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
+        let value: &MessageItem = try!(items.get(2).ok_or_else(|| MethodErr::no_arg())
+            .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
+        let iface: &Interface<M> = try!(IfaceName::new(&**iface_name).map_err(|e| MethodErr::invalid_arg(&e))
+            .and_then(|i| self.ifaces.get(&i).ok_or_else(|| MethodErr::no_interface(&i))));
+        let prop: &Property = try!(iface.properties.get(prop_name).ok_or_else(|| MethodErr::no_property(prop_name)));
+        let mut r = try!(prop.remote_set(m, value.clone()));
+        r.push(m.method_return());
+        Ok(r)
+    }
+
     fn prop_get(&self, m: &Message) -> MethodResult {
         let items = m.get_items();
         let iface_name: &String = try!(items.get(0).ok_or_else(|| MethodErr::no_arg())
@@ -351,7 +377,7 @@ impl<M: MCall> ObjectPath<M> {
                 .in_arg(("interface_name", "s")).in_arg(("property_name", "s")).out_arg(("value", "v")))
             .add_m(f.method_sync("GetAll", |m,o,_| o.prop_get_all(m))
                 .in_arg(("interface_name", "s")).out_arg(("props", "a{sv}")))
-            .add_m(f.method_sync("Set", |_,_,_| unimplemented!())
+            .add_m(f.method_sync("Set", |m,o,_| o.prop_set(m))
                 .in_args(vec!(("interface_name", "s"), ("property_name", "s"), ("value", "v"))));
         self.ifaces.insert(i.name.clone(), Arc::new(i));
     }
