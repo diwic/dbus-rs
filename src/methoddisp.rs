@@ -195,6 +195,13 @@ impl<M> Interface<M> {
     }
     /// Add an annotation that this entity is deprecated.
     pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
+
+    fn new(t: IfaceName) -> Interface<M> {
+        Interface { name: Arc::new(t), methods: BTreeMap::new(), signals: BTreeMap::new(),
+            properties: BTreeMap::new(), anns: BTreeMap::new()
+        }
+    }
+
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Debug)]
@@ -313,10 +320,15 @@ impl<M: MCall> Property<M> {
     /// Add an annotation that this entity is deprecated.
     pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
 
+    fn new(s: String, i: MessageItem) -> Property<M> {
+        Property { name: Arc::new(s), emits: EmitsChangedSignal::True, rw: Access::Read,
+            value: Mutex::new(i), owner: Mutex::new(None), anns: BTreeMap::new(), set_cb: None }
+    }
 }
 
 impl Property<MethodSync> {
     /// Sets a callback to be called when a "Set" call is coming in from the remote side.
+    /// Might change to something more ergonomic.
     /// For multi-thread use.
     pub fn on_set<H>(mut self, m: H) -> Self
     where H: Fn(&Message, &ObjectPath<MethodSync>, &Tree<MethodSync>) -> MethodResult + Send + Sync + 'static {
@@ -327,6 +339,7 @@ impl Property<MethodSync> {
 
 impl<'a> Property<MethodFn<'a>> {
     /// Sets a callback to be called when a "Set" call is coming in from the remote side.
+    /// Might change to something more ergonomic.
     /// For single-thread use.
     pub fn on_set<H: 'a>(mut self, m: H) -> Self
     where H: Fn(&Message, &ObjectPath<MethodFn<'a>>, &Tree<MethodFn<'a>>) -> MethodResult {
@@ -337,9 +350,10 @@ impl<'a> Property<MethodFn<'a>> {
 
 impl<'a> Property<MethodFnMut<'a>> {
     /// Sets a callback to be called when a "Set" call is coming in from the remote side.
+    /// Might change to something more ergonomic.
     /// For single-thread use.
     pub fn on_set<H: 'a>(mut self, m: H) -> Self
-    where H: Fn(&Message, &ObjectPath<MethodFnMut<'a>>, &Tree<MethodFnMut<'a>>) -> MethodResult {
+    where H: FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Tree<MethodFnMut<'a>>) -> MethodResult {
         self.set_cb = Some(MethodFnMut(Box::new(RefCell::new(m))));
         self
     }
@@ -451,7 +465,7 @@ impl<M: MCall> ObjectPath<M> {
         let ifname = IfaceName::from("org.freedesktop.DBus.Properties");
         if self.ifaces.contains_key(&ifname) { return };
         let f: Factory<M> = Factory(PhantomData);
-        let i = f.interface(ifname)
+        let i = Interface::<M>::new(ifname)
             .add_m(f.method_sync("Get", |m,o,_| o.prop_get(m) )
                 .in_arg(("interface_name", "s")).in_arg(("property_name", "s")).out_arg(("value", "v")))
             .add_m(f.method_sync("GetAll", |m,o,_| o.prop_get_all(m))
@@ -478,7 +492,7 @@ impl<M: MCall> ObjectPath<M> {
         let ifname: IfaceName = "org.freedesktop.DBus.Introspectable".into();
         if self.ifaces.contains_key(&ifname) { return self };
         let f: Factory<M> = Factory(PhantomData);
-        self.add(f.interface(ifname)
+        self.add(Interface::<M>::new(ifname)
             .add_m(f.method_sync("Introspect",
                 |m,o,t| Ok(vec!(m.method_return().append(o.introspect(t)))))
                 .out_arg(("xml_data", "s"))))
@@ -543,7 +557,7 @@ impl<M: MCall> ObjectPath<M> {
         let ifname: IfaceName = "org.freedesktop.DBus.ObjectManager".into();
         if self.ifaces.contains_key(&ifname) { return self };
         let f: Factory<M> = Factory(PhantomData);
-        self.add(f.interface(ifname)
+        self.add(Interface::<M>::new(ifname)
             .add_m(f.method_sync("GetManagedObjects",
                 |m,o,t| Ok(vec!(m.method_return().append(o.get_managed_objects(t)))))
                 .out_arg("a{oa{sa{sv}}}")))
@@ -646,10 +660,16 @@ impl<'a> Factory<MethodFn<'a>> {
     pub fn new_fn() -> Self { Factory(PhantomData) }
 
     /// Creates a new method for single-thread use.
-    pub fn method<H: 'a, T>(&self, t: T, handler: H) -> Method<MethodFn<'a>>
-    where H: Fn(&Message, &ObjectPath<MethodFn<'a>>, &Tree<MethodFn<'a>>) -> MethodResult, T: Into<Member> {
+    pub fn method<'b, H: 'b, T>(&self, t: T, handler: H) -> Method<MethodFn<'b>>
+    where H: Fn(&Message, &ObjectPath<MethodFn<'b>>, &Tree<MethodFn<'b>>) -> MethodResult, T: Into<Member> {
         Method::new(t.into(), MethodFn(Box::new(handler)))
     }
+
+    pub fn property<'b, T: Into<String>, I: Into<MessageItem>>(&self, t: T, i: I) -> Property<MethodFn<'b>> {
+        Property::new(t.into(), i.into())
+    }
+
+    pub fn interface<'b, T: Into<IfaceName>>(&self, t: T) -> Interface<MethodFn<'b>> { Interface::new(t.into()) }
 }
 
 impl<'a> Factory<MethodFnMut<'a>> {
@@ -660,10 +680,16 @@ impl<'a> Factory<MethodFnMut<'a>> {
     /// Creates a new method for single-thread use.
     /// This method can mutate its environment, so it will panic in case
     /// it is called recursively.
-    pub fn method<H: 'a, T>(&self, t: T, handler: H) -> Method<MethodFnMut<'a>>
-    where H: FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Tree<MethodFnMut<'a>>) -> MethodResult, T: Into<Member> {
+    pub fn method<'b, H: 'b, T>(&self, t: T, handler: H) -> Method<MethodFnMut<'b>>
+    where H: FnMut(&Message, &ObjectPath<MethodFnMut<'b>>, &Tree<MethodFnMut<'b>>) -> MethodResult, T: Into<Member> {
         Method::new(t.into(), MethodFnMut(Box::new(RefCell::new(handler))))
     }
+
+    pub fn property<'b, T: Into<String>, I: Into<MessageItem>>(&self, t: T, i: I) -> Property<MethodFnMut<'b>> {
+        Property::new(t.into(), i.into())
+    }
+
+    pub fn interface<'b, T: Into<IfaceName>>(&self, t: T) -> Interface<MethodFnMut<'b>> { Interface::new(t.into()) }
 }
 
 impl Factory<MethodSync> {
@@ -680,6 +706,12 @@ impl Factory<MethodSync> {
     where H: Fn(&Message, &ObjectPath<MethodSync>, &Tree<MethodSync>) -> MethodResult + Send + Sync + 'static, T: Into<Member> {
         Method::new(t.into(), MethodSync(Box::new(handler)))
     }
+
+    pub fn property<T: Into<String>, I: Into<MessageItem>>(&self, t: T, i: I) -> Property<MethodSync> {
+        Property::new(t.into(), i.into())
+    }
+
+    pub fn interface<T: Into<IfaceName>>(&self, t: T) -> Interface<MethodSync> { Interface::new(t.into()) }
 }
 
 impl<M> Factory<M> {
@@ -690,19 +722,8 @@ impl<M> Factory<M> {
         ObjectPath { name: Arc::new(t.into()), ifaces: BTreeMap::new() }
     }
 
-    pub fn interface<T: Into<IfaceName>>(&self, t: T) -> Interface<M> {
-        Interface { name: Arc::new(t.into()), methods: BTreeMap::new(), signals: BTreeMap::new(),
-            properties: BTreeMap::new(), anns: BTreeMap::new()
-        }
-    }
-
     pub fn signal<T: Into<Member>>(&self, t: T) -> Signal {
         Signal { name: Arc::new(t.into()), arguments: vec!(), owner: Mutex::new(None), anns: BTreeMap::new() }
-    }
-
-    pub fn property<T: Into<String>, I: Into<MessageItem>>(&self, t: T, i: I) -> Property<M> {
-        Property { name: Arc::new(t.into()), emits: EmitsChangedSignal::True, rw: Access::Read,
-            value: Mutex::new(i.into()), owner: Mutex::new(None), anns: BTreeMap::new(), set_cb: None }
     }
 }
 
@@ -754,22 +775,33 @@ fn test_sync_prop() {
 }
 
 #[test]
+fn prop_lifetime_simple() {
+    let f = Factory::new_fnmut();
+    let count;
+    let mut i = f.interface("com.example.dbus.rs");
+    count = i.add_p_ref(f.property("changes", 0i32));
+
+    let _setme = i.add_p_ref(f.property("setme", 0u8).access(Access::ReadWrite).on_set(|_,_,_| {
+        let v: i32 = count.get_value().inner().unwrap();
+        count.set_value((v + 1).into()).unwrap();
+        Ok(vec!())
+    }));
+}
+
+#[test]
 fn prop_server() {
-    use std::rc::Rc;
+    let (count, setme): (_, RefCell<Option<Arc<Property<_>>>>);
+    setme = RefCell::new(None);
     let f = Factory::new_fnmut();
     let mut i = f.interface("com.example.dbus.rs");
-    let count = i.add_p_ref(f.property("changes", 0i32));
-    // TODO: Figure out why we need this Rc<RefCell<Option<_>>> dance and can't just use a non-moving closure as callback
-    let setme: Rc<RefCell<Option<Arc<Property<_>>>>> = Rc::new(RefCell::new(None));
-    let count_c = count.clone();
-    let setme_c = setme.clone();
-    *setme.borrow_mut() = Some(i.add_p_ref(f.property("setme", 0u8).access(Access::ReadWrite).on_set(move |m,_,_| {
-        let q2 = setme_c.borrow_mut();
-        let q = q2.as_ref().unwrap();
-        let s = try!(q.verify_remote_set(m));
-        let r = try!(q.set_value(s).map_err(|_| MethodErr::ro_property(&q.name)));
-        let v: i32 = count_c.get_value().inner().unwrap();
-        count_c.set_value((v + 1).into()).unwrap();
+    count = i.add_p_ref(f.property("changes", 0i32));
+    *setme.borrow_mut() = Some(i.add_p_ref(f.property("setme", 0u8).access(Access::ReadWrite).on_set(|m,_,_| {
+        let ss2 = setme.borrow();
+        let ss = ss2.as_ref().unwrap();
+        let s = try!(ss.verify_remote_set(m));
+        let r = try!(ss.set_value(s).map_err(|_| MethodErr::ro_property(&ss.name)));
+        let v: i32 = count.get_value().inner().unwrap();
+        count.set_value((v + 1).into()).unwrap();
         Ok(r)
     })));
     let tree = f.tree().add(f.object_path("/example").add(i));
