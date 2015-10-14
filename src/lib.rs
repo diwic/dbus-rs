@@ -42,8 +42,7 @@ pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
 
 /// Contains functionality for the "server" of a D-Bus object. A remote application can
 /// introspect this object and call methods on it.
-/// The `mdisp` module supersedes this module, so this module will be deprecated
-/// once the `mdisp` module is done.
+/// Deprecated - use the `tree` module instead.
 pub mod obj {
     pub use objpath::{ObjectPath, Interface, Property, Signal, Argument};
     pub use objpath::{Method, MethodHandler, MethodResult};
@@ -53,25 +52,29 @@ pub mod obj {
 mod methoddisp;
 
 /// Contains functionality for dispatching methods on a D-Bus "server".
-/// Supersedes the `obj` module. Still WIP.
+/// Supersedes the `obj` module. Properties are somewhat still WIP,
+/// but should in any case be better than `obj` already.
 ///
 /// # Example
 /// ```
-/// use dbus::mdisp;
-/// let f = mdisp::Factory::new_fn();
+/// use dbus::{tree, Connection, BusType};
+/// let f = tree::Factory::new_fn();
 /// /* Add a method returning "Thanks!" on interface "com.example.dbus.rs"
 ///    on object path "/example". */
-/// let tree = f.tree().add(f.object_path("/example").introspectable()
+/// let t = f.tree().add(f.object_path("/example").introspectable()
 ///     .add(f.interface("com.example.dbus.rs")
 ///         .add_m(f.method("CallMe", |m,_,_| {
 ///             Ok(vec!(m.method_return().append("Thanks!"))) }
 ///         ).out_arg("s"))
 /// ));
-/// /* The tree is now built, use tree.set_registered() to register with a connection,
-/// then call tree.run(connection.iter()) to handle incoming method calls. */
+///
+/// let c = Connection::get_private(BusType::Session).unwrap();
+/// t.set_registered(&c, true).unwrap();
+/// /* Run forever */
+/// // for _ in t.run(&c, c.iter(1000)) {}
 /// ```
 
-pub mod mdisp {
+pub mod tree {
     pub use methoddisp::{Factory, Tree, TreeServer, ObjectPath, Interface, Signal};
     pub use methoddisp::{Property, EmitsChangedSignal, Access};
     pub use methoddisp::{Method, MethodErr, MethodResult, Argument};

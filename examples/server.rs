@@ -1,7 +1,7 @@
 extern crate dbus;
 
 use dbus::{Connection, BusType, NameFlag};
-use dbus::mdisp::Factory;
+use dbus::tree::Factory;
 
 fn main() {
     let c = Connection::get_private(BusType::Session).unwrap();
