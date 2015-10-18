@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
 use {MessageItem, Message, MessageType, Connection, ConnectionItem, Error, ErrorName};
-use {Signature, Member, Path, Interface as IfaceName};
+use {Signature, Member, Path};
+use Interface as IfaceName;
 use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 use std::collections::BTreeMap;
