@@ -85,6 +85,8 @@ pub enum MessageItem {
     /// A D-Bus objectpath requires its content to be a valid objectpath,
     /// so this cannot be any string.
     ObjectPath(Path),
+    /// A D-Bus String is zero terminated, so no \0 s in the String, please.
+    /// (D-Bus strings are also - like Rust strings - required to be valid UTF-8.)
     Str(String),
     Bool(bool),
     Byte(u8),
@@ -221,6 +223,9 @@ impl MessageItem {
     }
 
     /// Creates an MessageItem::Array from a list of MessageItems.
+    ///
+    /// Note: This requires `v` to be non-empty. See also
+    /// `MessageItem::from(&[T])`, which can handle empty arrays as well.
     pub fn new_array(v: Vec<MessageItem>) -> Result<MessageItem,ArrayError> {
         if v.len() == 0 {
             return Err(ArrayError::EmptyArray);
