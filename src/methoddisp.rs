@@ -421,6 +421,9 @@ pub struct ObjectPath<M> {
 }
 
 impl<M: MCall> ObjectPath<M> {
+    fn new(p: Path) -> ObjectPath<M> {
+        ObjectPath { name: Arc::new(p), ifaces: BTreeMap::new() }
+    }
 
     fn prop_set(&self, m: &Message, o: &ObjectPath<M>, t: &Tree<M>) -> MethodResult {
         let items = m.get_items();
@@ -671,6 +674,10 @@ impl<'a> Factory<MethodFn<'a>> {
     }
 
     pub fn interface<'b, T: Into<IfaceName>>(&self, t: T) -> Interface<MethodFn<'b>> { Interface::new(t.into()) }
+
+    pub fn tree<'b>(&self) -> Tree<MethodFn<'b>> { Tree { paths: BTreeMap::new() }}
+
+    pub fn object_path<'b, T: Into<Path>>(&self, t: T) -> ObjectPath<MethodFn<'b>> { ObjectPath::new(t.into()) }
 }
 
 impl<'a> Factory<MethodFnMut<'a>> {
@@ -691,6 +698,10 @@ impl<'a> Factory<MethodFnMut<'a>> {
     }
 
     pub fn interface<'b, T: Into<IfaceName>>(&self, t: T) -> Interface<MethodFnMut<'b>> { Interface::new(t.into()) }
+
+    pub fn tree<'b>(&self) -> Tree<MethodFnMut<'b>> { Tree { paths: BTreeMap::new() }}
+
+    pub fn object_path<'b, T: Into<Path>>(&self, t: T) -> ObjectPath<MethodFnMut<'b>> { ObjectPath::new(t.into()) }
 }
 
 impl Factory<MethodSync> {
@@ -713,16 +724,13 @@ impl Factory<MethodSync> {
     }
 
     pub fn interface<T: Into<IfaceName>>(&self, t: T) -> Interface<MethodSync> { Interface::new(t.into()) }
+
+    pub fn tree(&self) -> Tree<MethodSync> { Tree { paths: BTreeMap::new() }}
+
+    pub fn object_path<T: Into<Path>>(&self, t: T) -> ObjectPath<MethodSync> { ObjectPath::new(t.into()) }
 }
 
 impl<M> Factory<M> {
-
-    pub fn tree(&self) -> Tree<M> { Tree { paths: BTreeMap::new() }}
-
-    pub fn object_path<T: Into<Path>>(&self, t: T) -> ObjectPath<M> {
-        ObjectPath { name: Arc::new(t.into()), ifaces: BTreeMap::new() }
-    }
-
     pub fn signal<T: Into<Member>>(&self, t: T) -> Signal {
         Signal { name: Arc::new(t.into()), arguments: vec!(), owner: Mutex::new(None), anns: BTreeMap::new() }
     }
