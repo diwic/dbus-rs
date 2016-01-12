@@ -544,7 +544,7 @@ impl<M: MCall> ObjectPath<M> {
         let mut paths = t.children(&self, false);
         paths.push(&self);
         MessageItem::Array(
-            paths.iter().map(|p| ((&**p.name).clone().into(), MessageItem::Array(
+            paths.iter().map(|p| ((&*p.name).clone().into(), MessageItem::Array(
                 p.ifaces.values().map(|i| ((&**i.name).into(), MessageItem::Array(
                     i.properties.values().map(|pp| ((&**pp.name).into(), Box::new(pp.get_value()
                     ).into()).into()).collect(), "{sv}".into()
