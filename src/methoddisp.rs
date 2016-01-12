@@ -623,11 +623,22 @@ impl<M: MCall> Tree<M> {
     }
 
     /// Registers or unregisters all object paths in the tree.
-    /// FIXME: On error while registering, should unregister the already registered paths.
     pub fn set_registered(&self, c: &Connection, b: bool) -> Result<(), Error> {
+        let mut regd_paths = Vec::new();
         for p in self.paths.keys() {
-            if b { try!(c.register_object_path(p)); }
-            else { c.unregister_object_path(p); }
+            if b {
+                match c.register_object_path(p) {
+                    Ok(()) => regd_paths.push(p.clone()),
+                    Err(e) => {
+                        while let Some(rp) = regd_paths.pop() {
+                            c.unregister_object_path(&rp);
+                        }
+                        return Err(e)
+                    }
+                }
+            } else {
+                c.unregister_object_path(p);
+            }
         }
         Ok(())
     }
