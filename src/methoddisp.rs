@@ -181,7 +181,7 @@ impl<M> Interface<M> {
         s
     }
 
-    /// Adds a signal to the interface.
+    /// Adds a property to the interface.
     pub fn add_p(mut self, p: Property<M>) -> Self { self.properties.insert(p.name.clone(), Arc::new(p)); self }
     /// Adds a property to the interface. Returns a reference to the property
     /// (which you can use to get and set the current value of the property).
