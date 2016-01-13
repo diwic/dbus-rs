@@ -78,6 +78,7 @@ pub mod tree {
     pub use methoddisp::{Factory, Tree, TreeServer, ObjectPath, Interface, Signal};
     pub use methoddisp::{Property, EmitsChangedSignal, Access};
     pub use methoddisp::{Method, MethodErr, MethodResult, Argument};
+    pub use methoddisp::{MethodFn, MethodFnMut, MethodSync};
 }
 
 static INITDBUS: std::sync::Once = std::sync::ONCE_INIT;
