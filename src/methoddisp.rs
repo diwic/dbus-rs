@@ -665,12 +665,15 @@ impl<M: MethodType> Tree<M> {
 /// The factory is used to create object paths, interfaces, methods etc.
 ///
 /// There are three factories:
-///  * Fn - all methods are `Fn()`.
-///  * FnMut - all methods are `FnMut()`. This means they can mutate their environment,
-///    which has the side effect that if you call it recursively, it will RefCell panic.
-///  * Sync - all methods are `Fn() + Send + Sync + 'static`. This means that the methods
-///    can be called from different threads in parallel.
-#[derive(Debug)]
+///
+///  **Fn** - all methods are `Fn()`.
+///
+///  **FnMut** - all methods are `FnMut()`. This means they can mutate their environment,
+///  which has the side effect that if you call it recursively, it will RefCell panic.
+///
+///  **Sync** - all methods are `Fn() + Send + Sync + 'static`. This means that the methods
+///  can be called from different threads in parallel.
+#[derive(Debug, Copy, Clone)]
 pub struct Factory<M>(PhantomData<M>);
 
 impl<'a> Factory<MethodFn<'a>> {
