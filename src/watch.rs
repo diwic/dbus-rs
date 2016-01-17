@@ -126,7 +126,7 @@ mod test {
 
     #[repr(C)]
     #[derive(Clone, Debug)]
-    struct PollFd {
+    pub struct PollFd {
         fd: libc::c_int,
         events: libc::c_short,
         revents: libc::c_short,
