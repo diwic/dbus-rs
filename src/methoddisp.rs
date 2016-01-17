@@ -72,9 +72,9 @@ impl<T: Into<ErrorName>, M: Into<String>> From<(T, M)> for MethodErr {
 
 pub type MethodResult = Result<Vec<Message>, MethodErr>;
 
-struct MethodFn<'a>(Box<Fn(&Message, &ObjectPath<MethodFn<'a>>, &Tree<MethodFn<'a>>) -> MethodResult + 'a>);
-struct MethodFnMut<'a>(Box<RefCell<FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Tree<MethodFnMut<'a>>) -> MethodResult + 'a>>);
-struct MethodSync(Box<Fn(&Message, &ObjectPath<MethodSync>, &Tree<MethodSync>) -> MethodResult + Send + Sync + 'static>);
+pub struct MethodFn<'a>(Box<Fn(&Message, &ObjectPath<MethodFn<'a>>, &Tree<MethodFn<'a>>) -> MethodResult + 'a>);
+pub struct MethodFnMut<'a>(Box<RefCell<FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Tree<MethodFnMut<'a>>) -> MethodResult + 'a>>);
+pub struct MethodSync(Box<Fn(&Message, &ObjectPath<MethodSync>, &Tree<MethodSync>) -> MethodResult + Send + Sync + 'static>);
 
 impl<'a> fmt::Debug for MethodFn<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "<Fn>") }
@@ -88,7 +88,7 @@ impl fmt::Debug for MethodSync {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "<Fn + Send + Sync>") }
 }
 
-trait MCall: Sized {
+pub trait MCall: Sized {
     fn call_method(&self, m: &Message, o: &ObjectPath<Self>, i: &Tree<Self>) -> MethodResult;
     fn box_method<H>(h: H) -> Self
     where H: Fn(&Message, &ObjectPath<Self>, &Tree<Self>) -> MethodResult + Send + Sync + 'static;
