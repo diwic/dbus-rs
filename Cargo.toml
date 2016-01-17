@@ -4,10 +4,10 @@ name = "dbus"
 version = "0.2.2"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 
-description = "D-Bus bindings"
+description = "Bindings to D-Bus, which is a bus commonly used on Linux for inter-process communication."
 repository = "https://github.com/diwic/dbus-rs"
 documentation = "http://diwic.github.io/dbus-rs-docs/dbus"
-keywords = ["D-Bus"]
+keywords = ["D-Bus", "DBus"]
 license = "Apache-2.0/MIT"
 
 [dependencies]
