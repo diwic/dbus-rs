@@ -72,8 +72,11 @@ impl<T: Into<ErrorName>, M: Into<String>> From<(T, M)> for MethodErr {
 
 pub type MethodResult = Result<Vec<Message>, MethodErr>;
 
+/// A MethodType that wraps an Fn function
 pub struct MethodFn<'a>(Box<Fn(&Message, &ObjectPath<MethodFn<'a>>, &Tree<MethodFn<'a>>) -> MethodResult + 'a>);
+/// A MethodType that wraps an FnMut function. Calling this recursively will cause a refcell panic.
 pub struct MethodFnMut<'a>(Box<RefCell<FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Tree<MethodFnMut<'a>>) -> MethodResult + 'a>>);
+/// A MethodType that wraps an Fn+Send+Sync function, so it can be called from several threads in parallel.
 pub struct MethodSync(Box<Fn(&Message, &ObjectPath<MethodSync>, &Tree<MethodSync>) -> MethodResult + Send + Sync + 'static>);
 
 impl<'a> fmt::Debug for MethodFn<'a> {
@@ -88,13 +91,14 @@ impl fmt::Debug for MethodSync {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "<Fn + Send + Sync>") }
 }
 
-pub trait MCall: Sized {
+/// A helper trait used internally to make the tree generic over MethodFn, MethodFnMut and MethodSync.
+pub trait MethodType: Sized {
     fn call_method(&self, m: &Message, o: &ObjectPath<Self>, i: &Tree<Self>) -> MethodResult;
     fn box_method<H>(h: H) -> Self
     where H: Fn(&Message, &ObjectPath<Self>, &Tree<Self>) -> MethodResult + Send + Sync + 'static;
 }
 
-impl<'a> MCall for MethodFn<'a> {
+impl<'a> MethodType for MethodFn<'a> {
     fn call_method(&self, m: &Message, o: &ObjectPath<MethodFn<'a>>, i: &Tree<MethodFn<'a>>) -> MethodResult { self.0(m, o, i) }
 
     fn box_method<H>(h: H) -> Self
@@ -103,7 +107,7 @@ impl<'a> MCall for MethodFn<'a> {
     }
 }
 
-impl MCall for MethodSync {
+impl MethodType for MethodSync {
     fn call_method(&self, m: &Message, o: &ObjectPath<MethodSync>, i: &Tree<MethodSync>) -> MethodResult { self.0(m, o, i) }
 
     fn box_method<H>(h: H) -> Self
@@ -112,7 +116,7 @@ impl MCall for MethodSync {
     }
 }
 
-impl<'a> MCall for MethodFnMut<'a> {
+impl<'a> MethodType for MethodFnMut<'a> {
     fn call_method(&self, m: &Message, o: &ObjectPath<MethodFnMut<'a>>, i: &Tree<MethodFnMut<'a>>) -> MethodResult {
         let mut z = self.0.borrow_mut();
         (&mut *z)(m, o, i)
@@ -152,7 +156,7 @@ impl<M> Method<M> {
     pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
 }
 
-impl<M: MCall> Method<M> {
+impl<M: MethodType> Method<M> {
     pub fn call(&self, m: &Message, o: &ObjectPath<M>, i: &Tree<M>) -> MethodResult { self.cb.call_method(m, o, i) }
 
     fn new(n: Member, cb: M) -> Self { Method { name: Arc::new(n), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), cb: cb } }
@@ -241,7 +245,7 @@ pub struct Property<M> {
     anns: BTreeMap<String, String>,
 }
 
-impl<M: MCall> Property<M> {
+impl<M: MethodType> Property<M> {
     pub fn get_value(&self) -> MessageItem {
         self.value.lock().unwrap().clone()
     }
@@ -420,7 +424,7 @@ pub struct ObjectPath<M> {
     ifaces: ArcMap<IfaceName, Interface<M>>,
 }
 
-impl<M: MCall> ObjectPath<M> {
+impl<M: MethodType> ObjectPath<M> {
     fn new(p: Path) -> ObjectPath<M> {
         ObjectPath { name: Arc::new(p), ifaces: BTreeMap::new() }
     }
@@ -578,7 +582,7 @@ pub struct TreeServer<'a, I, M: 'a> {
     tree: &'a Tree<M>,
 }
 
-impl<'a, I: Iterator<Item=ConnectionItem>, M: 'a + MCall> Iterator for TreeServer<'a, I, M> {
+impl<'a, I: Iterator<Item=ConnectionItem>, M: 'a + MethodType> Iterator for TreeServer<'a, I, M> {
     type Item = ConnectionItem;
 
     fn next(&mut self) -> Option<ConnectionItem> {
@@ -603,7 +607,7 @@ pub struct Tree<M> {
     paths: ArcMap<Path, ObjectPath<M>>
 }
 
-impl<M: MCall> Tree<M> {
+impl<M: MethodType> Tree<M> {
 
     fn children(&self, o: &ObjectPath<M>, direct_only: bool) -> Vec<&ObjectPath<M>> {
         let parent: &str = &o.name;
@@ -747,7 +751,7 @@ impl<M> Factory<M> {
     }
 }
 
-impl<M: MCall> Factory<M> {
+impl<M: MethodType> Factory<M> {
     /// Creates a new method with bounds enough to be used in all trees.
     pub fn method_sync<H, T>(&self, t: T, handler: H) -> Method<M>
     where H: Fn(&Message, &ObjectPath<M>, &Tree<M>) -> MethodResult + Send + Sync + 'static, T: Into<Member> {
