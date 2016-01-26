@@ -152,7 +152,7 @@ fn iter_append_struct(i: &mut ffi::DBusMessageIter, a: &[MessageItem]) {
 
 fn iter_append_variant(i: &mut ffi::DBusMessageIter, a: &MessageItem) {
     let mut subiter = new_dbus_message_iter();
-    let atype = to_c_str(&format!("{}", a.array_type() as u8 as char));
+    let atype = to_c_str(&a.type_sig());
     assert!(unsafe { ffi::dbus_message_iter_open_container(i, ffi::DBUS_TYPE_VARIANT, atype.as_ptr(), &mut subiter) } != 0);
     a.iter_append(&mut subiter);
     assert!(unsafe { ffi::dbus_message_iter_close_container(i, &mut subiter) } != 0);
