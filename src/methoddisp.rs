@@ -13,9 +13,11 @@ use std::fmt;
 type ArcMap<K, V> = BTreeMap<Arc<K>, Arc<V>>;
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
+/// A D-Bus Argument.
 pub struct Argument(Option<String>, Signature);
 
 impl Argument {
+    /// Create a new Argument.
     pub fn new(name: Option<String>, sig: Signature) -> Argument { Argument(name, sig) }
 
     fn introspect(&self, indent: &str, dir: &str) -> String { 
@@ -43,24 +45,31 @@ impl<N: Into<String>, S: Into<Signature>> From<(N, S)> for Argument {
 }
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
+/// A D-Bus Method Error.
 pub struct MethodErr(ErrorName, String);
 
 impl MethodErr {
+    /// Create an Invalid Args MethodErr.
     pub fn invalid_arg<T: fmt::Debug>(a: &T) -> MethodErr {
         ("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a)).into()
     }
+    /// Create a MethodErr that there are not enough arguments given.
     pub fn no_arg() -> MethodErr {
         ("org.freedesktop.DBus.Error.InvalidArgs", "Not enough arguments").into()
     }
+    /// Create a MethodErr that the method failed in the way specified.
     pub fn failed<T: fmt::Display>(a: &T) -> MethodErr {
         ("org.freedesktop.DBus.Error.Failed", a.to_string()).into()
     }
+    /// Create a MethodErr that the Interface was unknown.
     pub fn no_interface<T: fmt::Display>(a: &T) -> MethodErr {
         ("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", a)).into()
     }
+    /// Create a MethodErr that the Property was unknown.
     pub fn no_property<T: fmt::Display>(a: &T) -> MethodErr {
         ("org.freedesktop.DBus.Error.UnknownProperty", format!("Unknown property {}", a)).into()
     }
+    /// Create a MethodErr that the Property was read-only.
     pub fn ro_property<T: fmt::Display>(a: &T) -> MethodErr {
         ("org.freedesktop.DBus.Error.PropertyReadOnly", format!("Property {} is read only", a)).into()
     }
@@ -70,6 +79,7 @@ impl<T: Into<ErrorName>, M: Into<String>> From<(T, M)> for MethodErr {
     fn from((t, m): (T, M)) -> MethodErr { MethodErr(t.into(), m.into()) }
 }
 
+/// Result containing the Messages returned from the Method, or a MethodErr.
 pub type MethodResult = Result<Vec<Message>, MethodErr>;
 
 /// A MethodType that wraps an Fn function
@@ -129,6 +139,7 @@ impl<'a> MethodType for MethodFnMut<'a> {
 }
 
 #[derive(Debug)]
+/// A D-Bus Method.
 pub struct Method<M> {
     cb: M,
     name: Arc<Member>,
@@ -138,17 +149,21 @@ pub struct Method<M> {
 }
 
 impl<M> Method<M> {
+    /// Builder method that adds an "in" Argument to this Method.
     pub fn in_arg<A: Into<Argument>>(mut self, a: A) -> Self { self.i_args.push(a.into()); self }
+    /// Builder method that adds multiple "in" Arguments to this Method.
     pub fn in_args<Z: Into<Argument>, A: IntoIterator<Item=Z>>(mut self, a: A) -> Self {
         self.i_args.extend(a.into_iter().map(|b| b.into())); self
     }
 
+    /// Builder method that adds an "out" Argument to this Method.
     pub fn out_arg<A: Into<Argument>>(mut self, a: A) -> Self { self.o_args.push(a.into()); self }
+    /// Builder method that adds multiple "out" Arguments to this Method.
     pub fn out_args<Z: Into<Argument>, A: IntoIterator<Item=Z>>(mut self, a: A) -> Self {
         self.o_args.extend(a.into_iter().map(|b| b.into())); self
     }
 
-    /// Add an annotation to the method
+    /// Add an annotation to the method.
     pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
         self.anns.insert(name.into(), value.into()); self
     }
@@ -157,6 +172,7 @@ impl<M> Method<M> {
 }
 
 impl<M: MethodType> Method<M> {
+    /// Call the Method.
     pub fn call(&self, m: &Message, o: &ObjectPath<M>, i: &Tree<M>) -> MethodResult { self.cb.call_method(m, o, i) }
 
     fn new(n: Member, cb: M) -> Self { Method { name: Arc::new(n), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), cb: cb } }
@@ -164,6 +180,7 @@ impl<M: MethodType> Method<M> {
 
 
 #[derive(Debug)]
+/// Represents a D-Bus interface.
 pub struct Interface<M> {
     name: Arc<IfaceName>,
     methods: ArcMap<Member, Method<M>>,
@@ -195,6 +212,7 @@ impl<M> Interface<M> {
         p
     }
 
+    /// Add an annotation to this Inteface.
     pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
         self.anns.insert(name.into(), value.into()); self
     }
@@ -210,17 +228,27 @@ impl<M> Interface<M> {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Debug)]
+/// Enumerates the different signaling behaviors a Property can have
+/// to being changed.
 pub enum EmitsChangedSignal {
+    /// The Property emits a signal that includes the new value.
     True,
+    /// The Property emits a signal that does not include the new value.
     Invalidates,
+    /// The Property cannot be changed.
     Const,
+    /// The Property does not emit a signal when changed.
     False,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Debug)]
+/// The possible access characteristics a Property can have.
 pub enum Access {
+    /// The Property can only be read (Get).
     Read,
+    /// The Property can be read or written.
     ReadWrite,
+    /// The Property can only be written (Set).
     Write,
 }
 
@@ -235,6 +263,7 @@ impl Access {
 }
 
 #[derive(Debug)]
+/// A D-Bus Property.
 pub struct Property<M> {
     name: Arc<String>,
     value: Mutex<MessageItem>,
@@ -246,10 +275,12 @@ pub struct Property<M> {
 }
 
 impl<M: MethodType> Property<M> {
+    /// Gets the value of the Property.
     pub fn get_value(&self) -> MessageItem {
         self.value.lock().unwrap().clone()
     }
 
+    /// Gets the signal (if any) associated with the Property.
     pub fn get_signal(&self) -> Option<Message> {
         self.owner.lock().unwrap().as_ref().map(|&(ref p, ref i)| {
             Message::signal(&p, &"org.freedesktop.DBus.Properties".into(), &"PropertiesChanged".into())
@@ -257,8 +288,9 @@ impl<M: MethodType> Property<M> {
         })
     }
 
-    /// Returns error if "emits" is "Const", and the property is in a tree.
-    /// Returns messages to be sent over a connection, this could be the PropertiesChanged signal.
+    /// Returns error if "emits" is "Const", and the property is in a
+    /// tree.  Returns messages to be sent over a connection, this
+    /// could be the PropertiesChanged signal.
     pub fn set_value(&self, m: MessageItem) -> Result<Vec<Message>,()> {
         let ss = match self.emits {
             EmitsChangedSignal::False => None,
@@ -278,18 +310,23 @@ impl<M: MethodType> Property<M> {
         Ok(ss.map(|s| vec!(s)).unwrap_or(vec!()))
     }
 
+    /// Builder method that allows setting the Property's signal
+    /// behavior when changed.
     pub fn emits_changed(mut self, e: EmitsChangedSignal) -> Self {
         self.emits = e;
         assert!(self.rw == Access::Read || self.emits != EmitsChangedSignal::Const);
         self
     }
 
+    /// Builder method that allows setting the Property as readable,
+    /// writable, or both.
     pub fn access(mut self, e: Access) -> Self {
         self.rw = e;
         assert!(self.rw == Access::Read || self.emits != EmitsChangedSignal::Const);
         self
     }
 
+    /// Helper method to check accessibility before getting a value.
     pub fn remote_get(&self, _: &Message) -> Result<MessageItem, MethodErr> {
         // TODO: We should be able to call a user-defined callback here instead...
         if self.rw == Access::Write { return Err(MethodErr::failed(&format!("Property {} is write only", &self.name))) }
@@ -319,9 +356,11 @@ impl<M: MethodType> Property<M> {
         }
     }
 
+    /// Add an annotation to this Property.
     pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
         self.anns.insert(name.into(), value.into()); self
     }
+
     /// Add an annotation that this entity is deprecated.
     pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
 
@@ -366,6 +405,7 @@ impl<'a> Property<MethodFnMut<'a>> {
 
 
 #[derive(Debug)]
+/// A D-Bus Signal.
 pub struct Signal {
     name: Arc<Member>,
     arguments: Vec<Argument>,
@@ -386,11 +426,14 @@ impl Signal {
         m
     }
 
+    /// Builder method that adds an Argument to the Signal.
     pub fn arg<A: Into<Argument>>(mut self, a: A) -> Self { self.arguments.push(a.into()); self }
+    /// Builder method that adds multiple "rguments to the Signel.
     pub fn args<Z: Into<Argument>, A: IntoIterator<Item=Z>>(mut self, a: A) -> Self {
         self.arguments.extend(a.into_iter().map(|b| b.into())); self
     }
 
+    /// Add an annotation to this Signal.
     pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
         self.anns.insert(name.into(), value.into()); self
     }
@@ -419,6 +462,7 @@ fn introspect_map<T, I: fmt::Display, C: Fn(&T) -> (String, String)>
 }
 
 #[derive(Debug)]
+/// A D-Bus Object Path.
 pub struct ObjectPath<M> {
     name: Arc<Path>,
     ifaces: ArcMap<IfaceName, Interface<M>>,
@@ -483,6 +527,7 @@ impl<M: MethodType> ObjectPath<M> {
         self.ifaces.insert(i.name.clone(), Arc::new(i));
     }
 
+    /// Add an Interface to this Object Path.
     pub fn add(mut self, p: Interface<M>) -> Self {
         for s in p.signals.values() {
             *s.owner.lock().unwrap() = Some((self.name.clone(), p.name.clone()))
@@ -621,6 +666,7 @@ impl<M: MethodType> Tree<M> {
         }).collect()
     }
 
+    /// Add a Object Path to this Tree.
     pub fn add(mut self, p: ObjectPath<M>) -> Self {
         self.paths.insert(p.name.clone(), Arc::new(p));
         self
@@ -687,14 +733,18 @@ impl<'a> Factory<MethodFn<'a>> {
         Method::new(t.into(), MethodFn(Box::new(handler)))
     }
 
+    /// Creates a new property for single-thread use.
     pub fn property<'b, T: Into<String>, I: Into<MessageItem>>(&self, t: T, i: I) -> Property<MethodFn<'b>> {
         Property::new(t.into(), i.into())
     }
 
+    /// Creates a new interface for single-thread use.
     pub fn interface<'b, T: Into<IfaceName>>(&self, t: T) -> Interface<MethodFn<'b>> { Interface::new(t.into()) }
 
+    /// Creates a new tree for single-thread use.
     pub fn tree<'b>(&self) -> Tree<MethodFn<'b>> { Tree { paths: BTreeMap::new() }}
 
+    /// Creates a new object path for single-thread use.
     pub fn object_path<'b, T: Into<Path>>(&self, t: T) -> ObjectPath<MethodFn<'b>> { ObjectPath::new(t.into()) }
 }
 
@@ -711,19 +761,23 @@ impl<'a> Factory<MethodFnMut<'a>> {
         Method::new(t.into(), MethodFnMut(Box::new(RefCell::new(handler))))
     }
 
+    /// Creates a new mutable property for single-thread use.
     pub fn property<'b, T: Into<String>, I: Into<MessageItem>>(&self, t: T, i: I) -> Property<MethodFnMut<'b>> {
         Property::new(t.into(), i.into())
     }
 
+    /// Creates a new mutable interface for single-thread use.
     pub fn interface<'b, T: Into<IfaceName>>(&self, t: T) -> Interface<MethodFnMut<'b>> { Interface::new(t.into()) }
 
+    /// Creates a new mutable tree for single-thread use.
     pub fn tree<'b>(&self) -> Tree<MethodFnMut<'b>> { Tree { paths: BTreeMap::new() }}
 
+    /// Creates a new mutable object path for single-thread use.
     pub fn object_path<'b, T: Into<Path>>(&self, t: T) -> ObjectPath<MethodFnMut<'b>> { ObjectPath::new(t.into()) }
 }
 
 impl Factory<MethodSync> {
-    
+
     /// Creates a new factory for multi-thread use.
     /// Trees created will be able to Send and Sync, i e,
     /// it can handle several messages in parallel.
@@ -737,18 +791,23 @@ impl Factory<MethodSync> {
         Method::new(t.into(), MethodSync(Box::new(handler)))
     }
 
+    /// Creates a new property for multi-threaded use.
     pub fn property<T: Into<String>, I: Into<MessageItem>>(&self, t: T, i: I) -> Property<MethodSync> {
         Property::new(t.into(), i.into())
     }
 
+    /// Creates a new interface for multi-threaded use.
     pub fn interface<T: Into<IfaceName>>(&self, t: T) -> Interface<MethodSync> { Interface::new(t.into()) }
 
+    /// Creates a new tree for multi-threaded use.
     pub fn tree(&self) -> Tree<MethodSync> { Tree { paths: BTreeMap::new() }}
 
+    /// Creates a new object path for multi-threaded use.
     pub fn object_path<T: Into<Path>>(&self, t: T) -> ObjectPath<MethodSync> { ObjectPath::new(t.into()) }
 }
 
 impl<M> Factory<M> {
+    /// Create a Signal.
     pub fn signal<T: Into<Member>>(&self, t: T) -> Signal {
         Signal { name: Arc::new(t.into()), arguments: vec!(), owner: Mutex::new(None), anns: BTreeMap::new() }
     }

@@ -11,6 +11,7 @@ pub struct Argument<'a> {
 }
 
 impl<'a> Argument<'a> {
+    /// Create a new Argument.
     pub fn new<T: Into<Cow<'a, str>>>(name: &'a str, sig: T) -> Argument<'a> {
         Argument { name: name, sig: sig.into() }
     }
@@ -33,9 +34,12 @@ pub struct Signal<'a> {
 }
 
 impl<'a> Signal<'a> {
+    /// Create a new Signal.
     pub fn new<N: ToString>(name: N, args: Vec<Argument<'a>>) -> Signal<'a> {
         Signal { name: name.to_string(), i: ISignal { args: args, anns: vec![] } }
     }
+
+    /// Add an Annotation to the Signal.
     pub fn annotate<N: ToString, V: ToString>(&mut self, name: N, value: V) {
         self.i.anns.push(Annotation { name: name.to_string(), value: value.to_string() });
     }
@@ -44,7 +48,11 @@ impl<'a> Signal<'a> {
 /// A method returns either a list of MessageItems, or an error - the tuple
 /// represents the name and message of the Error.
 pub type MethodResult = Result<Vec<MessageItem>, (&'static str, String)>;
+/// Contains the retrieved MessageItem or an error tuple containing the
+/// name and message of the error.
 pub type PropertyGetResult = Result<MessageItem, (&'static str, String)>;
+/// Contains () or an error tuple containing the name and message of
+/// the error.
 pub type PropertySetResult = Result<(), (&'static str, String)>;
 
 /// A boxed closure for dynamic dispatch. It is called when the method is 
@@ -65,30 +73,41 @@ pub struct Method<'a> {
 }
 
 impl<'a> Method<'a> {
+    /// Create a new Method.
     pub fn new<N: ToString>(name: N, in_args: Vec<Argument<'a>>,
             out_args: Vec<Argument<'a>>, cb: MethodHandler<'a>) -> Method<'a> {
         Method { name: name.to_string(), i: IMethod {
             in_args: in_args, out_args: out_args, cb: Rc::new(RefCell::new(cb)), anns: vec![] }
         }
     }
+
+    /// Add an Annotation to the Method.
     pub fn annotate<N: ToString, V: ToString>(&mut self, name: N, value: V) {
         self.i.anns.push(Annotation { name: name.to_string(), value: value.to_string() });
     }
 }
 
+/// A read/write property handler.
 pub trait PropertyRWHandler {
+    /// Get a property's value.
     fn get(&self) -> PropertyGetResult;
+    /// Set a property's value.
     fn set(&self, &MessageItem) -> PropertySetResult;
 }
 
+/// A read-only property handler.
 pub trait PropertyROHandler {
+    /// Get a property's value.
     fn get(&self) -> PropertyGetResult;
 }
 
+/// A write-only property handler.
 pub trait PropertyWOHandler {
+    /// Set a property's value.
     fn set(&self, &MessageItem) -> PropertySetResult;
 }
 
+/// Types of access to a Property.
 pub enum PropertyAccess<'a> {
     RO(Box<PropertyROHandler+'a>),
     RW(Box<PropertyRWHandler+'a>),
@@ -137,6 +156,7 @@ pub struct Interface<'a> {
 }
 
 impl<'a> Interface<'a> {
+    /// Create a new Interface.
     pub fn new(m: Vec<Method<'a>>, p: Vec<Property<'a>>, s: Vec<Signal<'a>>) -> Interface<'a> {
         Interface {
            methods: m.into_iter().map(|m| (m.name, m.i)).collect(),
@@ -316,6 +336,7 @@ impl PropertyROHandler for MessageItem {
 }
 
 impl<'a> ObjectPath<'a> {
+    /// Create a new ObjectPath.
     pub fn new(conn: &'a Connection, path: &str, introspectable: bool) -> ObjectPath<'a> {
         let i = IObjectPath {
             conn: conn,
@@ -356,6 +377,7 @@ impl<'a> ObjectPath<'a> {
         self.insert_interface("org.freedesktop.DBus.Properties", i);
     }
 
+    /// Add an Interface to this ObjectPath.
     pub fn insert_interface<N: ToString>(&mut self, name: N, i: Interface<'a>) {
         if !i.properties.is_empty() {
             self.add_property_handler();
@@ -363,14 +385,15 @@ impl<'a> ObjectPath<'a> {
         self.i.interfaces.borrow_mut().insert(name.to_string(), i);
     }
 
+    /// Returns if the ObjectPath is registered.
     pub fn is_registered(&self) -> bool {
         self.i.registered.get()
     }
 
+    /// Changes the registration status of the ObjectPath.
     pub fn set_registered(&mut self, register: bool) -> Result<(), Error> {
         self.i.set_registered(register)
     }
-
 
     /// Handles a method call if the object path matches.
     /// Return value: None => not handled (no match),

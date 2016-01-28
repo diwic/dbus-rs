@@ -15,6 +15,7 @@ pub struct Watch {
 }
 
 impl Watch {
+    /// Get the RawFd this Watch is for
     pub fn fd(&self) -> RawFd { self.fd }
     /// Add POLLIN to events to listen for
     pub fn readable(&self) -> bool { self.read }

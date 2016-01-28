@@ -10,6 +10,7 @@ macro_rules! cstring_wrapper {
 
 
 impl $t {
+    /// Creates a new instance of this struct.
     pub fn new<S: Into<Vec<u8>>>(s: S) -> Result<$t, String> {
         let c = try!(CString::new(s).map_err(|e| e.to_string()));
         let mut e = Error::empty();

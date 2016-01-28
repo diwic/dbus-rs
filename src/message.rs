@@ -6,8 +6,11 @@ use std::os::unix::io::{RawFd, AsRawFd};
 use std::ffi::CStr;
 
 #[derive(Debug,Copy,Clone)]
+/// Errors that can happen when creating a MessageItem::Array.
 pub enum ArrayError {
+    /// The array is empty.
     EmptyArray,
+    /// The array is composed of different element types.
     DifferentElementTypes,
 }
 
@@ -39,10 +42,12 @@ pub struct OwnedFd {
 }
 
 impl OwnedFd {
+    /// Create a new OwnedFd from a RawFd.
     pub fn new(fd: RawFd) -> OwnedFd {
         OwnedFd { fd: fd }
     }
 
+    /// Convert an OwnedFD back into a RawFd.
     pub fn into_fd(self) -> RawFd {
         let s = self.fd;
         ::std::mem::forget(self);
@@ -88,14 +93,23 @@ pub enum MessageItem {
     /// A D-Bus String is zero terminated, so no \0 s in the String, please.
     /// (D-Bus strings are also - like Rust strings - required to be valid UTF-8.)
     Str(String),
+    /// A D-Bus boolean type.
     Bool(bool),
+    /// A D-Bus unsigned 8 bit type.
     Byte(u8),
+    /// A D-Bus signed 16 bit type.
     Int16(i16),
+    /// A D-Bus signed 32 bit type.
     Int32(i32),
+    /// A D-Bus signed 64 bit type.
     Int64(i64),
+    /// A D-Bus unsigned 16 bit type.
     UInt16(u16),
+    /// A D-Bus unsigned 32 bit type.
     UInt32(u32),
+    /// A D-Bus unsigned 64 bit type.
     UInt64(u64),
+    /// A D-Bus IEEE-754 double-precision floating point type.
     Double(f64),
     /// D-Bus allows for sending file descriptors, which can be used to
     /// set up SHM, unix pipes, or other communication channels.
@@ -167,7 +181,7 @@ fn iter_append_dict(i: &mut ffi::DBusMessageIter, k: &MessageItem, v: &MessageIt
 }
 
 impl MessageItem {
-
+    /// Get the D-Bus ASCII type-code for this MessageItem.
     pub fn type_sig(&self) -> TypeSig<'static> {
         match self {
             // TODO: Can we make use of the ffi constants here instead of duplicating them?
@@ -190,6 +204,7 @@ impl MessageItem {
         }
     }
 
+    /// Get the integer value for this MessageItem's type-code.
     pub fn array_type(&self) -> i32 {
         let s = match self {
             &MessageItem::Str(_) => ffi::DBUS_TYPE_STRING,
@@ -438,6 +453,7 @@ impl From<(MessageItem, MessageItem)> for MessageItem {
 
 /// Helper trait for `MessageItem::inner()`
 pub trait FromMessageItem<'a> :Sized {
+    /// Allows converting from a MessageItem into the type it contains.
     fn from(i: &'a MessageItem) -> Result<Self, ()>;
 }
 
@@ -559,6 +575,7 @@ impl Message {
         Message {msg: ptr}
     }
 
+    /// The old way to create a new error reply
     pub fn new_error(m: &Message, error_name: &str, error_message: &str) -> Option<Message> {
         let (en, em) = (to_c_str(error_name), to_c_str(error_message));
         let ptr = unsafe { ffi::dbus_message_new_error(m.msg, en.as_ptr(), em.as_ptr()) };
@@ -572,6 +589,7 @@ impl Message {
         Message { msg: ptr}
     }
 
+    /// Get the MessageItems that make up the message.
     pub fn get_items(&self) -> Vec<MessageItem> {
         let mut i = new_dbus_message_iter();
         match unsafe { ffi::dbus_message_iter_init(self.msg, &mut i) } {
@@ -580,15 +598,18 @@ impl Message {
         }
     }
 
+    /// Get the D-Bus serial of a message, if one was specified.
     pub fn get_serial(&self) -> u32 {
         unsafe { ffi::dbus_message_get_serial(self.msg) }
     }
 
+    /// Get the serial of the message this message is a reply to, if present.
     pub fn get_reply_serial(&self) -> Option<u32> {
         let s = unsafe { ffi::dbus_message_get_reply_serial(self.msg) };
         if s == 0 { None } else { Some(s) }
     }
 
+    /// Add one or more MessageItems to this Message.
     pub fn append_items(&mut self, v: &[MessageItem]) {
         let mut i = new_dbus_message_iter();
         unsafe { ffi::dbus_message_iter_init_append(self.msg, &mut i) };
@@ -604,10 +625,12 @@ impl Message {
         self
     }
 
+    /// Gets the MessageType of the Message.
     pub fn msg_type(&self) -> MessageType {
         unsafe { mem::transmute(ffi::dbus_message_get_type(self.msg)) }
     }
 
+    /// Gets the name of the connection that originated this message.
     pub fn sender(&self) -> Option<String> {
         let s = unsafe { ffi::dbus_message_get_sender(self.msg) };
         c_str_to_slice(&s).map(|s| s.to_string())
@@ -624,24 +647,28 @@ impl Message {
          c_str_to_slice(&m).map(|s| s.to_string()))
     }
 
+    /// Gets the object path this Message is being sent to.
     pub fn path(&self) -> Option<Path> {
         let p = unsafe { ffi::dbus_message_get_path(self.msg) };
         c_str_to_slice(&p).map(|s| s.into())
     }
 
+    /// Gets the interface this Message is being sent to.
     pub fn interface(&self) -> Option<Interface> {
         let p = unsafe { ffi::dbus_message_get_interface(self.msg) };
         c_str_to_slice(&p).map(|s| s.into())
     }
 
+    /// Gets the interface member being called.
     pub fn member(&self) -> Option<Member> {
         let p = unsafe { ffi::dbus_message_get_member(self.msg) };
         c_str_to_slice(&p).map(|s| s.into())
     }
 
-    /// When the remote end returns an error, the message itself is correct but its contents
-    /// is an error. This method will transform such an error to a D-Bus Error or otherwise
-    /// return the original message.
+    /// When the remote end returns an error, the message itself is
+    /// correct but its contents is an error. This method will
+    /// transform such an error to a D-Bus Error or otherwise return
+    /// the original message.
     pub fn as_result(&mut self) -> Result<&mut Message, Error> {
         let mut e = Error::empty();
         if unsafe { ffi::dbus_set_error_from_message(e.get_mut(), self.msg) } != 0 { Err(e) }
