@@ -11,6 +11,7 @@ pub struct Props<'a> {
 }
 
 impl<'a> Props<'a> {
+    /// Create a new Props.
     pub fn new<N, P, I>(conn: &'a Connection, name: N, path: P, interface: I, timeout_ms: i32) -> Props<'a>
     where N: Into<BusName>, P: Into<Path>, I: Into<Interface> {
         Props {
@@ -22,6 +23,7 @@ impl<'a> Props<'a> {
         }
     }
 
+    /// Get a single property's value.
     pub fn get(&self, propname: &str) -> Result<MessageItem, Error> {
         let mut m = Message::method_call(&self.name, &self.path,
             &"org.freedesktop.DBus.Properties".into(), &"Get".into());
@@ -37,6 +39,7 @@ impl<'a> Props<'a> {
        return Err(Error::new_custom("InvalidReply", &f));
     }
 
+    /// Set a single property's value.
     pub fn set(&self, propname: &str, value: MessageItem) -> Result<(), Error> {
         let mut m = Message::method_call(&self.name, &self.path,
             &"org.freedesktop.DBus.Properties".into(), &"Set".into());
@@ -46,6 +49,7 @@ impl<'a> Props<'a> {
         Ok(())
     }
 
+    /// Get a map of all the properties' names and their values.
     pub fn get_all(&self) -> Result<BTreeMap<String, MessageItem>, Error> {
         let mut m = Message::method_call(&self.name, &self.path,
             &"org.freedesktop.DBus.Properties".into(), &"GetAll".into());
@@ -77,24 +81,31 @@ pub struct PropHandler<'a> {
 }
 
 impl<'a> PropHandler<'a> {
+    /// Create a new PropHandler from a Props.
     pub fn new(p: Props) -> PropHandler {
         PropHandler { p: p, map: BTreeMap::new() }
     }
 
+    /// Get a map of all the properties' names and their values.
     pub fn get_all(&mut self) -> Result<(), Error> {
         self.map = try!(self.p.get_all());
         Ok(())
     }
 
+    /// Get a mutable reference to the PropHandler's fetched properties.
     pub fn map_mut(&mut self) -> &mut BTreeMap<String, MessageItem> { &mut self.map }
+
+    /// Get a reference to the PropHandler's fetched properties.
     pub fn map(&self) -> &BTreeMap<String, MessageItem> { &self.map }
 
+    /// Get a single property's value.
     pub fn get(&mut self, propname: &str) -> Result<&MessageItem, Error> {
         let v = try!(self.p.get(propname));
         self.map.insert(propname.to_string(), v);
         Ok(self.map.get(propname).unwrap())
     }
 
+    /// Set a single property's value.
     pub fn set(&mut self, propname: &str, value: MessageItem) -> Result<(), Error> {
         try!(self.p.set(propname, value.clone()));
         self.map.insert(propname.to_string(), value);

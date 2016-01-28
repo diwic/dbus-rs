@@ -7,6 +7,8 @@
 //!
 //! See the examples directory for some examples to get you started.
 
+#![warn(missing_docs)]
+
 extern crate libc;
 
 pub use ffi::DBusBusType as BusType;
@@ -31,6 +33,7 @@ use std::cell::{Cell, RefCell};
 use std::mem;
 use std::os::unix::io::RawFd;
 
+#[allow(missing_docs)]
 mod ffi;
 mod message;
 mod prop;
@@ -107,6 +110,7 @@ fn to_c_str(n: &str) -> CString { CString::new(n.as_bytes()).unwrap() }
 
 impl Error {
 
+    /// Create a new custom D-Bus Error.
     pub fn new_custom(name: &str, message: &str) -> Error {
         let n = to_c_str(name);
         let m = to_c_str(&message.replace("%","%%"));
@@ -320,6 +324,7 @@ impl Connection {
         Ok(serial)
     }
 
+    /// Get the connection's unique name.
     pub fn unique_name(&self) -> String {
         let c = unsafe { ffi::dbus_bus_get_unique_name(self.conn()) };
         c_str_to_slice(&c).unwrap_or("").to_string()
@@ -333,6 +338,7 @@ impl Connection {
         }
     }
 
+    /// Register an object path.
     pub fn register_object_path(&self, path: &str) -> Result<(), Error> {
         let mut e = Error::empty();
         let p = to_c_str(path);
@@ -351,12 +357,14 @@ impl Connection {
         if r == 0 { Err(e) } else { Ok(()) }
     }
 
+    /// Unregister an object path.
     pub fn unregister_object_path(&self, path: &str) {
         let p = to_c_str(path);
         let r = unsafe { ffi::dbus_connection_unregister_object_path(self.conn(), p.as_ptr()) };
         if r == 0 { panic!("Out of memory"); }
     }
 
+    /// List registered object paths.
     pub fn list_registered_object_paths(&self, path: &str) -> Vec<String> {
         let p = to_c_str(path);
         let mut clist: *mut *mut libc::c_char = ptr::null_mut();
@@ -377,6 +385,7 @@ impl Connection {
         v
     }
 
+    /// Register a name.
     pub fn register_name(&self, name: &str, flags: u32) -> Result<RequestNameReply, Error> {
         let mut e = Error::empty();
         let n = to_c_str(name);
@@ -384,6 +393,7 @@ impl Connection {
         if r == -1 { Err(e) } else { Ok(unsafe { mem::transmute(r) }) }
     }
 
+    /// Release a name.
     pub fn release_name(&self, name: &str) -> Result<ReleaseNameReply, Error> {
         let mut e = Error::empty();
         let n = to_c_str(name);
@@ -391,6 +401,7 @@ impl Connection {
         if r == -1 { Err(e) } else { Ok(unsafe { mem::transmute(r) }) }
     }
 
+    /// Add a match rule to match messages on the message bus.
     pub fn add_match(&self, rule: &str) -> Result<(), Error> {
         let mut e = Error::empty();
         let n = to_c_str(rule);
@@ -398,6 +409,7 @@ impl Connection {
         if e.name().is_some() { Err(e) } else { Ok(()) }
     }
 
+    /// Remove a match rule to match messages on the message bus.
     pub fn remove_match(&self, rule: &str) -> Result<(), Error> {
         let mut e = Error::empty();
         let n = to_c_str(rule);
