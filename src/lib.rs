@@ -7,7 +7,7 @@
 //!
 //! See the examples directory for some examples to get you started.
 
-#![warn(missing_docs)]
+// #![warn(missing_docs)]
 
 extern crate libc;
 
@@ -39,9 +39,16 @@ mod message;
 mod prop;
 mod objpath;
 mod watch;
+mod msgarg;
 
 mod strings;
 pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
+
+/// Types and traits for easily appending a message with arguments.
+pub mod arg {
+    pub use msgarg::{IterAppend, Append, DictKey, Dict, Array, Variant};
+}
+
 
 /// Contains functionality for the "server" of a D-Bus object. A remote application can
 /// introspect this object and call methods on it.

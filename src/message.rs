@@ -5,6 +5,8 @@ use super::{BusName, Path, Interface, Member, ErrorName};
 use std::os::unix::io::{RawFd, AsRawFd};
 use std::ffi::CStr;
 
+use super::arg::{Append, IterAppend};
+
 #[derive(Debug,Copy,Clone)]
 /// Errors that can happen when creating a MessageItem::Array.
 pub enum ArrayError {
@@ -622,6 +624,36 @@ impl Message {
         let mut i = new_dbus_message_iter();
         unsafe { ffi::dbus_message_iter_init_append(self.msg, &mut i) };
         MessageItem::copy_to_iter(&mut i, &[v.into()]);
+        self
+    }
+
+    /// Appends one argument to this message.
+    /// Use in builder style: e g `m.method_return().append1(7i32)`
+    pub fn append1<A: Append>(self, a: A) -> Self {
+        {
+            let mut m = IterAppend::new(&self);
+            m.append(a);
+        }
+        self
+    }
+
+    /// Appends two arguments to this message.
+    /// Use in builder style: e g `m.method_return().append2(7i32, 6u8)`
+    pub fn append2<A1: Append, A2: Append>(self, a1: A1, a2: A2) -> Self {
+        {
+            let mut m = IterAppend::new(&self);
+            m.append(a1); m.append(a2);
+        }
+        self
+    }
+
+    /// Appends three arguments to this message.
+    /// Use in builder style: e g `m.method_return().append3(7i32, 6u8, true)`
+    pub fn append3<A1: Append, A2: Append, A3: Append>(self, a1: A1, a2: A2, a3: A3) -> Self {
+        {
+            let mut m = IterAppend::new(&self);
+            m.append(a1); m.append(a2); m.append(a3);
+        }
         self
     }
 

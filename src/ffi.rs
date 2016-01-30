@@ -102,6 +102,7 @@ pub struct DBusError {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct DBusMessageIter {
     pub dummy1: *mut c_void,
     pub dummy2: *mut c_void,
