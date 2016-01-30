@@ -127,13 +127,41 @@ impl<'a, T: Append> Append for &'a T {
     fn signature() -> Signature<'static> { T::signature() }
     fn append(self, i: &mut IterAppend) { self.clone().append(i) }
 }
- 
+
+// Map DBus-Type -> Alignment. Copied from _dbus_marshal_write_fixed_multi in
+// http://dbus.freedesktop.org/doc/api/html/dbus-marshal-basic_8c_source.html#l01020
+// Note that Rust booleans are one byte, dbus booleans are four bytes!
+const FIXED_ARRAY_ALIGNMENTS: [(i32, usize); 9] = [
+    (ffi::DBUS_TYPE_BYTE, 1),
+    (ffi::DBUS_TYPE_INT16, 2),
+    (ffi::DBUS_TYPE_UINT16, 2),
+    (ffi::DBUS_TYPE_UINT32, 4),
+    (ffi::DBUS_TYPE_INT32, 4),
+    (ffi::DBUS_TYPE_BOOLEAN, 4),
+    (ffi::DBUS_TYPE_INT64, 8),
+    (ffi::DBUS_TYPE_UINT64, 8),
+    (ffi::DBUS_TYPE_DOUBLE, 8)
+];
+
+
+/// Appends a D-Bus array. Note: In case you have a large array of integers or f64,
+/// using this method will be more efficient than an Array.
 impl<'a, T: Append> Append for &'a [T] {
     fn arg_type() -> i32 { ffi::DBUS_TYPE_ARRAY }
     fn signature() -> Signature<'static> { Signature::owned(format!("a{}", T::signature().0.to_str().unwrap())) }
     fn append(self, i: &mut IterAppend) {
         let z = self;
-        i.append_container(Self::arg_type(), Some(&T::signature()), |s| for arg in z { arg.clone().append(s) });
+        let zptr = z.as_ptr();
+        let zlen = z.len() as i32;
+
+        // Can we do append_fixed_array?
+        let a = (T::arg_type(), mem::size_of::<T>());
+        let can_fixed_array = (zlen > 1) && (z.len() == zlen as usize) && FIXED_ARRAY_ALIGNMENTS.iter().any(|&v| v == a);
+
+        i.append_container(Self::arg_type(), Some(&T::signature()), |s|
+            if can_fixed_array { unsafe { check("dbus_message_iter_append_fixed_array",
+                ffi::dbus_message_iter_append_fixed_array(&mut s.0, a.0, &zptr as *const _ as *const libc::c_void, zlen)) }}
+            else { for arg in z { arg.clone().append(s) }});
     }
 }
 
@@ -251,7 +279,7 @@ mod test {
         let m = Message::new_method_call(&c.unique_name(), "/hello", "com.example.hello", "Hello").unwrap();
         let m = m.append1(2000u16);
         let m = m.append1(Array::new(&vec![129u8, 5, 254]));
-        let m = m.append1(Variant(&["Hello", "world"][..]));
+        let m = m.append2(Variant(&["Hello", "world"][..]), &[32768u16, 16u16, 12u16][..]);
         let m = m.append3(-1i32, &*format!("Hello world"), -3.14f64);
         let m = m.append1((256i16, Variant(18_446_744_073_709_551_615u64)));
         let mut z = HashMap::new();

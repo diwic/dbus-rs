@@ -202,6 +202,8 @@ extern "C" {
     pub fn dbus_message_set_serial(message: *mut DBusMessage, serial: u32);
 
     pub fn dbus_message_iter_append_basic(iter: *mut DBusMessageIter, t: c_int, value: *const c_void) -> u32;
+    pub fn dbus_message_iter_append_fixed_array(iter: *mut DBusMessageIter, element_type: c_int,
+        value: *const c_void, n_elements: c_int) -> u32;
     pub fn dbus_message_iter_init(message: *mut DBusMessage, iter: *mut DBusMessageIter) -> u32;
     pub fn dbus_message_iter_init_append(message: *mut DBusMessage, iter: *mut DBusMessageIter);
     pub fn dbus_message_iter_get_arg_type(iter: *mut DBusMessageIter) -> c_int;
