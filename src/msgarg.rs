@@ -110,7 +110,7 @@ impl DictKey for f64 {}
 
 /// Represents a D-Bus string.
 /// # Panic
-/// Will panic in case the str contains \0 characters. 
+/// FIXME: Will panic in case the str contains \0 characters. 
 impl<'a> Append for &'a str {
     fn arg_type() -> i32 { ffi::DBUS_TYPE_STRING }
     fn signature() -> Signature<'static> { Signature::borrowed(b"s\0") }
@@ -121,7 +121,7 @@ impl<'a> Append for &'a str {
 }
 impl<'a> DictKey for &'a str {}
 
-
+/// Simple lift over reference to value - this makes some iterators more ergonomic to use
 impl<'a, T: Append> Append for &'a T {
     fn arg_type() -> i32 { T::arg_type() }
     fn signature() -> Signature<'static> { T::signature() }
@@ -169,6 +169,7 @@ impl<'a, T: Append> Append for &'a [T] {
 pub trait DictKey: Append {}
 
 #[derive(Copy, Clone)]
+/// Append a D-Bus dict type (as an array of dict entries).
 pub struct Dict<'a, K: 'a + DictKey, V: 'a + Append, I: Clone + Iterator<Item=(&'a K, &'a V)>>(I, PhantomData<&'a ()>);
 
 impl<'a, K: 'a + DictKey, V: 'a + Append, I: Clone + Iterator<Item=(&'a K, &'a V)>> Dict<'a, K, V, I> {
@@ -191,7 +192,8 @@ impl<'a, K: 'a + DictKey, V: 'a + Append, I: Clone + Iterator<Item=(&'a K, &'a V
     }
 }
 
-#[derive(Copy, Clone, Debug, Hash)]
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+/// A simple wrapper to specify a D-Bus variant.
 pub struct Variant<T>(pub T);
 
 impl<T: Append> Append for Variant<T> {
@@ -203,7 +205,8 @@ impl<T: Append> Append for Variant<T> {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
+/// Append a D-Bus Array with maximum flexibility (wraps an iterator of items to append). 
 pub struct Array<'a, T: 'a + Append, I: Iterator<Item=&'a T>>(I, PhantomData<&'a ()>);
 
 impl<'a, T: 'a + Append, I: Iterator<Item=&'a T>> Array<'a, T, I> {
@@ -219,16 +222,39 @@ impl<'a, T: 'a + Append, I: Clone + Iterator<Item=&'a T>> Append for Array<'a, T
     fn signature() -> Signature<'static> { Signature::owned(format!("a{}", T::signature().0.to_str().unwrap())) }
 }
 
-impl<A: Append, B: Append> Append for (A, B) {
+macro_rules! struct_append {
+    ( $($n: ident $t: ident,)+ ) => {
+
+/// Tuples are appended as D-Bus structs. 
+impl<$($t: Append),*> Append for ($($t,)*) {
     fn arg_type() -> i32 { ffi::DBUS_TYPE_STRUCT }
     fn signature() -> Signature<'static> {
-        Signature::owned(format!("({}{})", A::signature().0.to_str().unwrap(), B::signature().0.to_str().unwrap())) }
+        let mut s = String::from("(");
+        $( s.push_str($t::signature().0.to_str().unwrap()); )*
+        s.push_str(")");
+        Signature::owned(s)
+    }
     fn append(self, i: &mut IterAppend) {
-        let (a, b) = self;
-        i.append_container(Self::arg_type(), None, |s| { a.append(s); b.append(s) });
+        let ( $($n,)*) = self;
+        i.append_container(Self::arg_type(), None, |s| { $( $n.append(s); )* });
     }
 }
 
+    }
+}
+
+struct_append!(a A,);
+struct_append!(a A, b B,);
+struct_append!(a A, b B, c C,);
+struct_append!(a A, b B, c C, d D,);
+struct_append!(a A, b B, c C, d D, e E,);
+struct_append!(a A, b B, c C, d D, e E, f F,);
+struct_append!(a A, b B, c C, d D, e E, f F, g G,);
+struct_append!(a A, b B, c C, d D, e E, f F, g G, h H,);
+struct_append!(a A, b B, c C, d D, e E, f F, g G, h H, i I,);
+struct_append!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J,);
+struct_append!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J, k K,);
+struct_append!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J, k K, l L,);
 
 fn test_compile() {
     let mut q = IterAppend::new(unsafe { mem::transmute(0usize) });
@@ -240,6 +266,7 @@ fn test_compile() {
 }
 
 #[derive(Clone, Copy)]
+/// Helper struct for appending one or more arguments to a Message. 
 pub struct IterAppend<'a>(ffi::DBusMessageIter, &'a Message);
 
 impl<'a> IterAppend<'a> {

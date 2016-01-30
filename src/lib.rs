@@ -45,6 +45,34 @@ mod strings;
 pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
 
 /// Types and traits for easily appending a message with arguments.
+///
+/// Using this module to append argument to a message should be faster than
+/// using MessageItem, especially when large arrays need to be appended.
+/// It also encodes more of D-Bus restrictions into Rust's type system, so
+/// trying to append anything that D-Bus would not allow should result in a
+/// compile-time error.
+///
+/// **Append a**:
+///
+/// `bool, u8, u16, u32, u64, i16, i32, i64, f64` - the corresponding D-Bus basic type
+///
+/// `&str` - a D-Bus string. TODO: If the string contains null characters, it will be cropped
+/// to only include the data before the null character. (This allows for skipping an
+/// allocation by writing a string literal which ends with a null character.)
+///
+/// `&[T] where T: Append` - a D-Bus array. Note: can use an efficient fast-path in case of 
+/// T being an integer or f64 type.
+///
+/// `Array<T, I> where I: Iterator<Item=T>, T: Append` - a D-Bus array, maximum flexibility.
+///
+/// `Variant<T> where T: Append` - a D-Bus variant.
+///
+/// `(T1, T2) where T1: Append, T2: Append` - tuples are D-Bus structs. Implemented up to 12.
+///
+/// `Dict<T1, T2, I> where I: Iterator<Item=(T1, T2)>, T1: Append, T2: Append` - A D-Bus dict (array of dict entries).
+///
+/// Not implemented yet: Fd, ObjectPath and Signature types. And to get arguments just as ergonomic
+/// as this module appends them.
 pub mod arg {
     pub use msgarg::{IterAppend, Append, DictKey, Dict, Array, Variant};
 }
