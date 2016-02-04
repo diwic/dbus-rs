@@ -91,7 +91,7 @@ pub enum MessageItem {
     DictEntry(Box<MessageItem>, Box<MessageItem>),
     /// A D-Bus objectpath requires its content to be a valid objectpath,
     /// so this cannot be any string.
-    ObjectPath(Path),
+    ObjectPath(Path<'static>),
     /// A D-Bus String is zero terminated, so no \0 s in the String, please.
     /// (D-Bus strings are also - like Rust strings - required to be valid UTF-8.)
     Str(String),
@@ -437,7 +437,7 @@ impl<'a> From<&'a str> for MessageItem { fn from(i: &str) -> MessageItem { Messa
 
 impl From<String> for MessageItem { fn from(i: String) -> MessageItem { MessageItem::Str(i) } }
 
-impl From<Path> for MessageItem { fn from(i: Path) -> MessageItem { MessageItem::ObjectPath(i) } }
+impl From<Path<'static>> for MessageItem { fn from(i: Path<'static>) -> MessageItem { MessageItem::ObjectPath(i) } }
 
 impl From<OwnedFd> for MessageItem { fn from(i: OwnedFd) -> MessageItem { MessageItem::UnixFd(i) } }
 
@@ -473,8 +473,8 @@ impl<'a> FromMessageItem<'a> for &'a String {
     fn from(i: &'a MessageItem) -> Result<&'a String,()> { if let &MessageItem::Str(ref b) = i { Ok(&b) } else { Err(()) } }
 }
 
-impl<'a> FromMessageItem<'a> for &'a Path {
-    fn from(i: &'a MessageItem) -> Result<&'a Path,()> { if let &MessageItem::ObjectPath(ref b) = i { Ok(&b) } else { Err(()) } }
+impl<'a> FromMessageItem<'a> for &'a Path<'static> {
+    fn from(i: &'a MessageItem) -> Result<&'a Path<'static>,()> { if let &MessageItem::ObjectPath(ref b) = i { Ok(&b) } else { Err(()) } }
 }
 
 impl<'a> FromMessageItem<'a> for &'a MessageItem {
@@ -516,8 +516,8 @@ unsafe impl Send for Message {}
 
 impl Message {
     /// Creates a new method call message.
-    pub fn new_method_call<D, P, I, M>(destination: D, path: P, iface: I, method: M) -> Result<Message, String>
-    where D: Into<BusName>, P: Into<Path>, I: Into<Interface>, M: Into<Member> {
+    pub fn new_method_call<'d, 'p, 'i, 'm, D, P, I, M>(destination: D, path: P, iface: I, method: M) -> Result<Message, String>
+    where D: Into<BusName<'d>>, P: Into<Path<'p>>, I: Into<Interface<'i>>, M: Into<Member<'m>> {
         init_dbus();
         let (d, p, i, m) = (destination.into(), path.into(), iface.into(), method.into());
         let ptr = unsafe {
@@ -680,21 +680,21 @@ impl Message {
     }
 
     /// Gets the object path this Message is being sent to.
-    pub fn path(&self) -> Option<Path> {
+    pub fn path(&self) -> Option<Path<'static>> {
         let p = unsafe { ffi::dbus_message_get_path(self.msg) };
-        c_str_to_slice(&p).map(|s| s.into())
+        c_str_to_slice(&p).map(|s| String::from(s).into())
     }
 
     /// Gets the interface this Message is being sent to.
-    pub fn interface(&self) -> Option<Interface> {
+    pub fn interface(&self) -> Option<Interface<'static>> {
         let p = unsafe { ffi::dbus_message_get_interface(self.msg) };
-        c_str_to_slice(&p).map(|s| s.into())
+        c_str_to_slice(&p).map(|s| String::from(s).into())
     }
 
     /// Gets the interface member being called.
-    pub fn member(&self) -> Option<Member> {
+    pub fn member(&self) -> Option<Member<'static>> {
         let p = unsafe { ffi::dbus_message_get_member(self.msg) };
-        c_str_to_slice(&p).map(|s| s.into())
+        c_str_to_slice(&p).map(|s| String::from(s).into())
     }
 
     /// When the remote end returns an error, the message itself is

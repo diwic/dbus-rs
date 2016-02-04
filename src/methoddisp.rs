@@ -14,11 +14,11 @@ type ArcMap<K, V> = BTreeMap<Arc<K>, Arc<V>>;
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 /// A D-Bus Argument.
-pub struct Argument(Option<String>, Signature);
+pub struct Argument(Option<String>, Signature<'static>);
 
 impl Argument {
     /// Create a new Argument.
-    pub fn new(name: Option<String>, sig: Signature) -> Argument { Argument(name, sig) }
+    pub fn new(name: Option<String>, sig: Signature<'static>) -> Argument { Argument(name, sig) }
 
     fn introspect(&self, indent: &str, dir: &str) -> String { 
         let n = self.0.as_ref().map(|n| format!("name=\"{}\" ", n)).unwrap_or("".into());
@@ -32,21 +32,21 @@ impl Argument {
 // Doesn't work, conflicting impls
 // impl<S: Into<Signature>> From<S> for Argument
 
-impl From<Signature> for Argument {
-    fn from(t: Signature) -> Argument { Argument(None, t) }
+impl From<Signature<'static>> for Argument {
+    fn from(t: Signature<'static>) -> Argument { Argument(None, t) }
 }
 
 impl<'a> From<&'a str> for Argument {
-    fn from(t: &str) -> Argument { Argument(None, t.into()) }
+    fn from(t: &'a str) -> Argument { Argument(None, String::from(t).into()) }
 }
 
-impl<N: Into<String>, S: Into<Signature>> From<(N, S)> for Argument {
+impl<N: Into<String>, S: Into<Signature<'static>>> From<(N, S)> for Argument {
     fn from((n, s): (N, S)) -> Argument { Argument(Some(n.into()), s.into()) }
 }
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 /// A D-Bus Method Error.
-pub struct MethodErr(ErrorName, String);
+pub struct MethodErr(ErrorName<'static>, String);
 
 impl MethodErr {
     /// Create an Invalid Args MethodErr.
@@ -75,7 +75,7 @@ impl MethodErr {
     }
 }
 
-impl<T: Into<ErrorName>, M: Into<String>> From<(T, M)> for MethodErr {
+impl<T: Into<ErrorName<'static>>, M: Into<String>> From<(T, M)> for MethodErr {
     fn from((t, m): (T, M)) -> MethodErr { MethodErr(t.into(), m.into()) }
 }
 
@@ -142,7 +142,7 @@ impl<'a> MethodType for MethodFnMut<'a> {
 /// A D-Bus Method.
 pub struct Method<M> {
     cb: M,
-    name: Arc<Member>,
+    name: Arc<Member<'static>>,
     i_args: Vec<Argument>,
     o_args: Vec<Argument>,
     anns: BTreeMap<String, String>,
@@ -175,16 +175,16 @@ impl<M: MethodType> Method<M> {
     /// Call the Method.
     pub fn call(&self, m: &Message, o: &ObjectPath<M>, i: &Tree<M>) -> MethodResult { self.cb.call_method(m, o, i) }
 
-    fn new(n: Member, cb: M) -> Self { Method { name: Arc::new(n), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), cb: cb } }
+    fn new(n: Member<'static>, cb: M) -> Self { Method { name: Arc::new(n), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), cb: cb } }
 }
 
 
 #[derive(Debug)]
 /// Represents a D-Bus interface.
 pub struct Interface<M> {
-    name: Arc<IfaceName>,
-    methods: ArcMap<Member, Method<M>>,
-    signals: ArcMap<Member, Signal>,
+    name: Arc<IfaceName<'static>>,
+    methods: ArcMap<Member<'static>, Method<M>>,
+    signals: ArcMap<Member<'static>, Signal>,
     properties: ArcMap<String, Property<M>>,
     anns: BTreeMap<String, String>,
 }
@@ -219,7 +219,7 @@ impl<M> Interface<M> {
     /// Add an annotation that this entity is deprecated.
     pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
 
-    fn new(t: IfaceName) -> Interface<M> {
+    fn new(t: IfaceName<'static>) -> Interface<M> {
         Interface { name: Arc::new(t), methods: BTreeMap::new(), signals: BTreeMap::new(),
             properties: BTreeMap::new(), anns: BTreeMap::new()
         }
@@ -270,7 +270,7 @@ pub struct Property<M> {
     emits: EmitsChangedSignal,
     rw: Access,
     set_cb: Option<M>,
-    owner: Mutex<Option<(Arc<Path>, Arc<IfaceName>)>>,
+    owner: Mutex<Option<(Arc<Path<'static>>, Arc<IfaceName<'static>>)>>,
     anns: BTreeMap<String, String>,
 }
 
@@ -407,9 +407,9 @@ impl<'a> Property<MethodFnMut<'a>> {
 #[derive(Debug)]
 /// A D-Bus Signal.
 pub struct Signal {
-    name: Arc<Member>,
+    name: Arc<Member<'static>>,
     arguments: Vec<Argument>,
-    owner: Mutex<Option<(Arc<Path>, Arc<IfaceName>)>>,
+    owner: Mutex<Option<(Arc<Path<'static>>, Arc<IfaceName<'static>>)>>,
     anns: BTreeMap<String, String>,
 }
 
@@ -464,12 +464,12 @@ fn introspect_map<T, I: fmt::Display, C: Fn(&T) -> (String, String)>
 #[derive(Debug)]
 /// A D-Bus Object Path.
 pub struct ObjectPath<M> {
-    name: Arc<Path>,
-    ifaces: ArcMap<IfaceName, Interface<M>>,
+    name: Arc<Path<'static>>,
+    ifaces: ArcMap<IfaceName<'static>, Interface<M>>,
 }
 
 impl<M: MethodType> ObjectPath<M> {
-    fn new(p: Path) -> ObjectPath<M> {
+    fn new(p: Path<'static>) -> ObjectPath<M> {
         ObjectPath { name: Arc::new(p), ifaces: BTreeMap::new() }
     }
 
@@ -649,7 +649,7 @@ impl<'a, I: Iterator<Item=ConnectionItem>, M: 'a + MethodType> Iterator for Tree
 /// A collection of object paths.
 #[derive(Debug)]
 pub struct Tree<M> {
-    paths: ArcMap<Path, ObjectPath<M>>
+    paths: ArcMap<Path<'static>, ObjectPath<M>>
 }
 
 impl<M: MethodType> Tree<M> {
@@ -729,7 +729,7 @@ impl<'a> Factory<MethodFn<'a>> {
 
     /// Creates a new method for single-thread use.
     pub fn method<'b, H: 'b, T>(&self, t: T, handler: H) -> Method<MethodFn<'b>>
-    where H: Fn(&Message, &ObjectPath<MethodFn<'b>>, &Tree<MethodFn<'b>>) -> MethodResult, T: Into<Member> {
+    where H: Fn(&Message, &ObjectPath<MethodFn<'b>>, &Tree<MethodFn<'b>>) -> MethodResult, T: Into<Member<'static>> {
         Method::new(t.into(), MethodFn(Box::new(handler)))
     }
 
@@ -739,13 +739,13 @@ impl<'a> Factory<MethodFn<'a>> {
     }
 
     /// Creates a new interface for single-thread use.
-    pub fn interface<'b, T: Into<IfaceName>>(&self, t: T) -> Interface<MethodFn<'b>> { Interface::new(t.into()) }
+    pub fn interface<'b, T: Into<IfaceName<'static>>>(&self, t: T) -> Interface<MethodFn<'b>> { Interface::new(t.into()) }
 
     /// Creates a new tree for single-thread use.
     pub fn tree<'b>(&self) -> Tree<MethodFn<'b>> { Tree { paths: BTreeMap::new() }}
 
     /// Creates a new object path for single-thread use.
-    pub fn object_path<'b, T: Into<Path>>(&self, t: T) -> ObjectPath<MethodFn<'b>> { ObjectPath::new(t.into()) }
+    pub fn object_path<'b, T: Into<Path<'static>>>(&self, t: T) -> ObjectPath<MethodFn<'b>> { ObjectPath::new(t.into()) }
 }
 
 impl<'a> Factory<MethodFnMut<'a>> {
@@ -757,7 +757,7 @@ impl<'a> Factory<MethodFnMut<'a>> {
     /// This method can mutate its environment, so it will panic in case
     /// it is called recursively.
     pub fn method<'b, H: 'b, T>(&self, t: T, handler: H) -> Method<MethodFnMut<'b>>
-    where H: FnMut(&Message, &ObjectPath<MethodFnMut<'b>>, &Tree<MethodFnMut<'b>>) -> MethodResult, T: Into<Member> {
+    where H: FnMut(&Message, &ObjectPath<MethodFnMut<'b>>, &Tree<MethodFnMut<'b>>) -> MethodResult, T: Into<Member<'static>> {
         Method::new(t.into(), MethodFnMut(Box::new(RefCell::new(handler))))
     }
 
@@ -767,13 +767,13 @@ impl<'a> Factory<MethodFnMut<'a>> {
     }
 
     /// Creates a new mutable interface for single-thread use.
-    pub fn interface<'b, T: Into<IfaceName>>(&self, t: T) -> Interface<MethodFnMut<'b>> { Interface::new(t.into()) }
+    pub fn interface<'b, T: Into<IfaceName<'static>>>(&self, t: T) -> Interface<MethodFnMut<'b>> { Interface::new(t.into()) }
 
     /// Creates a new mutable tree for single-thread use.
     pub fn tree<'b>(&self) -> Tree<MethodFnMut<'b>> { Tree { paths: BTreeMap::new() }}
 
     /// Creates a new mutable object path for single-thread use.
-    pub fn object_path<'b, T: Into<Path>>(&self, t: T) -> ObjectPath<MethodFnMut<'b>> { ObjectPath::new(t.into()) }
+    pub fn object_path<'b, T: Into<Path<'static>>>(&self, t: T) -> ObjectPath<MethodFnMut<'b>> { ObjectPath::new(t.into()) }
 }
 
 impl Factory<MethodSync> {
@@ -787,7 +787,7 @@ impl Factory<MethodSync> {
     /// This puts bounds on the callback to enable it to be called from several threads
     /// in parallel.
     pub fn method<H, T>(&self, t: T, handler: H) -> Method<MethodSync>
-    where H: Fn(&Message, &ObjectPath<MethodSync>, &Tree<MethodSync>) -> MethodResult + Send + Sync + 'static, T: Into<Member> {
+    where H: Fn(&Message, &ObjectPath<MethodSync>, &Tree<MethodSync>) -> MethodResult + Send + Sync + 'static, T: Into<Member<'static>> {
         Method::new(t.into(), MethodSync(Box::new(handler)))
     }
 
@@ -797,18 +797,18 @@ impl Factory<MethodSync> {
     }
 
     /// Creates a new interface for multi-threaded use.
-    pub fn interface<T: Into<IfaceName>>(&self, t: T) -> Interface<MethodSync> { Interface::new(t.into()) }
+    pub fn interface<T: Into<IfaceName<'static>>>(&self, t: T) -> Interface<MethodSync> { Interface::new(t.into()) }
 
     /// Creates a new tree for multi-threaded use.
     pub fn tree(&self) -> Tree<MethodSync> { Tree { paths: BTreeMap::new() }}
 
     /// Creates a new object path for multi-threaded use.
-    pub fn object_path<T: Into<Path>>(&self, t: T) -> ObjectPath<MethodSync> { ObjectPath::new(t.into()) }
+    pub fn object_path<T: Into<Path<'static>>>(&self, t: T) -> ObjectPath<MethodSync> { ObjectPath::new(t.into()) }
 }
 
 impl<M> Factory<M> {
     /// Create a Signal.
-    pub fn signal<T: Into<Member>>(&self, t: T) -> Signal {
+    pub fn signal<T: Into<Member<'static>>>(&self, t: T) -> Signal {
         Signal { name: Arc::new(t.into()), arguments: vec!(), owner: Mutex::new(None), anns: BTreeMap::new() }
     }
 }
@@ -816,7 +816,7 @@ impl<M> Factory<M> {
 impl<M: MethodType> Factory<M> {
     /// Creates a new method with bounds enough to be used in all trees.
     pub fn method_sync<H, T>(&self, t: T, handler: H) -> Method<M>
-    where H: Fn(&Message, &ObjectPath<M>, &Tree<M>) -> MethodResult + Send + Sync + 'static, T: Into<Member> {
+    where H: Fn(&Message, &ObjectPath<M>, &Tree<M>) -> MethodResult + Send + Sync + 'static, T: Into<Member<'static>> {
         Method::new(t.into(), M::box_method(handler))
     }
 }

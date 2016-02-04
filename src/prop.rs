@@ -3,9 +3,9 @@ use std::collections::BTreeMap;
 
 /// Client side properties - get and set properties on a remote application.
 pub struct Props<'a> {
-    name: BusName,
-    path: Path,
-    interface: Interface,
+    name: BusName<'a>,
+    path: Path<'a>,
+    interface: Interface<'a>,
     timeout_ms: i32,
     conn: &'a Connection,
 }
@@ -13,7 +13,7 @@ pub struct Props<'a> {
 impl<'a> Props<'a> {
     /// Create a new Props.
     pub fn new<N, P, I>(conn: &'a Connection, name: N, path: P, interface: I, timeout_ms: i32) -> Props<'a>
-    where N: Into<BusName>, P: Into<Path>, I: Into<Interface> {
+    where N: Into<BusName<'a>>, P: Into<Path<'a>>, I: Into<Interface<'a>> {
         Props {
             name: name.into(),
             path: path.into(),
