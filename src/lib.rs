@@ -75,7 +75,7 @@ pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
 /// as this module appends them.
 pub mod arg {
     pub use msgarg::{Arg, FixedArray, Get, DictKey, Append};
-    pub use msgarg::{IterGet, IterAppend, Array, Variant, Dict};
+    pub use msgarg::{Iter, IterAppend, Array, Variant, Dict};
 }
 
 

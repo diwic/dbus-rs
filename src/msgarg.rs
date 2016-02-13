@@ -75,7 +75,7 @@ pub trait Append: Arg + Clone {
 
 /// Types that can be retrieved from a message as arguments implement this trait.
 pub trait Get<'a>: Sized {
-    fn get(i: &mut IterGet<'a>) -> Option<Self>;
+    fn get(i: &mut Iter<'a>) -> Option<Self>;
 }
 
 /// If a type implements this trait, it means the size and alignment is the same
@@ -100,7 +100,7 @@ impl Append for $t {
 }
 
 impl<'a> Get<'a> for $t {
-    fn get(i: &mut IterGet) -> Option<Self> { arg_get_basic(&mut i.0, Self::arg_type()).map(|q| q as $t) }
+    fn get(i: &mut Iter) -> Option<Self> { arg_get_basic(&mut i.0, Self::arg_type()).map(|q| q as $t) }
 }
 
 impl DictKey for $t {}
@@ -126,7 +126,7 @@ impl Append for bool {
 }
 impl DictKey for bool {}
 impl<'a> Get<'a> for bool {
-    fn get(i: &mut IterGet) -> Option<Self> { arg_get_basic(&mut i.0, Self::arg_type()).map(|q| q != 0) }
+    fn get(i: &mut Iter) -> Option<Self> { arg_get_basic(&mut i.0, Self::arg_type()).map(|q| q != 0) }
 }
 
 impl Arg for f64 {
@@ -138,7 +138,7 @@ impl Append for f64 {
 }
 impl DictKey for f64 {}
 impl<'a> Get<'a> for f64 {
-    fn get(i: &mut IterGet) -> Option<Self> { arg_get_f64(&mut i.0, Self::arg_type()) }
+    fn get(i: &mut Iter) -> Option<Self> { arg_get_f64(&mut i.0, Self::arg_type()) }
 }
 unsafe impl FixedArray for f64 {}
 
@@ -161,7 +161,7 @@ impl<'a> Append for &'a str {
 }
 impl<'a> DictKey for &'a str {}
 impl<'a> Get<'a> for &'a str {
-    fn get(i: &mut IterGet<'a>) -> Option<&'a str> { unsafe { arg_get_str(&mut i.0, Self::arg_type()) }
+    fn get(i: &mut Iter<'a>) -> Option<&'a str> { unsafe { arg_get_str(&mut i.0, Self::arg_type()) }
         .and_then(|s| s.to_str().ok()) }
 }
 
@@ -216,7 +216,7 @@ impl<'a, T: Append> Append for &'a [T] {
 }
 
 impl<'a, T: Get<'a> + FixedArray> Get<'a> for &'a [T] {
-    fn get(i: &mut IterGet<'a>) -> Option<&'a [T]> {
+    fn get(i: &mut Iter<'a>) -> Option<&'a [T]> {
         debug_assert!(FIXED_ARRAY_ALIGNMENTS.iter().any(|&v| v == (T::arg_type(), mem::size_of::<T>())));
         i.recurse(Self::arg_type()).and_then(|mut si| unsafe {
             if ffi::dbus_message_iter_get_arg_type(&mut si.0) != T::arg_type() { return None };
@@ -260,14 +260,14 @@ impl<'a, K: 'a + DictKey + Append, V: 'a + Append, I: Clone + Iterator<Item=(&'a
     }
 }
 
-impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Get<'a> for Dict<'a, K, V, IterGet<'a>> {
-    fn get(i: &mut IterGet<'a>) -> Option<Self> {
+impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Get<'a> for Dict<'a, K, V, Iter<'a>> {
+    fn get(i: &mut Iter<'a>) -> Option<Self> {
         i.recurse(Self::arg_type()).map(|si| Dict(si, PhantomData))
         // TODO: Verify full element signature?
     }
 }
 
-impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Iterator for Dict<'a, K, V, IterGet<'a>> {
+impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Iterator for Dict<'a, K, V, Iter<'a>> {
     type Item = (K, V);
     fn next(&mut self) -> Option<(K, V)> {
         let i = self.0.recurse(ffi::DBUS_TYPE_DICT_ENTRY).and_then(|mut si| {
@@ -300,13 +300,13 @@ impl<T: Append> Append for Variant<T> {
 }
 
 impl<'a, T: Get<'a>> Get<'a> for Variant<T> {
-    fn get(i: &mut IterGet<'a>) -> Option<Variant<T>> {
+    fn get(i: &mut Iter<'a>) -> Option<Variant<T>> {
         i.recurse(Self::arg_type()).and_then(|mut si| si.get().map(|v| Variant(v)))
     }
 }
 
-impl<'a> Get<'a> for Variant<IterGet<'a>> {
-    fn get(i: &mut IterGet<'a>) -> Option<Variant<IterGet<'a>>> {
+impl<'a> Get<'a> for Variant<Iter<'a>> {
+    fn get(i: &mut Iter<'a>) -> Option<Variant<Iter<'a>>> {
         i.recurse(Self::arg_type()).map(|v| Variant(v))
     }
 }
@@ -332,14 +332,14 @@ impl<'a, T: 'a + Append, I: Clone + Iterator<Item=&'a T>> Append for Array<'a, T
     }
 }
 
-impl<'a, T: Arg + Get<'a>> Get<'a> for Array<'a, T, IterGet<'a>> {
-    fn get(i: &mut IterGet<'a>) -> Option<Array<'a, T, IterGet<'a>>> {
+impl<'a, T: Arg + Get<'a>> Get<'a> for Array<'a, T, Iter<'a>> {
+    fn get(i: &mut Iter<'a>) -> Option<Array<'a, T, Iter<'a>>> {
         i.recurse(Self::arg_type()).map(|si| Array(si, PhantomData))
         // TODO: Verify full element signature?
     }
 }
 
-impl<'a, T: Get<'a>> Iterator for Array<'a, T, IterGet<'a>> {
+impl<'a, T: Get<'a>> Iterator for Array<'a, T, Iter<'a>> {
     type Item = T;
     fn next(&mut self) -> Option<T> {
         let i = self.0.get();
@@ -370,7 +370,7 @@ impl<$($t: Append),*> Append for ($($t,)*) {
 }
 
 impl<'a, $($t: Get<'a>),*> Get<'a> for ($($t,)*) {
-    fn get(i: &mut IterGet<'a>) -> Option<Self> {
+    fn get(i: &mut Iter<'a>) -> Option<Self> {
         let si = i.recurse(ffi::DBUS_TYPE_STRUCT);
         if si.is_none() { return None; }
         let mut si = si.unwrap();
@@ -437,13 +437,13 @@ impl<'a> IterAppend<'a> {
 #[derive(Clone, Copy)]
 /// Helper struct for retrieve one or more arguments from a Message.
 /// Note that this is not a Rust iterator, because arguments are often of different types
-pub struct IterGet<'a>(ffi::DBusMessageIter, &'a Message);
+pub struct Iter<'a>(ffi::DBusMessageIter, &'a Message);
 
-impl<'a> IterGet<'a> {
-    pub fn new(m: &'a Message) -> IterGet<'a> { 
+impl<'a> Iter<'a> {
+    pub fn new(m: &'a Message) -> Iter<'a> { 
         let mut i = ffi_iter();
         unsafe { ffi::dbus_message_iter_init(get_message_ptr(m), &mut i) };
-        IterGet(i, m)
+        Iter(i, m)
     }
 
     pub fn get<T: Get<'a>>(&mut self) -> Option<T> {
@@ -460,13 +460,13 @@ impl<'a> IterGet<'a> {
         unsafe { ffi::dbus_message_iter_next(&mut self.0) != 0 } 
     }
 
-    fn recurse(&mut self, arg_type: i32) -> Option<IterGet<'a>> {
+    fn recurse(&mut self, arg_type: i32) -> Option<Iter<'a>> {
         let mut subiter = ffi_iter();
         unsafe {
             if ffi::dbus_message_iter_get_arg_type(&mut self.0) != arg_type { return None };
             ffi::dbus_message_iter_recurse(&mut self.0, &mut subiter)
         }
-        Some(IterGet(subiter, self.1))
+        Some(Iter(subiter, self.1))
     }
 }
 
@@ -476,7 +476,7 @@ mod test {
     extern crate tempdir;
 
     use super::super::{Connection, ConnectionItem, Message, BusType};
-    use super::{Array, Variant, Dict, IterGet};
+    use super::{Array, Variant, Dict, Iter};
 
     use std::collections::HashMap;
 
@@ -511,7 +511,7 @@ mod test {
 
                     let mut g = m.iter_init();
                     assert!(g.next() && g.next());
-                    let v: Variant<IterGet> = g.get().unwrap();
+                    let v: Variant<Iter> = g.get().unwrap();
                     let mut viter = v.0;
                     assert_eq!(viter.arg_type(), Array::<&str,()>::arg_type());
                     let a: Array<&str, _> = viter.get().unwrap();
