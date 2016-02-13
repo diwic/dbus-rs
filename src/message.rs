@@ -5,7 +5,7 @@ use super::{BusName, Path, Interface, Member, ErrorName};
 use std::os::unix::io::{RawFd, AsRawFd};
 use std::ffi::CStr;
 
-use super::arg::{Append, IterAppend};
+use super::arg::{Append, IterAppend, Get, IterGet};
 
 #[derive(Debug,Copy,Clone)]
 /// Errors that can happen when creating a MessageItem::Array.
@@ -592,6 +592,9 @@ impl Message {
     }
 
     /// Get the MessageItems that make up the message.
+    ///
+    /// Note: use `iter_init` or `get1`/`get2`/etc instead for faster access to the arguments.
+    /// This method is provided for backwards compatibility.
     pub fn get_items(&self) -> Vec<MessageItem> {
         let mut i = new_dbus_message_iter();
         match unsafe { ffi::dbus_message_iter_init(self.msg, &mut i) } {
@@ -656,6 +659,36 @@ impl Message {
         }
         self
     }
+
+    /// Gets the first argument from the message, if that argument is of type G1.
+    /// Returns None if there are not enough arguments, or if types don't match.
+    pub fn get1<'a, G1: Get<'a>>(&'a self) -> Option<G1> {
+        let mut i = IterGet::new(&self);
+        i.get()
+    }
+
+    /// Gets the first two arguments from the message, if those arguments are of type G1 and G2.
+    /// Returns None if there are not enough arguments, or if types don't match.
+    pub fn get2<'a, G1: Get<'a>, G2: Get<'a>>(&'a self) -> (Option<G1>, Option<G2>) {
+        let mut i = IterGet::new(&self);
+        let g1 = i.get();
+        if !i.next() { return (g1, None); }
+        (g1, i.get())
+    }
+
+    /// Gets the first three arguments from the message, if those arguments are of type G1, G2 and G3.
+    /// Returns None if there are not enough arguments, or if types don't match.
+    pub fn get3<'a, G1: Get<'a>, G2: Get<'a>, G3: Get<'a>>(&'a self) -> (Option<G1>, Option<G2>, Option<G3>) {
+        let mut i = IterGet::new(&self);
+        let g1 = i.get();
+        if !i.next() { return (g1, None, None) }
+        let g2 = i.get();
+        if !i.next() { return (g1, g2, None) }
+        (g1, g2, i.get())
+    }
+
+    /// Returns a struct for retreiving the arguments from a message. Supersedes get_items().
+    pub fn iter_init<'a>(&'a self) -> IterGet<'a> { IterGet::new(&self) }
 
     /// Gets the MessageType of the Message.
     pub fn msg_type(&self) -> MessageType {

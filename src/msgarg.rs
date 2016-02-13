@@ -144,6 +144,9 @@ unsafe impl FixedArray for f64 {}
 
 /// Represents a D-Bus string.
 impl<'a> Arg for &'a str {
+    /// Returns the D-Bus argument type.
+    ///
+    /// This should probably rather be an associated constant instead, but those are still experimental. 
     fn arg_type() -> i32 { ffi::DBUS_TYPE_STRING }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"s\0") } }
 }
@@ -479,6 +482,12 @@ mod test {
                     let receiving = format!("{:?}", m.get_items());
                     println!("Receiving {}", receiving);
                     assert_eq!(sending, receiving);
+
+                    assert_eq!(2000u16, m.get1().unwrap());
+                    assert_eq!(m.get2(), (Some(2000u16), Some(&[129u8, 5, 254][..])));
+
+                    let mut g = m.iter_init();
+                    assert!(g.next() && g.next());
                     break;
                 }
                 _ => println!("Got {:?}", n),
