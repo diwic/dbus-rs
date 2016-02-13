@@ -582,7 +582,7 @@ mod test {
                     let (_, p, i, m) = s.headers();
                     match (&*p.unwrap(), &*i.unwrap(), &*m.unwrap()) {
                         ("/mysignal", "com.example.signaltest", "ThisIsASignal") => {
-                            assert_eq!(s.sender().unwrap(), uname);
+                            assert_eq!(&*s.sender().unwrap(), &*uname);
                             break;
                         },
                         (_, _, _) => println!("Other signal: {:?}", s.headers()),

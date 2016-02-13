@@ -322,8 +322,9 @@ impl<'a> Get<'a> for Variant<IterGet<'a>> {
 }
 
 #[derive(Copy, Clone, Debug)]
-/// Append a D-Bus Array with maximum flexibility (wraps an iterator of items to append). 
-pub struct Array<'a, T, I>(I, PhantomData<(*const T, &'a ())>);
+/// Represents a D-Bus Array. Maximum flexibility (wraps an iterator of items to append). 
+/// Note: Slices of FixedArray can be faster.
+pub struct Array<'a, T, I>(I, PhantomData<(*const T, &'a Message)>);
 
 impl<'a, T: 'a + Append, I: Iterator<Item=&'a T>> Array<'a, T, I> {
     pub fn new<J: IntoIterator<IntoIter=I, Item=&'a T>>(j: J) -> Array<'a, T, I> { Array(j.into_iter(), PhantomData) }
@@ -338,6 +339,22 @@ impl<'a, T: 'a + Append, I: Clone + Iterator<Item=&'a T>> Append for Array<'a, T
     fn append(self, i: &mut IterAppend) {
         let z = self.0;
         i.append_container(Self::arg_type(), Some(T::signature().as_cstr()), |s| for arg in z { arg.clone().append(s) });
+    }
+}
+
+impl<'a, T: Arg + Get<'a>> Get<'a> for Array<'a, T, IterGet<'a>> {
+    fn get(i: &mut IterGet<'a>) -> Option<Array<'a, T, IterGet<'a>>> {
+        i.recurse(Self::arg_type()).map(|si| Array(si, PhantomData))
+        // TODO: Verify full element signature?
+    }
+}
+
+impl<'a, T: Get<'a>> Iterator for Array<'a, T, IterGet<'a>> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        let i = self.0.get();
+        self.0.next();
+        i
     }
 }
 
@@ -454,7 +471,7 @@ mod test {
     extern crate tempdir;
 
     use super::super::{Connection, ConnectionItem, Message, BusType};
-    use super::{Array, Variant, Dict};
+    use super::{Array, Variant, Dict, IterGet};
 
     use std::collections::HashMap;
 
@@ -479,6 +496,7 @@ mod test {
         for n in c.iter(1000) {
             match n {
                 ConnectionItem::MethodCall(m) => {
+                    use super::Arg;
                     let receiving = format!("{:?}", m.get_items());
                     println!("Receiving {}", receiving);
                     assert_eq!(sending, receiving);
@@ -488,6 +506,11 @@ mod test {
 
                     let mut g = m.iter_init();
                     assert!(g.next() && g.next());
+                    let v: Variant<IterGet> = g.get().unwrap();
+                    let mut viter = v.0;
+                    assert_eq!(viter.arg_type(), Array::<&str,()>::arg_type());
+                    let a: Array<&str, _> = viter.get().unwrap();
+                    assert_eq!(a.collect::<Vec<&str>>(), vec!["Hello", "world"]);
                     break;
                 }
                 _ => println!("Got {:?}", n),

@@ -615,6 +615,9 @@ impl Message {
     }
 
     /// Add one or more MessageItems to this Message.
+    ///
+    /// Note: using `append1`, `append2` or `append3` might be faster, especially for large arrays.
+    /// This method is provided for backwards compatibility.
     pub fn append_items(&mut self, v: &[MessageItem]) {
         let mut i = new_dbus_message_iter();
         unsafe { ffi::dbus_message_iter_init_append(self.msg, &mut i) };
@@ -623,6 +626,9 @@ impl Message {
 
     /// Appends one MessageItem to a message.
     /// Use in builder style: e g `m.method_return().append(7i32)`
+    ///
+    /// Note: using `append1`, `append2` or `append3` might be faster, especially for large arrays.
+    /// This method is provided for backwards compatibility.
     pub fn append<I: Into<MessageItem>>(self, v: I) -> Self {
         let mut i = new_dbus_message_iter();
         unsafe { ffi::dbus_message_iter_init_append(self.msg, &mut i) };
@@ -695,10 +701,15 @@ impl Message {
         unsafe { mem::transmute(ffi::dbus_message_get_type(self.msg)) }
     }
 
+    fn msg_internal_str<'a>(&'a self, c: *const libc::c_char) -> Option<&'a [u8]> {
+        if c == ptr::null() { None }
+        else { Some( unsafe { CStr::from_ptr(c) }.to_bytes_with_nul()) }
+    }
+
     /// Gets the name of the connection that originated this message.
-    pub fn sender(&self) -> Option<String> {
-        let s = unsafe { ffi::dbus_message_get_sender(self.msg) };
-        c_str_to_slice(&s).map(|s| s.to_string())
+    pub fn sender<'a>(&'a self) -> Option<BusName<'a>> {
+        self.msg_internal_str(unsafe { ffi::dbus_message_get_sender(self.msg) })
+            .map(|s| unsafe { BusName::from_slice_unchecked(s) })
     }
 
     /// Returns a tuple of (Message type, Path, Interface, Member) of the current message.
@@ -713,21 +724,21 @@ impl Message {
     }
 
     /// Gets the object path this Message is being sent to.
-    pub fn path(&self) -> Option<Path<'static>> {
-        let p = unsafe { ffi::dbus_message_get_path(self.msg) };
-        c_str_to_slice(&p).map(|s| String::from(s).into())
+    pub fn path<'a>(&'a self) -> Option<Path<'a>> {
+        self.msg_internal_str(unsafe { ffi::dbus_message_get_path(self.msg) })
+            .map(|s| unsafe { Path::from_slice_unchecked(s) })
     }
 
     /// Gets the interface this Message is being sent to.
-    pub fn interface(&self) -> Option<Interface<'static>> {
-        let p = unsafe { ffi::dbus_message_get_interface(self.msg) };
-        c_str_to_slice(&p).map(|s| String::from(s).into())
+    pub fn interface<'a>(&'a self) -> Option<Interface<'a>> {
+        self.msg_internal_str(unsafe { ffi::dbus_message_get_interface(self.msg) })
+            .map(|s| unsafe { Interface::from_slice_unchecked(s) })
     }
 
     /// Gets the interface member being called.
-    pub fn member(&self) -> Option<Member<'static>> {
-        let p = unsafe { ffi::dbus_message_get_member(self.msg) };
-        c_str_to_slice(&p).map(|s| String::from(s).into())
+    pub fn member<'a>(&'a self) -> Option<Member<'a>> {
+        self.msg_internal_str(unsafe { ffi::dbus_message_get_member(self.msg) })
+            .map(|s| unsafe { Member::from_slice_unchecked(s) })
     }
 
     /// When the remote end returns an error, the message itself is
