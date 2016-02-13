@@ -231,15 +231,18 @@ impl<'a, T: Get<'a> + FixedArray> Get<'a> for &'a [T] {
 
 
 #[derive(Copy, Clone)]
-/// Append a D-Bus dict type (as an array of dict entries).
-pub struct Dict<'a, K: 'a + DictKey, V: 'a + Append, I: Clone + Iterator<Item=(&'a K, &'a V)>>(I, PhantomData<&'a ()>);
+/// Append a D-Bus dict type (i e, an array of dict entries).
+pub struct Dict<'a, K: DictKey, V: Arg, I>(I, PhantomData<(&'a Message, *const K, *const V)>);
+
+impl<'a, K: DictKey, V: Arg, I> Dict<'a, K, V, I> {
+    fn entry_sig() -> String { format!("{{{}{}}}", K::signature(), V::signature()) } 
+}
 
 impl<'a, K: 'a + DictKey, V: 'a + Append, I: Clone + Iterator<Item=(&'a K, &'a V)>> Dict<'a, K, V, I> {
-    fn entry_sig() -> String { format!("{{{}{}}}", K::signature(), V::signature()) } 
     pub fn new<J: IntoIterator<IntoIter=I, Item=(&'a K, &'a V)>>(j: J) -> Dict<'a, K, V, I> { Dict(j.into_iter(), PhantomData) }
 }
 
-impl<'a, K: 'a + DictKey, V: 'a + Append, I: Clone + Iterator<Item=(&'a K, &'a V)>> Arg for Dict<'a, K, V, I> {
+impl<'a, K: DictKey, V: Arg, I> Arg for Dict<'a, K, V, I> {
     fn arg_type() -> i32 { ffi::DBUS_TYPE_ARRAY }
     fn signature() -> Signature<'static> {
         Signature::from(format!("a{}", Self::entry_sig())) }
@@ -257,41 +260,28 @@ impl<'a, K: 'a + DictKey + Append, V: 'a + Append, I: Clone + Iterator<Item=(&'a
     }
 }
 
+impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Get<'a> for Dict<'a, K, V, IterGet<'a>> {
+    fn get(i: &mut IterGet<'a>) -> Option<Self> {
+        i.recurse(Self::arg_type()).map(|si| Dict(si, PhantomData))
+        // TODO: Verify full element signature?
+    }
+}
 
-/*
-#[derive(Copy, Clone)]
-pub struct DictIter<'a, K, V>(IterGet<'a>, PhantomData<(K, V)>); 
-
-impl<'a, K: Get<'a>, V: Get<'a>> Iterator for DictIter<'a, K, V> {
+impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Iterator for Dict<'a, K, V, IterGet<'a>> {
     type Item = (K, V);
-    fn next(&mut self) -> Option<Self::Item> {
-        let i = self.0.recurse(ffi::DBUS_TYPE_DICT_ENTRY).map(|si| {
-            let k = si.get().unwrap();
+    fn next(&mut self) -> Option<(K, V)> {
+        let i = self.0.recurse(ffi::DBUS_TYPE_DICT_ENTRY).and_then(|mut si| {
+            let k = si.get();
+            if k.is_none() { return None };
             assert!(si.next());
-            let v = si.get().unwrap();
-            (k, v)
+            let v = si.get(); 
+            if v.is_none() { return None };
+            Some((k.unwrap(), v.unwrap()))
         });
         self.0.next();
         i
     }
 }
-
-impl<'a, K: DictKey + Get<'a>, V: Get<'a>> Get<'a> for Dict<'a, K, V, DictIter<'a, K, V>> {
-    fn get(i: &mut IterGet<'a>) -> Option<Dict<'a, K, V, DictIter<'a, K, V>>> {
-        i.recurse(Self::arg_type()).and_then(|mut si| unsafe {
-            if ffi::dbus_message_iter_get_arg_type(&mut si.0) != ffi::DBUS_TYPE_DICT_ENTRY { return None };
-            // FIXME: Verify signature so K and V are both correct
-            Some(Dict(DictIter(si, PhantomData), PhantomData))
-        })
-    }
-}
-
-impl<'a, K: DictKey + Get<'a>, V: Get<'a>> IntoIterator for Dict<'a, K, V, DictIter<'a, K, V>> {
-    type IntoIter=DictIter<'a, K, V>;
-    type Item=(K, V);
-    fn into_iter(self) -> DictIter<'a, K, V> { self.0 }
-}
-*/
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 /// A simple wrapper to specify a D-Bus variant.
@@ -311,7 +301,7 @@ impl<T: Append> Append for Variant<T> {
 
 impl<'a, T: Get<'a>> Get<'a> for Variant<T> {
     fn get(i: &mut IterGet<'a>) -> Option<Variant<T>> {
-        i.recurse(Self::arg_type()).and_then(|mut si| si.get())
+        i.recurse(Self::arg_type()).and_then(|mut si| si.get().map(|v| Variant(v)))
     }
 }
 
@@ -358,7 +348,7 @@ impl<'a, T: Get<'a>> Iterator for Array<'a, T, IterGet<'a>> {
     }
 }
 
-macro_rules! struct_append {
+macro_rules! struct_impl {
     ( $($n: ident $t: ident,)+ ) => {
 
 /// Tuples are represented as D-Bus structs. 
@@ -379,21 +369,36 @@ impl<$($t: Append),*> Append for ($($t,)*) {
     }
 }
 
+impl<'a, $($t: Get<'a>),*> Get<'a> for ($($t,)*) {
+    fn get(i: &mut IterGet<'a>) -> Option<Self> {
+        let si = i.recurse(ffi::DBUS_TYPE_STRUCT);
+        if si.is_none() { return None; }
+        let mut si = si.unwrap();
+        let mut _valid_item = true;
+        $(
+            if !_valid_item { return None; }
+            let $n: Option<$t> = si.get();
+            if $n.is_none() { return None; }
+            _valid_item = si.next();
+        )*
+        Some(($( $n.unwrap(), )* ))
     }
-} // macro_rules end
+}
 
-struct_append!(a A,);
-struct_append!(a A, b B,);
-struct_append!(a A, b B, c C,);
-struct_append!(a A, b B, c C, d D,);
-struct_append!(a A, b B, c C, d D, e E,);
-struct_append!(a A, b B, c C, d D, e E, f F,);
-struct_append!(a A, b B, c C, d D, e E, f F, g G,);
-struct_append!(a A, b B, c C, d D, e E, f F, g G, h H,);
-struct_append!(a A, b B, c C, d D, e E, f F, g G, h H, i I,);
-struct_append!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J,);
-struct_append!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J, k K,);
-struct_append!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J, k K, l L,);
+}} // macro_rules end
+
+struct_impl!(a A,);
+struct_impl!(a A, b B,);
+struct_impl!(a A, b B, c C,);
+struct_impl!(a A, b B, c C, d D,);
+struct_impl!(a A, b B, c C, d D, e E,);
+struct_impl!(a A, b B, c C, d D, e E, f F,);
+struct_impl!(a A, b B, c C, d D, e E, f F, g G,);
+struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H,);
+struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I,);
+struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J,);
+struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J, k K,);
+struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J, k K, l L,);
 
 fn test_compile() {
     let mut q = IterAppend::new(unsafe { mem::transmute(0usize) });
@@ -511,6 +516,17 @@ mod test {
                     assert_eq!(viter.arg_type(), Array::<&str,()>::arg_type());
                     let a: Array<&str, _> = viter.get().unwrap();
                     assert_eq!(a.collect::<Vec<&str>>(), vec!["Hello", "world"]);
+
+                    assert!(g.next());
+                    assert_eq!(g.get::<u16>(), None); // It's an array, not a single u16
+                    assert!(g.next() && g.next() && g.next() && g.next());
+
+                    assert_eq!(g.get(), Some((256i16, Variant(18_446_744_073_709_551_615u64))));
+                    assert!(g.next());
+                    let d: Dict<u32, bool, _> = g.get().unwrap();
+                    let z2: HashMap<_, _> = d.collect();
+                    assert_eq!(z, z2);
+
                     break;
                 }
                 _ => println!("Got {:?}", n),
