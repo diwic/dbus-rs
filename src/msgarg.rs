@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 
 use std::ffi::{CStr, CString};
 
-use super::Signature;
+use super::{Signature, Path, OwnedFd};
 
 fn check(f: &str, i: u32) { if i == 0 { panic!("D-Bus error: '{}' failed", f) }} 
 
@@ -91,6 +91,9 @@ macro_rules! integer_impl {
     ($t: ident, $s: ident, $f: expr) => {
 
 impl Arg for $t {
+    /// Returns the D-Bus argument type.
+    ///
+    /// This should probably be an associated constant instead, but those are still experimental. 
     fn arg_type() -> i32 { ffi::$s }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked($f) } }
 }
@@ -129,6 +132,25 @@ impl<'a> Get<'a> for bool {
     fn get(i: &mut Iter) -> Option<Self> { arg_get_basic(&mut i.0, Self::arg_type()).map(|q| q != 0) }
 }
 
+impl Arg for OwnedFd {
+    fn arg_type() -> i32 { ffi::DBUS_TYPE_UNIX_FD }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"h\0") } }
+}
+impl Append for OwnedFd {
+    fn append(self, i: &mut IterAppend) {
+        use std::os::unix::io::AsRawFd;
+        arg_append_basic(&mut i.0, Self::arg_type(), self.as_raw_fd() as i64)
+    }
+}
+impl DictKey for OwnedFd {}
+impl<'a> Get<'a> for OwnedFd {
+    fn get(i: &mut Iter) -> Option<Self> {
+        use std::os::unix::io::RawFd;
+        arg_get_basic(&mut i.0, Self::arg_type()).map(|q| OwnedFd::new(q as RawFd)) 
+    }
+}
+
+
 impl Arg for f64 {
     fn arg_type() -> i32 { ffi::DBUS_TYPE_DOUBLE }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"d\0") } }
@@ -144,9 +166,6 @@ unsafe impl FixedArray for f64 {}
 
 /// Represents a D-Bus string.
 impl<'a> Arg for &'a str {
-    /// Returns the D-Bus argument type.
-    ///
-    /// This should probably rather be an associated constant instead, but those are still experimental. 
     fn arg_type() -> i32 { ffi::DBUS_TYPE_STRING }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"s\0") } }
 }
@@ -164,6 +183,38 @@ impl<'a> Get<'a> for &'a str {
     fn get(i: &mut Iter<'a>) -> Option<&'a str> { unsafe { arg_get_str(&mut i.0, Self::arg_type()) }
         .and_then(|s| s.to_str().ok()) }
 }
+
+impl<'a> Arg for Path<'a> {
+    fn arg_type() -> i32 { ffi::DBUS_TYPE_OBJECT_PATH }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"o\0") } }
+}
+impl<'a> DictKey for Path<'a> {}
+impl<'a> Append for Path<'a> {
+    fn append(self, i: &mut IterAppend) {
+        arg_append_str(&mut i.0, Self::arg_type(), self.as_cstr())
+    }
+}
+impl<'a> Get<'a> for Path<'a> {
+    fn get(i: &mut Iter<'a>) -> Option<Path<'a>> { unsafe { arg_get_str(&mut i.0, Self::arg_type()) }
+        .map(|s| unsafe { Path::from_slice_unchecked(s.to_bytes_with_nul()) } ) }
+}
+
+impl<'a> Arg for Signature<'a> {
+    fn arg_type() -> i32 { ffi::DBUS_TYPE_SIGNATURE }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"g\0") } }
+}
+impl<'a> DictKey for Signature<'a> {}
+impl<'a> Append for Signature<'a> {
+    fn append(self, i: &mut IterAppend) {
+        arg_append_str(&mut i.0, Self::arg_type(), self.as_cstr())
+    }
+}
+impl<'a> Get<'a> for Signature<'a> {
+    fn get(i: &mut Iter<'a>) -> Option<Signature<'a>> { unsafe { arg_get_str(&mut i.0, Self::arg_type()) }
+        .map(|s| unsafe { Signature::from_slice_unchecked(s.to_bytes_with_nul()) } ) }
+}
+
+
 
 /// Simple lift over reference to value - this makes some iterators more ergonomic to use
 impl<'a, T: Arg> Arg for &'a T {
@@ -475,7 +526,7 @@ impl<'a> Iter<'a> {
 mod test {
     extern crate tempdir;
 
-    use super::super::{Connection, ConnectionItem, Message, BusType};
+    use super::super::{Connection, ConnectionItem, Message, BusType, Path, Signature};
     use super::{Array, Variant, Dict, Iter};
 
     use std::collections::HashMap;
@@ -490,21 +541,22 @@ mod test {
         let m = m.append2(Variant(&["Hello", "world"][..]), &[32768u16, 16u16, 12u16][..]);
         let m = m.append3(-1i32, &*format!("Hello world"), -3.14f64);
         let m = m.append1((256i16, Variant(18_446_744_073_709_551_615u64)));
+        let m = m.append2(Path::new("/a/valid/path").unwrap(), Signature::new("a{sv}").unwrap());
         let mut z = HashMap::new();
         z.insert(123543u32, true);
         z.insert(0u32, false);
         let m = m.append1(Dict::new(&z));
-        let sending = format!("{:?}", m.get_items());
-        println!("Sending {}", sending);
+        // let sending = format!("{:?}", m.get_items());
+        // println!("Sending {}", sending);
         c.send(m).unwrap();
 
         for n in c.iter(1000) {
             match n {
                 ConnectionItem::MethodCall(m) => {
                     use super::Arg;
-                    let receiving = format!("{:?}", m.get_items());
-                    println!("Receiving {}", receiving);
-                    assert_eq!(sending, receiving);
+                    // let receiving = format!("{:?}", m.get_items());
+                    // println!("Receiving {}", receiving);
+                    // assert_eq!(sending, receiving);
 
                     assert_eq!(2000u16, m.get1().unwrap());
                     assert_eq!(m.get2(), (Some(2000u16), Some(&[129u8, 5, 254][..])));
@@ -523,10 +575,13 @@ mod test {
 
                     assert_eq!(g.get(), Some((256i16, Variant(18_446_744_073_709_551_615u64))));
                     assert!(g.next());
+                    assert_eq!(g.get(), Some(Path::new("/a/valid/path").unwrap()));
+                    assert!(g.next());
+                    assert_eq!(g.get(), Some(Signature::new("a{sv}").unwrap()));
+                    assert!(g.next());
                     let d: Dict<u32, bool, _> = g.get().unwrap();
                     let z2: HashMap<_, _> = d.collect();
                     assert_eq!(z, z2);
-
                     break;
                 }
                 _ => println!("Got {:?}", n),
