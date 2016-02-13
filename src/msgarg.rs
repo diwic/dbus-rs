@@ -170,11 +170,17 @@ impl<'a> Arg for &'a str {
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"s\0") } }
 }
 
-/// # Panic
-/// FIXME: Will panic in case the str contains \0 characters.
 impl<'a> Append for &'a str {
     fn append(self, i: &mut IterAppend) {
-        let z = CString::new(self).unwrap(); // FIXME: Do not unwrap here
+        use std::borrow::Cow;
+        let b: &[u8] = self.as_bytes();
+        let v: Cow<[u8]> = if b.len() > 0 && b[b.len()-1] == 0 { Cow::Borrowed(b) }
+        else {
+            let mut bb: Vec<u8> = b.into();
+            bb.push(0);
+            Cow::Owned(bb)
+        };
+        let z = unsafe { CStr::from_ptr(v.as_ptr() as *const libc::c_char) };
         arg_append_str(&mut i.0, Self::arg_type(), &z)
     }
 }
@@ -190,12 +196,15 @@ impl<'a> Arg for &'a CStr {
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"s\0") } }
 }
 
+/*
 /// Note: Will give D-Bus errors in case the CStr is not valid UTF-8.
 impl<'a> Append for &'a CStr {
     fn append(self, i: &mut IterAppend) {
         arg_append_str(&mut i.0, Self::arg_type(), &self)
     }
 }
+*/
+
 impl<'a> DictKey for &'a CStr {}
 impl<'a> Get<'a> for &'a CStr {
     fn get(i: &mut Iter<'a>) -> Option<&'a CStr> { unsafe { arg_get_str(&mut i.0, Self::arg_type()) }}
