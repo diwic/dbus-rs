@@ -184,6 +184,25 @@ impl<'a> Get<'a> for &'a str {
         .and_then(|s| s.to_str().ok()) }
 }
 
+/// Represents a D-Bus string.
+impl<'a> Arg for &'a CStr {
+    fn arg_type() -> i32 { ffi::DBUS_TYPE_STRING }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"s\0") } }
+}
+
+/// Note: Will give D-Bus errors in case the CStr is not valid UTF-8.
+impl<'a> Append for &'a CStr {
+    fn append(self, i: &mut IterAppend) {
+        arg_append_str(&mut i.0, Self::arg_type(), &self)
+    }
+}
+impl<'a> DictKey for &'a CStr {}
+impl<'a> Get<'a> for &'a CStr {
+    fn get(i: &mut Iter<'a>) -> Option<&'a CStr> { unsafe { arg_get_str(&mut i.0, Self::arg_type()) }}
+}
+
+
+
 impl<'a> Arg for Path<'a> {
     fn arg_type() -> i32 { ffi::DBUS_TYPE_OBJECT_PATH }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"o\0") } }

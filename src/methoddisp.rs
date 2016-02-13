@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::fmt;
 
 type ArcMap<K, V> = BTreeMap<Arc<K>, Arc<V>>;
@@ -473,39 +473,35 @@ impl<M: MethodType> ObjectPath<M> {
         ObjectPath { name: Arc::new(p), ifaces: BTreeMap::new() }
     }
 
+    fn get_iface<'a>(&'a self, i: Option<&'a CStr>) -> Result<&Arc<Interface<M>>, MethodErr> {
+        let iface_name = try!(i.ok_or_else(|| MethodErr::invalid_arg(&0)));
+        let j = try!(IfaceName::from_slice(iface_name.to_bytes_with_nul()).map_err(|e| MethodErr::invalid_arg(&e)));
+        self.ifaces.get(&j).ok_or_else(|| MethodErr::no_interface(&j))
+    }
+
     fn prop_set(&self, m: &Message, o: &ObjectPath<M>, t: &Tree<M>) -> MethodResult {
-        let items = m.get_items();
-        let iface_name: &String = try!(items.get(0).ok_or_else(|| MethodErr::no_arg())
-            .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
-        let prop_name: &String = try!(items.get(1).ok_or_else(|| MethodErr::no_arg())
-            .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
-        let iface: &Interface<M> = try!(IfaceName::new(&**iface_name).map_err(|e| MethodErr::invalid_arg(&e))
-            .and_then(|i| self.ifaces.get(&i).ok_or_else(|| MethodErr::no_interface(&i))));
-        let prop: &Property<M> = try!(iface.properties.get(prop_name).ok_or_else(|| MethodErr::no_property(prop_name)));
+        let (iname, p) = m.get2();
+        let iface = try!(self.get_iface(iname));
+        let prop_name: &str = try!(p.ok_or_else(|| MethodErr::invalid_arg(&1)));
+        let prop: &Property<M> = try!(iface.properties.get(&String::from(prop_name))
+            .ok_or_else(|| MethodErr::no_property(&prop_name)));
         let mut r = try!(prop.remote_set(m, o, t));
         r.push(m.method_return());
         Ok(r)
     }
 
     fn prop_get(&self, m: &Message) -> MethodResult {
-        let items = m.get_items();
-        let iface_name: &String = try!(items.get(0).ok_or_else(|| MethodErr::no_arg())
-            .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
-        let prop_name: &String = try!(items.get(1).ok_or_else(|| MethodErr::no_arg())
-            .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
-        let iface: &Interface<M> = try!(IfaceName::new(&**iface_name).map_err(|e| MethodErr::invalid_arg(&e))
-            .and_then(|i| self.ifaces.get(&i).ok_or_else(|| MethodErr::no_interface(&i))));
-        let prop: &Property<M> = try!(iface.properties.get(prop_name).ok_or_else(|| MethodErr::no_property(prop_name)));
+        let (iname, p) = m.get2();
+        let iface = try!(self.get_iface(iname));
+        let prop_name: &str = try!(p.ok_or_else(|| MethodErr::invalid_arg(&1)));
+        let prop: &Property<M> = try!(iface.properties.get(&String::from(prop_name))
+            .ok_or_else(|| MethodErr::no_property(&prop_name)));
         let r = try!(prop.remote_get(m));
         Ok(vec!(m.method_return().append(Box::new(r))))
     }
 
     fn prop_get_all(&self, m: &Message) -> MethodResult {
-        let items = m.get_items();
-        let iface_name: &String = try!(items.get(0).ok_or_else(|| MethodErr::no_arg())
-            .and_then(|i| i.inner().map_err(|_| MethodErr::invalid_arg(&i))));
-        let iface: &Interface<M> = try!(IfaceName::new(&**iface_name).map_err(|e| MethodErr::invalid_arg(&e))
-            .and_then(|i| self.ifaces.get(&i).ok_or_else(|| MethodErr::no_interface(&i))));
+        let iface = try!(self.get_iface(m.get1()));
         let mut q: Vec<MessageItem> = vec!();
         for v in iface.properties.values() {
              q.push(((&**v.name).into(), try!(v.remote_get(m))).into())
@@ -854,10 +850,9 @@ fn test_sync_prop() {
     super::message::message_set_serial(&mut msg, 4);
     let r = tree1.handle(&msg).unwrap();
     let r1 = r.get(0).unwrap();
-    let ii = r1.get_items();
-    let vv: &MessageItem = ii.get(0).unwrap().inner().unwrap();
-    let v: i32 = vv.inner().unwrap();
-    assert!(v == 7 || v == 9);
+    println!("{:?}", r1.get_items());
+    let vv: super::arg::Variant<i32> = r1.get1().unwrap();
+    assert!(vv.0 == 7 || vv.0 == 9);
 }
 
 /* This test case no longer works, for unknown reason, see
