@@ -549,6 +549,38 @@ impl<'a> Iter<'a> {
     }
 }
 
+use std::fmt;
+impl<'a> fmt::Debug for Iter<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut z = self.clone();
+        let mut t = f.debug_tuple("Iter");
+        loop {
+            t.field(& match z.arg_type() {
+                ffi::DBUS_TYPE_VARIANT => "Variant",
+                ffi::DBUS_TYPE_ARRAY =>
+                    if z.recurse(ffi::DBUS_TYPE_ARRAY).unwrap().arg_type() == ffi::DBUS_TYPE_DICT_ENTRY { "Dict" } else { "Array" },
+                ffi::DBUS_TYPE_STRUCT => "(...)",
+                ffi::DBUS_TYPE_STRING => "&str",
+                ffi::DBUS_TYPE_OBJECT_PATH => "Path",
+                ffi::DBUS_TYPE_SIGNATURE => "Signature",
+                ffi::DBUS_TYPE_UNIX_FD => "OwnedFd",
+                ffi::DBUS_TYPE_BOOLEAN => "bool",
+                ffi::DBUS_TYPE_BYTE => "u8",
+                ffi::DBUS_TYPE_INT16 => "i16",
+                ffi::DBUS_TYPE_INT32 => "i32",
+                ffi::DBUS_TYPE_INT64 => "i64",
+                ffi::DBUS_TYPE_UINT16 => "u16",
+                ffi::DBUS_TYPE_UINT32 => "u32",
+                ffi::DBUS_TYPE_UINT64 => "u64",
+                ffi::DBUS_TYPE_DOUBLE => "f64",
+                ffi::DBUS_TYPE_INVALID => { break },
+                _ => "Unknown?!"
+            });
+            if !z.next() { break }
+        }
+        t.finish()
+    }  
+}
 
 #[cfg(test)]
 mod test {
@@ -574,17 +606,17 @@ mod test {
         z.insert(123543u32, true);
         z.insert(0u32, false);
         let m = m.append1(Dict::new(&z));
-        // let sending = format!("{:?}", m.get_items());
-        // println!("Sending {}", sending);
+        let sending = format!("{:?}", m.iter_init());
+        println!("Sending {}", sending);
         c.send(m).unwrap();
 
         for n in c.iter(1000) {
             match n {
                 ConnectionItem::MethodCall(m) => {
                     use super::Arg;
-                    // let receiving = format!("{:?}", m.get_items());
-                    // println!("Receiving {}", receiving);
-                    // assert_eq!(sending, receiving);
+                    let receiving = format!("{:?}", m.iter_init());
+                    println!("Receiving {}", receiving);
+                    assert_eq!(sending, receiving);
 
                     assert_eq!(2000u16, m.get1().unwrap());
                     assert_eq!(m.get2(), (Some(2000u16), Some(&[129u8, 5, 254][..])));
