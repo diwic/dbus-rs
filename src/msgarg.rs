@@ -5,24 +5,9 @@ use super::message::get_message_ptr;
 use std::{mem, ptr};
 use std::marker::PhantomData;
 
-use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 
-// FIXME: Make strings::Signature a Cow instead
-#[derive(Clone, Debug)]
-pub struct Signature<'a>(Cow<'a, CStr>);
-
-impl<'a> Signature<'a> {
-    fn borrowed(a: &'a [u8]) -> Signature<'a> {
-        assert_eq!(a[a.len()-1], 0);
-        let c = unsafe { CStr::from_ptr(a.as_ptr() as *const i8)};
-        Signature(Cow::Borrowed(c))
-    }
-    fn owned(a: String) -> Signature<'static> {
-        let c = CString::new(a).unwrap();
-        Signature(Cow::Owned(c))
-    }
-}
+use super::Signature;
 
 fn check(f: &str, i: u32) { if i == 0 { panic!("D-Bus error: '{}' failed", f) }} 
 
@@ -36,7 +21,7 @@ fn arg_append_basic(i: *mut ffi::DBusMessageIter, arg_type: i32, v: i64) {
 }
 
 fn arg_get_basic(i: *mut ffi::DBusMessageIter, arg_type: i32) -> Option<i64> {
-    let mut c: i64 = 0;
+    let mut c = 0i64;
     unsafe {
         if ffi::dbus_message_iter_get_arg_type(i) != arg_type { return None };
         ffi::dbus_message_iter_get_basic(i, &mut c as *mut _ as *mut libc::c_void);
@@ -49,6 +34,15 @@ fn arg_append_f64(i: *mut ffi::DBusMessageIter, arg_type: i32, v: f64) {
     unsafe {
         check("dbus_message_iter_append_basic", ffi::dbus_message_iter_append_basic(i, arg_type, p));
     };
+}
+
+fn arg_get_f64(i: *mut ffi::DBusMessageIter, arg_type: i32) -> Option<f64> {
+    let mut c = 0f64;
+    unsafe {
+        if ffi::dbus_message_iter_get_arg_type(i) != arg_type { return None };
+        ffi::dbus_message_iter_get_basic(i, &mut c as *mut _ as *mut libc::c_void);
+    }
+    Some(c)
 }
 
 fn arg_append_str(i: *mut ffi::DBusMessageIter, arg_type: i32, v: &CStr) {
@@ -66,65 +60,115 @@ unsafe fn arg_get_str<'a>(i: *mut ffi::DBusMessageIter, arg_type: i32) -> Option
     Some(CStr::from_ptr(p as *const libc::c_char))
 }
 
-/// Types that can be appended to a message as argument implement this helper trait.
-pub trait Append: Clone {
+/// Types that can represent a D-Bus message argument implement this trait.
+///
+/// Types should also implement either Append or Get to be useful. 
+pub trait Arg {
     fn arg_type() -> i32;
     fn signature() -> Signature<'static>;
+}
+
+/// Types that can be appended to a message as arguments implement this trait.
+pub trait Append: Arg + Clone {
     fn append(self, &mut IterAppend);
 }
 
-macro_rules! integer_append {
+/// Types that can be retrieved from a message as arguments implement this trait.
+pub trait Get<'a>: Sized {
+    fn get(i: &mut IterGet<'a>) -> Option<Self>;
+}
+
+/// If a type implements this trait, it means the size and alignment is the same
+/// as in D-Bus. This means that you can quickly append and get slices of this type.
+///
+/// Note: Booleans do not implement this trait because D-Bus booleans are 4 bytes and Rust booleans are 1 byte.
+pub unsafe trait FixedArray: Arg {}
+
+/// Types that can be used as keys in a dict type implement this trait. 
+pub trait DictKey: Arg {}
+
+macro_rules! integer_impl {
     ($t: ident, $s: ident, $f: expr) => {
 
-impl Append for $t {
+impl Arg for $t {
     fn arg_type() -> i32 { ffi::$s }
-    fn signature() -> Signature<'static> { Signature::borrowed($f) }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked($f) } }
+}
+
+impl Append for $t {
     fn append(self, i: &mut IterAppend) { arg_append_basic(&mut i.0, Self::arg_type(), self as i64) }
 }
+
+impl<'a> Get<'a> for $t {
+    fn get(i: &mut IterGet) -> Option<Self> { arg_get_basic(&mut i.0, Self::arg_type()).map(|q| q as $t) }
+}
+
 impl DictKey for $t {}
+unsafe impl FixedArray for $t {}
 
-}}
+}} // End of macro_rules
 
-integer_append!(u8, DBUS_TYPE_BYTE, b"y\0");
-integer_append!(i16, DBUS_TYPE_INT16, b"n\0");
-integer_append!(u16, DBUS_TYPE_UINT16, b"q\0");
-integer_append!(i32, DBUS_TYPE_INT32, b"i\0");
-integer_append!(u32, DBUS_TYPE_UINT32, b"u\0");
-integer_append!(i64, DBUS_TYPE_INT64, b"x\0");
-integer_append!(u64, DBUS_TYPE_UINT64, b"t\0");
+integer_impl!(u8, DBUS_TYPE_BYTE, b"y\0");
+integer_impl!(i16, DBUS_TYPE_INT16, b"n\0");
+integer_impl!(u16, DBUS_TYPE_UINT16, b"q\0");
+integer_impl!(i32, DBUS_TYPE_INT32, b"i\0");
+integer_impl!(u32, DBUS_TYPE_UINT32, b"u\0");
+integer_impl!(i64, DBUS_TYPE_INT64, b"x\0");
+integer_impl!(u64, DBUS_TYPE_UINT64, b"t\0");
 
 
-impl Append for bool {
+impl Arg for bool {
     fn arg_type() -> i32 { ffi::DBUS_TYPE_BOOLEAN }
-    fn signature() -> Signature<'static> { Signature::borrowed(b"b\0") }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"b\0") } }
+}
+impl Append for bool {
     fn append(self, i: &mut IterAppend) { arg_append_basic(&mut i.0, Self::arg_type(), if self {1} else {0}) }
 }
 impl DictKey for bool {}
+impl<'a> Get<'a> for bool {
+    fn get(i: &mut IterGet) -> Option<Self> { arg_get_basic(&mut i.0, Self::arg_type()).map(|q| q != 0) }
+}
 
-impl Append for f64 {
+impl Arg for f64 {
     fn arg_type() -> i32 { ffi::DBUS_TYPE_DOUBLE }
-    fn signature() -> Signature<'static> { Signature::borrowed(b"d\0") }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"d\0") } }
+}
+impl Append for f64 {
     fn append(self, i: &mut IterAppend) { arg_append_f64(&mut i.0, Self::arg_type(), self) }
 }
 impl DictKey for f64 {}
+impl<'a> Get<'a> for f64 {
+    fn get(i: &mut IterGet) -> Option<Self> { arg_get_f64(&mut i.0, Self::arg_type()) }
+}
+unsafe impl FixedArray for f64 {}
 
 /// Represents a D-Bus string.
-/// # Panic
-/// FIXME: Will panic in case the str contains \0 characters. 
-impl<'a> Append for &'a str {
+impl<'a> Arg for &'a str {
     fn arg_type() -> i32 { ffi::DBUS_TYPE_STRING }
-    fn signature() -> Signature<'static> { Signature::borrowed(b"s\0") }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"s\0") } }
+}
+
+/// # Panic
+/// FIXME: Will panic in case the str contains \0 characters.
+impl<'a> Append for &'a str {
     fn append(self, i: &mut IterAppend) {
         let z = CString::new(self).unwrap(); // FIXME: Do not unwrap here
         arg_append_str(&mut i.0, Self::arg_type(), &z)
     }
 }
 impl<'a> DictKey for &'a str {}
+impl<'a> Get<'a> for &'a str {
+    fn get(i: &mut IterGet<'a>) -> Option<&'a str> { unsafe { arg_get_str(&mut i.0, Self::arg_type()) }
+        .and_then(|s| s.to_str().ok()) }
+}
 
 /// Simple lift over reference to value - this makes some iterators more ergonomic to use
-impl<'a, T: Append> Append for &'a T {
+impl<'a, T: Arg> Arg for &'a T {
     fn arg_type() -> i32 { T::arg_type() }
     fn signature() -> Signature<'static> { T::signature() }
+}
+
+impl<'a, T: Append> Append for &'a T {
     fn append(self, i: &mut IterAppend) { self.clone().append(i) }
 }
 
@@ -143,12 +187,15 @@ const FIXED_ARRAY_ALIGNMENTS: [(i32, usize); 9] = [
     (ffi::DBUS_TYPE_DOUBLE, 8)
 ];
 
-
-/// Appends a D-Bus array. Note: In case you have a large array of integers or f64,
-/// using this method will be more efficient than an Array.
-impl<'a, T: Append> Append for &'a [T] {
+/// Represents a D-Bus array.
+impl<'a, T: Arg> Arg for &'a [T] {
     fn arg_type() -> i32 { ffi::DBUS_TYPE_ARRAY }
-    fn signature() -> Signature<'static> { Signature::owned(format!("a{}", T::signature().0.to_str().unwrap())) }
+    fn signature() -> Signature<'static> { Signature::from(format!("a{}", T::signature())) }
+}
+
+/// Appends a D-Bus array. Note: In case you have a large array of a type that implements FixedArray,
+/// using this method will be more efficient than using an Array.
+impl<'a, T: Append> Append for &'a [T] {
     fn append(self, i: &mut IterAppend) {
         let z = self;
         let zptr = z.as_ptr();
@@ -158,32 +205,47 @@ impl<'a, T: Append> Append for &'a [T] {
         let a = (T::arg_type(), mem::size_of::<T>());
         let can_fixed_array = (zlen > 1) && (z.len() == zlen as usize) && FIXED_ARRAY_ALIGNMENTS.iter().any(|&v| v == a);
 
-        i.append_container(Self::arg_type(), Some(&T::signature()), |s|
+        i.append_container(Self::arg_type(), Some(T::signature().as_cstr()), |s|
             if can_fixed_array { unsafe { check("dbus_message_iter_append_fixed_array",
                 ffi::dbus_message_iter_append_fixed_array(&mut s.0, a.0, &zptr as *const _ as *const libc::c_void, zlen)) }}
             else { for arg in z { arg.clone().append(s) }});
     }
 }
 
-/// Types that can be used as keys in a dict type implement this trait. 
-pub trait DictKey: Append {}
+impl<'a, T: Get<'a> + FixedArray> Get<'a> for &'a [T] {
+    fn get(i: &mut IterGet<'a>) -> Option<&'a [T]> {
+        debug_assert!(FIXED_ARRAY_ALIGNMENTS.iter().any(|&v| v == (T::arg_type(), mem::size_of::<T>())));
+        i.recurse(Self::arg_type()).and_then(|mut si| unsafe {
+            if ffi::dbus_message_iter_get_arg_type(&mut si.0) != T::arg_type() { return None };
+
+            let mut v = ptr::null_mut();
+            let mut i = 0;
+            ffi::dbus_message_iter_get_fixed_array(&mut si.0, &mut v as *mut _ as *mut libc::c_void, &mut i);
+            Some(::std::slice::from_raw_parts(v, i as usize))
+        })
+    }
+}
+
 
 #[derive(Copy, Clone)]
 /// Append a D-Bus dict type (as an array of dict entries).
 pub struct Dict<'a, K: 'a + DictKey, V: 'a + Append, I: Clone + Iterator<Item=(&'a K, &'a V)>>(I, PhantomData<&'a ()>);
 
 impl<'a, K: 'a + DictKey, V: 'a + Append, I: Clone + Iterator<Item=(&'a K, &'a V)>> Dict<'a, K, V, I> {
-    fn entry_sig() -> String { format!("{{{}{}}}", K::signature().0.to_str().unwrap(), V::signature().0.to_str().unwrap()) } 
+    fn entry_sig() -> String { format!("{{{}{}}}", K::signature(), V::signature()) } 
     pub fn new<J: IntoIterator<IntoIter=I, Item=(&'a K, &'a V)>>(j: J) -> Dict<'a, K, V, I> { Dict(j.into_iter(), PhantomData) }
 }
 
-impl<'a, K: 'a + DictKey, V: 'a + Append, I: Clone + Iterator<Item=(&'a K, &'a V)>> Append for Dict<'a, K, V, I> {
+impl<'a, K: 'a + DictKey, V: 'a + Append, I: Clone + Iterator<Item=(&'a K, &'a V)>> Arg for Dict<'a, K, V, I> {
     fn arg_type() -> i32 { ffi::DBUS_TYPE_ARRAY }
     fn signature() -> Signature<'static> {
-        Signature::owned(format!("a{}", Self::entry_sig())) }
+        Signature::from(format!("a{}", Self::entry_sig())) }
+}
+
+impl<'a, K: 'a + DictKey + Append, V: 'a + Append, I: Clone + Iterator<Item=(&'a K, &'a V)>> Append for Dict<'a, K, V, I> {
     fn append(self, i: &mut IterAppend) {
         let z = self.0;
-        i.append_container(Self::arg_type(), Some(&Signature::owned(Self::entry_sig())), |s| for (k, v) in z {
+        i.append_container(Self::arg_type(), Some(&CString::new(Self::entry_sig()).unwrap()), |s| for (k, v) in z {
             s.append_container(ffi::DBUS_TYPE_DICT_ENTRY, None, |ss| {
                 k.clone().append(ss);
                 v.clone().append(ss);
@@ -192,48 +254,105 @@ impl<'a, K: 'a + DictKey, V: 'a + Append, I: Clone + Iterator<Item=(&'a K, &'a V
     }
 }
 
+
+/*
+#[derive(Copy, Clone)]
+pub struct DictIter<'a, K, V>(IterGet<'a>, PhantomData<(K, V)>); 
+
+impl<'a, K: Get<'a>, V: Get<'a>> Iterator for DictIter<'a, K, V> {
+    type Item = (K, V);
+    fn next(&mut self) -> Option<Self::Item> {
+        let i = self.0.recurse(ffi::DBUS_TYPE_DICT_ENTRY).map(|si| {
+            let k = si.get().unwrap();
+            assert!(si.next());
+            let v = si.get().unwrap();
+            (k, v)
+        });
+        self.0.next();
+        i
+    }
+}
+
+impl<'a, K: DictKey + Get<'a>, V: Get<'a>> Get<'a> for Dict<'a, K, V, DictIter<'a, K, V>> {
+    fn get(i: &mut IterGet<'a>) -> Option<Dict<'a, K, V, DictIter<'a, K, V>>> {
+        i.recurse(Self::arg_type()).and_then(|mut si| unsafe {
+            if ffi::dbus_message_iter_get_arg_type(&mut si.0) != ffi::DBUS_TYPE_DICT_ENTRY { return None };
+            // FIXME: Verify signature so K and V are both correct
+            Some(Dict(DictIter(si, PhantomData), PhantomData))
+        })
+    }
+}
+
+impl<'a, K: DictKey + Get<'a>, V: Get<'a>> IntoIterator for Dict<'a, K, V, DictIter<'a, K, V>> {
+    type IntoIter=DictIter<'a, K, V>;
+    type Item=(K, V);
+    fn into_iter(self) -> DictIter<'a, K, V> { self.0 }
+}
+*/
+
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 /// A simple wrapper to specify a D-Bus variant.
 pub struct Variant<T>(pub T);
 
-impl<T: Append> Append for Variant<T> {
+impl<T> Arg for Variant<T> {
     fn arg_type() -> i32 { ffi::DBUS_TYPE_VARIANT }
-    fn signature() -> Signature<'static> { Signature::borrowed(b"v\0") }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"v\0") } }
+}
+
+impl<T: Append> Append for Variant<T> {
     fn append(self, i: &mut IterAppend) {
         let z = self.0;
-        i.append_container(Self::arg_type(), Some(&T::signature()), |s| z.append(s));
+        i.append_container(Self::arg_type(), Some(T::signature().as_cstr()), |s| z.append(s));
+    }
+}
+
+impl<'a, T: Get<'a>> Get<'a> for Variant<T> {
+    fn get(i: &mut IterGet<'a>) -> Option<Variant<T>> {
+        i.recurse(Self::arg_type()).and_then(|mut si| si.get())
+    }
+}
+
+impl<'a> Get<'a> for Variant<IterGet<'a>> {
+    fn get(i: &mut IterGet<'a>) -> Option<Variant<IterGet<'a>>> {
+        i.recurse(Self::arg_type()).map(|v| Variant(v))
     }
 }
 
 #[derive(Copy, Clone, Debug)]
 /// Append a D-Bus Array with maximum flexibility (wraps an iterator of items to append). 
-pub struct Array<'a, T: 'a + Append, I: Iterator<Item=&'a T>>(I, PhantomData<&'a ()>);
+pub struct Array<'a, T, I>(I, PhantomData<(*const T, &'a ())>);
 
 impl<'a, T: 'a + Append, I: Iterator<Item=&'a T>> Array<'a, T, I> {
     pub fn new<J: IntoIterator<IntoIter=I, Item=&'a T>>(j: J) -> Array<'a, T, I> { Array(j.into_iter(), PhantomData) }
 }
 
+impl<'a, T: Arg, I> Arg for Array<'a, T, I> {
+    fn arg_type() -> i32 { ffi::DBUS_TYPE_ARRAY }
+    fn signature() -> Signature<'static> { Signature::from(format!("a{}", T::signature())) }
+}
+
 impl<'a, T: 'a + Append, I: Clone + Iterator<Item=&'a T>> Append for Array<'a, T, I> {
     fn append(self, i: &mut IterAppend) {
         let z = self.0;
-        i.append_container(Self::arg_type(), Some(&T::signature()), |s| for arg in z { arg.clone().append(s) });
+        i.append_container(Self::arg_type(), Some(T::signature().as_cstr()), |s| for arg in z { arg.clone().append(s) });
     }
-    fn arg_type() -> i32 { ffi::DBUS_TYPE_ARRAY }
-    fn signature() -> Signature<'static> { Signature::owned(format!("a{}", T::signature().0.to_str().unwrap())) }
 }
 
 macro_rules! struct_append {
     ( $($n: ident $t: ident,)+ ) => {
 
-/// Tuples are appended as D-Bus structs. 
-impl<$($t: Append),*> Append for ($($t,)*) {
+/// Tuples are represented as D-Bus structs. 
+impl<$($t: Arg),*> Arg for ($($t,)*) {
     fn arg_type() -> i32 { ffi::DBUS_TYPE_STRUCT }
     fn signature() -> Signature<'static> {
         let mut s = String::from("(");
-        $( s.push_str($t::signature().0.to_str().unwrap()); )*
+        $( s.push_str(&$t::signature()); )*
         s.push_str(")");
-        Signature::owned(s)
+        Signature::from(s)
     }
+}
+
+impl<$($t: Append),*> Append for ($($t,)*) {
     fn append(self, i: &mut IterAppend) {
         let ( $($n,)*) = self;
         i.append_container(Self::arg_type(), None, |s| { $( $n.append(s); )* });
@@ -241,7 +360,7 @@ impl<$($t: Append),*> Append for ($($t,)*) {
 }
 
     }
-}
+} // macro_rules end
 
 struct_append!(a A,);
 struct_append!(a A, b B,);
@@ -278,14 +397,51 @@ impl<'a> IterAppend<'a> {
 
     pub fn append<T: Append>(&mut self, a: T) { a.append(self) }
 
-    fn append_container<F: FnOnce(&mut IterAppend<'a>)>(&mut self, arg_type: i32, sig: Option<&Signature>, f: F) {
+    fn append_container<F: FnOnce(&mut IterAppend<'a>)>(&mut self, arg_type: i32, sig: Option<&CStr>, f: F) {
         let mut s = IterAppend(ffi_iter(), self.1);
-        let p = sig.map(|s| s.0.as_ptr()).unwrap_or(ptr::null());
+        let p = sig.map(|s| s.as_ref().as_ptr()).unwrap_or(ptr::null());
         check("dbus_message_iter_open_container",
             unsafe { ffi::dbus_message_iter_open_container(&mut self.0, arg_type, p, &mut s.0) });
         f(&mut s);
         check("dbus_message_iter_close_container",
             unsafe { ffi::dbus_message_iter_close_container(&mut self.0, &mut s.0) });
+    }
+}
+
+
+#[derive(Clone, Copy)]
+/// Helper struct for retrieve one or more arguments from a Message.
+/// Note that this is not a Rust iterator, because arguments are often of different types
+pub struct IterGet<'a>(ffi::DBusMessageIter, &'a Message);
+
+impl<'a> IterGet<'a> {
+    pub fn new(m: &'a Message) -> IterGet<'a> { 
+        let mut i = ffi_iter();
+        unsafe { ffi::dbus_message_iter_init(get_message_ptr(m), &mut i) };
+        IterGet(i, m)
+    }
+
+    pub fn get<T: Get<'a>>(&mut self) -> Option<T> {
+        T::get(self)
+    }
+
+    /// The raw arg_type for the current item.
+    /// Unlike Arg::arg_type, this requires access to self and is not a static method.
+    /// You can match this against Arg::arg_type for different types to understand what type the current item is.  
+    pub fn arg_type(&mut self) -> i32 { unsafe { ffi::dbus_message_iter_get_arg_type(&mut self.0) } }
+
+    /// Returns false if there are no more items.
+    pub fn next(&mut self) -> bool {
+        unsafe { ffi::dbus_message_iter_next(&mut self.0) != 0 } 
+    }
+
+    fn recurse(&mut self, arg_type: i32) -> Option<IterGet<'a>> {
+        let mut subiter = ffi_iter();
+        unsafe {
+            if ffi::dbus_message_iter_get_arg_type(&mut self.0) != arg_type { return None };
+            ffi::dbus_message_iter_recurse(&mut self.0, &mut subiter)
+        }
+        Some(IterGet(subiter, self.1))
     }
 }
 

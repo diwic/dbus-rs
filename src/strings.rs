@@ -33,6 +33,14 @@ impl<'m> $t<'m> {
             else { Err(e.message().unwrap().into()) }
     }
 
+    /// This function creates a $t without checking. It's up to you to
+    /// guarantee that s ends with a \0 and is a valid $t.
+    pub unsafe fn from_slice_unchecked(s: &'m [u8]) -> $t<'m> {
+        debug_assert!(s[s.len()-1] == 0);
+        $t(Cow::Borrowed(CStr::from_ptr(s.as_ptr() as *const libc::c_char)))
+    }
+
+    pub fn as_cstr(&self) -> &CStr { &self.0 }
 }
 
 /*

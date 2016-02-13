@@ -61,7 +61,7 @@ pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
 /// allocation by writing a string literal which ends with a null character.)
 ///
 /// `&[T] where T: Append` - a D-Bus array. Note: can use an efficient fast-path in case of 
-/// T being an integer or f64 type.
+/// T being an FixedArray type.
 ///
 /// `Array<T, I> where I: Iterator<Item=T>, T: Append` - a D-Bus array, maximum flexibility.
 ///
@@ -74,7 +74,8 @@ pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
 /// Not implemented yet: Fd, ObjectPath and Signature types. And to get arguments just as ergonomic
 /// as this module appends them.
 pub mod arg {
-    pub use msgarg::{IterAppend, Append, DictKey, Dict, Array, Variant};
+    pub use msgarg::{Arg, FixedArray, Get, DictKey, Append};
+    pub use msgarg::{IterGet, IterAppend, Array, Variant, Dict};
 }
 
 

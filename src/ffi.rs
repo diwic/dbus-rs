@@ -208,6 +208,8 @@ extern "C" {
     pub fn dbus_message_iter_init_append(message: *mut DBusMessage, iter: *mut DBusMessageIter);
     pub fn dbus_message_iter_get_arg_type(iter: *mut DBusMessageIter) -> c_int;
     pub fn dbus_message_iter_get_basic(iter: *mut DBusMessageIter, value: *mut c_void);
+    pub fn dbus_message_iter_get_fixed_array(iter: *mut DBusMessageIter,
+        value: *mut c_void, n_elements: *mut c_int) -> u32;
     pub fn dbus_message_iter_get_signature(iter: *mut DBusMessageIter) -> *mut c_char;
     pub fn dbus_message_iter_next(iter: *mut DBusMessageIter) -> u32;
     pub fn dbus_message_iter_recurse(iter: *mut DBusMessageIter, subiter: *mut DBusMessageIter);
