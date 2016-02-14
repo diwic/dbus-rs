@@ -47,7 +47,7 @@ let tree = f.tree().add(f.object_path("/hello").introspectable().add(
         f.method("Hello", |m,_,_| {
             let s = format!("Hello {}!", m.sender().unwrap());
             Ok(vec!(m.method_return().append1(s)))
-        }).out_arg(("reply", "s"))
+        }).outarg::<&str,_>("reply")
     )
 ));
 tree.set_registered(&c, true).unwrap();

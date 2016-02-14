@@ -13,7 +13,7 @@ fn main() {
             f.method("Hello", |m,_,_| {
                 let s = format!("Hello {}!", m.sender().unwrap());
                 Ok(vec!(m.method_return().append1(s)))
-            }).out_arg(("reply", "s")) // One output argument, no input arguments
+            }).outarg::<&str,_>("reply") // One output argument, no input arguments
         )
     ));
 

@@ -152,6 +152,8 @@ pub struct Method<M> {
 impl<M> Method<M> {
     /// Builder method that adds an "in" Argument to this Method.
     pub fn in_arg<A: Into<Argument>>(mut self, a: A) -> Self { self.i_args.push(a.into()); self }
+    /// Builder method that adds an "in" Argument to this Method.
+    pub fn inarg<A: arg::Arg, S: Into<String>>(mut self, s: S) -> Self { self.i_args.push((s.into(), A::signature()).into()); self }
     /// Builder method that adds multiple "in" Arguments to this Method.
     pub fn in_args<Z: Into<Argument>, A: IntoIterator<Item=Z>>(mut self, a: A) -> Self {
         self.i_args.extend(a.into_iter().map(|b| b.into())); self
@@ -159,6 +161,8 @@ impl<M> Method<M> {
 
     /// Builder method that adds an "out" Argument to this Method.
     pub fn out_arg<A: Into<Argument>>(mut self, a: A) -> Self { self.o_args.push(a.into()); self }
+    /// Builder method that adds an "out" Argument to this Method.
+    pub fn outarg<A: arg::Arg, S: Into<String>>(mut self, s: S) -> Self { self.o_args.push((s.into(), A::signature()).into()); self }
     /// Builder method that adds multiple "out" Arguments to this Method.
     pub fn out_args<Z: Into<Argument>, A: IntoIterator<Item=Z>>(mut self, a: A) -> Self {
         self.o_args.extend(a.into_iter().map(|b| b.into())); self
@@ -296,15 +300,11 @@ impl<M: MethodType> Property<M> {
         let ss = match self.emits {
             EmitsChangedSignal::False => None,
             EmitsChangedSignal::Const => if self.get_signal().is_some() { return Err(()) } else { None },
-            EmitsChangedSignal::True => self.get_signal().map(|mut s| {
-                let m = MessageItem::Array(vec!(((&*self.name).clone().into(), Box::new(m.clone()).into()).into()), "{sv}".into());
-                s.append_items(&[m]);
-                s
-            }),
-            EmitsChangedSignal::Invalidates => self.get_signal().map(|mut s| {
-                let m2 = [(&*self.name).clone()][..].into();
-                s.append_items(&[MessageItem::Array(vec!(), "{sv}".into()), m2]);
-                s
+            EmitsChangedSignal::True => self.get_signal().map(|s|
+                s.append2(arg::Dict::new(vec!((&**self.name, arg::Variant(m.clone())))), arg::Array::<&str, _>::new(vec!()))
+            ),
+            EmitsChangedSignal::Invalidates => self.get_signal().map(|s| {
+                s.append2(arg::Dict::<&str, arg::Variant<MessageItem>, _>::new(vec!()), arg::Array::new(vec!(&**self.name)))
             }),
         };
         *self.value.lock().unwrap() = m;
@@ -514,13 +514,19 @@ impl<M: MethodType> ObjectPath<M> {
         let ifname = IfaceName::from("org.freedesktop.DBus.Properties");
         if self.ifaces.contains_key(&ifname) { return };
         let f: Factory<M> = Factory(PhantomData);
+
         let i = Interface::<M>::new(ifname)
             .add_m(f.method_sync("Get", |m,o,_| o.prop_get(m) )
-                .in_arg(("interface_name", "s")).in_arg(("property_name", "s")).out_arg(("value", "v")))
+                .inarg::<&str,_>("interface_name")
+                .inarg::<&str,_>("property_name")
+                .outarg::<arg::Variant<()>,_>("value"))
             .add_m(f.method_sync("GetAll", |m,o,_| o.prop_get_all(m))
-                .in_arg(("interface_name", "s")).out_arg(("props", "a{sv}")))
+                .inarg::<&str,_>("interface_name")
+                .outarg::<arg::Dict<&str, arg::Variant<()>, ()>,_>("props"))
             .add_m(f.method_sync("Set", |m,o,t| o.prop_set(m, o, t))
-                .in_args(vec!(("interface_name", "s"), ("property_name", "s"), ("value", "v"))));
+                .inarg::<&str,_>("interface_name")
+                .inarg::<&str,_>("property_name")
+                .inarg::<arg::Variant<()>,_>("value"));
         self.ifaces.insert(i.name.clone(), Arc::new(i));
     }
 
