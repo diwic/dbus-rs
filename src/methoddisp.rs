@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::marker::PhantomData;
 use std::ffi::{CStr, CString};
 use std::fmt;
+use super::arg;
 
 type ArcMap<K, V> = BTreeMap<Arc<K>, Arc<V>>;
 
@@ -497,7 +498,7 @@ impl<M: MethodType> ObjectPath<M> {
         let prop: &Property<M> = try!(iface.properties.get(&String::from(prop_name))
             .ok_or_else(|| MethodErr::no_property(&prop_name)));
         let r = try!(prop.remote_get(m));
-        Ok(vec!(m.method_return().append(Box::new(r))))
+        Ok(vec!(m.method_return().append1(arg::Variant(r))))
     }
 
     fn prop_get_all(&self, m: &Message) -> MethodResult {

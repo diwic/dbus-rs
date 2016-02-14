@@ -254,78 +254,82 @@ impl MessageItem {
         MessageItem::new_array2(i.map(|ii| ii.clone()))
     }
 
+    fn from_iter_single(i: &mut ffi::DBusMessageIter) -> Option<MessageItem> {
+        let t = unsafe { ffi::dbus_message_iter_get_arg_type(i) };
+        match t {
+            ffi::DBUS_TYPE_INVALID => { None },
+            ffi::DBUS_TYPE_DICT_ENTRY => {
+                let mut subiter = new_dbus_message_iter();
+                unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
+                let a = MessageItem::from_iter(&mut subiter);
+                if a.len() != 2 { panic!("D-Bus dict entry error"); }
+                let mut a = a.into_iter();
+                let key = Box::new(a.next().unwrap());
+                let value = Box::new(a.next().unwrap());
+                Some(MessageItem::DictEntry(key, value))
+            }
+            ffi::DBUS_TYPE_VARIANT => {
+                let mut subiter = new_dbus_message_iter();
+                unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
+                let a = MessageItem::from_iter(&mut subiter);
+                if a.len() != 1 { panic!("D-Bus variant error"); }
+                Some(MessageItem::Variant(Box::new(a.into_iter().next().unwrap())))
+            }
+            ffi::DBUS_TYPE_ARRAY => {
+                let mut subiter = new_dbus_message_iter();
+                unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
+                let a = MessageItem::from_iter(&mut subiter);
+                let t = if a.len() > 0 { a[0].type_sig() } else {
+                    let c = unsafe { ffi::dbus_message_iter_get_signature(&mut subiter) };
+                    let s = c_str_to_slice(&(c as *const libc::c_char)).unwrap().to_string();
+                    unsafe { ffi::dbus_free(c as *mut libc::c_void) };
+                    Cow::Owned(s)
+                };
+                Some(MessageItem::Array(a, t))
+            },
+            ffi::DBUS_TYPE_STRUCT => {
+                let mut subiter = new_dbus_message_iter();
+                unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
+                Some(MessageItem::Struct(MessageItem::from_iter(&mut subiter)))
+            },
+            ffi::DBUS_TYPE_STRING => {
+                let mut c: *const libc::c_char = ptr::null();
+                unsafe {
+                    let p: *mut libc::c_void = mem::transmute(&mut c);
+                    ffi::dbus_message_iter_get_basic(i, p);
+                };
+                Some(MessageItem::Str(c_str_to_slice(&c).expect("D-Bus string error").to_string()))
+            },
+            ffi::DBUS_TYPE_OBJECT_PATH => {
+                let mut c: *const libc::c_char = ptr::null();
+                unsafe {
+                    let p: *mut libc::c_void = mem::transmute(&mut c);
+                    ffi::dbus_message_iter_get_basic(i, p);
+                };
+                let o = Path::new(c_str_to_slice(&c).expect("D-Bus object path error")).ok().expect("D-Bus object path error");
+                Some(MessageItem::ObjectPath(o))
+            },
+            ffi::DBUS_TYPE_UNIX_FD => Some(MessageItem::UnixFd(OwnedFd::new(iter_get_basic(i) as libc::c_int))),
+            ffi::DBUS_TYPE_BOOLEAN => Some(MessageItem::Bool((iter_get_basic(i) as u32) != 0)),
+            ffi::DBUS_TYPE_BYTE => Some(MessageItem::Byte(iter_get_basic(i) as u8)),
+            ffi::DBUS_TYPE_INT16 => Some(MessageItem::Int16(iter_get_basic(i) as i16)),
+            ffi::DBUS_TYPE_INT32 => Some(MessageItem::Int32(iter_get_basic(i) as i32)),
+            ffi::DBUS_TYPE_INT64 => Some(MessageItem::Int64(iter_get_basic(i) as i64)),
+            ffi::DBUS_TYPE_UINT16 => Some(MessageItem::UInt16(iter_get_basic(i) as u16)),
+            ffi::DBUS_TYPE_UINT32 => Some(MessageItem::UInt32(iter_get_basic(i) as u32)),
+            ffi::DBUS_TYPE_UINT64 => Some(MessageItem::UInt64(iter_get_basic(i) as u64)),
+            ffi::DBUS_TYPE_DOUBLE => Some(MessageItem::Double(iter_get_f64(i))),
+            _ => { None /* Only the new msgarg module supports signatures */ }
+        }
+    }
+
     fn from_iter(i: &mut ffi::DBusMessageIter) -> Vec<MessageItem> {
         let mut v = Vec::new();
-        loop {
-            let t = unsafe { ffi::dbus_message_iter_get_arg_type(i) };
-            match t {
-                ffi::DBUS_TYPE_INVALID => { return v },
-                ffi::DBUS_TYPE_DICT_ENTRY => {
-                    let mut subiter = new_dbus_message_iter();
-                    unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
-                    let a = MessageItem::from_iter(&mut subiter);
-                    if a.len() != 2 { panic!("D-Bus dict entry error"); }
-                    let mut a = a.into_iter();
-                    let key = Box::new(a.next().unwrap());
-                    let value = Box::new(a.next().unwrap());
-                    v.push(MessageItem::DictEntry(key, value));
-                }
-                ffi::DBUS_TYPE_VARIANT => {
-                    let mut subiter = new_dbus_message_iter();
-                    unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
-                    let a = MessageItem::from_iter(&mut subiter);
-                    if a.len() != 1 { panic!("D-Bus variant error"); }
-                    v.push(MessageItem::Variant(Box::new(a.into_iter().next().unwrap())));
-                }
-                ffi::DBUS_TYPE_ARRAY => {
-                    let mut subiter = new_dbus_message_iter();
-                    unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
-                    let a = MessageItem::from_iter(&mut subiter);
-                    let t = if a.len() > 0 { a[0].type_sig() } else {
-                        let c = unsafe { ffi::dbus_message_iter_get_signature(&mut subiter) };
-                        let s = c_str_to_slice(&(c as *const libc::c_char)).unwrap().to_string();
-                        unsafe { ffi::dbus_free(c as *mut libc::c_void) };
-                        Cow::Owned(s)
-                    };
-                    v.push(MessageItem::Array(a, t));
-                },
-                ffi::DBUS_TYPE_STRUCT => {
-                    let mut subiter = new_dbus_message_iter();
-                    unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
-                    v.push(MessageItem::Struct(MessageItem::from_iter(&mut subiter)));
-                },
-                ffi::DBUS_TYPE_STRING => {
-                    let mut c: *const libc::c_char = ptr::null();
-                    unsafe {
-                        let p: *mut libc::c_void = mem::transmute(&mut c);
-                        ffi::dbus_message_iter_get_basic(i, p);
-                    };
-                    v.push(MessageItem::Str(c_str_to_slice(&c).expect("D-Bus string error").to_string()));
-                },
-                ffi::DBUS_TYPE_OBJECT_PATH => {
-                    let mut c: *const libc::c_char = ptr::null();
-                    unsafe {
-                        let p: *mut libc::c_void = mem::transmute(&mut c);
-                        ffi::dbus_message_iter_get_basic(i, p);
-                    };
-                    let o = Path::new(c_str_to_slice(&c).expect("D-Bus object path error")).ok().expect("D-Bus object path error");
-                    v.push(MessageItem::ObjectPath(o));
-                },
-                ffi::DBUS_TYPE_UNIX_FD => v.push(MessageItem::UnixFd(OwnedFd::new(iter_get_basic(i) as libc::c_int))),
-                ffi::DBUS_TYPE_BOOLEAN => v.push(MessageItem::Bool((iter_get_basic(i) as u32) != 0)),
-                ffi::DBUS_TYPE_BYTE => v.push(MessageItem::Byte(iter_get_basic(i) as u8)),
-                ffi::DBUS_TYPE_INT16 => v.push(MessageItem::Int16(iter_get_basic(i) as i16)),
-                ffi::DBUS_TYPE_INT32 => v.push(MessageItem::Int32(iter_get_basic(i) as i32)),
-                ffi::DBUS_TYPE_INT64 => v.push(MessageItem::Int64(iter_get_basic(i) as i64)),
-                ffi::DBUS_TYPE_UINT16 => v.push(MessageItem::UInt16(iter_get_basic(i) as u16)),
-                ffi::DBUS_TYPE_UINT32 => v.push(MessageItem::UInt32(iter_get_basic(i) as u32)),
-                ffi::DBUS_TYPE_UINT64 => v.push(MessageItem::UInt64(iter_get_basic(i) as u64)),
-                ffi::DBUS_TYPE_DOUBLE => v.push(MessageItem::Double(iter_get_f64(i))),
-
-                _ => { panic!("D-Bus unsupported message type {} ({})", t, t as u8 as char); }
-            }
+        while let Some(m) = Self::from_iter_single(i) {
+            v.push(m);
             unsafe { ffi::dbus_message_iter_next(i) };
         }
+        v
     }
 
     fn iter_append_basic(&self, i: &mut ffi::DBusMessageIter, v: i64) {
@@ -384,6 +388,18 @@ impl MessageItem {
         T::from(self)
     }
 }
+
+
+// For use by the msgarg module
+pub fn append_messageitem(i: &mut ffi::DBusMessageIter, m: &MessageItem) {
+    m.iter_append(i)
+}
+
+// For use by the msgarg module
+pub fn get_messageitem(i: &mut ffi::DBusMessageIter) -> Option<MessageItem> {
+    MessageItem::from_iter_single(i)
+}
+
 
 macro_rules! msgitem_convert {
     ($t: ty, $s: ident) => {

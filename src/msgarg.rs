@@ -69,7 +69,7 @@ pub trait Arg {
 }
 
 /// Types that can be appended to a message as arguments implement this trait.
-pub trait Append: Arg + Clone {
+pub trait Append: Clone {
     fn append(self, &mut IterAppend);
 }
 
@@ -293,7 +293,7 @@ impl<'a, T: Arg> Arg for &'a [T] {
 
 /// Appends a D-Bus array. Note: In case you have a large array of a type that implements FixedArray,
 /// using this method will be more efficient than using an Array.
-impl<'a, T: Append> Append for &'a [T] {
+impl<'a, T: Arg + Append> Append for &'a [T] {
     fn append(self, i: &mut IterAppend) {
         let z = self;
         let zptr = z.as_ptr();
@@ -333,7 +333,7 @@ impl<'a, K: DictKey, V: Arg, I> Dict<'a, K, V, I> {
     fn entry_sig() -> String { format!("{{{}{}}}", K::signature(), V::signature()) } 
 }
 
-impl<'a, K: 'a + DictKey, V: 'a + Append, I: Clone + Iterator<Item=(&'a K, &'a V)>> Dict<'a, K, V, I> {
+impl<'a, K: 'a + DictKey, V: 'a + Append + Arg, I: Clone + Iterator<Item=(&'a K, &'a V)>> Dict<'a, K, V, I> {
     pub fn new<J: IntoIterator<IntoIter=I, Item=(&'a K, &'a V)>>(j: J) -> Dict<'a, K, V, I> { Dict(j.into_iter(), PhantomData) }
 }
 
@@ -343,7 +343,7 @@ impl<'a, K: DictKey, V: Arg, I> Arg for Dict<'a, K, V, I> {
         Signature::from(format!("a{}", Self::entry_sig())) }
 }
 
-impl<'a, K: 'a + DictKey + Append, V: 'a + Append, I: Clone + Iterator<Item=(&'a K, &'a V)>> Append for Dict<'a, K, V, I> {
+impl<'a, K: 'a + DictKey + Append, V: 'a + Append + Arg, I: Clone + Iterator<Item=(&'a K, &'a V)>> Append for Dict<'a, K, V, I> {
     fn append(self, i: &mut IterAppend) {
         let z = self.0;
         i.append_container(Self::arg_type(), Some(&CString::new(Self::entry_sig()).unwrap()), |s| for (k, v) in z {
@@ -387,12 +387,21 @@ impl<T> Arg for Variant<T> {
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"v\0") } }
 }
 
-impl<T: Append> Append for Variant<T> {
+impl<T: Arg + Append> Append for Variant<T> {
     fn append(self, i: &mut IterAppend) {
         let z = self.0;
         i.append_container(Self::arg_type(), Some(T::signature().as_cstr()), |s| z.append(s));
     }
 }
+
+impl Append for Variant<super::MessageItem> {
+    fn append(self, i: &mut IterAppend) {
+        let z = self.0;
+        let sig = CString::new(z.type_sig().into_owned()).unwrap();
+        i.append_container(Self::arg_type(), Some(&sig), |s| z.append(s));
+    }
+}
+
 
 impl<'a, T: Get<'a>> Get<'a> for Variant<T> {
     fn get(i: &mut Iter<'a>) -> Option<Variant<T>> {
@@ -420,7 +429,7 @@ impl<'a, T: Arg, I> Arg for Array<'a, T, I> {
     fn signature() -> Signature<'static> { Signature::from(format!("a{}", T::signature())) }
 }
 
-impl<'a, T: 'a + Append, I: Clone + Iterator<Item=&'a T>> Append for Array<'a, T, I> {
+impl<'a, T: 'a + Arg + Append, I: Clone + Iterator<Item=&'a T>> Append for Array<'a, T, I> {
     fn append(self, i: &mut IterAppend) {
         let z = self.0;
         i.append_container(Self::arg_type(), Some(T::signature().as_cstr()), |s| for arg in z { arg.clone().append(s) });
@@ -457,7 +466,7 @@ impl<$($t: Arg),*> Arg for ($($t,)*) {
     }
 }
 
-impl<$($t: Append),*> Append for ($($t,)*) {
+impl<$($t: Arg + Append),*> Append for ($($t,)*) {
     fn append(self, i: &mut IterAppend) {
         let ( $($n,)*) = self;
         i.append_container(Self::arg_type(), None, |s| { $( $n.append(s); )* });
@@ -494,6 +503,19 @@ struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I,);
 struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J,);
 struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J, k K,);
 struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J, k K, l L,);
+
+impl Append for super::MessageItem {
+    fn append(self, i: &mut IterAppend) {
+        super::message::append_messageitem(&mut i.0, &self)
+    }
+}
+
+impl<'a> Get<'a> for super::MessageItem {
+    fn get(i: &mut Iter<'a>) -> Option<Self> {
+        super::message::get_messageitem(&mut i.0)
+    }
+}
+
 
 fn test_compile() {
     let mut q = IterAppend::new(unsafe { mem::transmute(0usize) });
@@ -555,7 +577,15 @@ impl<'a> Iter<'a> {
         unsafe { ffi::dbus_message_iter_next(&mut self.0) != 0 } 
     }
 
-    fn recurse(&mut self, arg_type: i32) -> Option<Iter<'a>> {
+    /// If the current argument is a container of the specified arg_type, then a new
+    /// Iter is returned which is for iterating over the contents inside the container.
+    ///
+    /// Primarily for internal use (the "get" function is more ergonomic), but could be
+    /// useful for recursing into containers with unknown types.
+    pub fn recurse(&mut self, arg_type: i32) -> Option<Iter<'a>> {
+        let containers = [ffi::DBUS_TYPE_ARRAY, ffi::DBUS_TYPE_DICT_ENTRY, ffi::DBUS_TYPE_STRUCT, ffi::DBUS_TYPE_VARIANT];
+        if !containers.iter().any(|&t| t == arg_type) { return None; }
+
         let mut subiter = ffi_iter();
         unsafe {
             if ffi::dbus_message_iter_get_arg_type(&mut self.0) != arg_type { return None };
