@@ -503,11 +503,11 @@ impl<M: MethodType> ObjectPath<M> {
 
     fn prop_get_all(&self, m: &Message) -> MethodResult {
         let iface = try!(self.get_iface(m.get1()));
-        let mut q: Vec<MessageItem> = vec!();
+        let mut q = vec!();
         for v in iface.properties.values() {
-             q.push(((&**v.name).into(), try!(v.remote_get(m))).into())
+            q.push((&**v.name, arg::Variant(try!(v.remote_get(m)))));
         }
-        Ok(vec!(m.method_return().append(MessageItem::Array(q, "{sv}".into()))))
+        Ok(vec!(m.method_return().append1(arg::Dict::new(q))))
     }
 
     fn add_property_handler(&mut self) {

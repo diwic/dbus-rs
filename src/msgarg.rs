@@ -69,7 +69,7 @@ pub trait Arg {
 }
 
 /// Types that can be appended to a message as arguments implement this trait.
-pub trait Append: Clone {
+pub trait Append: Sized {
     fn append(self, &mut IterAppend);
 }
 
@@ -259,16 +259,16 @@ impl<'a> Get<'a> for Signature<'a> {
 }
 
 
-
 /// Simple lift over reference to value - this makes some iterators more ergonomic to use
 impl<'a, T: Arg> Arg for &'a T {
     fn arg_type() -> i32 { T::arg_type() }
     fn signature() -> Signature<'static> { T::signature() }
 }
-
-impl<'a, T: Append> Append for &'a T {
+impl<'a, T: Append + Clone> Append for &'a T {
     fn append(self, i: &mut IterAppend) { self.clone().append(i) }
 }
+impl<'a, T: DictKey> DictKey for &'a T {}
+
 
 // Map DBus-Type -> Alignment. Copied from _dbus_marshal_write_fixed_multi in
 // http://dbus.freedesktop.org/doc/api/html/dbus-marshal-basic_8c_source.html#l01020
@@ -293,7 +293,7 @@ impl<'a, T: Arg> Arg for &'a [T] {
 
 /// Appends a D-Bus array. Note: In case you have a large array of a type that implements FixedArray,
 /// using this method will be more efficient than using an Array.
-impl<'a, T: Arg + Append> Append for &'a [T] {
+impl<'a, T: Arg + Append + Clone> Append for &'a [T] {
     fn append(self, i: &mut IterAppend) {
         let z = self;
         let zptr = z.as_ptr();
@@ -333,8 +333,8 @@ impl<'a, K: DictKey, V: Arg, I> Dict<'a, K, V, I> {
     fn entry_sig() -> String { format!("{{{}{}}}", K::signature(), V::signature()) } 
 }
 
-impl<'a, K: 'a + DictKey, V: 'a + Append + Arg, I: Clone + Iterator<Item=(&'a K, &'a V)>> Dict<'a, K, V, I> {
-    pub fn new<J: IntoIterator<IntoIter=I, Item=(&'a K, &'a V)>>(j: J) -> Dict<'a, K, V, I> { Dict(j.into_iter(), PhantomData) }
+impl<'a, K: 'a + DictKey, V: 'a + Append + Arg, I: Iterator<Item=(K, V)>> Dict<'a, K, V, I> {
+    pub fn new<J: IntoIterator<IntoIter=I, Item=(K, V)>>(j: J) -> Dict<'a, K, V, I> { Dict(j.into_iter(), PhantomData) }
 }
 
 impl<'a, K: DictKey, V: Arg, I> Arg for Dict<'a, K, V, I> {
@@ -343,17 +343,18 @@ impl<'a, K: DictKey, V: Arg, I> Arg for Dict<'a, K, V, I> {
         Signature::from(format!("a{}", Self::entry_sig())) }
 }
 
-impl<'a, K: 'a + DictKey + Append, V: 'a + Append + Arg, I: Clone + Iterator<Item=(&'a K, &'a V)>> Append for Dict<'a, K, V, I> {
+impl<'a, K: 'a + DictKey + Append, V: 'a + Append + Arg, I: Iterator<Item=(K, V)>> Append for Dict<'a, K, V, I> {
     fn append(self, i: &mut IterAppend) {
         let z = self.0;
         i.append_container(Self::arg_type(), Some(&CString::new(Self::entry_sig()).unwrap()), |s| for (k, v) in z {
             s.append_container(ffi::DBUS_TYPE_DICT_ENTRY, None, |ss| {
-                k.clone().append(ss);
-                v.clone().append(ss);
+                k.append(ss);
+                v.append(ss);
             })
         });
     }
 }
+
 
 impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Get<'a> for Dict<'a, K, V, Iter<'a>> {
     fn get(i: &mut Iter<'a>) -> Option<Self> {
@@ -420,8 +421,8 @@ impl<'a> Get<'a> for Variant<Iter<'a>> {
 /// Note: Slices of FixedArray can be faster.
 pub struct Array<'a, T, I>(I, PhantomData<(*const T, &'a Message)>);
 
-impl<'a, T: 'a + Append, I: Iterator<Item=&'a T>> Array<'a, T, I> {
-    pub fn new<J: IntoIterator<IntoIter=I, Item=&'a T>>(j: J) -> Array<'a, T, I> { Array(j.into_iter(), PhantomData) }
+impl<'a, T: 'a + Append, I: Iterator<Item=T>> Array<'a, T, I> {
+    pub fn new<J: IntoIterator<IntoIter=I, Item=T>>(j: J) -> Array<'a, T, I> { Array(j.into_iter(), PhantomData) }
 }
 
 impl<'a, T: Arg, I> Arg for Array<'a, T, I> {
@@ -429,10 +430,10 @@ impl<'a, T: Arg, I> Arg for Array<'a, T, I> {
     fn signature() -> Signature<'static> { Signature::from(format!("a{}", T::signature())) }
 }
 
-impl<'a, T: 'a + Arg + Append, I: Clone + Iterator<Item=&'a T>> Append for Array<'a, T, I> {
+impl<'a, T: 'a + Arg + Append, I: Iterator<Item=T>> Append for Array<'a, T, I> {
     fn append(self, i: &mut IterAppend) {
         let z = self.0;
-        i.append_container(Self::arg_type(), Some(T::signature().as_cstr()), |s| for arg in z { arg.clone().append(s) });
+        i.append_container(Self::arg_type(), Some(T::signature().as_cstr()), |s| for arg in z { arg.append(s) });
     }
 }
 
