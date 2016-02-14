@@ -190,6 +190,22 @@ impl<'a> Get<'a> for &'a str {
         .and_then(|s| s.to_str().ok()) }
 }
 
+impl<'a> Arg for String {
+    fn arg_type() -> i32 { ffi::DBUS_TYPE_STRING }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"s\0") } }
+}
+impl<'a> Append for String {
+    fn append(mut self, i: &mut IterAppend) {
+        self.push_str("\0");
+        let s: &str = &self;
+        s.append(i)
+    }
+}
+impl<'a> DictKey for String {}
+impl<'a> Get<'a> for String {
+    fn get(i: &mut Iter<'a>) -> Option<String> { <&str>::get(i).map(|s| String::from(s)) }
+}
+
 /// Represents a D-Bus string.
 impl<'a> Arg for &'a CStr {
     fn arg_type() -> i32 { ffi::DBUS_TYPE_STRING }

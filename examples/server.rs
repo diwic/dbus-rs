@@ -12,7 +12,7 @@ fn main() {
         f.interface("com.example.dbustest").add_m(
             f.method("Hello", |m,_,_| {
                 let s = format!("Hello {}!", m.sender().unwrap());
-                Ok(vec!(m.method_return().append(s)))
+                Ok(vec!(m.method_return().append1(s)))
             }).out_arg(("reply", "s")) // One output argument, no input arguments
         )
     ));

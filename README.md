@@ -1,13 +1,13 @@
 A D-Bus binding for rust.
 ========================
 
-Current state: WIP, but these things should be up and working:
+Current state: Slowly maturing. Most stuff you need should be working:
  * Connect to system or session bus
- * Method calls send/receive
- * Signals send/receive
- * Properties, on both client and server sides (set/get/getall methods, but no signals)
- * Server side introspection
- * Server side method dispatch (boxed closures) and property get/set dispatch (trait objects)
+ * Messages send/receive (method calls, method returns, signals, errors)
+ * Message get/append arguments (through either generics or enums), all types (including Unix Fd).
+ * Build server side trees, with introspection and method dispatch (boxed closures)
+ * Properties, on both client and server sides (set/get/getall methods, signals on server side)
+ * Optional async API (for poll-based mainloops, e g mio)
 
 [API Documentation](http://diwic.github.io/dbus-rs-docs/dbus/)
 
@@ -23,8 +23,8 @@ This example opens a connection to the session bus and asks for a list of all na
 let c = Connection::get_private(BusType::Session).unwrap();
 let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
 let r = c.send_with_reply_and_block(m, 2000).unwrap();
-let reply = r.get_items();
-println!("{}", reply);
+let arr: Array<&str, _>  = r.get1().unwrap();
+for name in arr { println!("{}", name); }
 ```
 
 You can try a similar example by running:
@@ -46,7 +46,7 @@ let tree = f.tree().add(f.object_path("/hello").introspectable().add(
     f.interface("com.example.dbustest").add_m(
         f.method("Hello", |m,_,_| {
             let s = format!("Hello {}!", m.sender().unwrap());
-            Ok(vec!(m.method_return().append(s)))
+            Ok(vec!(m.method_return().append1(s)))
         }).out_arg(("reply", "s"))
     )
 ));

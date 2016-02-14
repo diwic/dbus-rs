@@ -118,6 +118,11 @@ pub struct DBusMessageIter {
     pub dummy11: c_int,
     pub pad1: c_int,
     pub pad2: c_int,
+    // Here would have been padding; because pad3 is a 8 byte aligned pointer (on amd64).
+    // Rust reserves the right not to copy the padding when cloning a struct,
+    // but the D-Bus library uses this part of the struct too.
+    // Hence, add a field as big as the padding to ensure Rust copies all data.
+    pub pad2_added_by_rust: c_int,
     pub pad3: *mut c_void,
 }
 

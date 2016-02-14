@@ -16,24 +16,7 @@ pub enum ArrayError {
     DifferentElementTypes,
 }
 
-fn new_dbus_message_iter() -> ffi::DBusMessageIter {
-    ffi::DBusMessageIter {
-        dummy1: ptr::null_mut(),
-        dummy2: ptr::null_mut(),
-        dummy3: 0,
-        dummy4: 0,
-        dummy5: 0,
-        dummy6: 0,
-        dummy7: 0,
-        dummy8: 0,
-        dummy9: 0,
-        dummy10: 0,
-        dummy11: 0,
-        pad1: 0,
-        pad2: 0,
-        pad3: ptr::null_mut(),
-    }
-}
+fn new_dbus_message_iter() -> ffi::DBusMessageIter { unsafe { mem::zeroed() }}
 
 
 /// An RAII wrapper around Fd to ensure that file descriptor is closed
