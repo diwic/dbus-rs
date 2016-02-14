@@ -542,7 +542,7 @@ impl<'a> IterAppend<'a> {
 
     fn append_container<F: FnOnce(&mut IterAppend<'a>)>(&mut self, arg_type: i32, sig: Option<&CStr>, f: F) {
         let mut s = IterAppend(ffi_iter(), self.1);
-        let p = sig.map(|s| s.as_ref().as_ptr()).unwrap_or(ptr::null());
+        let p = sig.map(|s| s.as_ptr()).unwrap_or(ptr::null());
         check("dbus_message_iter_open_container",
             unsafe { ffi::dbus_message_iter_open_container(&mut self.0, arg_type, p, &mut s.0) });
         f(&mut s);
