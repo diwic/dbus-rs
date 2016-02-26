@@ -692,6 +692,35 @@ impl Message {
         (g1, g2, i.get())
     }
 
+    /// Gets the first four arguments from the message, if those arguments are of type G1, G2, G3 and G4.
+    /// Returns None if there are not enough arguments, or if types don't match.
+    pub fn get4<'a, G1: Get<'a>, G2: Get<'a>, G3: Get<'a>, G4: Get<'a>>(&'a self) -> (Option<G1>, Option<G2>, Option<G3>, Option<G4>) {
+        let mut i = Iter::new(&self);
+        let g1 = i.get();
+        if !i.next() { return (g1, None, None, None) }
+        let g2 = i.get();
+        if !i.next() { return (g1, g2, None, None) }
+        let g3 = i.get();
+        if !i.next() { return (g1, g2, g3, None) }
+        (g1, g2, g3, i.get())
+    }
+
+    /// Gets the first five arguments from the message, if those arguments are of type G1, G2, G3 and G4.
+    /// Returns None if there are not enough arguments, or if types don't match.
+    /// Note: If you need more than five arguments, use `iter_init` instead.
+    pub fn get5<'a, G1: Get<'a>, G2: Get<'a>, G3: Get<'a>, G4: Get<'a>, G5: Get<'a>>(&'a self) -> (Option<G1>, Option<G2>, Option<G3>, Option<G4>, Option<G5>) {
+        let mut i = Iter::new(&self);
+        let g1 = i.get();
+        if !i.next() { return (g1, None, None, None, None) }
+        let g2 = i.get();
+        if !i.next() { return (g1, g2, None, None, None) }
+        let g3 = i.get();
+        if !i.next() { return (g1, g2, g3, None, None) }
+        let g4 = i.get();
+        if !i.next() { return (g1, g2, g3, g4, None) }
+        (g1, g2, g3, g4, i.get())
+    }
+
     /// Returns a struct for retreiving the arguments from a message. Supersedes get_items().
     pub fn iter_init<'a>(&'a self) -> Iter<'a> { Iter::new(&self) }
 

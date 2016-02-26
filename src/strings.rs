@@ -33,8 +33,8 @@ impl<'m> $t<'m> {
             else { Err(e.message().unwrap().into()) }
     }
 
-    /// This function creates a $t without checking. It's up to you to
-    /// guarantee that s ends with a \0 and is a valid $t.
+    /// This function creates a new instance of this struct, without checking.
+    /// It's up to you to guarantee that s ends with a \0 and is valid.
     pub unsafe fn from_slice_unchecked(s: &'m [u8]) -> $t<'m> {
         debug_assert!(s[s.len()-1] == 0);
         $t(Cow::Borrowed(CStr::from_ptr(s.as_ptr() as *const libc::c_char)))
@@ -91,6 +91,11 @@ pub struct Signature<'a>(Cow<'a, CStr>);
 
 cstring_wrapper!(Signature, dbus_signature_validate_single);
 
+impl Signature<'static> {
+    /// Makes a D-Bus signature that corresponds to A. 
+    pub fn make<A: super::arg::Arg>() -> Signature<'static> { A::signature() }
+}
+
 /// A wrapper around a string that is guaranteed to be
 /// a valid D-Bus object path.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
@@ -137,4 +142,9 @@ fn some_path() {
     let p2 = Path::new("##invalid##");
     assert_eq!(p1, Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"/valid\0".as_ptr() as *const libc::c_char) })));
     assert_eq!(p2, Err("Object path was not valid: '##invalid##'".into()));
+}
+
+#[test]
+fn make_sig() {
+    assert_eq!(&*Signature::make::<(&str, u8)>(), "(sy)");
 }
