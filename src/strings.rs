@@ -40,6 +40,7 @@ impl<'m> $t<'m> {
         $t(Cow::Borrowed(CStr::from_ptr(s.as_ptr() as *const libc::c_char)))
     }
 
+    /// View this struct as a CStr.
     pub fn as_cstr(&self) -> &CStr { &self.0 }
 }
 

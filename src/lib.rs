@@ -241,6 +241,17 @@ impl std::fmt::Display for Error {
     }
 }
 
+impl WatchEvent {
+    /// After running poll, this transforms the revents into a parameter you can send into `Connection::watch_handle`
+    pub fn from_revents(revents: libc::c_short) -> libc::c_uint {
+        0 +
+        if (revents & libc::POLLIN) != 0 { WatchEvent::Readable as libc::c_uint } else { 0 } +
+        if (revents & libc::POLLOUT) != 0 { WatchEvent::Writable as libc::c_uint } else { 0 } +
+        if (revents & libc::POLLERR) != 0 { WatchEvent::Error as libc::c_uint } else { 0 } +
+        if (revents & libc::POLLHUP) != 0 { WatchEvent::Hangup as libc::c_uint } else { 0 } 
+    }
+}
+
 /// When listening for incoming events on the D-Bus, this enum will tell you what type
 /// of incoming event has happened.
 #[derive(Debug)]
@@ -489,6 +500,8 @@ impl Connection {
     }
 
     /// Async I/O: Get an up-to-date list of file descriptors to watch.
+    ///
+    /// See the `Watch` struct for an example.
     pub fn watch_fds(&self) -> Vec<Watch> {
         self.i.watches.as_ref().unwrap().get_enabled_fds()
     }
@@ -496,6 +509,8 @@ impl Connection {
     /// Async I/O: Call this function whenever you detected an event on the Fd,
     /// Flags are a set of WatchEvent bits.
     /// The returned iterator will return pending items only, never block for new events.
+    ///
+    /// See the `Watch` struct for an example.
     pub fn watch_handle(&self, fd: RawFd, flags: libc::c_uint) -> ConnectionItems {
         self.i.watches.as_ref().unwrap().watch_handle(fd, flags);
         ConnectionItems { c: self, timeout_ms: None }

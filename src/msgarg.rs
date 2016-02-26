@@ -64,17 +64,21 @@ unsafe fn arg_get_str<'a>(i: *mut ffi::DBusMessageIter, arg_type: i32) -> Option
 ///
 /// Types should also implement either Append or Get to be useful. 
 pub trait Arg {
+    /// The corresponding D-Bus argument type code. 
     fn arg_type() -> i32;
+    /// The corresponding D-Bus type signature for this type. 
     fn signature() -> Signature<'static>;
 }
 
 /// Types that can be appended to a message as arguments implement this trait.
 pub trait Append: Sized {
+    /// Performs the append operation.
     fn append(self, &mut IterAppend);
 }
 
 /// Types that can be retrieved from a message as arguments implement this trait.
 pub trait Get<'a>: Sized {
+    /// Performs the get operation.
     fn get(i: &mut Iter<'a>) -> Option<Self>;
 }
 
@@ -334,6 +338,7 @@ impl<'a, K: DictKey, V: Arg, I> Dict<'a, K, V, I> {
 }
 
 impl<'a, K: 'a + DictKey, V: 'a + Append + Arg, I: Iterator<Item=(K, V)>> Dict<'a, K, V, I> {
+    /// Creates a new Dict from an iterator. The iterator is consumed when appended.
     pub fn new<J: IntoIterator<IntoIter=I, Item=(K, V)>>(j: J) -> Dict<'a, K, V, I> { Dict(j.into_iter(), PhantomData) }
 }
 
@@ -422,6 +427,7 @@ impl<'a> Get<'a> for Variant<Iter<'a>> {
 pub struct Array<'a, T, I>(I, PhantomData<(*const T, &'a Message)>);
 
 impl<'a, T: 'a + Append, I: Iterator<Item=T>> Array<'a, T, I> {
+    /// Creates a new Array from an iterator. The iterator is consumed when appending.
     pub fn new<J: IntoIterator<IntoIter=I, Item=T>>(j: J) -> Array<'a, T, I> { Array(j.into_iter(), PhantomData) }
 }
 
@@ -532,12 +538,14 @@ fn test_compile() {
 pub struct IterAppend<'a>(ffi::DBusMessageIter, &'a Message);
 
 impl<'a> IterAppend<'a> {
-    pub fn new(m: &'a Message) -> IterAppend<'a> { 
+    /// Creates a new IterAppend struct.
+    pub fn new(m: &'a mut Message) -> IterAppend<'a> { 
         let mut i = ffi_iter();
         unsafe { ffi::dbus_message_iter_init_append(get_message_ptr(m), &mut i) };
         IterAppend(i, m)
     }
 
+    /// Appends the argument.
     pub fn append<T: Append>(&mut self, a: T) { a.append(self) }
 
     fn append_container<F: FnOnce(&mut IterAppend<'a>)>(&mut self, arg_type: i32, sig: Option<&CStr>, f: F) {
@@ -558,12 +566,14 @@ impl<'a> IterAppend<'a> {
 pub struct Iter<'a>(ffi::DBusMessageIter, &'a Message);
 
 impl<'a> Iter<'a> {
+    /// Creates a new struct for iterating over the arguments of a message, starting with the first argument. 
     pub fn new(m: &'a Message) -> Iter<'a> { 
         let mut i = ffi_iter();
         unsafe { ffi::dbus_message_iter_init(get_message_ptr(m), &mut i) };
         Iter(i, m)
     }
 
+    /// Returns the current argument, if T is the argument type. Otherwise returns None.
     pub fn get<T: Get<'a>>(&mut self) -> Option<T> {
         T::get(self)
     }

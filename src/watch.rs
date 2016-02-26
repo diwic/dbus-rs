@@ -6,7 +6,33 @@ use std::mem;
 use std::cell::RefCell;
 use std::os::unix::io::{RawFd, AsRawFd};
 
-/// A file descriptor to watch for incoming events (for async I/O)
+/// A file descriptor to watch for incoming events (for async I/O).
+///
+/// # Example
+/// ```
+/// extern crate libc;
+/// extern crate dbus;
+/// fn main() {
+///     use dbus::{Connection, BusType, WatchEvent};
+///     let c = Connection::get_private(BusType::Session).unwrap();
+///
+///     // Get a list of fds to poll for
+///     let mut fds: Vec<_> = c.watch_fds().iter().map(|w| w.to_pollfd()).collect();
+///
+///     // Poll them with a 1 s timeout
+///     let r = unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::c_ulong, 1000) };
+///     assert!(r >= 0);
+///
+///     // And handle incoming events
+///     for pfd in fds.iter().filter(|pfd| pfd.revents != 0) {
+///         for item in c.watch_handle(pfd.fd, WatchEvent::from_revents(pfd.revents)) {
+///             // Handle item
+///             println!("Received ConnectionItem: {:?}", item);
+///         }
+///     }
+/// }
+/// ```
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Watch {
     fd: RawFd,
@@ -21,6 +47,13 @@ impl Watch {
     pub fn readable(&self) -> bool { self.read }
     /// Add POLLOUT to events to listen for
     pub fn writable(&self) -> bool { self.write }
+    /// Returns the current watch as a libc::pollfd, to use with libc::poll
+    pub fn to_pollfd(&self) -> libc::pollfd {
+        libc::pollfd { fd: self.fd, revents: 0, events: libc::POLLERR + libc::POLLHUP + 
+            if self.readable() { libc::POLLIN } else { 0 } +
+            if self.writable() { libc::POLLOUT } else { 0 },
+        }
+    }
 }
 
 impl AsRawFd for Watch {
@@ -43,6 +76,7 @@ impl WatchList {
         }
         w
     }
+
 
     pub fn watch_handle(&self, fd: RawFd, flags: libc::c_uint) {
         // println!("watch_handle {} flags {}", fd, flags);
@@ -125,30 +159,6 @@ mod test {
     use libc;
     use super::super::{Connection, Message, BusType, WatchEvent, ConnectionItem, MessageType};
 
-    #[repr(C)]
-    #[derive(Clone, Debug)]
-    pub struct PollFd {
-        fd: libc::c_int,
-        events: libc::c_short,
-        revents: libc::c_short,
-    }
-
-    const POLLIN: libc::c_short = 0x001;
-    const POLLOUT: libc::c_short = 0x004;
-    const POLLERR: libc::c_short = 0x008;
-    const POLLHUP: libc::c_short = 0x010;
-
-    extern "C" { pub fn poll(fds: *mut PollFd, nfds: libc::c_ulong, timeout: libc::c_int) -> libc::c_int; }
-
-    fn build_pollfds(c: &Connection) -> Vec<PollFd> {
-        c.watch_fds().iter().map(|w|
-             PollFd {
-                 fd: w.fd(),
-                 events: POLLERR + POLLHUP + if w.readable() { POLLIN } else { 0 } + if w.writable() { POLLOUT } else { 0 },
-                 revents: 0
-             }).collect()
-    }
-
     #[test]
     fn async() {
         let c = Connection::get_private(BusType::Session).unwrap();
@@ -157,7 +167,7 @@ mod test {
         let serial = c.send(m).unwrap();
         println!("Async: sent serial {}", serial);
 
-        let mut fds: Vec<PollFd> = build_pollfds(&c);
+        let mut fds: Vec<_> = c.watch_fds().iter().map(|w| w.to_pollfd()).collect();
         let mut new_fds = None;
         let mut i = 0;
         let mut success = false;
@@ -166,21 +176,17 @@ mod test {
             if let Some(q) = new_fds { fds = q; new_fds = None };
 
             for f in fds.iter_mut() { f.revents = 0 };
-            assert!(unsafe { poll(fds.as_mut_ptr(), fds.len() as libc::c_ulong, 1000) } > 0);
+            assert!(unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::c_ulong, 1000) } > 0);
 
             for f in fds.iter().filter(|pfd| pfd.revents != 0) {
-                let m =
-                    if (f.revents & POLLIN) != 0 { WatchEvent::Readable as libc::c_uint } else { 0 } +
-                    if (f.revents & POLLOUT) != 0 { WatchEvent::Writable as libc::c_uint } else { 0 } +
-                    if (f.revents & POLLERR) != 0 { WatchEvent::Error as libc::c_uint } else { 0 } +
-                    if (f.revents & POLLHUP) != 0 { WatchEvent::Hangup as libc::c_uint } else { 0 };
+                let m = WatchEvent::from_revents(f.revents);
                 println!("Async: fd {}, revents {} -> {}", f.fd, f.revents, m);
-                assert!(f.revents & POLLIN != 0 || f.revents & POLLOUT != 0);
+                assert!(f.revents & libc::POLLIN != 0 || f.revents & libc::POLLOUT != 0);
 
                 for e in c.watch_handle(f.fd, m) {
                     println!("Async: got {:?}", e);
                     match e {
-                        ConnectionItem::WatchFd(_) => new_fds = Some(build_pollfds(&c)),
+                        ConnectionItem::WatchFd(_) => new_fds = Some(c.watch_fds().iter().map(|w| w.to_pollfd()).collect()),
                         ConnectionItem::MethodCall(m) => {
                             assert_eq!(m.headers(), (MessageType::MethodCall, Some("/test".to_string()),
                                 Some("com.example.asynctest".into()), Some("AsyncTest".to_string())));

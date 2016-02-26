@@ -637,9 +637,9 @@ impl Message {
 
     /// Appends one argument to this message.
     /// Use in builder style: e g `m.method_return().append1(7i32)`
-    pub fn append1<A: Append>(self, a: A) -> Self {
+    pub fn append1<A: Append>(mut self, a: A) -> Self {
         {
-            let mut m = IterAppend::new(&self);
+            let mut m = IterAppend::new(&mut self);
             m.append(a);
         }
         self
@@ -647,9 +647,9 @@ impl Message {
 
     /// Appends two arguments to this message.
     /// Use in builder style: e g `m.method_return().append2(7i32, 6u8)`
-    pub fn append2<A1: Append, A2: Append>(self, a1: A1, a2: A2) -> Self {
+    pub fn append2<A1: Append, A2: Append>(mut self, a1: A1, a2: A2) -> Self {
         {
-            let mut m = IterAppend::new(&self);
+            let mut m = IterAppend::new(&mut self);
             m.append(a1); m.append(a2);
         }
         self
@@ -657,9 +657,9 @@ impl Message {
 
     /// Appends three arguments to this message.
     /// Use in builder style: e g `m.method_return().append3(7i32, 6u8, true)`
-    pub fn append3<A1: Append, A2: Append, A3: Append>(self, a1: A1, a2: A2, a3: A3) -> Self {
+    pub fn append3<A1: Append, A2: Append, A3: Append>(mut self, a1: A1, a2: A2, a3: A3) -> Self {
         {
-            let mut m = IterAppend::new(&self);
+            let mut m = IterAppend::new(&mut self);
             m.append(a1); m.append(a2); m.append(a3);
         }
         self
