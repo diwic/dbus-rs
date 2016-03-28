@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use libc::{c_void, c_char, c_uint, c_int};
+use std::os::raw::{c_void, c_char, c_uint, c_int};
 
 pub type DBusConnection = c_void;
 pub type DBusMessage = c_void;

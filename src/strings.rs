@@ -5,7 +5,7 @@ use std::{str, fmt, ops, default};
 use std::ffi::{CStr, CString};
 use std::borrow::Cow;
 use Error;
-use libc;
+use std::os::raw::c_char;
 
 macro_rules! cstring_wrapper {
     ($t: ident, $s: ident) => {
@@ -25,9 +25,9 @@ impl<'m> $t<'m> {
     pub fn from_slice(s: &'m [u8]) -> Result<$t<'m>, String> {
         if s.len() == 0 || s[s.len()-1] != 0 { return $t::new(s) };
         let mut e = Error::empty();
-        let b = unsafe { ffi::$s(s.as_ptr() as *const libc::c_char, e.get_mut()) };
+        let b = unsafe { ffi::$s(s.as_ptr() as *const c_char, e.get_mut()) };
         if b != 0 {
-            let c = unsafe { CStr::from_ptr(s.as_ptr() as *const libc::c_char) };
+            let c = unsafe { CStr::from_ptr(s.as_ptr() as *const c_char) };
             Ok($t(Cow::Borrowed(c))) 
         }
             else { Err(e.message().unwrap().into()) }
@@ -37,7 +37,7 @@ impl<'m> $t<'m> {
     /// It's up to you to guarantee that s ends with a \0 and is valid.
     pub unsafe fn from_slice_unchecked(s: &'m [u8]) -> $t<'m> {
         debug_assert!(s[s.len()-1] == 0);
-        $t(Cow::Borrowed(CStr::from_ptr(s.as_ptr() as *const libc::c_char)))
+        $t(Cow::Borrowed(CStr::from_ptr(s.as_ptr() as *const c_char)))
     }
 
     /// View this struct as a CStr.
@@ -106,7 +106,7 @@ cstring_wrapper!(Path, dbus_validate_path);
 
 // This is needed so one can make arrays of paths easily
 impl<'a> default::Default for Path<'a> {
-    fn default() -> Path<'a> { Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"/\0".as_ptr() as *const libc::c_char)})) }
+    fn default() -> Path<'a> { Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"/\0".as_ptr() as *const c_char)})) }
 }
 
 /// A wrapper around a string that is guaranteed to be
@@ -139,9 +139,10 @@ cstring_wrapper!(ErrorName, dbus_validate_error_name);
 
 #[test]
 fn some_path() {
+    use std::os::raw::c_char;
     let p1: Path = "/valid".into();
     let p2 = Path::new("##invalid##");
-    assert_eq!(p1, Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"/valid\0".as_ptr() as *const libc::c_char) })));
+    assert_eq!(p1, Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"/valid\0".as_ptr() as *const c_char) })));
     assert_eq!(p2, Err("Object path was not valid: '##invalid##'".into()));
 }
 

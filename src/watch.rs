@@ -5,6 +5,7 @@ use super::Connection;
 use std::mem;
 use std::cell::RefCell;
 use std::os::unix::io::{RawFd, AsRawFd};
+use std::os::raw::{c_void, c_uint};
 
 /// A file descriptor to watch for incoming events (for async I/O).
 ///
@@ -78,7 +79,7 @@ impl WatchList {
     }
 
 
-    pub fn watch_handle(&self, fd: RawFd, flags: libc::c_uint) {
+    pub fn watch_handle(&self, fd: RawFd, flags: c_uint) {
         // println!("watch_handle {} flags {}", fd, flags);
         for &q in self.watches.borrow().iter() {
             let w = self.get_watch(q);
@@ -99,8 +100,8 @@ impl WatchList {
         let enabled = self.watches.borrow().contains(&watch) && unsafe { ffi::dbus_watch_get_enabled(watch) != 0 };
         let flags = unsafe { ffi::dbus_watch_get_flags(watch) };
         if enabled {
-            w.read = (flags & ffi::DBusWatchEvent::Readable as libc::c_uint) != 0;
-            w.write = (flags & ffi::DBusWatchEvent::Writable as libc::c_uint) != 0;
+            w.read = (flags & ffi::DBusWatchEvent::Readable as c_uint) != 0;
+            w.write = (flags & ffi::DBusWatchEvent::Writable as c_uint) != 0;
         }
         // println!("Get watch fd {:?} ptr {:?} enabled {:?} flags {:?}", w, watch, enabled, flags);
         w
@@ -133,7 +134,7 @@ impl WatchList {
     }
 }
 
-extern "C" fn add_watch_cb(watch: *mut ffi::DBusWatch, data: *mut libc::c_void) -> u32 {
+extern "C" fn add_watch_cb(watch: *mut ffi::DBusWatch, data: *mut c_void) -> u32 {
     let wlist: &WatchList = unsafe { mem::transmute(data) };
     // println!("Add watch {:?}", watch);
     wlist.watches.borrow_mut().push(watch);
@@ -141,14 +142,14 @@ extern "C" fn add_watch_cb(watch: *mut ffi::DBusWatch, data: *mut libc::c_void) 
     1
 }
 
-extern "C" fn remove_watch_cb(watch: *mut ffi::DBusWatch, data: *mut libc::c_void) {
+extern "C" fn remove_watch_cb(watch: *mut ffi::DBusWatch, data: *mut c_void) {
     let wlist: &WatchList = unsafe { mem::transmute(data) };
     // println!("Removed watch {:?}", watch);
     wlist.watches.borrow_mut().retain(|w| *w != watch);
     wlist.update(watch);
 }
 
-extern "C" fn toggled_watch_cb(watch: *mut ffi::DBusWatch, data: *mut libc::c_void) {
+extern "C" fn toggled_watch_cb(watch: *mut ffi::DBusWatch, data: *mut c_void) {
     let wlist: &WatchList = unsafe { mem::transmute(data) };
     // println!("Toggled watch {:?}", watch);
     wlist.update(watch);

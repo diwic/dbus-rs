@@ -32,6 +32,7 @@ use std::collections::LinkedList;
 use std::cell::{Cell, RefCell};
 use std::mem;
 use std::os::unix::io::RawFd;
+use std::os::raw::{c_void, c_char, c_int, c_uint};
 
 #[allow(missing_docs)]
 mod ffi;
@@ -172,7 +173,7 @@ pub struct Error {
 
 unsafe impl Send for Error {}
 
-fn c_str_to_slice(c: & *const libc::c_char) -> Option<&str> {
+fn c_str_to_slice(c: & *const c_char) -> Option<&str> {
     if *c == ptr::null() { None }
     else { std::str::from_utf8( unsafe { CStr::from_ptr(*c).to_bytes() }).ok() }
 }
@@ -243,12 +244,12 @@ impl std::fmt::Display for Error {
 
 impl WatchEvent {
     /// After running poll, this transforms the revents into a parameter you can send into `Connection::watch_handle`
-    pub fn from_revents(revents: libc::c_short) -> libc::c_uint {
+    pub fn from_revents(revents: libc::c_short) -> c_uint {
         0 +
-        if (revents & libc::POLLIN) != 0 { WatchEvent::Readable as libc::c_uint } else { 0 } +
-        if (revents & libc::POLLOUT) != 0 { WatchEvent::Writable as libc::c_uint } else { 0 } +
-        if (revents & libc::POLLERR) != 0 { WatchEvent::Error as libc::c_uint } else { 0 } +
-        if (revents & libc::POLLHUP) != 0 { WatchEvent::Hangup as libc::c_uint } else { 0 } 
+        if (revents & libc::POLLIN) != 0 { WatchEvent::Readable as c_uint } else { 0 } +
+        if (revents & libc::POLLOUT) != 0 { WatchEvent::Writable as c_uint } else { 0 } +
+        if (revents & libc::POLLERR) != 0 { WatchEvent::Error as c_uint } else { 0 } +
+        if (revents & libc::POLLHUP) != 0 { WatchEvent::Hangup as c_uint } else { 0 } 
     }
 }
 
@@ -284,7 +285,7 @@ impl<'a> Iterator for ConnectionItems<'a> {
 
             match self.timeout_ms {
                 Some(t) => {
-                    let r = unsafe { ffi::dbus_connection_read_write_dispatch(self.c.conn(), t as libc::c_int) };
+                    let r = unsafe { ffi::dbus_connection_read_write_dispatch(self.c.conn(), t as c_int) };
                     if !self.c.i.pending_items.borrow().is_empty() { continue };
                     if r == 0 { return None; }
                     return Some(ConnectionItem::Nothing);
@@ -316,7 +317,7 @@ pub struct Connection {
 }
 
 extern "C" fn filter_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::DBusMessage,
-    user_data: *mut libc::c_void) -> ffi::DBusHandlerResult {
+    user_data: *mut c_void) -> ffi::DBusHandlerResult {
 
     let m = message::message_from_ptr(msg, true);
     let i: &IConnection = unsafe { mem::transmute(user_data) };
@@ -339,7 +340,7 @@ extern "C" fn filter_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::D
 }
 
 extern "C" fn object_path_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::DBusMessage,
-    user_data: *mut libc::c_void) -> ffi::DBusHandlerResult {
+    user_data: *mut c_void) -> ffi::DBusHandlerResult {
 
     let m = message::message_from_ptr(msg, true);
     let i: &IConnection = unsafe { mem::transmute(user_data) };
@@ -389,7 +390,7 @@ impl Connection {
         let mut e = Error::empty();
         let response = unsafe {
             ffi::dbus_connection_send_with_reply_and_block(self.conn(), message::get_message_ptr(&msg),
-                timeout_ms as libc::c_int, e.get_mut())
+                timeout_ms as c_int, e.get_mut())
         };
         if response == ptr::null_mut() {
             return Err(e);
@@ -433,7 +434,7 @@ impl Connection {
             dbus_internal_pad4: None,
         };
         let r = unsafe {
-            let user_data: *mut libc::c_void = mem::transmute(&*self.i);
+            let user_data: *mut c_void = mem::transmute(&*self.i);
             ffi::dbus_connection_try_register_object_path(self.conn(), p.as_ptr(), &vtable, user_data, e.get_mut())
         };
         if r == 0 { Err(e) } else { Ok(()) }
@@ -449,7 +450,7 @@ impl Connection {
     /// List registered object paths.
     pub fn list_registered_object_paths(&self, path: &str) -> Vec<String> {
         let p = to_c_str(path);
-        let mut clist: *mut *mut libc::c_char = ptr::null_mut();
+        let mut clist: *mut *mut c_char = ptr::null_mut();
         let r = unsafe { ffi::dbus_connection_list_registered(self.conn(), p.as_ptr(), &mut clist) };
         if r == 0 { panic!("Out of memory"); }
         let mut v = Vec::new();
@@ -511,7 +512,7 @@ impl Connection {
     /// The returned iterator will return pending items only, never block for new events.
     ///
     /// See the `Watch` struct for an example.
-    pub fn watch_handle(&self, fd: RawFd, flags: libc::c_uint) -> ConnectionItems {
+    pub fn watch_handle(&self, fd: RawFd, flags: c_uint) -> ConnectionItems {
         self.i.watches.as_ref().unwrap().watch_handle(fd, flags);
         ConnectionItems { c: self, timeout_ms: None }
     }

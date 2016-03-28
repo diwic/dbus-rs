@@ -4,6 +4,7 @@ use super::{ffi, Error, MessageType, TypeSig, libc, to_c_str, c_str_to_slice, in
 use super::{BusName, Path, Interface, Member, ErrorName};
 use std::os::unix::io::{RawFd, AsRawFd};
 use std::ffi::CStr;
+use std::os::raw::{c_void, c_char, c_int};
 
 use super::arg::{Append, IterAppend, Get, Iter};
 
@@ -104,7 +105,7 @@ pub enum MessageItem {
 fn iter_get_basic(i: &mut ffi::DBusMessageIter) -> i64 {
     let mut c: i64 = 0;
     unsafe {
-        let p: *mut libc::c_void = mem::transmute(&mut c);
+        let p: *mut c_void = mem::transmute(&mut c);
         ffi::dbus_message_iter_get_basic(i, p);
     }
     c
@@ -113,7 +114,7 @@ fn iter_get_basic(i: &mut ffi::DBusMessageIter) -> i64 {
 fn iter_get_f64(i: &mut ffi::DBusMessageIter) -> f64 {
     let mut c: f64 = 0.0;
     unsafe {
-        let p: *mut libc::c_void = mem::transmute(&mut c);
+        let p: *mut c_void = mem::transmute(&mut c);
         ffi::dbus_message_iter_get_basic(i, p);
     }
     c
@@ -121,7 +122,7 @@ fn iter_get_f64(i: &mut ffi::DBusMessageIter) -> f64 {
 
 fn iter_append_f64(i: &mut ffi::DBusMessageIter, v: f64) {
     unsafe {
-        let p: *const libc::c_void = mem::transmute(&v);
+        let p: *const c_void = mem::transmute(&v);
         ffi::dbus_message_iter_append_basic(i, ffi::DBUS_TYPE_DOUBLE, p);
     }
 }
@@ -281,8 +282,8 @@ impl MessageItem {
                 let a = MessageItem::from_iter(&mut subiter);
                 let t = if a.len() > 0 { a[0].type_sig() } else {
                     let c = unsafe { ffi::dbus_message_iter_get_signature(&mut subiter) };
-                    let s = c_str_to_slice(&(c as *const libc::c_char)).unwrap().to_string();
-                    unsafe { ffi::dbus_free(c as *mut libc::c_void) };
+                    let s = c_str_to_slice(&(c as *const c_char)).unwrap().to_string();
+                    unsafe { ffi::dbus_free(c as *mut c_void) };
                     Cow::Owned(s)
                 };
                 Some(MessageItem::Array(a, t))
@@ -293,17 +294,17 @@ impl MessageItem {
                 Some(MessageItem::Struct(MessageItem::from_iter(&mut subiter)))
             },
             ffi::DBUS_TYPE_STRING => {
-                let mut c: *const libc::c_char = ptr::null();
+                let mut c: *const c_char = ptr::null();
                 unsafe {
-                    let p: *mut libc::c_void = mem::transmute(&mut c);
+                    let p: *mut c_void = mem::transmute(&mut c);
                     ffi::dbus_message_iter_get_basic(i, p);
                 };
                 Some(MessageItem::Str(c_str_to_slice(&c).expect("D-Bus string error").to_string()))
             },
             ffi::DBUS_TYPE_OBJECT_PATH => {
-                let mut c: *const libc::c_char = ptr::null();
+                let mut c: *const c_char = ptr::null();
                 unsafe {
-                    let p: *mut libc::c_void = mem::transmute(&mut c);
+                    let p: *mut c_void = mem::transmute(&mut c);
                     ffi::dbus_message_iter_get_basic(i, p);
                 };
                 let o = Path::new(c_str_to_slice(&c).expect("D-Bus object path error")).ok().expect("D-Bus object path error");
@@ -335,8 +336,8 @@ impl MessageItem {
     fn iter_append_basic(&self, i: &mut ffi::DBusMessageIter, v: i64) {
         let t = self.array_type();
         unsafe {
-            let p: *const libc::c_void = mem::transmute(&v);
-            ffi::dbus_message_iter_append_basic(i, t as libc::c_int, p);
+            let p: *const c_void = mem::transmute(&v);
+            ffi::dbus_message_iter_append_basic(i, t as c_int, p);
         }
     }
 
@@ -845,7 +846,7 @@ mod test {
                     if let Some(&MessageItem::UnixFd(ref z)) = m.get_items().get(0) {
                         println!("Got {:?}", m.get_items());
                         let mut q: libc::c_char = 100;
-                        assert_eq!(1, unsafe { libc::read(z.as_raw_fd(), &mut q as *mut i8 as *mut libc::c_void, 1) });
+                        assert_eq!(1, unsafe { libc::read(z.as_raw_fd(), &mut q as *mut _ as *mut libc::c_void, 1) });
                         assert_eq!(q, 'z' as libc::c_char);
                         break;
                     }

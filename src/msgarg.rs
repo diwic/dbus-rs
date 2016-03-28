@@ -1,12 +1,12 @@
 #![allow(dead_code)]
 
-use super::{ffi, libc, Message};
+use super::{ffi, Message};
 use super::message::get_message_ptr;
 use std::{mem, ptr};
 use std::marker::PhantomData;
 
 use std::ffi::{CStr, CString};
-
+use std::os::raw::{c_void, c_char};
 use super::{Signature, Path, OwnedFd};
 
 fn check(f: &str, i: u32) { if i == 0 { panic!("D-Bus error: '{}' failed", f) }} 
@@ -14,7 +14,7 @@ fn check(f: &str, i: u32) { if i == 0 { panic!("D-Bus error: '{}' failed", f) }}
 fn ffi_iter() -> ffi::DBusMessageIter { unsafe { mem::zeroed() }} 
 
 fn arg_append_basic(i: *mut ffi::DBusMessageIter, arg_type: i32, v: i64) {
-    let p = &v as *const _ as *const libc::c_void;
+    let p = &v as *const _ as *const c_void;
     unsafe {
         check("dbus_message_iter_append_basic", ffi::dbus_message_iter_append_basic(i, arg_type, p));
     };
@@ -24,13 +24,13 @@ fn arg_get_basic(i: *mut ffi::DBusMessageIter, arg_type: i32) -> Option<i64> {
     let mut c = 0i64;
     unsafe {
         if ffi::dbus_message_iter_get_arg_type(i) != arg_type { return None };
-        ffi::dbus_message_iter_get_basic(i, &mut c as *mut _ as *mut libc::c_void);
+        ffi::dbus_message_iter_get_basic(i, &mut c as *mut _ as *mut c_void);
     }
     Some(c)
 }
 
 fn arg_append_f64(i: *mut ffi::DBusMessageIter, arg_type: i32, v: f64) {
-    let p = &v as *const _ as *const libc::c_void;
+    let p = &v as *const _ as *const c_void;
     unsafe {
         check("dbus_message_iter_append_basic", ffi::dbus_message_iter_append_basic(i, arg_type, p));
     };
@@ -40,14 +40,14 @@ fn arg_get_f64(i: *mut ffi::DBusMessageIter, arg_type: i32) -> Option<f64> {
     let mut c = 0f64;
     unsafe {
         if ffi::dbus_message_iter_get_arg_type(i) != arg_type { return None };
-        ffi::dbus_message_iter_get_basic(i, &mut c as *mut _ as *mut libc::c_void);
+        ffi::dbus_message_iter_get_basic(i, &mut c as *mut _ as *mut c_void);
     }
     Some(c)
 }
 
 fn arg_append_str(i: *mut ffi::DBusMessageIter, arg_type: i32, v: &CStr) {
     let p = v.as_ptr();
-    let q = &p as *const _ as *const libc::c_void;
+    let q = &p as *const _ as *const c_void;
     unsafe {
         check("dbus_message_iter_append_basic", ffi::dbus_message_iter_append_basic(i, arg_type, q));
     };
@@ -56,8 +56,8 @@ fn arg_append_str(i: *mut ffi::DBusMessageIter, arg_type: i32, v: &CStr) {
 unsafe fn arg_get_str<'a>(i: *mut ffi::DBusMessageIter, arg_type: i32) -> Option<&'a CStr> {
     if ffi::dbus_message_iter_get_arg_type(i) != arg_type { return None };
     let mut p = ptr::null_mut();
-    ffi::dbus_message_iter_get_basic(i, &mut p as *mut _ as *mut libc::c_void);
-    Some(CStr::from_ptr(p as *const libc::c_char))
+    ffi::dbus_message_iter_get_basic(i, &mut p as *mut _ as *mut c_void);
+    Some(CStr::from_ptr(p as *const c_char))
 }
 
 /// Types that can represent a D-Bus message argument implement this trait.
@@ -184,7 +184,7 @@ impl<'a> Append for &'a str {
             bb.push(0);
             Cow::Owned(bb)
         };
-        let z = unsafe { CStr::from_ptr(v.as_ptr() as *const libc::c_char) };
+        let z = unsafe { CStr::from_ptr(v.as_ptr() as *const c_char) };
         arg_append_str(&mut i.0, Self::arg_type(), &z)
     }
 }
@@ -309,7 +309,7 @@ impl<'a, T: Arg + Append + Clone> Append for &'a [T] {
 
         i.append_container(Self::arg_type(), Some(T::signature().as_cstr()), |s|
             if can_fixed_array { unsafe { check("dbus_message_iter_append_fixed_array",
-                ffi::dbus_message_iter_append_fixed_array(&mut s.0, a.0, &zptr as *const _ as *const libc::c_void, zlen)) }}
+                ffi::dbus_message_iter_append_fixed_array(&mut s.0, a.0, &zptr as *const _ as *const c_void, zlen)) }}
             else { for arg in z { arg.clone().append(s) }});
     }
 }
@@ -322,7 +322,7 @@ impl<'a, T: Get<'a> + FixedArray> Get<'a> for &'a [T] {
 
             let mut v = ptr::null_mut();
             let mut i = 0;
-            ffi::dbus_message_iter_get_fixed_array(&mut si.0, &mut v as *mut _ as *mut libc::c_void, &mut i);
+            ffi::dbus_message_iter_get_fixed_array(&mut si.0, &mut v as *mut _ as *mut c_void, &mut i);
             Some(::std::slice::from_raw_parts(v, i as usize))
         })
     }
