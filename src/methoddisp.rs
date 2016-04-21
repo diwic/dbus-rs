@@ -675,6 +675,20 @@ impl<M: MethodType> Tree<M> {
         self
     }
 
+    /// Add a Object Path to this Tree, and register it.
+    pub fn add_and_reg(&mut self, c: &Connection, p: ObjectPath<M>) -> Result<&mut Self, Error> {
+        try!(c.register_object_path(&*p.name));
+        self.paths.insert(p.name.clone(), Arc::new(p));
+        Ok(self)
+    }
+
+    /// Remove an Object Path from this Tree, and unregister it.
+    pub fn remove_and_unreg(&mut self, c: &Connection, p: ObjectPath<M>) -> &mut Self {
+        c.unregister_object_path(&**p.name);
+        self.paths.remove(&p.name);
+        self
+    }
+
     /// Registers or unregisters all object paths in the tree.
     pub fn set_registered(&self, c: &Connection, b: bool) -> Result<(), Error> {
         let mut regd_paths = Vec::new();
