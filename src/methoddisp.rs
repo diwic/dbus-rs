@@ -669,7 +669,7 @@ impl<M: MethodType> Tree<M> {
         }).collect()
     }
 
-    /// Add a Object Path to this Tree.
+    /// Add an Object Path to this Tree.
     ///
     /// Note: This does not unregister a path with the connection, so if the tree is currently registered,
     /// you might want to call Connection::register_object_path to add the path manually.
@@ -678,14 +678,23 @@ impl<M: MethodType> Tree<M> {
         self
     }
 
+    /// Adds an ObjectPath to this Tree. Returns a reference to the ObjectPath.
+    /// The note for add() also applies here.
+    pub fn add_o_ref(&mut self, p: ObjectPath<M>) -> Arc<ObjectPath<M>> {
+        let name = p.name.clone();
+        let o = Arc::new(p);
+        self.paths.insert(name, o.clone());
+        o
+    }
+
     /// Remove a object path from the Tree. Returns the object path removed, or None if not found.
     ///
     /// Note: This does not unregister a path with the connection, so if the tree is currently registered,
     /// you might want to call Connection::unregister_object_path to remove the path manually.
-    pub fn remove(&mut self, p: &Path<'static>) -> Option<ObjectPath<M>> {
+    pub fn remove(&mut self, p: &Path<'static>) -> Option<Arc<ObjectPath<M>>> {
         // There is no real reason p needs to have a static lifetime; but
         // the borrow checker doesn't agree. :-(
-        self.paths.remove(p).map(|o| Arc::try_unwrap(o).unwrap_or_else(|_| unreachable!()))
+        self.paths.remove(p)
     }
 
     /// Registers or unregisters all object paths in the tree.
