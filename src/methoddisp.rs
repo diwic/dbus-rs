@@ -199,6 +199,11 @@ impl<M> Interface<M> {
     pub fn add_m(mut self, m: Method<M>) -> Self { self.methods.insert(m.name.clone(), Arc::new(m)); self }
     /// Adds a signal to the interface.
     pub fn add_s(mut self, s: Signal) -> Self { self.signals.insert(s.name.clone(), Arc::new(s)); self }
+    /// Adds a signal to the interface. Lets you keep another clone of the signal
+    /// (which you can use to emit the signal, once it belongs to an object path).
+    ///
+    /// Note: You are not allowed to add a signal to more than one interface.
+    pub fn add_s_arc(mut self, s: Arc<Signal>) -> Self { self.signals.insert(s.name.clone(), s); self }
     /// Adds a signal to the interface. Returns a reference to the signal
     /// (which you can use to emit the signal, once it belongs to an object path).
     pub fn add_s_ref(&mut self, s: Signal) -> Arc<Signal> {
@@ -209,6 +214,11 @@ impl<M> Interface<M> {
 
     /// Adds a property to the interface.
     pub fn add_p(mut self, p: Property<M>) -> Self { self.properties.insert(p.name.clone(), Arc::new(p)); self }
+    /// Adds a property to the interface. Lets you keep another clone of the property
+    /// (which you can use to get and set the current value of the property).
+    ///
+    /// Note: You are not allowed to add a property to more than one interface. Later function calls might panic if you do so.
+    pub fn add_p_arc(mut self, p: Arc<Property<M>>) -> Self { self.properties.insert(p.name.clone(), p); self }
     /// Adds a property to the interface. Returns a reference to the property
     /// (which you can use to get and set the current value of the property).
     pub fn add_p_ref(&mut self, p: Property<M>) -> Arc<Property<M>> {
@@ -427,8 +437,16 @@ impl Signal {
         m
     }
 
+    /// Returns a message which emits the signal when sent.
+    /// Panics if the signal is not inserted in an object path.
+    ///
+    /// Same as "emit" but does not take a "MessageItem" argument.
+    pub fn msg(&self) -> Message { self.emit(&[]) }
+
     /// Builder method that adds an Argument to the Signal.
     pub fn arg<A: Into<Argument>>(mut self, a: A) -> Self { self.arguments.push(a.into()); self }
+    /// Builder method that adds an Argument to the Signal.
+    pub fn sarg<A: arg::Arg, S: Into<String>>(mut self, s: S) -> Self { self.arguments.push((s.into(), A::signature()).into()); self }
     /// Builder method that adds multiple "rguments to the Signel.
     pub fn args<Z: Into<Argument>, A: IntoIterator<Item=Z>>(mut self, a: A) -> Self {
         self.arguments.extend(a.into_iter().map(|b| b.into())); self
@@ -532,11 +550,16 @@ impl<M: MethodType> ObjectPath<M> {
 
     /// Add an Interface to this Object Path.
     pub fn add(mut self, p: Interface<M>) -> Self {
+        use std::mem;
         for s in p.signals.values() {
-            *s.owner.lock().unwrap() = Some((self.name.clone(), p.name.clone()))
+            let n = Some((self.name.clone(), p.name.clone()));
+            let o = mem::replace(&mut *s.owner.lock().unwrap(), n);
+            assert!(o.is_none(), "Signal {} already added to object path", s.name);
         };
         for s in p.properties.values() {
-            *s.owner.lock().unwrap() = Some((self.name.clone(), p.name.clone()))
+            let n = Some((self.name.clone(), p.name.clone()));
+            let o = mem::replace(&mut *s.owner.lock().unwrap(), n);
+            assert!(o.is_none(), "Property {} already added to object path", s.name);
         };
         if !p.properties.is_empty() { self.add_property_handler(); }
         self.ifaces.insert(p.name.clone(), Arc::new(p));
