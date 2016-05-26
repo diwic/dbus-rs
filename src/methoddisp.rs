@@ -909,12 +909,13 @@ fn test_sync_prop() {
 
 /* This test case no longer works, for unknown reason, see
    https://github.com/diwic/dbus-rs/issues/27
+
 #[test]
 fn prop_lifetime_simple() {
-    let f = Factory::new_fnmut();
     let count;
-    let mut i = f.interface("com.example.dbus.rs");
-    count = i.add_p_ref(f.property("changes", 0i32));
+    let f = Factory::new_fnmut();
+    count = Arc::new(f.property("changes", 0i32));
+    let mut i = f.interface("com.example.dbus.rs").add_p_arc(count.clone());
 
     let _setme = i.add_p_ref(f.property("setme", 0u8).access(Access::ReadWrite).on_set(|_,_,_| {
         let v: i32 = count.get_value().inner().unwrap();
@@ -924,24 +925,27 @@ fn prop_lifetime_simple() {
 }
 */
 
-/* This test case no longer works, for unknown reason, see
-   https://github.com/diwic/dbus-rs/issues/27
 #[test]
 fn prop_server() {
-    let (count, setme): (_, RefCell<Option<Arc<Property<_>>>>);
-    setme = RefCell::new(None);
+    let setme: Arc<RefCell<Option<Arc<Property<_>>>>>; // Yikes!
+    setme = Arc::new(RefCell::new(None));
     let f = Factory::new_fnmut();
     let mut i = f.interface("com.example.dbus.rs");
-    count = i.add_p_ref(f.property("changes", 0i32));
-    *setme.borrow_mut() = Some(i.add_p_ref(f.property("setme", 0u8).access(Access::ReadWrite).on_set(|m,_,_| {
-        let ss2 = setme.borrow();
+    let count = i.add_p_ref(f.property("changes", 0i32));
+    let count2 = count.clone();
+    let setme2 = setme.clone();
+    let setme3 = Arc::new(f.property("setme", 0u8).access(Access::ReadWrite).on_set(move |m,_,_| {
+        let ss2 = setme2.borrow();
         let ss = ss2.as_ref().unwrap();
         let s = try!(ss.verify_remote_set(m));
         let r = try!(ss.set_value(s).map_err(|_| MethodErr::ro_property(&ss.name)));
-        let v: i32 = count.get_value().inner().unwrap();
-        count.set_value((v + 1).into()).unwrap();
+        let v: i32 = count2.get_value().inner().unwrap();
+        count2.set_value((v + 1).into()).unwrap();
         Ok(r)
-    })));
+    }));
+    *setme.borrow_mut() = Some(setme3.clone());
+    let i = i.add_p_arc(setme3);
+
     let tree = f.tree().add(f.object_path("/example").add(i));
 
     let mut msg = Message::new_method_call("com.example.dbus.rs", "/example", "org.freedesktop.DBus.Properties", "Get").unwrap()
@@ -980,7 +984,7 @@ fn prop_server() {
     assert_eq!(c, 1);
 
 }
-*/
+
 
 #[test]
 fn test_introspection() {
