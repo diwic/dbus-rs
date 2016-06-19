@@ -111,7 +111,7 @@ pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
 
 pub mod arg {
     pub use msgarg::{Arg, FixedArray, Get, DictKey, Append};
-    pub use msgarg::{Iter, IterAppend, Array, Variant, Dict};
+    pub use msgarg::{Iter, TypeMismatchError, IterAppend, Array, Variant, Dict};
 }
 
 
