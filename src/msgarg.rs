@@ -2,7 +2,7 @@
 
 use super::{ffi, Message};
 use super::message::get_message_ptr;
-use std::{mem, ptr};
+use std::{mem, ptr, error, fmt};
 use std::marker::PhantomData;
 
 use std::ffi::{CStr, CString};
@@ -559,6 +559,22 @@ impl<'a> IterAppend<'a> {
     }
 }
 
+/// Error struct to indicate a D-Bus argument type mismatch.
+///
+/// Might be returned from `iter::read()`. 
+#[derive(Clone, Copy, Debug)]
+pub struct TypeMismatchError {}
+
+impl error::Error for TypeMismatchError {
+    fn description(&self) -> &str { "D-Bus argument type mismatch" }
+    fn cause(&self) -> Option<&error::Error> { None }
+}
+
+impl fmt::Display for TypeMismatchError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", (self as &error::Error).description())
+    }
+}
 
 #[derive(Clone, Copy)]
 /// Helper struct for retrieve one or more arguments from a Message.
@@ -588,6 +604,15 @@ impl<'a> Iter<'a> {
         unsafe { ffi::dbus_message_iter_next(&mut self.0) != 0 } 
     }
 
+    /// Wrapper around `get` and `next`. Calls `get`, and then `next` if `get` succeeded. 
+    ///
+    /// Also returns a `Result` rather than an `Option` to work better with `try!`.
+    pub fn read<T: Get<'a>>(&mut self) -> Result<T, TypeMismatchError> {
+        let r = try!(self.get().ok_or_else(|| TypeMismatchError {}));
+        self.next();
+        Ok(r)
+    }
+
     /// If the current argument is a container of the specified arg_type, then a new
     /// Iter is returned which is for iterating over the contents inside the container.
     ///
@@ -606,7 +631,6 @@ impl<'a> Iter<'a> {
     }
 }
 
-use std::fmt;
 impl<'a> fmt::Debug for Iter<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut z = self.clone();
