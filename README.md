@@ -1,4 +1,4 @@
-A D-Bus binding for rust.
+A D-Bus binding for Rust.
 ========================
 
 Current state: Slowly maturing. Most stuff you need should be working:
@@ -9,7 +9,7 @@ Current state: Slowly maturing. Most stuff you need should be working:
  * Properties, on both client and server sides (set/get/getall methods, signals on server side)
  * Optional async API (for poll-based mainloops, e g mio)
 
-[API Documentation](http://diwic.github.io/dbus-rs-docs/dbus/)
+[API Documentation is here](http://diwic.github.io/dbus-rs-docs/dbus/). If you have further questions or comments, [filing an issue](https://github.com/diwic/dbus-rs/issues) with your question is fine.
 
 Examples
 ========
@@ -83,4 +83,4 @@ For an extended example, which also uses non-panicing error handling, see
 License
 =======
 
-Apache / MIT dual licensed.
+Apache / MIT dual licensed. 

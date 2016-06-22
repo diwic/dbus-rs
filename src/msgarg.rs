@@ -607,6 +607,30 @@ impl<'a> Iter<'a> {
     /// Wrapper around `get` and `next`. Calls `get`, and then `next` if `get` succeeded. 
     ///
     /// Also returns a `Result` rather than an `Option` to work better with `try!`.
+    ///
+    /// # Example
+    /// ```ignore
+    /// struct ServiceBrowserItemNew {
+    ///     interface: i32,
+    ///     protocol: i32,
+    ///     name: String,
+    ///     item_type: String,
+    ///     domain: String,
+    ///     flags: u32,
+    /// }
+    ///
+    /// fn service_browser_item_new_msg(m: &Message) -> Result<ServiceBrowserItemNew, TypeMismatchError> {
+    ///     let mut iter = m.iter_init();
+    ///     Ok(ServiceBrowserItemNew {
+    ///         interface: try!(iter.read()),
+    ///         protocol: try!(iter.read()),
+    ///         name: try!(iter.read()),
+    ///         item_type: try!(iter.read()),
+    ///         domain: try!(iter.read()),
+    ///         flags: try!(iter.read()),
+    ///     })
+    /// }
+    /// ```
     pub fn read<T: Get<'a>>(&mut self) -> Result<T, TypeMismatchError> {
         let r = try!(self.get().ok_or_else(|| TypeMismatchError {}));
         self.next();
