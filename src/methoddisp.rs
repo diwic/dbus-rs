@@ -30,6 +30,25 @@ impl Argument {
     }
 }
 
+// Small helper struct to reduce memory somewhat for objects without annotations
+#[derive(Clone, Debug, Default)]
+struct Annotations(Option<BTreeMap<String, String>>);
+
+impl Annotations {
+    fn new() -> Annotations { Annotations(None) }
+
+    fn insert<N: Into<String>, V: Into<String>>(&mut self, n: N, v: V) {
+       if self.0.is_none() { self.0 = Some(BTreeMap::new()) }
+        self.0.as_mut().unwrap().insert(n.into(), v.into());
+    }
+
+    fn introspect(&self, indent: &str) -> String {
+        self.0.as_ref().map(|s| s.iter().fold("".into(), |aa, (ak, av)| {
+            format!("{}{}<annotation name=\"{}\" value=\"{}\"/>\n", aa, indent, ak, av)
+        })).unwrap_or(String::new())
+    }
+}
+
 // Doesn't work, conflicting impls
 // impl<S: Into<Signature>> From<S> for Argument
 
@@ -146,7 +165,7 @@ pub struct Method<M> {
     name: Arc<Member<'static>>,
     i_args: Vec<Argument>,
     o_args: Vec<Argument>,
-    anns: BTreeMap<String, String>,
+    anns: Annotations,
 }
 
 impl<M> Method<M> {
@@ -170,7 +189,7 @@ impl<M> Method<M> {
 
     /// Add an annotation to the method.
     pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
-        self.anns.insert(name.into(), value.into()); self
+        self.anns.insert(name, value); self
     }
     /// Add an annotation that this entity is deprecated.
     pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
@@ -180,7 +199,8 @@ impl<M: MethodType> Method<M> {
     /// Call the Method.
     pub fn call(&self, m: &Message, o: &ObjectPath<M>, i: &Tree<M>) -> MethodResult { self.cb.call_method(m, o, i) }
 
-    fn new(n: Member<'static>, cb: M) -> Self { Method { name: Arc::new(n), i_args: vec!(), o_args: vec!(), anns: BTreeMap::new(), cb: cb } }
+    fn new(n: Member<'static>, cb: M) -> Self { Method { name: Arc::new(n), i_args: vec!(),
+        o_args: vec!(), anns: Annotations::new(), cb: cb } }
 }
 
 
@@ -191,7 +211,7 @@ pub struct Interface<M> {
     methods: ArcMap<Member<'static>, Method<M>>,
     signals: ArcMap<Member<'static>, Signal>,
     properties: ArcMap<String, Property<M>>,
-    anns: BTreeMap<String, String>,
+    anns: Annotations,
 }
 
 impl<M> Interface<M> {
@@ -229,14 +249,14 @@ impl<M> Interface<M> {
 
     /// Add an annotation to this Inteface.
     pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
-        self.anns.insert(name.into(), value.into()); self
+        self.anns.insert(name, value); self
     }
     /// Add an annotation that this entity is deprecated.
     pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
 
     fn new(t: IfaceName<'static>) -> Interface<M> {
         Interface { name: Arc::new(t), methods: BTreeMap::new(), signals: BTreeMap::new(),
-            properties: BTreeMap::new(), anns: BTreeMap::new()
+            properties: BTreeMap::new(), anns: Annotations::new()
         }
     }
 
@@ -286,7 +306,7 @@ pub struct Property<M> {
     rw: Access,
     set_cb: Option<M>,
     owner: Mutex<Option<(Arc<Path<'static>>, Arc<IfaceName<'static>>)>>,
-    anns: BTreeMap<String, String>,
+    anns: Annotations,
 }
 
 impl<M: MethodType> Property<M> {
@@ -369,7 +389,7 @@ impl<M: MethodType> Property<M> {
 
     /// Add an annotation to this Property.
     pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
-        self.anns.insert(name.into(), value.into()); self
+        self.anns.insert(name, value); self
     }
 
     /// Add an annotation that this entity is deprecated.
@@ -377,7 +397,7 @@ impl<M: MethodType> Property<M> {
 
     fn new(s: String, i: MessageItem) -> Property<M> {
         Property { name: Arc::new(s), emits: EmitsChangedSignal::True, rw: Access::Read,
-            value: Mutex::new(i), owner: Mutex::new(None), anns: BTreeMap::new(), set_cb: None }
+            value: Mutex::new(i), owner: Mutex::new(None), anns: Annotations::new(), set_cb: None }
     }
 }
 
@@ -421,7 +441,7 @@ pub struct Signal {
     name: Arc<Member<'static>>,
     arguments: Vec<Argument>,
     owner: Mutex<Option<(Arc<Path<'static>>, Arc<IfaceName<'static>>)>>,
-    anns: BTreeMap<String, String>,
+    anns: Annotations,
 }
 
 impl Signal {
@@ -454,16 +474,10 @@ impl Signal {
 
     /// Add an annotation to this Signal.
     pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
-        self.anns.insert(name.into(), value.into()); self
+        self.anns.insert(name, value); self
     }
     /// Add an annotation that this entity is deprecated.
     pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
-}
-
-fn introspect_anns(anns: &BTreeMap<String, String>, indent: &str) -> String {
-    anns.iter().fold("".into(), |aa, (ak, av)| {
-        format!("{}{}<annotation name=\"{}\" value=\"{}\"/>\n", aa, indent, ak, av)
-    })
 }
 
 fn introspect_map<T, I: fmt::Display, C: Fn(&T) -> (String, String)>
@@ -591,17 +605,17 @@ impl<M: MethodType> ObjectPath<M> {
                 introspect_map(&iv.methods, "method", "    ", |m| (format!(""), format!("{}{}{}",
                     Argument::introspect_all(&m.i_args, "      ", " direction=\"in\""),
                     Argument::introspect_all(&m.o_args, "      ", " direction=\"out\""),
-                    introspect_anns(&m.anns, "      ")
+                    m.anns.introspect("      ")
                 ))),
                 introspect_map(&iv.properties, "property", "    ", |p| (
                     format!(" type=\"{}\" access=\"{}\"", p.get_value().type_sig(), p.rw.introspect()),
-                    introspect_anns(&p.anns, "      ")
+                    p.anns.introspect("      ")
                 )),
                 introspect_map(&iv.signals, "signal", "    ", |s| (format!(""), format!("{}{}",
                     Argument::introspect_all(&s.arguments, "      ", ""),
-                    introspect_anns(&s.anns, "      ")
+                    s.anns.introspect("      ")
                 ))),
-                introspect_anns(&iv.anns, "    ")
+                iv.anns.introspect("    ")
             ))
         );
         let olen = self.name.len()+1;
@@ -857,7 +871,7 @@ impl Factory<MethodSync> {
 impl<M> Factory<M> {
     /// Create a Signal.
     pub fn signal<T: Into<Member<'static>>>(&self, t: T) -> Signal {
-        Signal { name: Arc::new(t.into()), arguments: vec!(), owner: Mutex::new(None), anns: BTreeMap::new() }
+        Signal { name: Arc::new(t.into()), arguments: vec!(), owner: Mutex::new(None), anns: Annotations::new() }
     }
 }
 
@@ -993,7 +1007,7 @@ fn test_introspection() {
         .add(f.interface("com.example.echo")
             .add_m(f.method("Echo", |_,_,_| unimplemented!()).in_arg(("request", "s")).out_arg(("reply", "s")))
             .add_p(f.property("EchoCount", 7i32))
-            .add_s(f.signal("Echoed").arg(("data", "s")))
+            .add_s(f.signal("Echoed").arg(("data", "s")).deprecated())
     );
 
     let actual_result = t.introspect(&f.tree().add(f.object_path("/echo/subpath")));
@@ -1009,6 +1023,7 @@ fn test_introspection() {
     <property name="EchoCount" type="i" access="read"/>
     <signal name="Echoed">
       <arg name="data" type="s"/>
+      <annotation name="org.freedesktop.DBus.Deprecated" value="true"/>
     </signal>
   </interface>
   <interface name="org.freedesktop.DBus.Introspectable">
