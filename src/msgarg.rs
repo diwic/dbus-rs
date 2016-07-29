@@ -557,6 +557,62 @@ impl<'a> IterAppend<'a> {
         check("dbus_message_iter_close_container",
             unsafe { ffi::dbus_message_iter_close_container(&mut self.0, &mut s.0) });
     }
+
+    /// Low-level function to append a variant.
+    ///
+    /// Use in case the `Variant` struct is not flexible enough -
+    /// the easier way is to just call e g "append1" on a message and supply a `Variant` parameter.
+    ///
+    /// In order not to get D-Bus errors: during the call to "f" you need to call "append" on
+    /// the supplied `IterAppend` exactly once,
+    /// and with a value which has the same signature as inner_sig.  
+    pub fn append_variant<F: FnOnce(&mut IterAppend<'a>)>(&mut self, inner_sig: &Signature, f: F) {
+        self.append_container(Variant::<()>::arg_type(), Some(inner_sig.as_cstr()), f)
+    }
+
+    /// Low-level function to append an array.
+    ///
+    /// Use in case the `Array` struct is not flexible enough -
+    /// the easier way is to just call e g "append1" on a message and supply an `Array` parameter.
+    ///
+    /// In order not to get D-Bus errors: during the call to "f", you should only call "append" on
+    /// the supplied `IterAppend` with values which has the same signature as inner_sig.
+    pub fn append_array<F: FnOnce(&mut IterAppend<'a>)>(&mut self, inner_sig: &Signature, f: F) {
+        self.append_container(Array::<bool,()>::arg_type(), Some(inner_sig.as_cstr()), f)
+    }
+
+    /// Low-level function to append a struct.
+    ///
+    /// Use in case tuples are not flexible enough -
+    /// the easier way is to just call e g "append1" on a message and supply a tuple parameter.
+    pub fn append_struct<F: FnOnce(&mut IterAppend<'a>)>(&mut self, f: F) {
+        self.append_container(ffi::DBUS_TYPE_STRUCT, None, f)
+    }
+
+    /// Low-level function to append a dict entry.
+    ///
+    /// Use in case the `Dict` struct is not flexible enough -
+    /// the easier way is to just call e g "append1" on a message and supply a `Dict` parameter.
+    ///
+    /// In order not to get D-Bus errors: during the call to "f", you should call "append" once
+    /// for the key, then once for the value. You should only call this function for a subiterator
+    /// you got from calling "append_dict", and signatures need to match what you specified in "append_dict".
+    pub fn append_dict_entry<F: FnOnce(&mut IterAppend<'a>)>(&mut self, f: F) {
+        self.append_container(ffi::DBUS_TYPE_DICT_ENTRY, None, f)
+    }
+
+    /// Low-level function to append a dict.
+    ///
+    /// Use in case the `Dict` struct is not flexible enough -
+    /// the easier way is to just call e g "append1" on a message and supply a `Dict` parameter.
+    ///
+    /// In order not to get D-Bus errors: during the call to "f", you should only call "append_dict_entry"
+    /// for the subiterator - do this as many times as the number of dict entries.
+    pub fn append_dict<F: FnOnce(&mut IterAppend<'a>)>(&mut self, key_sig: &Signature, value_sig: &Signature, f: F) {
+        let sig = format!("{{{}{}}}", key_sig, value_sig);
+        self.append_container(Array::<bool,()>::arg_type(), Some(&CString::new(sig).unwrap()), f);
+    }
+
 }
 
 /// Error struct to indicate a D-Bus argument type mismatch.
@@ -592,6 +648,18 @@ impl<'a> Iter<'a> {
     /// Returns the current argument, if T is the argument type. Otherwise returns None.
     pub fn get<T: Get<'a>>(&mut self) -> Option<T> {
         T::get(self)
+    }
+
+    /// Returns the type signature for the current argument.
+    pub fn signature(&mut self) -> Signature<'static> {
+        unsafe {
+            let c = ffi::dbus_message_iter_get_signature(&mut self.0);
+            assert!(c != ptr::null_mut());
+            let cc = CStr::from_ptr(c);
+            let r = Signature::new(cc.to_bytes());
+            ffi::dbus_free(c as *mut c_void);
+            r.unwrap()
+        } 
     }
 
     /// The raw arg_type for the current item.

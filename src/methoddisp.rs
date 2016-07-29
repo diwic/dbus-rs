@@ -1,3 +1,6 @@
+/// NOTE: No longer used - replaced with files in the "tree" directory.
+
+
 #![allow(dead_code)]
 
 use {MessageItem, Message, MessageType, Connection, ConnectionItem, Error, ErrorName};

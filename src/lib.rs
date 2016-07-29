@@ -124,37 +124,7 @@ pub mod obj {
     pub use objpath::{PropertyROHandler, PropertyRWHandler, PropertyWOHandler, PropertyGetResult, PropertySetResult};
 }
 
-mod methoddisp;
-
-/// Contains functionality for dispatching methods on a D-Bus "server".
-/// Supersedes the `obj` module. Properties are somewhat still WIP,
-/// but should in any case be better than `obj` already.
-///
-/// # Example
-/// ```
-/// use dbus::{tree, Connection, BusType};
-/// let f = tree::Factory::new_fn();
-/// /* Add a method returning "Thanks!" on interface "com.example.dbus.rs"
-///    on object path "/example". */
-/// let t = f.tree().add(f.object_path("/example").introspectable()
-///     .add(f.interface("com.example.dbus.rs")
-///         .add_m(f.method("CallMe", |m,_,_| {
-///             Ok(vec!(m.method_return().append("Thanks!"))) }
-///         ).out_arg("s"))
-/// ));
-///
-/// let c = Connection::get_private(BusType::Session).unwrap();
-/// t.set_registered(&c, true).unwrap();
-/// /* Run forever */
-/// // for _ in t.run(&c, c.iter(1000)) {}
-/// ```
-
-pub mod tree {
-    pub use methoddisp::{Factory, Tree, TreeServer, ObjectPath, Interface, Signal};
-    pub use methoddisp::{Property, EmitsChangedSignal, Access};
-    pub use methoddisp::{Method, MethodErr, MethodResult, Argument};
-    pub use methoddisp::{MethodFn, MethodFnMut, MethodSync};
-}
+pub mod tree;
 
 static INITDBUS: std::sync::Once = std::sync::ONCE_INIT;
 

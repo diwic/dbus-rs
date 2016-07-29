@@ -1,0 +1,110 @@
+use super::{MethodType, DataType, MTFn, MTSync, MethodResult, MethodInfo};
+use super::{Tree, ObjectPath, Interface, Property, Signal, Method};
+use super::objectpath::IfaceCache;
+use std::sync::Arc;
+use Interface as IfaceName;
+use {Member, Path, arg};
+use std::default::Default;
+
+
+/// The factory is used to create object paths, interfaces, methods etc.
+///
+/// There are three factories:
+///
+///  **MTFn** - all methods are `Fn()`.
+///
+///  **MTFnMut** - all methods are `FnMut()`. This means they can mutate their environment,
+///  which has the side effect that if you call it recursively, it will RefCell panic.
+///
+///  **MTSync** - all methods are `Fn() + Send + Sync + 'static`. This means that the methods
+///  can be called from different threads in parallel.
+///
+#[derive(Debug, Clone)]
+pub struct Factory<M: MethodType<D>, D: DataType=()>(Arc<IfaceCache<M, D>>);
+
+
+impl Factory<MTFn<()>, ()> {
+    /// Creates a new factory for single-thread use.
+    pub fn new_fn<D: DataType>() -> Factory<MTFn<D>, D> { Factory(IfaceCache::new()) }
+
+    /// Creates a new factory for multi-thread use.
+    pub fn new_sync<D: DataType>() -> Factory<MTSync<D>, D> { Factory(IfaceCache::new()) }
+   
+}
+
+impl<D: DataType> Factory<MTFn<D>, D> {
+    /// Creates a new method for single-thread use.
+    pub fn method<H, T>(&self, t: T, data: D::Method, handler: H) -> Method<MTFn<D>, D>
+        where H: Fn(&MethodInfo<MTFn<D>, D>) -> MethodResult, T: Into<Member<'static>> {
+        super::leaves::new_method(t.into(), data, Box::new(handler) as Box<<MTFn<D> as MethodType<D>>::Method>)
+    }
+}
+
+impl<D: DataType> Factory<MTSync<D>, D> {
+    /// Creates a new method for multi-thread use.
+    pub fn method<H, T>(&self, t: T, data: D::Method, handler: H) -> Method<MTSync<D>, D>
+        where H: Fn(&MethodInfo<MTSync<D>, D>) -> MethodResult + Send + Sync + 'static, T: Into<Member<'static>> {
+        super::leaves::new_method(t.into(), data, Box::new(handler) as Box<<MTSync<D> as MethodType<D>>::Method>)
+    }
+}
+
+
+impl<M: MethodType<D>, D: DataType> Factory<M, D> {
+
+    /// Creates a new property.
+    ///
+    /// `A` is used to calculate the type signature of the property.
+    pub fn property<A: arg::Arg, T: Into<String>>(&self, name: T, data: D::Property) -> Property<M, D> {
+        let sig = A::signature();
+        super::leaves::new_property(name.into(), sig, data)
+    }
+
+    /// Creates a new signal.
+    pub fn signal<T: Into<Member<'static>>>(&self, name: T, data: D::Signal) -> Signal<D> {
+        super::leaves::new_signal(name.into(), data)
+    }
+
+    /// Creates a new interface.
+    pub fn interface<T: Into<IfaceName<'static>>>(&self, name: T, data: D::Interface) -> Interface<M, D> {
+        super::objectpath::new_interface(name.into(), data)
+    }
+
+    /// Creates a new object path.
+    pub fn object_path<T: Into<Path<'static>>>(&self, name: T, data: D::ObjectPath) -> ObjectPath<M, D> {
+        super::objectpath::new_objectpath(name.into(), data, self.0.clone())
+    }
+
+    /// Creates a new tree.
+    pub fn tree(&self) -> Tree<M, D> { Default::default() }
+ 
+}
+
+#[test]
+fn create_fn() {
+    let f = Factory::new_fn::<()>();
+    let borrow_me = 5u32;
+    let m = f.method("test", (), |m| Ok(vec!(m.msg.method_return().append1(&borrow_me))));
+    assert_eq!(&**m.get_name(), "test");
+}
+
+
+#[test]
+fn fn_customdata() {
+    #[derive(Default)]
+    struct Custom;
+    impl DataType for Custom {
+        type ObjectPath = Arc<u8>;
+        type Interface = ();
+        type Property = ();
+        type Method = i32;
+        type Signal = ();
+    }
+
+    let f = Factory::new_fn::<Custom>();
+  
+    let m = f.method("test", 789, |_| unimplemented!());
+    assert_eq!(*m.get_data(), 789);
+   
+    let o = f.object_path("/test/test", Arc::new(7));
+    assert_eq!(**o.get_data(), 7);
+}
