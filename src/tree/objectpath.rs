@@ -1,7 +1,7 @@
 use super::utils::{ArcMap, Annotations, Introspect};
 use super::{MethodType, MethodInfo, MethodResult, MethodErr, DataType, Property, Method, Signal};
 use std::sync::{Arc, Mutex};
-use {Member, Message, Path, MessageType, Connection, ConnectionItem, Error, arg};
+use {Member, Message, Path, Signature, MessageType, Connection, ConnectionItem, Error, arg};
 use Interface as IfaceName;
 use std::fmt;
 use std::ffi::{CStr, CString};
@@ -144,6 +144,24 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
         self.add(z)
     }
 
+    /// Adds ObjectManager support for this object path.
+    ///
+    /// It is not possible to add/remove interfaces while the object path belongs to a tree,
+    /// hence no InterfacesAdded / InterfacesRemoved signals are sent.
+    pub fn object_manager(mut self) -> Self {
+        use arg::{Variant, Dict};
+        let ifname = IfaceName::from("org.freedesktop.DBus.ObjectManager");
+        if self.ifaces.contains_key(&ifname) { return self };
+        let z = self.ifacecache.get(ifname, |i| {
+            i.add_m(super::leaves::new_method("GetManagedObjects".into(), Default::default(),
+                M::make_method(Box::new(|m| m.path.get_managed_objects(m))))
+                .outarg::<Dict<Path,Dict<&str,Dict<&str,Variant<()>,()>,()>,()>,_>("objpath_interfaces_and_properties"))
+        });
+        self.ifaces.insert(z.name.clone(), z);
+        self
+    }
+
+
     fn introspect(&self, tree: &Tree<M, D>) -> String {
         let ifacestr = introspect_map(&self.ifaces, "  ");
         let olen = self.name.len()+1;
@@ -228,6 +246,36 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
         r.push(m.msg.method_return());
         Ok(r)
 
+    }
+
+    fn get_managed_objects(&self, m: &MethodInfo<M, D>) -> MethodResult {
+        use arg::{Dict, Variant};
+        let mut paths = m.tree.children(&self, false);
+        paths.push(&self);
+        let mut result = Ok(());
+        let mut r = m.msg.method_return();
+        {
+            let mut i = arg::IterAppend::new(&mut r);
+            i.append_dict(&Signature::make::<Path>(), &Signature::make::<Dict<&str,Dict<&str,Variant<()>,()>,()>>(), |ii| {
+                for p in paths {
+                    ii.append_dict_entry(|pi| {
+                        pi.append(&*p.name);
+                        pi.append_dict(&Signature::make::<&str>(), &Signature::make::<Dict<&str,Variant<()>,()>>(), |pii| {
+                            for ifaces in p.ifaces.values() {
+                                pii.append_dict_entry(|ppii| {
+                                    ppii.append(&**ifaces.name);
+                                    result = prop_append_dict(ppii, ifaces.properties.values().map(|v| &**v), m);
+                                });
+                                if result.is_err() { break; }
+                            }
+                        });
+                    });
+                    if result.is_err() { break; }
+                }
+            });
+        }
+        try!(result);
+        Ok(vec!(r))
     }
 
     fn handle(&self, m: &Message, t: &Tree<M, D>) -> MethodResult {

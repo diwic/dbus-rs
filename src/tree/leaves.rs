@@ -399,6 +399,7 @@ pub fn new_property<M: MethodType<D>, D: DataType>
 fn test_prop_handlers() {
     use tree::Factory;
     use std::collections::BTreeMap;
+    use arg::{Dict, Variant};
 
     #[derive(Default, Debug)]
     struct Custom;
@@ -411,7 +412,7 @@ fn test_prop_handlers() {
     }
 
     let f = Factory::new_fn::<Custom>();
-    let tree = f.tree().add(f.object_path("/test", ()).introspectable()
+    let tree = f.tree().add(f.object_path("/test", ()).introspectable().object_manager()
         .add(f.interface("com.example.test", ())
             .add_p(f.property::<i32,_>("Value1", 5i32).default_get())
             .add_p(f.property::<i32,_>("Value2", 9i32).default_get())
@@ -434,12 +435,24 @@ fn test_prop_handlers() {
         .append1("com.example.test");
     ::message::message_set_serial(&mut msg, 4);
     let res = tree.handle(&msg).unwrap();
-    let d: arg::Dict<&str, arg::Variant<i32>, _> = res[0].get1().unwrap();
+    let d: Dict<&str, Variant<i32>, _> = res[0].get1().unwrap();
     let z2: BTreeMap<_, _> = d.collect();
     assert_eq!(z2.get("Value1"), Some(&arg::Variant(5i32)));
     assert_eq!(z2.get("Value2"), Some(&arg::Variant(9i32)));
     assert_eq!(z2.get("Mooh"), None);
 
+    let mut msg = Message::new_method_call("com.example.test", "/test", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects").unwrap();
+    ::message::message_set_serial(&mut msg, 4);
+    let res = tree.handle(&msg).unwrap();
+    let pdict: arg::Dict<Path, Dict<&str, Dict<&str, Variant<i32>, _>, _>, _> = res[0].get1().unwrap();
+    let pmap: BTreeMap<_, _> = pdict.collect();
+    let idict = pmap.get(&Path::from("/test")).unwrap();
+    let imap: BTreeMap<_, _> = idict.collect();
+    let propdict = imap.get("com.example.test").unwrap();
+    let propmap: BTreeMap<_, _> = propdict.collect();
+    assert_eq!(propmap.get("Value1"), Some(&arg::Variant(5i32)));
+    assert_eq!(propmap.get("Value2"), Some(&arg::Variant(9i32)));
+    assert_eq!(propmap.get("Mooh"), None);
 }
 
 #[test]

@@ -329,7 +329,7 @@ impl<'a, T: Get<'a> + FixedArray> Get<'a> for &'a [T] {
 }
 
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 /// Append a D-Bus dict type (i e, an array of dict entries).
 pub struct Dict<'a, K: DictKey, V: Arg, I>(I, PhantomData<(&'a Message, *const K, *const V)>);
 
