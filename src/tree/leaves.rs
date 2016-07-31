@@ -1,6 +1,6 @@
 // Methods, signals, properties, and interfaces.
 use super::utils::{Argument, Annotations, Introspect, introspect_args};
-use super::{MethodType, MethodInfo, MethodResult, MethodErr, DataType, PropInfo, MTFn};
+use super::{MethodType, MethodInfo, MethodResult, MethodErr, DataType, PropInfo, MTFn, MTSync};
 use {Member, Signature, Message, Path, MessageItem};
 use Interface as IfaceName;
 use arg;
@@ -351,6 +351,26 @@ impl<'a, D: DataType> Property<MTFn<D>, D> {
     }
 }
 
+impl<D: DataType> Property<MTSync<D>, D> {
+    /// Sets the callback for getting a property.
+    ///
+    /// For multi-thread use.
+    pub fn on_get<H>(mut self, handler: H) -> Property<MTSync<D>, D>
+        where H: Fn(&mut arg::IterAppend, &PropInfo<MTSync<D>, D>) -> Result<(), MethodErr> + Send + Sync + 'static {
+        self.get_cb = Some(DebugGetProp(Box::new(handler) as Box<_>));
+        self
+    }
+
+    /// Sets the callback for setting a property.
+    ///
+    /// For single-thread use.
+    pub fn on_set<H>(mut self, handler: H) -> Property<MTSync<D>, D>
+        where H: Fn(&mut arg::Iter, &PropInfo<MTSync<D>, D>) -> Result<(), MethodErr> + Send + Sync + 'static {
+        self.set_cb = Some(DebugSetProp(Box::new(handler) as Box<_>));
+        self
+    }
+}
+
 
 impl<M: MethodType<D>, D: DataType> Property<M, D> where D::Property: arg::Append + Clone {
     // Adds a "standard" get handler.
@@ -481,44 +501,48 @@ fn test_set_prop() {
 }
 
 
-/*
 #[test]
 fn test_sync_prop() {
-    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use tree::{Factory, Access, EmitsChangedSignal};
 
-    #[derive(Default)]
-    struct Custom;
-    impl DataType for Custom {
-        type ObjectPath = ();
-        type Interface = ();
-        type Property = AtomicUsize;
-        type Method = ();
-        type Signal = ();
-    }
+    let f = Factory::new_sync::<()>();
 
-    let f = Factory::new_sync::<Custom>();
-    let mut i = f.interface("com.example.echo");
-    let p = Arc::new(f.property("EchoCount", AtomicUSize::new(7)));
-    let tree1 = Arc::new(f.tree().add(f.object_path("/echo", ()).introspectable()
-        .add(f.interface("com.example.echo", ()).add_p(p.clone())));
+    let count = Arc::new(AtomicUsize::new(3));
+    let (cget, cset) = (count.clone(), count.clone());
+
+    let tree1 = Arc::new(f.tree().add(f.object_path("/syncprop", ()).introspectable()
+        .add(f.interface("com.example.syncprop", ())
+            .add_p(f.property::<u32,_>("syncprop", ())
+                .access(Access::ReadWrite)
+                .emits_changed(EmitsChangedSignal::False)
+                .on_get(move |i,_| { i.append(cget.load(Ordering::SeqCst) as u32); Ok(()) }) 
+                .on_set(move |i,_| { cset.store(i.get::<u32>().unwrap() as usize, Ordering::SeqCst); Ok(()) })
+            )
+        )
+    ));
+
     let tree2 = tree1.clone();
     println!("{:#?}", tree2);
+
     ::std::thread::spawn(move || {
-        let r = p.set_value(9i32.into(), &"/echo".into(), &"com.example.echo".into()).unwrap();
-        let signal = r.get(0).unwrap();
-        assert_eq!(signal.msg_type(), MessageType::Signal);
-        let mut msg = Message::new_method_call("com.example.echoserver", "/echo", "com.example", "dummy").unwrap();
-        super::message::message_set_serial(&mut msg, 3);
-        tree2.handle(&msg);
+        let mut msg = Message::new_method_call("com.example.syncprop", "/syncprop", "org.freedesktop.DBus.Properties", "Set").unwrap()
+            .append3("com.example.syncprop", "syncprop", arg::Variant(5u32));
+         ::message::message_set_serial(&mut msg, 30);
+         let mut r = tree2.handle(&msg).unwrap();
+         assert!(r[0].as_result().is_ok());
     });
 
-    let mut msg = Message::new_method_call("com.example.echoserver", "/echo", "org.freedesktop.DBus.Properties", "Get").unwrap()
-        .append("com.example.echo").append("EchoCount");
-    super::message::message_set_serial(&mut msg, 4);
-    let r = tree1.handle(&msg).unwrap();
-    let r1 = r.get(0).unwrap();
-    println!("{:?}", r1.get_items());
-    let vv: super::arg::Variant<i32> = r1.get1().unwrap();
-    assert!(vv.0 == 7 || vv.0 == 9);
+    loop {
+        let mut msg = Message::new_method_call("com.example.echoserver", "/syncprop", "org.freedesktop.DBus.Properties", "Get").unwrap()
+            .append("com.example.syncprop").append1("syncprop");
+        ::message::message_set_serial(&mut msg, 4);
+        let mut r = tree1.handle(&msg).unwrap();
+        let r = r[0].as_result().unwrap();
+        let z: arg::Variant<u32> = r.get1().unwrap();
+        if z.0 == 5 { break; }
+        assert_eq!(z.0, 3);
+   }
+   assert_eq!(count.load(Ordering::SeqCst), 5);
 }
-*/
