@@ -1,10 +1,11 @@
 // Methods, signals, properties, and interfaces.
 use super::utils::{Argument, Annotations, Introspect, introspect_args};
-use super::{MethodType, MethodInfo, MethodResult, MethodErr, DataType, PropInfo, MTFn, MTSync};
+use super::{MethodType, MethodInfo, MethodResult, MethodErr, DataType, PropInfo, MTFn, MTFnMut, MTSync};
 use {Member, Signature, Message, Path, MessageItem};
 use Interface as IfaceName;
 use arg;
 use std::fmt;
+use std::cell::RefCell;
 
 
 // Workaround for https://github.com/rust-lang/rust/issues/31518
@@ -351,6 +352,27 @@ impl<'a, D: DataType> Property<MTFn<D>, D> {
     }
 }
 
+
+impl<'a, D: DataType> Property<MTFnMut<D>, D> {
+    /// Sets the callback for getting a property.
+    ///
+    /// For single-thread use.
+    pub fn on_get<H>(mut self, handler: H) -> Property<MTFnMut<D>, D>
+        where H: 'static + Fn(&mut arg::IterAppend, &PropInfo<MTFnMut<D>, D>) -> Result<(), MethodErr> {
+        self.get_cb = Some(DebugGetProp(Box::new(RefCell::new(handler)) as Box<_>));
+        self
+    }
+
+    /// Sets the callback for setting a property.
+    ///
+    /// For single-thread use.
+    pub fn on_set<H>(mut self, handler: H) -> Property<MTFnMut<D>, D>
+        where H: 'static + Fn(&mut arg::Iter, &PropInfo<MTFnMut<D>, D>) -> Result<(), MethodErr> {
+        self.set_cb = Some(DebugSetProp(Box::new(RefCell::new(handler)) as Box<_>));
+        self
+    }
+}
+
 impl<D: DataType> Property<MTSync<D>, D> {
     /// Sets the callback for getting a property.
     ///
@@ -375,7 +397,7 @@ impl<D: DataType> Property<MTSync<D>, D> {
 impl<M: MethodType<D>, D: DataType> Property<M, D> where D::Property: arg::Append + Clone {
     // Adds a "standard" get handler.
     pub fn default_get(mut self) -> Self {
-        let g = Box::new(|i: &mut arg::IterAppend, p: &PropInfo<M, D>| { i.append(p.prop.get_data()); Ok(()) });
+        let g = |i: &mut arg::IterAppend, p: &PropInfo<M, D>| { i.append(p.prop.get_data()); Ok(()) };
         self.get_cb = Some(DebugGetProp(M::make_getprop(g)));
         self
     }

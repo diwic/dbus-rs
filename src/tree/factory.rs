@@ -1,11 +1,11 @@
-use super::{MethodType, DataType, MTFn, MTSync, MethodResult, MethodInfo};
+use super::{MethodType, DataType, MTFn, MTFnMut, MTSync, MethodResult, MethodInfo};
 use super::{Tree, ObjectPath, Interface, Property, Signal, Method};
 use super::objectpath::IfaceCache;
 use std::sync::Arc;
 use Interface as IfaceName;
 use {Member, Path, arg};
 use std::default::Default;
-
+use std::cell::RefCell;
 
 /// The factory is used to create object paths, interfaces, methods etc.
 ///
@@ -27,6 +27,9 @@ impl Factory<MTFn<()>, ()> {
     /// Creates a new factory for single-thread use.
     pub fn new_fn<D: DataType>() -> Factory<MTFn<D>, D> { Factory(IfaceCache::new()) }
 
+    /// Creates a new factory for single-thread use, where callbacks can mutate their environment.
+    pub fn new_fnmut<D: DataType>() -> Factory<MTFnMut<D>, D> { Factory(IfaceCache::new()) }
+
     /// Creates a new factory for multi-thread use.
     pub fn new_sync<D: DataType>() -> Factory<MTSync<D>, D> { Factory(IfaceCache::new()) }
    
@@ -37,6 +40,14 @@ impl<D: DataType> Factory<MTFn<D>, D> {
     pub fn method<H, T>(&self, t: T, data: D::Method, handler: H) -> Method<MTFn<D>, D>
         where H: 'static + Fn(&MethodInfo<MTFn<D>, D>) -> MethodResult, T: Into<Member<'static>> {
         super::leaves::new_method(t.into(), data, Box::new(handler) as Box<_>)
+    }
+}
+
+impl<D: DataType> Factory<MTFnMut<D>, D> {
+    /// Creates a new method for single-thread use.
+    pub fn method<H, T>(&self, t: T, data: D::Method, handler: H) -> Method<MTFnMut<D>, D>
+        where H: 'static + FnMut(&MethodInfo<MTFnMut<D>, D>) -> MethodResult, T: Into<Member<'static>> {
+        super::leaves::new_method(t.into(), data, Box::new(RefCell::new(handler)) as Box<_>)
     }
 }
 
@@ -79,15 +90,18 @@ impl<M: MethodType<D>, D: DataType> Factory<M, D> {
  
 }
 
-/*
+
 #[test]
-fn create_fn() {
-    let f = Factory::new_fn::<()>();
-    let borrow_me = 5u32;
-    let m = f.method("test", (), |m| Ok(vec!(m.msg.method_return().append1(&borrow_me))));
+fn create_fnmut() {
+    let f = Factory::new_fnmut::<()>();
+    let mut move_me = 5u32;
+    let m = f.method("test", (), move |m| {
+        move_me += 1; 
+        Ok(vec!(m.msg.method_return().append1(&move_me)))
+    });
     assert_eq!(&**m.get_name(), "test");
 }
-*/
+
 
 #[test]
 fn fn_customdata() {

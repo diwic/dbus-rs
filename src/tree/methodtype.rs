@@ -5,6 +5,7 @@ use {ErrorName, Message};
 use arg::{Iter, IterAppend};
 use std::marker::PhantomData;
 use super::{Method, Interface, Property, ObjectPath, Tree};
+use std::cell::RefCell;
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 /// A D-Bus Method Error.
@@ -83,8 +84,10 @@ pub trait MethodType<D: DataType>: Sized + Default {
     fn call_setprop(&Self::SetProp, &mut Iter, &PropInfo<Self, D>) -> Result<(), MethodErr>;
     fn call_method(&Self::Method, &MethodInfo<Self, D>) -> MethodResult;
 
-    fn make_getprop(h: Box<Fn(&mut IterAppend, &PropInfo<Self,D>) -> Result<(), MethodErr> + Send + Sync + 'static>) -> Box<Self::GetProp>;
-    fn make_method(h: Box<Fn(&MethodInfo<Self,D>) -> MethodResult + Send + Sync + 'static>) -> Box<Self::Method>;
+    fn make_getprop<H>(h: H) -> Box<Self::GetProp>
+    where H: Fn(&mut IterAppend, &PropInfo<Self,D>) -> Result<(), MethodErr> + Send + Sync + 'static;
+    fn make_method<H>(h: H) -> Box<Self::Method>
+    where H: Fn(&MethodInfo<Self,D>) -> MethodResult + Send + Sync + 'static;
 }
 
 
@@ -104,12 +107,34 @@ impl<D: DataType> MethodType<D> for MTFn<D> {
     fn call_method(p: &Self::Method, minfo: &MethodInfo<Self, D>)
         -> MethodResult { p(minfo) }
 
-    fn make_getprop(h: Box<Fn(&mut IterAppend, &PropInfo<Self,D>)
-        -> Result<(), MethodErr> + Send + Sync + 'static>) -> Box<Self::GetProp> { h }
-    fn make_method(h: Box<Fn(&MethodInfo<Self,D>) -> MethodResult + Send + Sync + 'static>) -> Box<Self::Method> { h }
-
+    fn make_getprop<H>(h: H) -> Box<Self::GetProp>
+    where H: Fn(&mut IterAppend, &PropInfo<Self,D>) -> Result<(), MethodErr> + Send + Sync + 'static { Box::new(h) }
+    fn make_method<H>(h: H) -> Box<Self::Method>
+    where H: Fn(&MethodInfo<Self,D>) -> MethodResult + Send + Sync + 'static { Box::new(h) }
 }
 
+/// An abstract type to represent FnMut functions.
+#[derive(Default, Debug, Copy, Clone)]
+pub struct MTFnMut<D=()>(PhantomData<*const D>);
+
+impl<D: DataType> MethodType<D> for MTFnMut<D> {
+    type GetProp = RefCell<FnMut(&mut IterAppend, &PropInfo<Self, D>) -> Result<(), MethodErr>>;
+    type SetProp = RefCell<FnMut(&mut Iter, &PropInfo<Self, D>) -> Result<(), MethodErr>>;
+    type Method = RefCell<FnMut(&MethodInfo<Self, D>) -> MethodResult>;
+
+    fn call_getprop(p: &Self::GetProp, i: &mut IterAppend, pinfo: &PropInfo<Self, D>)
+        -> Result<(), MethodErr> { (&mut *p.borrow_mut())(i, pinfo) }
+    fn call_setprop(p: &Self::SetProp, i: &mut Iter, pinfo: &PropInfo<Self, D>)
+        -> Result<(), MethodErr> { (&mut *p.borrow_mut())(i, pinfo) }
+    fn call_method(p: &Self::Method, minfo: &MethodInfo<Self, D>)
+        -> MethodResult { (&mut *p.borrow_mut())(minfo) }
+
+    fn make_getprop<H>(h: H) -> Box<Self::GetProp>
+    where H: Fn(&mut IterAppend, &PropInfo<Self,D>) -> Result<(), MethodErr> + Send + Sync + 'static { Box::new(RefCell::new(h)) }
+    fn make_method<H>(h: H) -> Box<Self::Method>
+    where H: Fn(&MethodInfo<Self,D>) -> MethodResult + Send + Sync + 'static { Box::new(RefCell::new(h)) }
+
+}
 
 /// An abstract type to represent Fn + Send + Sync functions (that can be called from several threads in parallel).
 #[derive(Default, Debug, Copy, Clone)]
@@ -127,10 +152,10 @@ impl<D: DataType> MethodType<D> for MTSync<D> {
     fn call_method(p: &Self::Method, minfo: &MethodInfo<Self, D>)
         -> MethodResult { p(minfo) }
 
-    fn make_getprop(h: Box<Fn(&mut IterAppend, &PropInfo<Self,D>)
-        -> Result<(), MethodErr> + Send + Sync + 'static>) -> Box<Self::GetProp> { h }
-    fn make_method(h: Box<Fn(&MethodInfo<Self,D>) -> MethodResult + Send + Sync + 'static>) -> Box<Self::Method> { h }
-
+    fn make_getprop<H>(h: H) -> Box<Self::GetProp>
+    where H: Fn(&mut IterAppend, &PropInfo<Self,D>) -> Result<(), MethodErr> + Send + Sync + 'static  { Box::new(h) }
+    fn make_method<H>(h: H) -> Box<Self::Method>
+    where H: Fn(&MethodInfo<Self,D>) -> MethodResult + Send + Sync + 'static { Box::new(h) }
 }
 
 

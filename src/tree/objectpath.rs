@@ -136,9 +136,9 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
     pub fn introspectable(self) -> Self {
         let z = self.ifacecache.get("org.freedesktop.DBus.Introspectable", |i| {
             i.add_m(
-                super::leaves::new_method("Introspect".into(), Default::default(), M::make_method(Box::new(|m| {
+                super::leaves::new_method("Introspect".into(), Default::default(), M::make_method(|m| {
                     Ok(vec!(m.msg.method_return().append1(m.path.introspect(m.tree))))
-                }))).out_arg(("xml_data", "s"))
+                })).out_arg(("xml_data", "s"))
              )
         });
         self.add(z)
@@ -154,7 +154,7 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
         if self.ifaces.contains_key(&ifname) { return self };
         let z = self.ifacecache.get(ifname, |i| {
             i.add_m(super::leaves::new_method("GetManagedObjects".into(), Default::default(),
-                M::make_method(Box::new(|m| m.path.get_managed_objects(m))))
+                M::make_method(|m| m.path.get_managed_objects(m)))
                 .outarg::<Dict<Path,Dict<&str,Dict<&str,Variant<()>,()>,()>,()>,_>("objpath_interfaces_and_properties"))
         });
         self.ifaces.insert(z.name.clone(), z);
@@ -181,16 +181,16 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
         if self.ifaces.contains_key(&ifname) { return };
         let z = self.ifacecache.get(ifname, |i| {
             i.add_m(super::leaves::new_method("Get".into(), Default::default(),
-                M::make_method(Box::new(|m| m.path.prop_get(m))))
+                M::make_method(|m| m.path.prop_get(m)))
                 .inarg::<&str,_>("interface_name")
                 .inarg::<&str,_>("property_name")
                 .outarg::<Variant<()>,_>("value"))
             .add_m(super::leaves::new_method("GetAll".into(), Default::default(),
-                M::make_method(Box::new(|m| m.path.prop_get_all(m))))
+                M::make_method(|m| m.path.prop_get_all(m)))
                 .inarg::<&str,_>("interface_name")
                 .outarg::<Dict<&str, Variant<()>, ()>,_>("props"))
             .add_m(super::leaves::new_method("Set".into(), Default::default(),
-                M::make_method(Box::new(|m| m.path.prop_set(m))))
+                M::make_method(|m| m.path.prop_set(m)))
                 .inarg::<&str,_>("interface_name")
                 .inarg::<&str,_>("property_name")
                 .inarg::<Variant<bool>,_>("value"))
