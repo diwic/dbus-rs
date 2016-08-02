@@ -336,7 +336,7 @@ impl<'a, D: DataType> Property<MTFn<D>, D> {
     ///
     /// For single-thread use.
     pub fn on_get<H>(mut self, handler: H) -> Property<MTFn<D>, D>
-        where H: Fn(&mut arg::IterAppend, &PropInfo<MTFn<D>, D>) -> Result<(), MethodErr> + 'a {
+        where H: 'static + Fn(&mut arg::IterAppend, &PropInfo<MTFn<D>, D>) -> Result<(), MethodErr> {
         self.get_cb = Some(DebugGetProp(Box::new(handler) as Box<_>));
         self
     }
@@ -345,7 +345,7 @@ impl<'a, D: DataType> Property<MTFn<D>, D> {
     ///
     /// For single-thread use.
     pub fn on_set<H>(mut self, handler: H) -> Property<MTFn<D>, D>
-        where H: Fn(&mut arg::Iter, &PropInfo<MTFn<D>, D>) -> Result<(), MethodErr> + 'a {
+        where H: 'static + Fn(&mut arg::Iter, &PropInfo<MTFn<D>, D>) -> Result<(), MethodErr> {
         self.set_cb = Some(DebugSetProp(Box::new(handler) as Box<_>));
         self
     }
@@ -460,21 +460,24 @@ fn test_set_prop() {
     use tree::{Factory, Access};
     use std::cell::{Cell, RefCell};
     use std::collections::BTreeMap;
+    use std::rc::Rc;
  
-    let changes = Cell::new(0i32);
-    let setme = RefCell::new("I have not been set yet!".to_owned());
+    let changes = Rc::new(Cell::new(0i32));
+    let (changes1, changes2) = (changes.clone(), changes.clone());
+    let setme = Rc::new(RefCell::new("I have not been set yet!".to_owned()));
+    let (setme1, setme2) = (setme.clone(), setme.clone());
 
     let f = Factory::new_fn::<()>();
     let tree = f.tree().add(f.object_path("/example", ()).introspectable()
         .add(f.interface("com.example.dbus.rs", ())
             .add_p(f.property::<i32,_>("changes", ())
-                .on_get(|i, _| { i.append(changes.get()); Ok(()) })) 
+                .on_get(move |i, _| { i.append(changes1.get()); Ok(()) })) 
             .add_p(f.property::<String,_>("setme", ())
                 .access(Access::ReadWrite)
-                .on_get(|i, _| { i.append(&*setme.borrow()); Ok(()) })
-                .on_set(|i, _| {
-                    *setme.borrow_mut() = i.get().unwrap();
-                    changes.set(changes.get() + 1);
+                .on_get(move |i, _| { i.append(&*setme1.borrow()); Ok(()) })
+                .on_set(move |i, _| {
+                    *setme2.borrow_mut() = i.get().unwrap();
+                    changes2.set(changes2.get() + 1);
                     Ok(())
                 }))
         )

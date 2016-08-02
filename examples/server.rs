@@ -26,6 +26,7 @@ fn main() {
     // We create the signal first, since we'll need it in both inside the method callback
     // and when creating the tree.
     let signal = Arc::new(f.signal("HelloHappened", ()).sarg::<&str,_>("sender"));
+    let signal2 = signal.clone();
 
     // We create a tree with one object path inside and make that path introspectable.
     let tree = f.tree().add(f.object_path("/hello", ()).introspectable().add(
@@ -34,7 +35,7 @@ fn main() {
         f.interface("com.example.dbustest", ()).add_m(
 
             // ...and a method inside the interface.
-            f.method("Hello", (), |m| {
+            f.method("Hello", (), move |m| {
 
                 // This is the callback that will be called when another peer on the bus calls our method.
                 // the callback receives "MethodInfo" struct and can return either an error, or a list of
@@ -55,7 +56,7 @@ fn main() {
             }).outarg::<&str,_>("reply")
 
         // We also add the signal to the interface. This is mainly for introspection.
-        ).add_s(signal.clone())
+        ).add_s(signal2)
     ));
 
     // We register all object paths in the tree.

@@ -92,10 +92,10 @@ pub trait MethodType<D: DataType>: Sized + Default {
 #[derive(Default, Debug, Copy, Clone)]
 pub struct MTFn<D=()>(PhantomData<*const D>);
 
-impl<'a, D: DataType> MethodType<D> for MTFn<D> {
-    type GetProp = Fn(&mut IterAppend, &PropInfo<Self, D>) -> Result<(), MethodErr> + 'a;
-    type SetProp = Fn(&mut Iter, &PropInfo<Self, D>) -> Result<(), MethodErr> + 'a;
-    type Method = Fn(&MethodInfo<Self, D>) -> MethodResult + 'a;
+impl<D: DataType> MethodType<D> for MTFn<D> {
+    type GetProp = Fn(&mut IterAppend, &PropInfo<Self, D>) -> Result<(), MethodErr>;
+    type SetProp = Fn(&mut Iter, &PropInfo<Self, D>) -> Result<(), MethodErr>;
+    type Method = Fn(&MethodInfo<Self, D>) -> MethodResult;
 
     fn call_getprop(p: &Self::GetProp, i: &mut IterAppend, pinfo: &PropInfo<Self, D>)
         -> Result<(), MethodErr> { p(i, pinfo) }
