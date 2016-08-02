@@ -284,7 +284,9 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
     /// Will verify signature in case iter is not None; iter is supposed to point at the Variant with the item inside.
     pub fn can_set(&self, i: Option<arg::Iter>) -> Result<(), MethodErr> {
         use arg::Arg;
-        if self.rw == Access::Read || self.set_cb.is_none() { return Err(MethodErr::ro_property(&self.name)) }
+        if self.rw == Access::Read || self.set_cb.is_none() || self.emits == EmitsChangedSignal::Const {
+            return Err(MethodErr::ro_property(&self.name))
+        }
         if let Some(mut i) = i {
             let mut subiter = try!(i.recurse(arg::Variant::<bool>::arg_type()).ok_or_else(|| MethodErr::invalid_arg(&2)));
             if &*subiter.signature() != &*self.sig {
@@ -302,7 +304,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
         use arg::Arg;
         let mut subiter = try!(i.recurse(arg::Variant::<bool>::arg_type()).ok_or_else(|| MethodErr::invalid_arg(&2)));
         try!(M::call_setprop(&*self.set_cb.as_ref().unwrap().0, &mut subiter, pinfo));
-        Ok(self.get_emits_changed_signal(pinfo))
+        self.get_emits_changed_signal(pinfo)
     }
 
     /// Gets the signal (if any) associated with the Property.
@@ -311,23 +313,23 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
             .append1(&**p.iface.get_name())
     }
 
-    fn get_emits_changed_signal(&self, m: &PropInfo<M, D>) -> Option<Message> {
+    fn get_emits_changed_signal(&self, m: &PropInfo<M, D>) -> Result<Option<Message>, MethodErr> {
         match self.emits {
-            EmitsChangedSignal::False => None,
-            EmitsChangedSignal::Const => None,
-            EmitsChangedSignal::True => Some({
+            EmitsChangedSignal::False => Ok(None),
+            EmitsChangedSignal::Const => Err(MethodErr::ro_property(&self.name)),
+            EmitsChangedSignal::True => Ok(Some({
                 let mut s = self.get_signal(m);
                 {
                     let mut iter = arg::IterAppend::new(&mut s);
-                    prop_append_dict(&mut iter, Some(self).into_iter(), &m.to_method_info()).unwrap(); // Should we really unwrap this?
+                    try!(prop_append_dict(&mut iter, Some(self).into_iter(), &m.to_method_info()));
                     iter.append(arg::Array::<&str, _>::new(vec!()));
                 }
                 s
-            }),
-            EmitsChangedSignal::Invalidates => Some(self.get_signal(m).append2(
+            })),
+            EmitsChangedSignal::Invalidates => Ok(Some(self.get_signal(m).append2(
                 arg::Dict::<&str, arg::Variant<bool>, _>::new(vec!()),
                 arg::Array::new(Some(&*self.name).into_iter())
-            )),
+            ))),
         }
     }
 }
