@@ -11,6 +11,8 @@ Current state: Slowly maturing. Most stuff you need should be working:
 
 [API Documentation is here](http://diwic.github.io/dbus-rs-docs/dbus/). If you have further questions or comments, [filing an issue](https://github.com/diwic/dbus-rs/issues) with your question is fine.
 
+Requirements: [Libdbus](https://dbus.freedesktop.org/releases/dbus/) 1.6 or higher, and latest stable release of [Rust](https://www.rust-lang.org/). 
+
 Examples
 ========
 
@@ -41,12 +43,12 @@ It then listens for incoming D-Bus events and handles them accordingly.
 ```rust
 let c = Connection::get_private(BusType::Session).unwrap();
 c.register_name("com.example.dbustest", NameFlag::ReplaceExisting as u32).unwrap();
-let f = Factory::new_fn();
-let tree = f.tree().add(f.object_path("/hello").introspectable().add(
+let f = Factory::new_fn::<()>();
+let tree = f.tree().add(f.object_path("/hello", ()).introspectable().add(
     f.interface("com.example.dbustest").add_m(
-        f.method("Hello", |m,_,_| {
-            let s = format!("Hello {}!", m.sender().unwrap());
-            Ok(vec!(m.method_return().append1(s)))
+        f.method("Hello", (), |m| {
+            let s = format!("Hello {}!", m.msg.sender().unwrap());
+            Ok(vec!(m.msg.method_return().append1(s)))
         }).outarg::<&str,_>("reply")
     )
 ));
@@ -54,7 +56,7 @@ tree.set_registered(&c, true).unwrap();
 for _ in tree.run(&c, c.iter(1000)) {}
 ```
 
-You can try a similar example by running:
+You can try a similar example (which has more comments) by running:
 
     cargo run --example server
 
