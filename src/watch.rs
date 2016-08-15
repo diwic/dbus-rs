@@ -71,7 +71,7 @@ pub struct WatchList {
 impl WatchList {
     pub fn new(c: &Connection, on_update: Box<Fn(Watch)>) -> Box<WatchList> {
         let w = Box::new(WatchList { on_update: on_update, watches: RefCell::new(vec!()), enabled_fds: RefCell::new(vec!()) });
-        if unsafe { ffi::dbus_connection_set_watch_functions(c.i.conn.get(),
+        if unsafe { ffi::dbus_connection_set_watch_functions(super::connection::conn_handle(c),
             Some(add_watch_cb), Some(remove_watch_cb), Some(toggled_watch_cb), &*w as *const _ as *mut _, None) } == 0 {
             panic!("dbus_connection_set_watch_functions failed");
         }
