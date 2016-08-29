@@ -408,7 +408,17 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> where D::Property: arg::Appen
 impl<M: MethodType<D>, D: DataType> Introspect for Property<M, D> {
     fn xml_name(&self) -> &'static str { "property" }
     fn xml_params(&self) -> String { format!(" type=\"{}\" access=\"{}\"", self.sig, self.rw.introspect()) }
-    fn xml_contents(&self) -> String { self.anns.introspect("      ") }
+    fn xml_contents(&self) -> String {
+        let s = match self.emits {
+             EmitsChangedSignal::True => return self.anns.introspect("      "),
+             EmitsChangedSignal::False => "false",
+             EmitsChangedSignal::Const => "const",
+             EmitsChangedSignal::Invalidates => "invalidates",
+        };
+        let mut tempanns = self.anns.clone();
+        tempanns.insert("org.freedesktop.DBus.Property.EmitsChangedSignal", s);
+        tempanns.introspect("      ")
+    }
 }
 
 pub fn new_property<M: MethodType<D>, D: DataType>

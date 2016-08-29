@@ -2,7 +2,7 @@
 
 use std::fmt;
 use {ErrorName, Message};
-use arg::{Iter, IterAppend};
+use arg::{Iter, IterAppend, TypeMismatchError};
 use std::marker::PhantomData;
 use super::{Method, Interface, Property, ObjectPath, Tree};
 use std::cell::RefCell;
@@ -43,6 +43,10 @@ impl MethodErr {
 
     pub fn errorname(&self) -> &ErrorName<'static> { &self.0 }
     pub fn description(&self) -> &str { &self.1 }
+}
+
+impl From<TypeMismatchError> for MethodErr {
+    fn from(t: TypeMismatchError) -> MethodErr { ("org.freedesktop.DBus.Error.Failed", format!("{}", t)).into() }
 }
 
 impl<T: Into<ErrorName<'static>>, M: Into<String>> From<(T, M)> for MethodErr {
