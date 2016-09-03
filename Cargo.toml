@@ -1,12 +1,12 @@
 [package]
 
 name = "dbus"
-version = "0.3.4"
+version = "0.4.0"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 
 description = "Bindings to D-Bus, which is a bus commonly used on Linux for inter-process communication."
 repository = "https://github.com/diwic/dbus-rs"
-documentation = "http://diwic.github.io/dbus-rs-docs/dbus"
+documentation = "http://docs.rs/dbus"
 keywords = ["D-Bus", "DBus"]
 license = "Apache-2.0/MIT"
 

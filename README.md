@@ -9,7 +9,7 @@ Current state: Slowly maturing. Most stuff you need should be working:
  * Properties, on both client and server sides (set/get/getall methods, signals on server side)
  * Optional async API (for poll-based mainloops, e g mio)
 
-[API Documentation is here](http://diwic.github.io/dbus-rs-docs/dbus/). If you have further questions or comments, [filing an issue](https://github.com/diwic/dbus-rs/issues) with your question is fine.
+[API Documentation is here](http://docs.rs/dbus/). If you have further questions or comments, [filing an issue](https://github.com/diwic/dbus-rs/issues) with your question is fine.
 
 Requirements: [Libdbus](https://dbus.freedesktop.org/releases/dbus/) 1.6 or higher, and latest stable release of [Rust](https://www.rust-lang.org/). 
 
