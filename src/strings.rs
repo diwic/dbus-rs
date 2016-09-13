@@ -1,7 +1,7 @@
 // CString wrappers.
 
 use ffi;
-use std::{str, fmt, ops, default};
+use std::{str, fmt, ops, default, hash};
 use std::ffi::{CStr, CString};
 use std::borrow::Cow;
 use Error;
@@ -81,6 +81,12 @@ impl<'m> fmt::Display for $t<'m> {
 
 impl<'m> AsRef<CStr> for $t<'m> {
     fn as_ref(&self) -> &CStr { &self.0 }
+}
+
+impl<'m> hash::Hash for $t<'m> {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+    }
 }
 
 }}
