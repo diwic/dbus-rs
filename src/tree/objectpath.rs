@@ -301,14 +301,22 @@ pub struct Tree<M: MethodType<D>, D: DataType> {
 }
 
 impl<M: MethodType<D>, D: DataType> Tree<M, D> {
-    /// Builder function that adds am object path to this tree.
+    /// Builder function that adds an object path to this tree.
     ///
     /// Note: This does not register a path with the connection, so if the tree is currently registered,
     /// you might want to call Connection::register_object_path to add the path manually.
     pub fn add<I: Into<Arc<ObjectPath<M, D>>>>(mut self, s: I) -> Self {
+        self.insert(s);
+        self
+    }
+
+    /// Non-builder function that adds an object path to this tree.
+    ///
+    /// Note: This does not register a path with the connection, so if the tree is currently registered,
+    /// you might want to call Connection::register_object_path to add the path manually.
+    pub fn insert<I: Into<Arc<ObjectPath<M, D>>>>(&mut self, s: I) {
         let m = s.into();
         self.paths.insert(m.name.clone(), m);
-        self
     }
 
 
