@@ -615,11 +615,43 @@ impl<'a> IterAppend<'a> {
 
 }
 
+
+fn arg_type_to_str(i: i32) -> &'static str {
+    match i {
+        ffi::DBUS_TYPE_VARIANT => "Variant",
+        ffi::DBUS_TYPE_ARRAY => "Array/Dict",
+        ffi::DBUS_TYPE_STRUCT => "Struct",
+        ffi::DBUS_TYPE_STRING => "String",
+        ffi::DBUS_TYPE_OBJECT_PATH => "Path",
+        ffi::DBUS_TYPE_SIGNATURE => "Signature",
+        ffi::DBUS_TYPE_UNIX_FD => "OwnedFd",
+        ffi::DBUS_TYPE_BOOLEAN => "bool",
+        ffi::DBUS_TYPE_BYTE => "u8",
+        ffi::DBUS_TYPE_INT16 => "i16",
+        ffi::DBUS_TYPE_INT32 => "i32",
+        ffi::DBUS_TYPE_INT64 => "i64",
+        ffi::DBUS_TYPE_UINT16 => "u16",
+        ffi::DBUS_TYPE_UINT32 => "u32",
+        ffi::DBUS_TYPE_UINT64 => "u64",
+        ffi::DBUS_TYPE_DOUBLE => "f64",
+        ffi::DBUS_TYPE_INVALID => "nothing",
+        _ => "Invalid argument type"
+    }
+}
+
 /// Error struct to indicate a D-Bus argument type mismatch.
 ///
 /// Might be returned from `iter::read()`. 
 #[derive(Clone, Copy, Debug)]
-pub struct TypeMismatchError {}
+pub struct TypeMismatchError {
+    expected: i32,
+    found: i32,
+}
+
+impl TypeMismatchError {
+    pub fn expected_arg_type(&self) -> i32 { self.expected }
+    pub fn found_arg_type(&self) -> i32 { self.found }
+}
 
 impl error::Error for TypeMismatchError {
     fn description(&self) -> &str { "D-Bus argument type mismatch" }
@@ -628,7 +660,11 @@ impl error::Error for TypeMismatchError {
 
 impl fmt::Display for TypeMismatchError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", (self as &error::Error).description())
+        write!(f, "{}: expected {}, found {}",
+            (self as &error::Error).description(),
+            arg_type_to_str(self.expected),
+            if self.expected == self.found { "same but still different somehow" } else { arg_type_to_str(self.found) }
+        )
     }
 }
 
@@ -663,8 +699,10 @@ impl<'a> Iter<'a> {
     }
 
     /// The raw arg_type for the current item.
+    ///
     /// Unlike Arg::arg_type, this requires access to self and is not a static method.
-    /// You can match this against Arg::arg_type for different types to understand what type the current item is.  
+    /// You can match this against Arg::arg_type for different types to understand what type the current item is.
+    /// In case you're past the last argument, this function will return 0.
     pub fn arg_type(&mut self) -> i32 { unsafe { ffi::dbus_message_iter_get_arg_type(&mut self.0) } }
 
     /// Returns false if there are no more items.
@@ -699,8 +737,9 @@ impl<'a> Iter<'a> {
     ///     })
     /// }
     /// ```
-    pub fn read<T: Get<'a>>(&mut self) -> Result<T, TypeMismatchError> {
-        let r = try!(self.get().ok_or_else(|| TypeMismatchError {}));
+    pub fn read<T: Arg + Get<'a>>(&mut self) -> Result<T, TypeMismatchError> {
+        let r = try!(self.get().ok_or_else(||
+             TypeMismatchError { expected: T::arg_type(), found: self.arg_type() }));
         self.next();
         Ok(r)
     }
