@@ -4,7 +4,6 @@ use super::objectpath::IfaceCache;
 use std::sync::Arc;
 use Interface as IfaceName;
 use {Member, Path, arg};
-use std::default::Default;
 use std::cell::RefCell;
 
 /// The factory is used to create object paths, interfaces, methods etc.
@@ -86,8 +85,9 @@ impl<M: MethodType<D>, D: DataType> Factory<M, D> {
     }
 
     /// Creates a new tree.
-    pub fn tree(&self) -> Tree<M, D> { Default::default() }
- 
+    pub fn tree(&self, data: D::Tree) -> Tree<M, D> {
+        super::objectpath::new_tree(data)
+    }
 }
 
 

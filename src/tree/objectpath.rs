@@ -297,7 +297,8 @@ pub fn new_objectpath<M: MethodType<D>, D: DataType>(n: Path<'static>, d: D::Obj
 /// A collection of object paths.
 #[derive(Debug, Default)]
 pub struct Tree<M: MethodType<D>, D: DataType> {
-    paths: ArcMap<Arc<Path<'static>>, ObjectPath<M, D>>
+    paths: ArcMap<Arc<Path<'static>>, ObjectPath<M, D>>,
+    data: D::Tree,
 }
 
 impl<M: MethodType<D>, D: DataType> Tree<M, D> {
@@ -380,6 +381,13 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
         }).collect()
     }
 
+    /// Get associated data
+    pub fn get_data(&self) -> &D::Tree { &self.data }
+
+}
+
+pub fn new_tree<M: MethodType<D>, D: DataType>(d: D::Tree) -> Tree<M, D> {
+    Tree { paths: ArcMap::new(), data: d }
 }
 
 /// An iterator adapter that handles incoming method calls.

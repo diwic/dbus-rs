@@ -60,6 +60,7 @@ pub type MethodResult = Result<Vec<Message>, MethodErr>;
 ///
 /// These currently require a debug bound, due to https://github.com/rust-lang/rust/issues/31518
 pub trait DataType: Sized + Default {
+    type Tree: fmt::Debug;
     type ObjectPath: fmt::Debug;
     type Property: fmt::Debug;
     type Interface: fmt::Debug + Default;
@@ -69,6 +70,7 @@ pub trait DataType: Sized + Default {
 
 /// No associated data for the tree.
 impl DataType for () {
+    type Tree = ();
     type ObjectPath = ();
     type Interface = ();
     type Property = ();
