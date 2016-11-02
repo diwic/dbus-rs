@@ -108,6 +108,7 @@ fn fn_customdata() {
     #[derive(Default)]
     struct Custom;
     impl DataType for Custom {
+        type Tree = ();
         type ObjectPath = Arc<u8>;
         type Interface = ();
         type Property = ();

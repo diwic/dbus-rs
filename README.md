@@ -44,7 +44,7 @@ It then listens for incoming D-Bus events and handles them accordingly.
 let c = Connection::get_private(BusType::Session).unwrap();
 c.register_name("com.example.dbustest", NameFlag::ReplaceExisting as u32).unwrap();
 let f = Factory::new_fn::<()>();
-let tree = f.tree().add(f.object_path("/hello", ()).introspectable().add(
+let tree = f.tree(()).add(f.object_path("/hello", ()).introspectable().add(
     f.interface("com.example.dbustest", ()).add_m(
         f.method("Hello", (), |m| {
             let s = format!("Hello {}!", m.msg.sender().unwrap());

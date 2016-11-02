@@ -432,7 +432,7 @@ fn test_introspection() {
             .add_s(f.signal("Echoed", ()).arg(("data", "s")).deprecated())
     );
 
-    let actual_result = t.introspect(&f.tree().add(f.object_path("/echo/subpath", ())));
+    let actual_result = t.introspect(&f.tree(()).add(f.object_path("/echo/subpath", ())));
     println!("\n=== Introspection XML start ===\n{}\n=== Introspection XML end ===", actual_result);
 
     let expected_result = r##"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">

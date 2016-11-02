@@ -438,6 +438,7 @@ fn test_prop_handlers() {
     #[derive(Default, Debug)]
     struct Custom;
     impl DataType for Custom {
+        type Tree = ();
         type ObjectPath = ();
         type Interface = ();
         type Property = i32;
@@ -446,7 +447,7 @@ fn test_prop_handlers() {
     }
 
     let f = Factory::new_fn::<Custom>();
-    let tree = f.tree().add(f.object_path("/test", ()).introspectable().object_manager()
+    let tree = f.tree(()).add(f.object_path("/test", ()).introspectable().object_manager()
         .add(f.interface("com.example.test", ())
             .add_p(f.property::<i32,_>("Value1", 5i32).default_get())
             .add_p(f.property::<i32,_>("Value2", 9i32).default_get())
@@ -502,7 +503,7 @@ fn test_set_prop() {
     let (setme1, setme2) = (setme.clone(), setme.clone());
 
     let f = Factory::new_fn::<()>();
-    let tree = f.tree().add(f.object_path("/example", ()).introspectable()
+    let tree = f.tree(()).add(f.object_path("/example", ()).introspectable()
         .add(f.interface("com.example.dbus.rs", ())
             .add_p(f.property::<i32,_>("changes", ())
                 .on_get(move |i, _| { i.append(changes1.get()); Ok(()) })) 
@@ -562,7 +563,7 @@ fn test_sync_prop() {
     let count = Arc::new(AtomicUsize::new(3));
     let (cget, cset) = (count.clone(), count.clone());
 
-    let tree1 = Arc::new(f.tree().add(f.object_path("/syncprop", ()).introspectable()
+    let tree1 = Arc::new(f.tree(()).add(f.object_path("/syncprop", ()).introspectable()
         .add(f.interface("com.example.syncprop", ())
             .add_p(f.property::<u32,_>("syncprop", ())
                 .access(Access::ReadWrite)
