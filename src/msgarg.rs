@@ -6,58 +6,86 @@ use std::{mem, ptr, error, fmt};
 use std::marker::PhantomData;
 
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_void, c_char};
+use std::os::raw::{c_void, c_char, c_int};
 use super::{Signature, Path, OwnedFd};
 
 fn check(f: &str, i: u32) { if i == 0 { panic!("D-Bus error: '{}' failed", f) }} 
 
 fn ffi_iter() -> ffi::DBusMessageIter { unsafe { mem::zeroed() }} 
 
-fn arg_append_basic(i: *mut ffi::DBusMessageIter, arg_type: i32, v: i64) {
+fn arg_append_basic(i: *mut ffi::DBusMessageIter, arg_type: ArgType, v: i64) {
     let p = &v as *const _ as *const c_void;
     unsafe {
-        check("dbus_message_iter_append_basic", ffi::dbus_message_iter_append_basic(i, arg_type, p));
+        check("dbus_message_iter_append_basic", ffi::dbus_message_iter_append_basic(i, arg_type as c_int, p));
     };
 }
 
-fn arg_get_basic(i: *mut ffi::DBusMessageIter, arg_type: i32) -> Option<i64> {
+fn arg_get_basic(i: *mut ffi::DBusMessageIter, arg_type: ArgType) -> Option<i64> {
     let mut c = 0i64;
     unsafe {
-        if ffi::dbus_message_iter_get_arg_type(i) != arg_type { return None };
+        if ffi::dbus_message_iter_get_arg_type(i) != arg_type as c_int { return None };
         ffi::dbus_message_iter_get_basic(i, &mut c as *mut _ as *mut c_void);
     }
     Some(c)
 }
 
-fn arg_append_f64(i: *mut ffi::DBusMessageIter, arg_type: i32, v: f64) {
+fn arg_append_f64(i: *mut ffi::DBusMessageIter, arg_type: ArgType, v: f64) {
     let p = &v as *const _ as *const c_void;
     unsafe {
-        check("dbus_message_iter_append_basic", ffi::dbus_message_iter_append_basic(i, arg_type, p));
+        check("dbus_message_iter_append_basic", ffi::dbus_message_iter_append_basic(i, arg_type as c_int, p));
     };
 }
 
-fn arg_get_f64(i: *mut ffi::DBusMessageIter, arg_type: i32) -> Option<f64> {
+fn arg_get_f64(i: *mut ffi::DBusMessageIter, arg_type: ArgType) -> Option<f64> {
     let mut c = 0f64;
     unsafe {
-        if ffi::dbus_message_iter_get_arg_type(i) != arg_type { return None };
+        if ffi::dbus_message_iter_get_arg_type(i) != arg_type as c_int { return None };
         ffi::dbus_message_iter_get_basic(i, &mut c as *mut _ as *mut c_void);
     }
     Some(c)
 }
 
-fn arg_append_str(i: *mut ffi::DBusMessageIter, arg_type: i32, v: &CStr) {
+fn arg_append_str(i: *mut ffi::DBusMessageIter, arg_type: ArgType, v: &CStr) {
     let p = v.as_ptr();
     let q = &p as *const _ as *const c_void;
     unsafe {
-        check("dbus_message_iter_append_basic", ffi::dbus_message_iter_append_basic(i, arg_type, q));
+        check("dbus_message_iter_append_basic", ffi::dbus_message_iter_append_basic(i, arg_type as c_int, q));
     };
 }
 
-unsafe fn arg_get_str<'a>(i: *mut ffi::DBusMessageIter, arg_type: i32) -> Option<&'a CStr> {
-    if ffi::dbus_message_iter_get_arg_type(i) != arg_type { return None };
+unsafe fn arg_get_str<'a>(i: *mut ffi::DBusMessageIter, arg_type: ArgType) -> Option<&'a CStr> {
+    if ffi::dbus_message_iter_get_arg_type(i) != arg_type as c_int { return None };
     let mut p = ptr::null_mut();
     ffi::dbus_message_iter_get_basic(i, &mut p as *mut _ as *mut c_void);
     Some(CStr::from_ptr(p as *const c_char))
+}
+
+/// Type of Argument
+///
+/// use this to figure out, e g, which type of argument is at the current position of Iter. 
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub enum ArgType {
+    /// Dicts are Arrays of dict entries, so Dict types will have Array as ArgType.
+    Array = ffi::DBUS_TYPE_ARRAY as u8,
+    Variant = ffi::DBUS_TYPE_VARIANT as u8,
+    Boolean = ffi::DBUS_TYPE_BOOLEAN as u8,
+    /// This is also the ArgType returned when there are no more arguments available.
+    Invalid = ffi::DBUS_TYPE_INVALID as u8,
+    String = ffi::DBUS_TYPE_STRING as u8,
+    DictEntry = ffi::DBUS_TYPE_DICT_ENTRY as u8,
+    Byte = ffi::DBUS_TYPE_BYTE as u8,
+    Int16 = ffi::DBUS_TYPE_INT16 as u8,
+    UInt16 = ffi::DBUS_TYPE_UINT16 as u8,
+    Int32 = ffi::DBUS_TYPE_INT32 as u8,
+    UInt32 = ffi::DBUS_TYPE_UINT32 as u8,
+    Int64 = ffi::DBUS_TYPE_INT64 as u8,
+    UInt64 = ffi::DBUS_TYPE_UINT64 as u8,
+    Double = ffi::DBUS_TYPE_DOUBLE as u8,
+    UnixFd = ffi::DBUS_TYPE_UNIX_FD as u8,
+    Struct = ffi::DBUS_TYPE_STRUCT as u8,
+    ObjectPath = ffi::DBUS_TYPE_OBJECT_PATH as u8,
+    Signature = ffi::DBUS_TYPE_SIGNATURE as u8,
 }
 
 /// Types that can represent a D-Bus message argument implement this trait.
@@ -65,7 +93,7 @@ unsafe fn arg_get_str<'a>(i: *mut ffi::DBusMessageIter, arg_type: i32) -> Option
 /// Types should also implement either Append or Get to be useful. 
 pub trait Arg {
     /// The corresponding D-Bus argument type code. 
-    fn arg_type() -> i32;
+    fn arg_type() -> ArgType;
     /// The corresponding D-Bus type signature for this type. 
     fn signature() -> Signature<'static>;
 }
@@ -98,7 +126,7 @@ impl Arg for $t {
     /// Returns the D-Bus argument type.
     ///
     /// This should probably be an associated constant instead, but those are still experimental. 
-    fn arg_type() -> i32 { ffi::$s }
+    fn arg_type() -> ArgType { ArgType::$s }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked($f) } }
 }
 
@@ -115,17 +143,17 @@ unsafe impl FixedArray for $t {}
 
 }} // End of macro_rules
 
-integer_impl!(u8, DBUS_TYPE_BYTE, b"y\0");
-integer_impl!(i16, DBUS_TYPE_INT16, b"n\0");
-integer_impl!(u16, DBUS_TYPE_UINT16, b"q\0");
-integer_impl!(i32, DBUS_TYPE_INT32, b"i\0");
-integer_impl!(u32, DBUS_TYPE_UINT32, b"u\0");
-integer_impl!(i64, DBUS_TYPE_INT64, b"x\0");
-integer_impl!(u64, DBUS_TYPE_UINT64, b"t\0");
+integer_impl!(u8, Byte, b"y\0");
+integer_impl!(i16, Int16, b"n\0");
+integer_impl!(u16, UInt16, b"q\0");
+integer_impl!(i32, Int32, b"i\0");
+integer_impl!(u32, UInt32, b"u\0");
+integer_impl!(i64, Int64, b"x\0");
+integer_impl!(u64, UInt64, b"t\0");
 
 
 impl Arg for bool {
-    fn arg_type() -> i32 { ffi::DBUS_TYPE_BOOLEAN }
+    fn arg_type() -> ArgType { ArgType::Boolean }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"b\0") } }
 }
 impl Append for bool {
@@ -137,7 +165,7 @@ impl<'a> Get<'a> for bool {
 }
 
 impl Arg for OwnedFd {
-    fn arg_type() -> i32 { ffi::DBUS_TYPE_UNIX_FD }
+    fn arg_type() -> ArgType { ArgType::UnixFd }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"h\0") } }
 }
 impl Append for OwnedFd {
@@ -156,7 +184,7 @@ impl<'a> Get<'a> for OwnedFd {
 
 
 impl Arg for f64 {
-    fn arg_type() -> i32 { ffi::DBUS_TYPE_DOUBLE }
+    fn arg_type() -> ArgType { ArgType::Double }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"d\0") } }
 }
 impl Append for f64 {
@@ -170,7 +198,7 @@ unsafe impl FixedArray for f64 {}
 
 /// Represents a D-Bus string.
 impl<'a> Arg for &'a str {
-    fn arg_type() -> i32 { ffi::DBUS_TYPE_STRING }
+    fn arg_type() -> ArgType { ArgType::String }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"s\0") } }
 }
 
@@ -195,7 +223,7 @@ impl<'a> Get<'a> for &'a str {
 }
 
 impl<'a> Arg for String {
-    fn arg_type() -> i32 { ffi::DBUS_TYPE_STRING }
+    fn arg_type() -> ArgType { ArgType::String }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"s\0") } }
 }
 impl<'a> Append for String {
@@ -212,7 +240,7 @@ impl<'a> Get<'a> for String {
 
 /// Represents a D-Bus string.
 impl<'a> Arg for &'a CStr {
-    fn arg_type() -> i32 { ffi::DBUS_TYPE_STRING }
+    fn arg_type() -> ArgType { ArgType::String }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"s\0") } }
 }
 
@@ -233,7 +261,7 @@ impl<'a> Get<'a> for &'a CStr {
 
 
 impl<'a> Arg for Path<'a> {
-    fn arg_type() -> i32 { ffi::DBUS_TYPE_OBJECT_PATH }
+    fn arg_type() -> ArgType { ArgType::ObjectPath }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"o\0") } }
 }
 impl<'a> DictKey for Path<'a> {}
@@ -248,7 +276,7 @@ impl<'a> Get<'a> for Path<'a> {
 }
 
 impl<'a> Arg for Signature<'a> {
-    fn arg_type() -> i32 { ffi::DBUS_TYPE_SIGNATURE }
+    fn arg_type() -> ArgType { ArgType::Signature }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"g\0") } }
 }
 impl<'a> DictKey for Signature<'a> {}
@@ -265,7 +293,7 @@ impl<'a> Get<'a> for Signature<'a> {
 
 /// Simple lift over reference to value - this makes some iterators more ergonomic to use
 impl<'a, T: Arg> Arg for &'a T {
-    fn arg_type() -> i32 { T::arg_type() }
+    fn arg_type() -> ArgType { T::arg_type() }
     fn signature() -> Signature<'static> { T::signature() }
 }
 impl<'a, T: Append + Clone> Append for &'a T {
@@ -277,21 +305,21 @@ impl<'a, T: DictKey> DictKey for &'a T {}
 // Map DBus-Type -> Alignment. Copied from _dbus_marshal_write_fixed_multi in
 // http://dbus.freedesktop.org/doc/api/html/dbus-marshal-basic_8c_source.html#l01020
 // Note that Rust booleans are one byte, dbus booleans are four bytes!
-const FIXED_ARRAY_ALIGNMENTS: [(i32, usize); 9] = [
-    (ffi::DBUS_TYPE_BYTE, 1),
-    (ffi::DBUS_TYPE_INT16, 2),
-    (ffi::DBUS_TYPE_UINT16, 2),
-    (ffi::DBUS_TYPE_UINT32, 4),
-    (ffi::DBUS_TYPE_INT32, 4),
-    (ffi::DBUS_TYPE_BOOLEAN, 4),
-    (ffi::DBUS_TYPE_INT64, 8),
-    (ffi::DBUS_TYPE_UINT64, 8),
-    (ffi::DBUS_TYPE_DOUBLE, 8)
+const FIXED_ARRAY_ALIGNMENTS: [(ArgType, usize); 9] = [
+    (ArgType::Byte, 1),
+    (ArgType::Int16, 2),
+    (ArgType::UInt16, 2),	
+    (ArgType::UInt32, 4),
+    (ArgType::Int32, 4),
+    (ArgType::Boolean, 4),
+    (ArgType::Int64, 8),
+    (ArgType::UInt64, 8),
+    (ArgType::Double, 8)
 ];
 
 /// Represents a D-Bus array.
 impl<'a, T: Arg> Arg for &'a [T] {
-    fn arg_type() -> i32 { ffi::DBUS_TYPE_ARRAY }
+    fn arg_type() -> ArgType { ArgType::Array }
     fn signature() -> Signature<'static> { Signature::from(format!("a{}", T::signature())) }
 }
 
@@ -309,7 +337,7 @@ impl<'a, T: Arg + Append + Clone> Append for &'a [T] {
 
         i.append_container(Self::arg_type(), Some(T::signature().as_cstr()), |s|
             if can_fixed_array { unsafe { check("dbus_message_iter_append_fixed_array",
-                ffi::dbus_message_iter_append_fixed_array(&mut s.0, a.0, &zptr as *const _ as *const c_void, zlen)) }}
+                ffi::dbus_message_iter_append_fixed_array(&mut s.0, a.0 as c_int, &zptr as *const _ as *const c_void, zlen)) }}
             else { for arg in z { arg.clone().append(s) }});
     }
 }
@@ -318,7 +346,7 @@ impl<'a, T: Get<'a> + FixedArray> Get<'a> for &'a [T] {
     fn get(i: &mut Iter<'a>) -> Option<&'a [T]> {
         debug_assert!(FIXED_ARRAY_ALIGNMENTS.iter().any(|&v| v == (T::arg_type(), mem::size_of::<T>())));
         i.recurse(Self::arg_type()).and_then(|mut si| unsafe {
-            if ffi::dbus_message_iter_get_arg_type(&mut si.0) != T::arg_type() { return None };
+            if ffi::dbus_message_iter_get_arg_type(&mut si.0) != T::arg_type() as c_int { return None };
 
             let mut v = ptr::null_mut();
             let mut i = 0;
@@ -343,7 +371,7 @@ impl<'a, K: 'a + DictKey, V: 'a + Append + Arg, I: Iterator<Item=(K, V)>> Dict<'
 }
 
 impl<'a, K: DictKey, V: Arg, I> Arg for Dict<'a, K, V, I> {
-    fn arg_type() -> i32 { ffi::DBUS_TYPE_ARRAY }
+    fn arg_type() -> ArgType { ArgType::Array }
     fn signature() -> Signature<'static> {
         Signature::from(format!("a{}", Self::entry_sig())) }
 }
@@ -352,7 +380,7 @@ impl<'a, K: 'a + DictKey + Append, V: 'a + Append + Arg, I: Iterator<Item=(K, V)
     fn append(self, i: &mut IterAppend) {
         let z = self.0;
         i.append_container(Self::arg_type(), Some(&CString::new(Self::entry_sig()).unwrap()), |s| for (k, v) in z {
-            s.append_container(ffi::DBUS_TYPE_DICT_ENTRY, None, |ss| {
+            s.append_container(ArgType::DictEntry, None, |ss| {
                 k.append(ss);
                 v.append(ss);
             })
@@ -371,7 +399,7 @@ impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Get<'a> for Dict<'a, K, V, Iter
 impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Iterator for Dict<'a, K, V, Iter<'a>> {
     type Item = (K, V);
     fn next(&mut self) -> Option<(K, V)> {
-        let i = self.0.recurse(ffi::DBUS_TYPE_DICT_ENTRY).and_then(|mut si| {
+        let i = self.0.recurse(ArgType::DictEntry).and_then(|mut si| {
             let k = si.get();
             if k.is_none() { return None };
             assert!(si.next());
@@ -389,7 +417,7 @@ impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Iterator for Dict<'a, K, V, Ite
 pub struct Variant<T>(pub T);
 
 impl<T> Arg for Variant<T> {
-    fn arg_type() -> i32 { ffi::DBUS_TYPE_VARIANT }
+    fn arg_type() -> ArgType { ArgType::Variant }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"v\0") } }
 }
 
@@ -432,7 +460,7 @@ impl<'a, T: 'a + Append, I: Iterator<Item=T>> Array<'a, T, I> {
 }
 
 impl<'a, T: Arg, I> Arg for Array<'a, T, I> {
-    fn arg_type() -> i32 { ffi::DBUS_TYPE_ARRAY }
+    fn arg_type() -> ArgType { ArgType::Array }
     fn signature() -> Signature<'static> { Signature::from(format!("a{}", T::signature())) }
 }
 
@@ -464,7 +492,7 @@ macro_rules! struct_impl {
 
 /// Tuples are represented as D-Bus structs. 
 impl<$($t: Arg),*> Arg for ($($t,)*) {
-    fn arg_type() -> i32 { ffi::DBUS_TYPE_STRUCT }
+    fn arg_type() -> ArgType { ArgType::Struct }
     fn signature() -> Signature<'static> {
         let mut s = String::from("(");
         $( s.push_str(&$t::signature()); )*
@@ -482,7 +510,7 @@ impl<$($t: Arg + Append),*> Append for ($($t,)*) {
 
 impl<'a, $($t: Get<'a>),*> Get<'a> for ($($t,)*) {
     fn get(i: &mut Iter<'a>) -> Option<Self> {
-        let si = i.recurse(ffi::DBUS_TYPE_STRUCT);
+        let si = i.recurse(ArgType::Struct);
         if si.is_none() { return None; }
         let mut si = si.unwrap();
         let mut _valid_item = true;
@@ -548,11 +576,11 @@ impl<'a> IterAppend<'a> {
     /// Appends the argument.
     pub fn append<T: Append>(&mut self, a: T) { a.append(self) }
 
-    fn append_container<F: FnOnce(&mut IterAppend<'a>)>(&mut self, arg_type: i32, sig: Option<&CStr>, f: F) {
+    fn append_container<F: FnOnce(&mut IterAppend<'a>)>(&mut self, arg_type: ArgType, sig: Option<&CStr>, f: F) {
         let mut s = IterAppend(ffi_iter(), self.1);
         let p = sig.map(|s| s.as_ptr()).unwrap_or(ptr::null());
         check("dbus_message_iter_open_container",
-            unsafe { ffi::dbus_message_iter_open_container(&mut self.0, arg_type, p, &mut s.0) });
+            unsafe { ffi::dbus_message_iter_open_container(&mut self.0, arg_type as c_int, p, &mut s.0) });
         f(&mut s);
         check("dbus_message_iter_close_container",
             unsafe { ffi::dbus_message_iter_close_container(&mut self.0, &mut s.0) });
@@ -567,7 +595,7 @@ impl<'a> IterAppend<'a> {
     /// the supplied `IterAppend` exactly once,
     /// and with a value which has the same signature as inner_sig.  
     pub fn append_variant<F: FnOnce(&mut IterAppend<'a>)>(&mut self, inner_sig: &Signature, f: F) {
-        self.append_container(Variant::<()>::arg_type(), Some(inner_sig.as_cstr()), f)
+        self.append_container(ArgType::Variant, Some(inner_sig.as_cstr()), f)
     }
 
     /// Low-level function to append an array.
@@ -578,7 +606,7 @@ impl<'a> IterAppend<'a> {
     /// In order not to get D-Bus errors: during the call to "f", you should only call "append" on
     /// the supplied `IterAppend` with values which has the same signature as inner_sig.
     pub fn append_array<F: FnOnce(&mut IterAppend<'a>)>(&mut self, inner_sig: &Signature, f: F) {
-        self.append_container(Array::<bool,()>::arg_type(), Some(inner_sig.as_cstr()), f)
+        self.append_container(ArgType::Array, Some(inner_sig.as_cstr()), f)
     }
 
     /// Low-level function to append a struct.
@@ -586,7 +614,7 @@ impl<'a> IterAppend<'a> {
     /// Use in case tuples are not flexible enough -
     /// the easier way is to just call e g "append1" on a message and supply a tuple parameter.
     pub fn append_struct<F: FnOnce(&mut IterAppend<'a>)>(&mut self, f: F) {
-        self.append_container(ffi::DBUS_TYPE_STRUCT, None, f)
+        self.append_container(ArgType::Struct, None, f)
     }
 
     /// Low-level function to append a dict entry.
@@ -598,7 +626,7 @@ impl<'a> IterAppend<'a> {
     /// for the key, then once for the value. You should only call this function for a subiterator
     /// you got from calling "append_dict", and signatures need to match what you specified in "append_dict".
     pub fn append_dict_entry<F: FnOnce(&mut IterAppend<'a>)>(&mut self, f: F) {
-        self.append_container(ffi::DBUS_TYPE_DICT_ENTRY, None, f)
+        self.append_container(ArgType::DictEntry, None, f)
     }
 
     /// Low-level function to append a dict.
@@ -615,27 +643,30 @@ impl<'a> IterAppend<'a> {
 
 }
 
+const ALL_ARG_TYPES: [(ArgType, &'static str); 18] =
+    [(ArgType::Variant, "Variant"),
+    (ArgType::Array, "Array/Dict"),
+    (ArgType::Struct, "Struct"),
+    (ArgType::String, "String"),
+    (ArgType::DictEntry, "Dict entry"),
+    (ArgType::ObjectPath, "Path"),
+    (ArgType::Signature, "Signature"),
+    (ArgType::UnixFd, "OwnedFd"),
+    (ArgType::Boolean, "bool"),
+    (ArgType::Byte, "u8"),
+    (ArgType::Int16, "i16"),
+    (ArgType::Int32, "i32"),
+    (ArgType::Int64, "i64"),
+    (ArgType::UInt16, "u16"),
+    (ArgType::UInt32, "u32"),
+    (ArgType::UInt64, "u64"),
+    (ArgType::Double, "f64"),
+    (ArgType::Invalid, "nothing")];
 
-fn arg_type_to_str(i: i32) -> &'static str {
-    match i {
-        ffi::DBUS_TYPE_VARIANT => "Variant",
-        ffi::DBUS_TYPE_ARRAY => "Array/Dict",
-        ffi::DBUS_TYPE_STRUCT => "Struct",
-        ffi::DBUS_TYPE_STRING => "String",
-        ffi::DBUS_TYPE_OBJECT_PATH => "Path",
-        ffi::DBUS_TYPE_SIGNATURE => "Signature",
-        ffi::DBUS_TYPE_UNIX_FD => "OwnedFd",
-        ffi::DBUS_TYPE_BOOLEAN => "bool",
-        ffi::DBUS_TYPE_BYTE => "u8",
-        ffi::DBUS_TYPE_INT16 => "i16",
-        ffi::DBUS_TYPE_INT32 => "i32",
-        ffi::DBUS_TYPE_INT64 => "i64",
-        ffi::DBUS_TYPE_UINT16 => "u16",
-        ffi::DBUS_TYPE_UINT32 => "u32",
-        ffi::DBUS_TYPE_UINT64 => "u64",
-        ffi::DBUS_TYPE_DOUBLE => "f64",
-        ffi::DBUS_TYPE_INVALID => "nothing",
-        _ => "Invalid argument type"
+impl ArgType {
+    /// A str corresponding to the name of a Rust type. 
+    pub fn as_str(self) -> &'static str {
+        ALL_ARG_TYPES.iter().skip_while(|a| a.0 != self).next().unwrap().1
     }
 }
 
@@ -644,13 +675,13 @@ fn arg_type_to_str(i: i32) -> &'static str {
 /// Might be returned from `iter::read()`. 
 #[derive(Clone, Copy, Debug)]
 pub struct TypeMismatchError {
-    expected: i32,
-    found: i32,
+    expected: ArgType,
+    found: ArgType,
 }
 
 impl TypeMismatchError {
-    pub fn expected_arg_type(&self) -> i32 { self.expected }
-    pub fn found_arg_type(&self) -> i32 { self.found }
+    pub fn expected_arg_type(&self) -> ArgType { self.expected }
+    pub fn found_arg_type(&self) -> ArgType { self.found }
 }
 
 impl error::Error for TypeMismatchError {
@@ -662,8 +693,8 @@ impl fmt::Display for TypeMismatchError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}: expected {}, found {}",
             (self as &error::Error).description(),
-            arg_type_to_str(self.expected),
-            if self.expected == self.found { "same but still different somehow" } else { arg_type_to_str(self.found) }
+            self.expected.as_str(),
+            if self.expected == self.found { "same but still different somehow" } else { self.found.as_str() }
         )
     }
 }
@@ -703,7 +734,13 @@ impl<'a> Iter<'a> {
     /// Unlike Arg::arg_type, this requires access to self and is not a static method.
     /// You can match this against Arg::arg_type for different types to understand what type the current item is.
     /// In case you're past the last argument, this function will return 0.
-    pub fn arg_type(&mut self) -> i32 { unsafe { ffi::dbus_message_iter_get_arg_type(&mut self.0) } }
+    pub fn arg_type(&mut self) -> ArgType {
+        let s = unsafe { ffi::dbus_message_iter_get_arg_type(&mut self.0) };
+        for &(a, _) in &ALL_ARG_TYPES {
+            if a as c_int == s { return a; }
+        }
+        panic!("Invalid arg_type {} returned from D-Bus", s);
+    }
 
     /// Returns false if there are no more items.
     pub fn next(&mut self) -> bool {
@@ -749,13 +786,13 @@ impl<'a> Iter<'a> {
     ///
     /// Primarily for internal use (the "get" function is more ergonomic), but could be
     /// useful for recursing into containers with unknown types.
-    pub fn recurse(&mut self, arg_type: i32) -> Option<Iter<'a>> {
-        let containers = [ffi::DBUS_TYPE_ARRAY, ffi::DBUS_TYPE_DICT_ENTRY, ffi::DBUS_TYPE_STRUCT, ffi::DBUS_TYPE_VARIANT];
+    pub fn recurse(&mut self, arg_type: ArgType) -> Option<Iter<'a>> {
+        let containers = [ArgType::Array, ArgType::DictEntry, ArgType::Struct, ArgType::Variant];
         if !containers.iter().any(|&t| t == arg_type) { return None; }
 
         let mut subiter = ffi_iter();
         unsafe {
-            if ffi::dbus_message_iter_get_arg_type(&mut self.0) != arg_type { return None };
+            if ffi::dbus_message_iter_get_arg_type(&mut self.0) != arg_type as c_int { return None };
             ffi::dbus_message_iter_recurse(&mut self.0, &mut subiter)
         }
         Some(Iter(subiter, self.1))
@@ -767,7 +804,8 @@ impl<'a> fmt::Debug for Iter<'a> {
         let mut z = self.clone();
         let mut t = f.debug_tuple("Iter");
         loop {
-            t.field(& match z.arg_type() {
+            t.field(&z.arg_type()
+/* & match z.arg_type() {
                 ffi::DBUS_TYPE_VARIANT => "Variant",
                 ffi::DBUS_TYPE_ARRAY =>
                     if z.recurse(ffi::DBUS_TYPE_ARRAY).unwrap().arg_type() == ffi::DBUS_TYPE_DICT_ENTRY { "Dict" } else { "Array" },
@@ -787,7 +825,7 @@ impl<'a> fmt::Debug for Iter<'a> {
                 ffi::DBUS_TYPE_DOUBLE => "f64",
                 ffi::DBUS_TYPE_INVALID => { break },
                 _ => "Unknown?!"
-            });
+            } */ );
             if !z.next() { break }
         }
         t.finish()
