@@ -297,7 +297,8 @@ pub fn new_objectpath<M: MethodType<D>, D: DataType>(n: Path<'static>, d: D::Obj
 /// A collection of object paths.
 #[derive(Debug, Default)]
 pub struct Tree<M: MethodType<D>, D: DataType> {
-    paths: ArcMap<Arc<Path<'static>>, ObjectPath<M, D>>
+    paths: ArcMap<Arc<Path<'static>>, ObjectPath<M, D>>,
+    data: D::Tree,
 }
 
 impl<M: MethodType<D>, D: DataType> Tree<M, D> {
@@ -380,6 +381,13 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
         }).collect()
     }
 
+    /// Get associated data
+    pub fn get_data(&self) -> &D::Tree { &self.data }
+
+}
+
+pub fn new_tree<M: MethodType<D>, D: DataType>(d: D::Tree) -> Tree<M, D> {
+    Tree { paths: ArcMap::new(), data: d }
 }
 
 /// An iterator adapter that handles incoming method calls.
@@ -424,7 +432,7 @@ fn test_introspection() {
             .add_s(f.signal("Echoed", ()).arg(("data", "s")).deprecated())
     );
 
-    let actual_result = t.introspect(&f.tree().add(f.object_path("/echo/subpath", ())));
+    let actual_result = t.introspect(&f.tree(()).add(f.object_path("/echo/subpath", ())));
     println!("\n=== Introspection XML start ===\n{}\n=== Introspection XML end ===", actual_result);
 
     let expected_result = r##"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">

@@ -7,7 +7,7 @@
 //! let f = tree::Factory::new_fn::<()>();
 //! /* Add a method returning "Thanks!" on interface "com.example.dbus.rs"
 //!    on object path "/example". */
-//! let t = f.tree().add(f.object_path("/example", ()).introspectable()
+//! let t = f.tree(()).add(f.object_path("/example", ()).introspectable()
 //!     .add(f.interface("com.example.dbus.rs", ())
 //!         .add_m(f.method("CallMe", (), |m| {
 //!             Ok(vec!(m.msg.method_return().append("Thanks!"))) }

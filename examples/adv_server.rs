@@ -27,6 +27,7 @@ struct Device {
 #[derive(Copy, Clone, Default, Debug)]
 struct TData;
 impl tree::DataType for TData {
+    type Tree = ();
     type ObjectPath = Arc<Device>;
     type Property = ();
     type Interface = ();
@@ -126,7 +127,7 @@ fn create_tree(devices: &[Arc<Device>], iface: &Arc<Interface<MTFn<TData>, TData
     -> tree::Tree<MTFn<TData>, TData> {
 
     let f = tree::Factory::new_fn();
-    let mut tree = f.tree();
+    let mut tree = f.tree(());
     for dev in devices {
         tree = tree.add(f.object_path(dev.path.clone(), dev.clone())
             .introspectable()
