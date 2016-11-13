@@ -1,3 +1,6 @@
+// Docstring comments in this file were copied and adapted from the
+// <dbus/dbus-shared.h> header.
+
 #![allow(dead_code)]
 
 use std::os::raw::{c_void, c_char, c_uint, c_int};
@@ -9,9 +12,13 @@ pub type DBusWatch = c_void;
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Copy, Clone)]
+/// Well-known bus types.
 pub enum DBusBusType {
+    /// The login session bus.
     Session = 0,
+    /// The systemwide bus.
     System = 1,
+    /// The bus that started us, if any.
     Starter = 2,
 }
 
@@ -36,34 +43,53 @@ pub const DBUS_TYPE_SIGNATURE: c_int = 'g' as c_int;
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Copy, Clone)]
+/// Owner flags.
 pub enum DBusNameFlag {
+    /// Allow another service to become the primary owner if requested.
     AllowReplacement = 1,
+    /// Request to replace the current primary owner.
     ReplaceExisting = 2,
+    /// If we can not become the primary owner do not place us in the queue.
     DoNotQueue = 4,
 }
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Copy, Clone)]
+/// Replies to request for a name.
 pub enum DBusRequestNameReply {
+    /// Service has become the primary owner of the requested name.
     PrimaryOwner = 1,
+    /// Service could not become the primary owner and has been placed
+    /// in the queue.
     InQueue = 2,
+    /// Service is already in the queue.
     Exists = 3,
+    /// Service is already the primary owner.
     AlreadyOwner = 4,
 }
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Copy, Clone)]
+/// Replies to releasing a name.
 pub enum DBusReleaseNameReply {
+    /// Service was released from the given name.
     Released = 1,
+    /// The given name does not exist on the bus.
     NonExistent = 2,
+    /// Service is not an owner of the given name.
     NotOwner = 3,
 }
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Copy, Clone)]
+/// Results that a message handler can return
 pub enum DBusHandlerResult {
+    /// Message has had its effect - no need to run more handlers.
     Handled = 0,
+    /// Message has not had any effect - see if other handlers want it.
     NotYetHandled = 1,
+    /// Need more memory in order to return Handled or
+    /// NotYetHandled. Please try again later with more memory.
     NeedMemory = 2,
 }
 
