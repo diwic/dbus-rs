@@ -673,7 +673,7 @@ impl ArgType {
 /// Error struct to indicate a D-Bus argument type mismatch.
 ///
 /// Might be returned from `iter::read()`. 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TypeMismatchError {
     expected: ArgType,
     found: ArgType,
@@ -826,7 +826,7 @@ mod test {
     extern crate tempdir;
 
     use super::super::{Connection, ConnectionItem, Message, BusType, Path, Signature};
-    use super::{Array, Variant, Dict, Iter, ArgType};
+    use super::{Array, Variant, Dict, Iter, ArgType, TypeMismatchError};
 
     use std::collections::HashMap;
 
@@ -859,6 +859,8 @@ mod test {
 
                     assert_eq!(2000u16, m.get1().unwrap());
                     assert_eq!(m.get2(), (Some(2000u16), Some(&[129u8, 5, 254][..])));
+                    assert_eq!(m.read2::<u16, bool>().unwrap_err(),
+                        TypeMismatchError { position: 1, found: ArgType::Array, expected: ArgType::Boolean });
 
                     let mut g = m.iter_init();
                     let e = g.read::<u32>().unwrap_err();

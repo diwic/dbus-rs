@@ -198,16 +198,14 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
         self.ifaces.insert(z.name.clone(), z);
     }
 
-    fn get_iface<'a>(&'a self, i: Option<&'a CStr>) -> Result<&Arc<Interface<M, D>>, MethodErr> {
-        let iface_name = try!(i.ok_or_else(|| MethodErr::invalid_arg(&0)));
+    fn get_iface<'a>(&'a self, iface_name: &'a CStr) -> Result<&Arc<Interface<M, D>>, MethodErr> {
         let j = try!(IfaceName::from_slice(iface_name.to_bytes_with_nul()).map_err(|e| MethodErr::invalid_arg(&e)));
         self.ifaces.get(&j).ok_or_else(|| MethodErr::no_interface(&j))
     }
 
     fn prop_get(&self, m: &MethodInfo<M, D>) -> MethodResult {
-        let (iname, p) = m.msg.get2();
+        let (iname, prop_name): (&CStr, &str) = try!(m.msg.read2());
         let iface = try!(self.get_iface(iname));
-        let prop_name: &str = try!(p.ok_or_else(|| MethodErr::invalid_arg(&1)));
         let prop: &Property<M, D> = try!(iface.properties.get(&String::from(prop_name))
             .ok_or_else(|| MethodErr::no_property(&prop_name)));
         try!(prop.can_get());
@@ -221,7 +219,7 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
     }
 
     fn prop_get_all(&self, m: &MethodInfo<M, D>) -> MethodResult {
-        let iface = try!(self.get_iface(m.msg.get1()));
+        let iface = try!(self.get_iface(try!(m.msg.read1())));
         let mut mret = m.msg.method_return(); 
         try!(prop_append_dict(&mut arg::IterAppend::new(&mut mret), 
             iface.properties.values().map(|v| &**v), m));
@@ -230,9 +228,8 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
 
 
     fn prop_set(&self, m: &MethodInfo<M, D>) -> MethodResult {
-        let (iname, p) = m.msg.get2();
+        let (iname, prop_name): (&CStr, &str) = try!(m.msg.read2());
         let iface = try!(self.get_iface(iname));
-        let prop_name: &str = try!(p.ok_or_else(|| MethodErr::invalid_arg(&1)));
         let prop: &Property<M, D> = try!(iface.properties.get(&String::from(prop_name))
             .ok_or_else(|| MethodErr::no_property(&prop_name)));
 

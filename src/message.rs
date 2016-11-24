@@ -6,7 +6,7 @@ use std::os::unix::io::{RawFd, AsRawFd};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_char, c_int};
 
-use super::arg::{Append, IterAppend, Get, Iter};
+use super::arg::{Append, IterAppend, Get, Iter, Arg, TypeMismatchError};
 
 #[derive(Debug,Copy,Clone)]
 /// Errors that can happen when creating a MessageItem::Array.
@@ -720,6 +720,50 @@ impl Message {
         let g4 = i.get();
         if !i.next() { return (g1, g2, g3, g4, None) }
         (g1, g2, g3, g4, i.get())
+    }
+
+    /// Gets the first argument from the message, if that argument is of type G1.
+    ///
+    /// Returns a TypeMismatchError if there are not enough arguments, or if types don't match.
+    pub fn read1<'a, G1: Arg + Get<'a>>(&'a self) -> Result<G1, TypeMismatchError> {
+        let mut i = Iter::new(&self);
+        i.read()
+    }
+
+    /// Gets the first two arguments from the message, if those arguments are of type G1 and G2.
+    ///
+    /// Returns a TypeMismatchError if there are not enough arguments, or if types don't match.
+    pub fn read2<'a, G1: Arg + Get<'a>, G2: Arg + Get<'a>>(&'a self) -> Result<(G1, G2), TypeMismatchError> {
+        let mut i = Iter::new(&self);
+        Ok((try!(i.read()), try!(i.read())))
+    }
+
+    /// Gets the first three arguments from the message, if those arguments are of type G1, G2 and G3.
+    ///
+    /// Returns a TypeMismatchError if there are not enough arguments, or if types don't match.
+    pub fn read3<'a, G1: Arg + Get<'a>, G2: Arg + Get<'a>, G3: Arg + Get<'a>>(&'a self) -> 
+        Result<(G1, G2, G3), TypeMismatchError> {
+        let mut i = Iter::new(&self);
+        Ok((try!(i.read()), try!(i.read()), try!(i.read())))
+    }
+
+    /// Gets the first four arguments from the message, if those arguments are of type G1, G2, G3 and G4.
+    ///
+    /// Returns a TypeMismatchError if there are not enough arguments, or if types don't match.
+    pub fn read4<'a, G1: Arg + Get<'a>, G2: Arg + Get<'a>, G3: Arg + Get<'a>, G4: Arg + Get<'a>>(&'a self) ->
+        Result<(G1, G2, G3, G4), TypeMismatchError> {
+        let mut i = Iter::new(&self);
+        Ok((try!(i.read()), try!(i.read()), try!(i.read()), try!(i.read())))
+    }
+
+    /// Gets the first five arguments from the message, if those arguments are of type G1, G2, G3, G4 and G5.
+    ///
+    /// Returns a TypeMismatchError if there are not enough arguments, or if types don't match.
+    /// Note: If you need more than five arguments, use `iter_init` instead.
+    pub fn read5<'a, G1: Arg + Get<'a>, G2: Arg + Get<'a>, G3: Arg + Get<'a>, G4: Arg + Get<'a>, G5: Arg + Get<'a>>(&'a self) ->
+        Result<(G1, G2, G3, G4, G5), TypeMismatchError> {
+        let mut i = Iter::new(&self);
+        Ok((try!(i.read()), try!(i.read()), try!(i.read()), try!(i.read()), try!(i.read())))
     }
 
     /// Returns a struct for retreiving the arguments from a message. Supersedes get_items().
