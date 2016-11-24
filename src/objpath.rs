@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use super::{Connection, Message, MessageItem, Error, TypeSig};
 use std::collections::BTreeMap;
 use std::rc::Rc;
@@ -74,6 +76,7 @@ pub struct Method<'a> {
 
 impl<'a> Method<'a> {
     /// Create a new Method.
+    #[deprecated(note="please use `tree` module instead")]
     pub fn new<N: ToString>(name: N, in_args: Vec<Argument<'a>>,
             out_args: Vec<Argument<'a>>, cb: MethodHandler<'a>) -> Method<'a> {
         Method { name: name.to_string(), i: IMethod {
@@ -157,6 +160,7 @@ pub struct Interface<'a> {
 
 impl<'a> Interface<'a> {
     /// Create a new Interface.
+    #[deprecated(note="please use `tree` module instead")]
     pub fn new(m: Vec<Method<'a>>, p: Vec<Property<'a>>, s: Vec<Signal<'a>>) -> Interface<'a> {
         Interface {
            methods: m.into_iter().map(|m| (m.name, m.i)).collect(),
@@ -337,6 +341,7 @@ impl PropertyROHandler for MessageItem {
 
 impl<'a> ObjectPath<'a> {
     /// Create a new ObjectPath.
+    #[deprecated(note="please use `tree` module instead")]
     pub fn new(conn: &'a Connection, path: &str, introspectable: bool) -> ObjectPath<'a> {
         let i = IObjectPath {
             conn: conn,
