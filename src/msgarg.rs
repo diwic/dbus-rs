@@ -677,11 +677,20 @@ impl ArgType {
 pub struct TypeMismatchError {
     expected: ArgType,
     found: ArgType,
+    position: u32,
 }
 
 impl TypeMismatchError {
+    /// The ArgType we were trying to read, but failed
     pub fn expected_arg_type(&self) -> ArgType { self.expected }
+
+    /// The ArgType we should have been trying to read, if we wanted the read to succeed 
     pub fn found_arg_type(&self) -> ArgType { self.found }
+
+    /// At what argument was the error found?
+    ///
+    /// Returns 0 for first argument, 1 for second argument, etc.
+    pub fn pos(&self) -> u32 { self.position }
 }
 
 impl error::Error for TypeMismatchError {
@@ -691,9 +700,9 @@ impl error::Error for TypeMismatchError {
 
 impl fmt::Display for TypeMismatchError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}: expected {}, found {}",
+        write!(f, "{} at position {}: expected {}, found {}",
             (self as &error::Error).description(),
-            self.expected.as_str(),
+            self.position, self.expected.as_str(),
             if self.expected == self.found { "same but still different somehow" } else { self.found.as_str() }
         )
     }
@@ -702,14 +711,14 @@ impl fmt::Display for TypeMismatchError {
 #[derive(Clone, Copy)]
 /// Helper struct for retrieve one or more arguments from a Message.
 /// Note that this is not a Rust iterator, because arguments are often of different types
-pub struct Iter<'a>(ffi::DBusMessageIter, &'a Message);
+pub struct Iter<'a>(ffi::DBusMessageIter, &'a Message, u32);
 
 impl<'a> Iter<'a> {
     /// Creates a new struct for iterating over the arguments of a message, starting with the first argument. 
     pub fn new(m: &'a Message) -> Iter<'a> { 
         let mut i = ffi_iter();
         unsafe { ffi::dbus_message_iter_init(get_message_ptr(m), &mut i) };
-        Iter(i, m)
+        Iter(i, m, 0)
     }
 
     /// Returns the current argument, if T is the argument type. Otherwise returns None.
@@ -744,6 +753,7 @@ impl<'a> Iter<'a> {
 
     /// Returns false if there are no more items.
     pub fn next(&mut self) -> bool {
+        self.2 += 1;
         unsafe { ffi::dbus_message_iter_next(&mut self.0) != 0 } 
     }
 
@@ -776,7 +786,7 @@ impl<'a> Iter<'a> {
     /// ```
     pub fn read<T: Arg + Get<'a>>(&mut self) -> Result<T, TypeMismatchError> {
         let r = try!(self.get().ok_or_else(||
-             TypeMismatchError { expected: T::arg_type(), found: self.arg_type() }));
+             TypeMismatchError { expected: T::arg_type(), found: self.arg_type(), position: self.2 }));
         self.next();
         Ok(r)
     }
@@ -795,7 +805,7 @@ impl<'a> Iter<'a> {
             if ffi::dbus_message_iter_get_arg_type(&mut self.0) != arg_type as c_int { return None };
             ffi::dbus_message_iter_recurse(&mut self.0, &mut subiter)
         }
-        Some(Iter(subiter, self.1))
+        Some(Iter(subiter, self.1, 0))
     }
 }
 
@@ -804,28 +814,7 @@ impl<'a> fmt::Debug for Iter<'a> {
         let mut z = self.clone();
         let mut t = f.debug_tuple("Iter");
         loop {
-            t.field(&z.arg_type()
-/* & match z.arg_type() {
-                ffi::DBUS_TYPE_VARIANT => "Variant",
-                ffi::DBUS_TYPE_ARRAY =>
-                    if z.recurse(ffi::DBUS_TYPE_ARRAY).unwrap().arg_type() == ffi::DBUS_TYPE_DICT_ENTRY { "Dict" } else { "Array" },
-                ffi::DBUS_TYPE_STRUCT => "(...)",
-                ffi::DBUS_TYPE_STRING => "&str",
-                ffi::DBUS_TYPE_OBJECT_PATH => "Path",
-                ffi::DBUS_TYPE_SIGNATURE => "Signature",
-                ffi::DBUS_TYPE_UNIX_FD => "OwnedFd",
-                ffi::DBUS_TYPE_BOOLEAN => "bool",
-                ffi::DBUS_TYPE_BYTE => "u8",
-                ffi::DBUS_TYPE_INT16 => "i16",
-                ffi::DBUS_TYPE_INT32 => "i32",
-                ffi::DBUS_TYPE_INT64 => "i64",
-                ffi::DBUS_TYPE_UINT16 => "u16",
-                ffi::DBUS_TYPE_UINT32 => "u32",
-                ffi::DBUS_TYPE_UINT64 => "u64",
-                ffi::DBUS_TYPE_DOUBLE => "f64",
-                ffi::DBUS_TYPE_INVALID => { break },
-                _ => "Unknown?!"
-            } */ );
+            t.field(&z.arg_type());
             if !z.next() { break }
         }
         t.finish()
@@ -837,7 +826,7 @@ mod test {
     extern crate tempdir;
 
     use super::super::{Connection, ConnectionItem, Message, BusType, Path, Signature};
-    use super::{Array, Variant, Dict, Iter};
+    use super::{Array, Variant, Dict, Iter, ArgType};
 
     use std::collections::HashMap;
 
@@ -872,6 +861,11 @@ mod test {
                     assert_eq!(m.get2(), (Some(2000u16), Some(&[129u8, 5, 254][..])));
 
                     let mut g = m.iter_init();
+                    let e = g.read::<u32>().unwrap_err();
+                    assert_eq!(e.pos(), 0);
+                    assert_eq!(e.expected_arg_type(), ArgType::UInt32);
+                    assert_eq!(e.found_arg_type(), ArgType::UInt16);
+
                     assert!(g.next() && g.next());
                     let v: Variant<Iter> = g.get().unwrap();
                     let mut viter = v.0;
