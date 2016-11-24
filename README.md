@@ -11,7 +11,7 @@ Current state: Slowly maturing. Most stuff you need should be working:
 
 [API Documentation is here](http://docs.rs/dbus/). If you have further questions or comments, [filing an issue](https://github.com/diwic/dbus-rs/issues) with your question is fine.
 
-Requirements: [Libdbus](https://dbus.freedesktop.org/releases/dbus/) 1.6 or higher, and latest stable release of [Rust](https://www.rust-lang.org/). 
+Requirements: [Libdbus](https://dbus.freedesktop.org/releases/dbus/) 1.6 or higher, and latest stable release of [Rust](https://www.rust-lang.org/). If you run Ubuntu, this translates to Ubuntu 14.04 or later, the `libdbus-1-dev` package installed while building, and the `libdbus-1-3` package installed while running.
 
 Examples
 ========
