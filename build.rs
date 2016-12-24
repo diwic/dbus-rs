@@ -1,5 +1,5 @@
-extern crate pkg_config;
+extern crate metadeps;
 
 fn main() {
-    pkg_config::find_library("dbus-1").unwrap();
+    metadeps::probe().unwrap();
 }
