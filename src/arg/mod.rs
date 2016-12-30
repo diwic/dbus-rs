@@ -63,7 +63,310 @@
 //!
 
 mod msgarg;
+mod basic_impl;
 
-pub use self::msgarg::{Arg, FixedArray, Get, DictKey, Append};
-pub use self::msgarg::{Iter, TypeMismatchError, IterAppend, Array, Variant, Dict};
+pub use self::msgarg::{Arg, FixedArray, Get, DictKey, Append, RefArg};
+pub use self::msgarg::{Array, Variant, Dict};
+
+use std::{fmt, mem, ptr, error};
+use {ffi, Message, message, Signature};
+use std::ffi::{CStr, CString};
+use std::os::raw::{c_void, c_int};
+
+
+fn check(f: &str, i: u32) { if i == 0 { panic!("D-Bus error: '{}' failed", f) }} 
+
+fn ffi_iter() -> ffi::DBusMessageIter { unsafe { mem::zeroed() }} 
+
+#[derive(Clone, Copy)]
+/// Helper struct for appending one or more arguments to a Message. 
+pub struct IterAppend<'a>(ffi::DBusMessageIter, &'a Message);
+
+impl<'a> IterAppend<'a> {
+    /// Creates a new IterAppend struct.
+    pub fn new(m: &'a mut Message) -> IterAppend<'a> { 
+        let mut i = ffi_iter();
+        unsafe { ffi::dbus_message_iter_init_append(message::get_message_ptr(m), &mut i) };
+        IterAppend(i, m)
+    }
+
+    /// Appends the argument.
+    pub fn append<T: Append>(&mut self, a: T) { a.append(self) }
+
+    fn append_container<F: FnOnce(&mut IterAppend<'a>)>(&mut self, arg_type: ArgType, sig: Option<&CStr>, f: F) {
+        let mut s = IterAppend(ffi_iter(), self.1);
+        let p = sig.map(|s| s.as_ptr()).unwrap_or(ptr::null());
+        check("dbus_message_iter_open_container",
+            unsafe { ffi::dbus_message_iter_open_container(&mut self.0, arg_type as c_int, p, &mut s.0) });
+        f(&mut s);
+        check("dbus_message_iter_close_container",
+            unsafe { ffi::dbus_message_iter_close_container(&mut self.0, &mut s.0) });
+    }
+
+    /// Low-level function to append a variant.
+    ///
+    /// Use in case the `Variant` struct is not flexible enough -
+    /// the easier way is to just call e g "append1" on a message and supply a `Variant` parameter.
+    ///
+    /// In order not to get D-Bus errors: during the call to "f" you need to call "append" on
+    /// the supplied `IterAppend` exactly once,
+    /// and with a value which has the same signature as inner_sig.  
+    pub fn append_variant<F: FnOnce(&mut IterAppend<'a>)>(&mut self, inner_sig: &Signature, f: F) {
+        self.append_container(ArgType::Variant, Some(inner_sig.as_cstr()), f)
+    }
+
+    /// Low-level function to append an array.
+    ///
+    /// Use in case the `Array` struct is not flexible enough -
+    /// the easier way is to just call e g "append1" on a message and supply an `Array` parameter.
+    ///
+    /// In order not to get D-Bus errors: during the call to "f", you should only call "append" on
+    /// the supplied `IterAppend` with values which has the same signature as inner_sig.
+    pub fn append_array<F: FnOnce(&mut IterAppend<'a>)>(&mut self, inner_sig: &Signature, f: F) {
+        self.append_container(ArgType::Array, Some(inner_sig.as_cstr()), f)
+    }
+
+    /// Low-level function to append a struct.
+    ///
+    /// Use in case tuples are not flexible enough -
+    /// the easier way is to just call e g "append1" on a message and supply a tuple parameter.
+    pub fn append_struct<F: FnOnce(&mut IterAppend<'a>)>(&mut self, f: F) {
+        self.append_container(ArgType::Struct, None, f)
+    }
+
+    /// Low-level function to append a dict entry.
+    ///
+    /// Use in case the `Dict` struct is not flexible enough -
+    /// the easier way is to just call e g "append1" on a message and supply a `Dict` parameter.
+    ///
+    /// In order not to get D-Bus errors: during the call to "f", you should call "append" once
+    /// for the key, then once for the value. You should only call this function for a subiterator
+    /// you got from calling "append_dict", and signatures need to match what you specified in "append_dict".
+    pub fn append_dict_entry<F: FnOnce(&mut IterAppend<'a>)>(&mut self, f: F) {
+        self.append_container(ArgType::DictEntry, None, f)
+    }
+
+    /// Low-level function to append a dict.
+    ///
+    /// Use in case the `Dict` struct is not flexible enough -
+    /// the easier way is to just call e g "append1" on a message and supply a `Dict` parameter.
+    ///
+    /// In order not to get D-Bus errors: during the call to "f", you should only call "append_dict_entry"
+    /// for the subiterator - do this as many times as the number of dict entries.
+    pub fn append_dict<F: FnOnce(&mut IterAppend<'a>)>(&mut self, key_sig: &Signature, value_sig: &Signature, f: F) {
+        let sig = format!("{{{}{}}}", key_sig, value_sig);
+        self.append_container(Array::<bool,()>::arg_type(), Some(&CString::new(sig).unwrap()), f);
+    }
+}
+
+
+
+#[derive(Clone, Copy)]
+/// Helper struct for retrieve one or more arguments from a Message.
+/// Note that this is not a Rust iterator, because arguments are often of different types
+pub struct Iter<'a>(ffi::DBusMessageIter, &'a Message, u32);
+
+impl<'a> Iter<'a> {
+    /// Creates a new struct for iterating over the arguments of a message, starting with the first argument. 
+    pub fn new(m: &'a Message) -> Iter<'a> { 
+        let mut i = ffi_iter();
+        unsafe { ffi::dbus_message_iter_init(message::get_message_ptr(m), &mut i) };
+        Iter(i, m, 0)
+    }
+
+    /// Returns the current argument, if T is the argument type. Otherwise returns None.
+    pub fn get<T: Get<'a>>(&mut self) -> Option<T> {
+        T::get(self)
+    }
+
+    /// Returns the type signature for the current argument.
+    pub fn signature(&mut self) -> Signature<'static> {
+        unsafe {
+            let c = ffi::dbus_message_iter_get_signature(&mut self.0);
+            assert!(c != ptr::null_mut());
+            let cc = CStr::from_ptr(c);
+            let r = Signature::new(cc.to_bytes());
+            ffi::dbus_free(c as *mut c_void);
+            r.unwrap()
+        } 
+    }
+
+    /// The raw arg_type for the current item.
+    ///
+    /// Unlike Arg::arg_type, this requires access to self and is not a static method.
+    /// You can match this against Arg::arg_type for different types to understand what type the current item is.
+    /// In case you're past the last argument, this function will return 0.
+    pub fn arg_type(&mut self) -> ArgType {
+        let s = unsafe { ffi::dbus_message_iter_get_arg_type(&mut self.0) };
+        for &(a, _) in &ALL_ARG_TYPES {
+            if a as c_int == s { return a; }
+        }
+        panic!("Invalid arg_type {} returned from D-Bus", s);
+    }
+
+    /// Returns false if there are no more items.
+    pub fn next(&mut self) -> bool {
+        self.2 += 1;
+        unsafe { ffi::dbus_message_iter_next(&mut self.0) != 0 } 
+    }
+
+    /// Wrapper around `get` and `next`. Calls `get`, and then `next` if `get` succeeded. 
+    ///
+    /// Also returns a `Result` rather than an `Option` to work better with `try!`.
+    ///
+    /// # Example
+    /// ```ignore
+    /// struct ServiceBrowserItemNew {
+    ///     interface: i32,
+    ///     protocol: i32,
+    ///     name: String,
+    ///     item_type: String,
+    ///     domain: String,
+    ///     flags: u32,
+    /// }
+    ///
+    /// fn service_browser_item_new_msg(m: &Message) -> Result<ServiceBrowserItemNew, TypeMismatchError> {
+    ///     let mut iter = m.iter_init();
+    ///     Ok(ServiceBrowserItemNew {
+    ///         interface: try!(iter.read()),
+    ///         protocol: try!(iter.read()),
+    ///         name: try!(iter.read()),
+    ///         item_type: try!(iter.read()),
+    ///         domain: try!(iter.read()),
+    ///         flags: try!(iter.read()),
+    ///     })
+    /// }
+    /// ```
+    pub fn read<T: Arg + Get<'a>>(&mut self) -> Result<T, TypeMismatchError> {
+        let r = try!(self.get().ok_or_else(||
+             TypeMismatchError { expected: T::arg_type(), found: self.arg_type(), position: self.2 }));
+        self.next();
+        Ok(r)
+    }
+
+    /// If the current argument is a container of the specified arg_type, then a new
+    /// Iter is returned which is for iterating over the contents inside the container.
+    ///
+    /// Primarily for internal use (the "get" function is more ergonomic), but could be
+    /// useful for recursing into containers with unknown types.
+    pub fn recurse(&mut self, arg_type: ArgType) -> Option<Iter<'a>> {
+        let containers = [ArgType::Array, ArgType::DictEntry, ArgType::Struct, ArgType::Variant];
+        if !containers.iter().any(|&t| t == arg_type) { return None; }
+
+        let mut subiter = ffi_iter();
+        unsafe {
+            if ffi::dbus_message_iter_get_arg_type(&mut self.0) != arg_type as c_int { return None };
+            ffi::dbus_message_iter_recurse(&mut self.0, &mut subiter)
+        }
+        Some(Iter(subiter, self.1, 0))
+    }
+}
+
+impl<'a> fmt::Debug for Iter<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut z = self.clone();
+        let mut t = f.debug_tuple("Iter");
+        loop {
+            t.field(&z.arg_type());
+            if !z.next() { break }
+        }
+        t.finish()
+    }  
+}
+
+
+
+/// Type of Argument
+///
+/// use this to figure out, e g, which type of argument is at the current position of Iter. 
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub enum ArgType {
+    /// Dicts are Arrays of dict entries, so Dict types will have Array as ArgType.
+    Array = ffi::DBUS_TYPE_ARRAY as u8,
+    Variant = ffi::DBUS_TYPE_VARIANT as u8,
+    Boolean = ffi::DBUS_TYPE_BOOLEAN as u8,
+    /// This is also the ArgType returned when there are no more arguments available.
+    Invalid = ffi::DBUS_TYPE_INVALID as u8,
+    String = ffi::DBUS_TYPE_STRING as u8,
+    DictEntry = ffi::DBUS_TYPE_DICT_ENTRY as u8,
+    Byte = ffi::DBUS_TYPE_BYTE as u8,
+    Int16 = ffi::DBUS_TYPE_INT16 as u8,
+    UInt16 = ffi::DBUS_TYPE_UINT16 as u8,
+    Int32 = ffi::DBUS_TYPE_INT32 as u8,
+    UInt32 = ffi::DBUS_TYPE_UINT32 as u8,
+    Int64 = ffi::DBUS_TYPE_INT64 as u8,
+    UInt64 = ffi::DBUS_TYPE_UINT64 as u8,
+    Double = ffi::DBUS_TYPE_DOUBLE as u8,
+    UnixFd = ffi::DBUS_TYPE_UNIX_FD as u8,
+    Struct = ffi::DBUS_TYPE_STRUCT as u8,
+    ObjectPath = ffi::DBUS_TYPE_OBJECT_PATH as u8,
+    Signature = ffi::DBUS_TYPE_SIGNATURE as u8,
+}
+
+const ALL_ARG_TYPES: [(ArgType, &'static str); 18] =
+    [(ArgType::Variant, "Variant"),
+    (ArgType::Array, "Array/Dict"),
+    (ArgType::Struct, "Struct"),
+    (ArgType::String, "String"),
+    (ArgType::DictEntry, "Dict entry"),
+    (ArgType::ObjectPath, "Path"),
+    (ArgType::Signature, "Signature"),
+    (ArgType::UnixFd, "OwnedFd"),
+    (ArgType::Boolean, "bool"),
+    (ArgType::Byte, "u8"),
+    (ArgType::Int16, "i16"),
+    (ArgType::Int32, "i32"),
+    (ArgType::Int64, "i64"),
+    (ArgType::UInt16, "u16"),
+    (ArgType::UInt32, "u32"),
+    (ArgType::UInt64, "u64"),
+    (ArgType::Double, "f64"),
+    (ArgType::Invalid, "nothing")];
+
+impl ArgType {
+    /// A str corresponding to the name of a Rust type. 
+    pub fn as_str(self) -> &'static str {
+        ALL_ARG_TYPES.iter().skip_while(|a| a.0 != self).next().unwrap().1
+    }
+}
+
+
+/// Error struct to indicate a D-Bus argument type mismatch.
+///
+/// Might be returned from `iter::read()`. 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TypeMismatchError {
+    expected: ArgType,
+    found: ArgType,
+    position: u32,
+}
+
+impl TypeMismatchError {
+    /// The ArgType we were trying to read, but failed
+    pub fn expected_arg_type(&self) -> ArgType { self.expected }
+
+    /// The ArgType we should have been trying to read, if we wanted the read to succeed 
+    pub fn found_arg_type(&self) -> ArgType { self.found }
+
+    /// At what argument was the error found?
+    ///
+    /// Returns 0 for first argument, 1 for second argument, etc.
+    pub fn pos(&self) -> u32 { self.position }
+}
+
+impl error::Error for TypeMismatchError {
+    fn description(&self) -> &str { "D-Bus argument type mismatch" }
+    fn cause(&self) -> Option<&error::Error> { None }
+}
+
+impl fmt::Display for TypeMismatchError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} at position {}: expected {}, found {}",
+            (self as &error::Error).description(),
+            self.position, self.expected.as_str(),
+            if self.expected == self.found { "same but still different somehow" } else { self.found.as_str() }
+        )
+    }
+}
 
