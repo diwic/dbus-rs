@@ -501,10 +501,10 @@ impl<$($t: Arg),*> Arg for ($($t,)*) {
     }
 }
 
-impl<$($t: Arg + Append),*> Append for ($($t,)*) {
+impl<$($t: Append),*> Append for ($($t,)*) {
     fn append(self, i: &mut IterAppend) {
         let ( $($n,)*) = self;
-        i.append_container(Self::arg_type(), None, |s| { $( $n.append(s); )* });
+        i.append_container(ArgType::Struct, None, |s| { $( $n.append(s); )* });
     }
 }
 
