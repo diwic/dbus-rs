@@ -66,6 +66,17 @@ impl<'m> From<&'m String> for $t<'m> { fn from(s: &'m String) -> $t<'m> { $t::fr
 /// If given string is not valid.
 impl<'m> From<&'m str> for $t<'m> { fn from(s: &'m str) -> $t<'m> { $t::from_slice(s.as_bytes()).unwrap() } }
 
+/// #Panics
+///
+/// If given string is not valid.
+impl<'m> From<Cow<'m, str>> for $t<'m> {
+    fn from(s: Cow<'m, str>) -> $t<'m> { 
+        match s {
+            Cow::Borrowed(z) => z.into(),
+            Cow::Owned(z) => z.into(),
+        }
+    }
+}
 
 impl<'m> ops::Deref for $t<'m> {
     type Target = str;
