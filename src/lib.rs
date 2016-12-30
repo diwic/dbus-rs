@@ -37,7 +37,6 @@ mod message;
 mod prop;
 mod objpath;
 mod watch;
-mod msgarg;
 mod connection;
 
 mod strings;
@@ -107,10 +106,7 @@ pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
 /// `OwnedFd` - a file descriptor sent from the remote side.
 ///
 
-pub mod arg {
-    pub use msgarg::{Arg, FixedArray, Get, DictKey, Append};
-    pub use msgarg::{Iter, TypeMismatchError, IterAppend, Array, Variant, Dict};
-}
+pub mod arg;
 
 
 /// Contains functionality for the "server" of a D-Bus object. A remote application can

@@ -1,13 +1,12 @@
 #![allow(dead_code)]
 
-use super::{ffi, Message};
-use super::message::get_message_ptr;
+use {ffi, Message, message};
 use std::{mem, ptr, error, fmt};
 use std::marker::PhantomData;
 
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_void, c_char, c_int};
-use super::{Signature, Path, OwnedFd};
+use {Signature, Path, OwnedFd};
 
 fn check(f: &str, i: u32) { if i == 0 { panic!("D-Bus error: '{}' failed", f) }} 
 
@@ -428,7 +427,7 @@ impl<T: Arg + Append> Append for Variant<T> {
     }
 }
 
-impl Append for Variant<super::MessageItem> {
+impl Append for Variant<message::MessageItem> {
     fn append(self, i: &mut IterAppend) {
         let z = self.0;
         let sig = CString::new(z.type_sig().into_owned()).unwrap();
@@ -539,15 +538,15 @@ struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J,);
 struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J, k K,);
 struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J, k K, l L,);
 
-impl Append for super::MessageItem {
+impl Append for message::MessageItem {
     fn append(self, i: &mut IterAppend) {
-        super::message::append_messageitem(&mut i.0, &self)
+        message::append_messageitem(&mut i.0, &self)
     }
 }
 
-impl<'a> Get<'a> for super::MessageItem {
+impl<'a> Get<'a> for message::MessageItem {
     fn get(i: &mut Iter<'a>) -> Option<Self> {
-        super::message::get_messageitem(&mut i.0)
+        message::get_messageitem(&mut i.0)
     }
 }
 
@@ -569,7 +568,7 @@ impl<'a> IterAppend<'a> {
     /// Creates a new IterAppend struct.
     pub fn new(m: &'a mut Message) -> IterAppend<'a> { 
         let mut i = ffi_iter();
-        unsafe { ffi::dbus_message_iter_init_append(get_message_ptr(m), &mut i) };
+        unsafe { ffi::dbus_message_iter_init_append(message::get_message_ptr(m), &mut i) };
         IterAppend(i, m)
     }
 
@@ -717,7 +716,7 @@ impl<'a> Iter<'a> {
     /// Creates a new struct for iterating over the arguments of a message, starting with the first argument. 
     pub fn new(m: &'a Message) -> Iter<'a> { 
         let mut i = ffi_iter();
-        unsafe { ffi::dbus_message_iter_init(get_message_ptr(m), &mut i) };
+        unsafe { ffi::dbus_message_iter_init(message::get_message_ptr(m), &mut i) };
         Iter(i, m, 0)
     }
 
@@ -825,7 +824,7 @@ impl<'a> fmt::Debug for Iter<'a> {
 mod test {
     extern crate tempdir;
 
-    use super::super::{Connection, ConnectionItem, Message, BusType, Path, Signature};
+    use {Connection, ConnectionItem, Message, BusType, Path, Signature};
     use super::{Array, Variant, Dict, Iter, ArgType, TypeMismatchError};
 
     use std::collections::HashMap;
