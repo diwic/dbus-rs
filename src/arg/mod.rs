@@ -65,9 +65,10 @@
 mod msgarg;
 mod basic_impl;
 mod variantstruct_impl;
+mod array_impl;
 
 pub use self::msgarg::{Arg, FixedArray, Get, DictKey, Append, RefArg};
-pub use self::msgarg::{Array, Dict};
+pub use self::array_impl::{Array, Dict};
 pub use self::variantstruct_impl::Variant;
 
 use std::{fmt, mem, ptr, error};
@@ -182,8 +183,8 @@ impl<'a> Iter<'a> {
 
     pub fn get_refarg(&mut self) -> Option<Box<RefArg + 'static>> {
         Some(match self.arg_type() {
-	    ArgType::Array => unimplemented!(),
-	    ArgType::Variant => Box::new(Variant(self.recurse(ArgType::Variant).unwrap().get_refarg().unwrap())),
+	    ArgType::Array => array_impl::get_array_refarg(self),
+	    ArgType::Variant => Box::new(Variant::new_refarg(self).unwrap()),
 	    ArgType::Boolean => Box::new(self.get::<bool>().unwrap()),
 	    ArgType::Invalid => return None,
 	    ArgType::String => Box::new(self.get::<String>().unwrap()),

@@ -7,6 +7,12 @@ use std::any;
 /// A simple wrapper to specify a D-Bus variant.
 pub struct Variant<T>(pub T);
 
+impl Variant<Box<RefArg>> {
+    pub fn new_refarg<'a>(i: &mut Iter<'a>) -> Option<Self> {
+        i.recurse(ArgType::Variant).and_then(|mut si| si.get_refarg()).map(|v| Variant(v))
+    }
+}
+
 impl<T> Arg for Variant<T> {
     fn arg_type() -> ArgType { ArgType::Variant }
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"v\0") } }
