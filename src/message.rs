@@ -6,7 +6,7 @@ use std::os::unix::io::{RawFd, AsRawFd};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_char, c_int};
 
-use super::arg::{Append, IterAppend, Get, Iter, Arg, TypeMismatchError};
+use super::arg::{Append, IterAppend, Get, Iter, Arg, RefArg, TypeMismatchError};
 
 #[derive(Debug,Copy,Clone)]
 /// Errors that can happen when creating a MessageItem::Array.
@@ -665,6 +665,16 @@ impl Message {
         }
         self
     }
+
+    pub fn append_ref<A: RefArg>(mut self, r: &[A]) -> Self {
+        {
+            let mut m = IterAppend::new(&mut self);
+            for rr in r {
+                rr.append(&mut m);
+            }
+        }
+        self
+    } 
 
     /// Gets the first argument from the message, if that argument is of type G1.
     /// Returns None if there are not enough arguments, or if types don't match.

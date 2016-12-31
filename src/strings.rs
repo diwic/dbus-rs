@@ -42,6 +42,11 @@ impl<'m> $t<'m> {
 
     /// View this struct as a CStr.
     pub fn as_cstr(&self) -> &CStr { &self.0 }
+
+    /// Makes sure this string does not contain borrows.
+    pub fn into_static(self) -> $t<'static> {
+        $t(Cow::Owned(self.0.into_owned()))
+    }
 }
 
 /*

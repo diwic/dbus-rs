@@ -29,7 +29,7 @@
 //!
 //! `Dict<K, V, I> where K: Append + DictKey, V: Append, I: Iterator<Item=(&K, &V)>` - A D-Bus dict (array of dict entries).
 //!
-//! `ObjectPath` - a D-Bus object path.
+//! `Path` - a D-Bus object path.
 //!
 //! `Signature` - a D-Bus signature.
 //!
@@ -55,7 +55,7 @@
 //! `Dict<K, V, Iter> where K: Get + DictKey, V: Get` - A D-Bus dict (array of dict entries). Implements Iterator so you can easily
 //! collect it into, e g, a `HashMap`.
 //!
-//! `ObjectPath` - a D-Bus object path.
+//! `Path` - a D-Bus object path.
 //!
 //! `Signature` - a D-Bus signature.
 //!
@@ -64,12 +64,14 @@
 
 mod msgarg;
 mod basic_impl;
+mod variantstruct_impl;
 
 pub use self::msgarg::{Arg, FixedArray, Get, DictKey, Append, RefArg};
-pub use self::msgarg::{Array, Variant, Dict};
+pub use self::msgarg::{Array, Dict};
+pub use self::variantstruct_impl::Variant;
 
 use std::{fmt, mem, ptr, error};
-use {ffi, Message, message, Signature};
+use {ffi, Message, message, Signature, Path};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_void, c_int};
 
@@ -163,7 +165,6 @@ impl<'a> IterAppend<'a> {
 
 #[derive(Clone, Copy)]
 /// Helper struct for retrieve one or more arguments from a Message.
-/// Note that this is not a Rust iterator, because arguments are often of different types
 pub struct Iter<'a>(ffi::DBusMessageIter, &'a Message, u32);
 
 impl<'a> Iter<'a> {
@@ -179,6 +180,29 @@ impl<'a> Iter<'a> {
         T::get(self)
     }
 
+    pub fn get_refarg(&mut self) -> Option<Box<RefArg + 'static>> {
+        Some(match self.arg_type() {
+	    ArgType::Array => unimplemented!(),
+	    ArgType::Variant => Box::new(Variant(self.recurse(ArgType::Variant).unwrap().get_refarg().unwrap())),
+	    ArgType::Boolean => Box::new(self.get::<bool>().unwrap()),
+	    ArgType::Invalid => return None,
+	    ArgType::String => Box::new(self.get::<String>().unwrap()),
+	    ArgType::DictEntry => unimplemented!(),
+	    ArgType::Byte => Box::new(self.get::<u8>().unwrap()),
+	    ArgType::Int16 => Box::new(self.get::<i16>().unwrap()),
+	    ArgType::UInt16 => Box::new(self.get::<u16>().unwrap()),
+	    ArgType::Int32 => Box::new(self.get::<i32>().unwrap()),
+	    ArgType::UInt32 => Box::new(self.get::<u32>().unwrap()),
+	    ArgType::Int64 => Box::new(self.get::<i64>().unwrap()),
+	    ArgType::UInt64 => Box::new(self.get::<u64>().unwrap()),
+	    ArgType::Double => Box::new(self.get::<f64>().unwrap()),
+	    ArgType::UnixFd => unimplemented!(),
+	    ArgType::Struct => Box::new(self.recurse(ArgType::Struct).unwrap().collect::<Vec<_>>()),
+	    ArgType::ObjectPath => Box::new(self.get::<Path>().unwrap().into_static()),
+	    ArgType::Signature => Box::new(self.get::<Signature>().unwrap().into_static()),
+        })
+    }
+
     /// Returns the type signature for the current argument.
     pub fn signature(&mut self) -> Signature<'static> {
         unsafe {
@@ -188,7 +212,7 @@ impl<'a> Iter<'a> {
             let r = Signature::new(cc.to_bytes());
             ffi::dbus_free(c as *mut c_void);
             r.unwrap()
-        } 
+        }
     }
 
     /// The raw arg_type for the current item.
@@ -198,10 +222,7 @@ impl<'a> Iter<'a> {
     /// In case you're past the last argument, this function will return 0.
     pub fn arg_type(&mut self) -> ArgType {
         let s = unsafe { ffi::dbus_message_iter_get_arg_type(&mut self.0) };
-        for &(a, _) in &ALL_ARG_TYPES {
-            if a as c_int == s { return a; }
-        }
-        panic!("Invalid arg_type {} returned from D-Bus", s);
+        ArgType::from_i32(s as i32).unwrap()
     }
 
     /// Returns false if there are no more items.
@@ -271,10 +292,17 @@ impl<'a> fmt::Debug for Iter<'a> {
             if !z.next() { break }
         }
         t.finish()
-    }  
+    }
 }
 
-
+impl<'a> Iterator for Iter<'a> {
+    type Item = Box<RefArg + 'static>;
+    fn next(&mut self) -> Option<Self::Item> {
+        let r = self.get_refarg();
+        if r.is_some() { self.next(); }
+        r
+    }
+}
 
 /// Type of Argument
 ///
@@ -329,6 +357,13 @@ impl ArgType {
     pub fn as_str(self) -> &'static str {
         ALL_ARG_TYPES.iter().skip_while(|a| a.0 != self).next().unwrap().1
     }
+
+    pub fn from_i32(i: i32) -> Result<ArgType, String> {
+        for &(a, _) in &ALL_ARG_TYPES {
+            if a as i32 == i { return Ok(a); }
+        }
+        Err(format!("Invalid arg_type {}", i))
+    }
 }
 
 
@@ -368,5 +403,16 @@ impl fmt::Display for TypeMismatchError {
             if self.expected == self.found { "same but still different somehow" } else { self.found.as_str() }
         )
     }
+}
+
+
+#[allow(dead_code)]
+fn test_compile() {
+    let mut q = IterAppend::new(unsafe { mem::transmute(0usize) });
+
+    q.append(5u8);
+    q.append(Array::new(&[5u8, 6, 7]));
+    q.append((8u8, &[9u8, 6, 7][..]));
+    q.append(Variant((6u8, 7u8)));
 }
 

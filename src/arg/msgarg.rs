@@ -1,8 +1,10 @@
 #![allow(dead_code)]
 
-use {ffi, Message, message, Signature};
-use std::{mem, ptr};
+use {ffi, Message, Signature};
+use std::{mem, ptr, fmt, any};
 use std::marker::PhantomData;
+use std::sync::Arc;
+use std::rc::Rc;
 
 use super::{Iter, IterAppend, check, ArgType};
 
@@ -32,7 +34,7 @@ pub trait Get<'a>: Sized {
 }
 
 /// Object safe version of Arg + Append + Get.
-pub trait RefArg {
+pub trait RefArg: fmt::Debug {
     /// The corresponding D-Bus argument type code. 
     fn arg_type(&self) -> ArgType;
     /// The corresponding D-Bus type signature for this type. 
@@ -42,7 +44,9 @@ pub trait RefArg {
     /// Performs the get operation.
     ///
     /// If successful, replaces self and returns Ok, otherwise self remains unchanged and Err is returned.
-    fn get<'a>(&mut self, i: &mut Iter<'a>) -> Result<(), ()>;   
+    // fn get<'a>(&mut self, i: &mut Iter<'a>) -> Result<(), ()>;  
+
+    fn as_any(&self) -> &any::Any where Self: 'static;
 }
 
 /// If a type implements this trait, it means the size and alignment is the same
@@ -66,6 +70,61 @@ impl<'a, T: Append + Clone> Append for &'a T {
 }
 impl<'a, T: DictKey> DictKey for &'a T {}
 
+impl<'a, T: RefArg + ?Sized> RefArg for &'a T {
+    #[inline]
+    fn arg_type(&self) -> ArgType { (&**self).arg_type() }
+    #[inline]
+    fn signature(&self) -> Signature<'static> { (&**self).signature() }
+    #[inline]
+    fn append(&self, i: &mut IterAppend) { (&**self).append(i) }
+    #[inline]
+    fn as_any(&self) -> &any::Any where T: 'static { (&**self).as_any() }
+
+/*    fn get<'b>(&mut self, i: &mut Iter<'b>) -> Result<(), ()> {
+        Err(()) // No way we can make this mutable here
+    } */
+}
+
+
+
+macro_rules! deref_impl {
+    ($t: ident, $ss: ident, $make_mut: expr) => {
+
+impl<T: RefArg + ?Sized> RefArg for $t<T> {
+    #[inline]
+    fn arg_type(&self) -> ArgType { (&**self).arg_type() }
+    #[inline]
+    fn signature(&self) -> Signature<'static> { (&**self).signature() }
+    #[inline]
+    fn append(&self, i: &mut IterAppend) { (&**self).append(i) }
+    #[inline]
+    fn as_any(&self) -> &any::Any where T: 'static { (&**self).as_any() }
+    /* fn get<'a>(&mut self, i: &mut Iter<'a>) -> Result<(), ()> {
+        let $ss = self;
+        let q: &mut T = $make_mut; 
+        q.get(i)
+    } */
+}
+impl<T: DictKey> DictKey for $t<T> {}
+
+impl<T: Arg> Arg for $t<T> {
+    fn arg_type() -> ArgType { T::arg_type() }
+    fn signature() -> Signature<'static> { T::signature() }
+}
+impl<'a, T: Get<'a>> Get<'a> for $t<T> {
+    fn get(i: &mut Iter<'a>) -> Option<Self> { T::get(i).map(|v| $t::new(v)) }
+}
+
+    }
+}
+
+impl<T: Append> Append for Box<T> {
+    fn append(self, i: &mut IterAppend) { let q: T = *self; q.append(i) }
+}
+
+deref_impl!(Box, ss, &mut **ss);
+deref_impl!(Rc, ss, Rc::get_mut(ss).unwrap());
+deref_impl!(Arc, ss, Arc::get_mut(ss).unwrap());
 
 // Map DBus-Type -> Alignment. Copied from _dbus_marshal_write_fixed_multi in
 // http://dbus.freedesktop.org/doc/api/html/dbus-marshal-basic_8c_source.html#l01020
@@ -177,43 +236,6 @@ impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Iterator for Dict<'a, K, V, Ite
     }
 }
 
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
-/// A simple wrapper to specify a D-Bus variant.
-pub struct Variant<T>(pub T);
-
-impl<T> Arg for Variant<T> {
-    fn arg_type() -> ArgType { ArgType::Variant }
-    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"v\0") } }
-}
-
-impl<T: Arg + Append> Append for Variant<T> {
-    fn append(self, i: &mut IterAppend) {
-        let z = self.0;
-        i.append_container(Self::arg_type(), Some(T::signature().as_cstr()), |s| z.append(s));
-    }
-}
-
-impl Append for Variant<message::MessageItem> {
-    fn append(self, i: &mut IterAppend) {
-        let z = self.0;
-        let sig = CString::new(z.type_sig().into_owned()).unwrap();
-        i.append_container(Self::arg_type(), Some(&sig), |s| z.append(s));
-    }
-}
-
-
-impl<'a, T: Get<'a>> Get<'a> for Variant<T> {
-    fn get(i: &mut Iter<'a>) -> Option<Variant<T>> {
-        i.recurse(Self::arg_type()).and_then(|mut si| si.get().map(|v| Variant(v)))
-    }
-}
-
-impl<'a> Get<'a> for Variant<Iter<'a>> {
-    fn get(i: &mut Iter<'a>) -> Option<Variant<Iter<'a>>> {
-        i.recurse(Self::arg_type()).map(|v| Variant(v))
-    }
-}
-
 #[derive(Copy, Clone, Debug)]
 /// Represents a D-Bus Array. Maximum flexibility (wraps an iterator of items to append). 
 /// Note: Slices of FixedArray can be faster.
@@ -252,89 +274,45 @@ impl<'a, T: Get<'a>> Iterator for Array<'a, T, Iter<'a>> {
     }
 }
 
-macro_rules! struct_impl {
-    ( $($n: ident $t: ident,)+ ) => {
-
-/// Tuples are represented as D-Bus structs. 
-impl<$($t: Arg),*> Arg for ($($t,)*) {
-    fn arg_type() -> ArgType { ArgType::Struct }
-    fn signature() -> Signature<'static> {
-        let mut s = String::from("(");
-        $( s.push_str(&$t::signature()); )*
-        s.push_str(")");
-        Signature::from(s)
-    }
-}
-
-impl<$($t: Append),*> Append for ($($t,)*) {
-    fn append(self, i: &mut IterAppend) {
-        let ( $($n,)*) = self;
-        i.append_container(ArgType::Struct, None, |s| { $( $n.append(s); )* });
-    }
-}
-
-impl<'a, $($t: Get<'a>),*> Get<'a> for ($($t,)*) {
-    fn get(i: &mut Iter<'a>) -> Option<Self> {
-        let si = i.recurse(ArgType::Struct);
-        if si.is_none() { return None; }
-        let mut si = si.unwrap();
-        let mut _valid_item = true;
-        $(
-            if !_valid_item { return None; }
-            let $n: Option<$t> = si.get();
-            if $n.is_none() { return None; }
-            _valid_item = si.next();
-        )*
-        Some(($( $n.unwrap(), )* ))
-    }
-}
-
-}} // macro_rules end
-
-struct_impl!(a A,);
-struct_impl!(a A, b B,);
-struct_impl!(a A, b B, c C,);
-struct_impl!(a A, b B, c C, d D,);
-struct_impl!(a A, b B, c C, d D, e E,);
-struct_impl!(a A, b B, c C, d D, e E, f F,);
-struct_impl!(a A, b B, c C, d D, e E, f F, g G,);
-struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H,);
-struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I,);
-struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J,);
-struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J, k K,);
-struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J, k K, l L,);
-
-impl Append for message::MessageItem {
-    fn append(self, i: &mut IterAppend) {
-        message::append_messageitem(&mut i.0, &self)
-    }
-}
-
-impl<'a> Get<'a> for message::MessageItem {
-    fn get(i: &mut Iter<'a>) -> Option<Self> {
-        message::get_messageitem(&mut i.0)
-    }
-}
-
-
-fn test_compile() {
-    let mut q = IterAppend::new(unsafe { mem::transmute(0usize) });
-
-    q.append(5u8);
-    q.append(Array::new(&[5u8, 6, 7]));
-    q.append((8u8, &[9u8, 6, 7][..]));
-    q.append(Variant((6u8, 7u8)));
-}
-
-
 #[cfg(test)]
 mod test {
     extern crate tempdir;
 
     use {Connection, ConnectionItem, Message, BusType, Path, Signature};
-    use arg::{Array, Variant, Dict, Iter, ArgType, TypeMismatchError};
+    use arg::{Array, Variant, Dict, Iter, ArgType, TypeMismatchError, RefArg};
 
     use std::collections::HashMap;
+
+    #[test]
+    fn refarg() {
+        let c = Connection::get_private(BusType::Session).unwrap();
+        c.register_object_path("/mooh").unwrap();
+        let m = Message::new_method_call(&c.unique_name(), "/mooh", "com.example.hello", "Hello").unwrap();
+
+        let mut vv: Vec<Variant<Box<RefArg>>> = vec!();
+        vv.push(Variant(Box::new(5i32)));
+        vv.push(Variant(Box::new(String::from("Hello world"))));
+        let m = m.append_ref(&vv);
+
+        let (f1, f2) = (false, 7u64);
+        let mut v: Vec<&RefArg> = vec!();
+        v.push(&f1);
+        v.push(&f2);
+        let m = m.append_ref(&v);
+        c.send(m).unwrap();
+
+        for n in c.iter(1000) {
+            if let ConnectionItem::MethodCall(m) = n {
+                let rv: Vec<Box<RefArg + 'static>> = m.iter_init().collect();
+                println!("Receiving {:?}", v);
+                let rv0: &Variant<Box<RefArg>> = rv[0].as_any().downcast_ref().unwrap(); 
+                let rv00: &i32 = rv0.0.as_any().downcast_ref().unwrap();
+                assert_eq!(rv00, &5i32);
+                assert_eq!(Some(&false), rv[2].as_any().downcast_ref::<bool>());
+                break;
+            }
+        }
+    }
 
     #[test]
     fn message_types() {
