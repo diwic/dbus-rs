@@ -55,13 +55,6 @@ impl<T: RefArg> RefArg for Variant<T> {
     }
     #[inline]
     fn as_any(&self) -> &any::Any where T: 'static { self }
-
-    /* fn get<'a>(&mut self, i: &mut Iter<'a>) -> Result<(), ()> {
-        unimplemented!() /*
-        i.recurse(ArgType::Variant).and_then(|mut si| {
-            *self = Variant(si.get_refarg().unwrap()); 
-        }).ok_or(())*/
-    } */
 }
 
 macro_rules! struct_impl {

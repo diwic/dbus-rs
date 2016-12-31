@@ -30,6 +30,9 @@ pub trait Get<'a>: Sized {
 }
 
 /// Object safe version of Arg + Append + Get.
+///
+/// This trait is somewhat under development, which means that not all types are supported
+/// and that the API might change. Only use in case Arg is not dynamic enough for your needs. 
 pub trait RefArg: fmt::Debug {
     /// The corresponding D-Bus argument type code. 
     fn arg_type(&self) -> ArgType;
@@ -71,10 +74,6 @@ impl<'a, T: RefArg + ?Sized> RefArg for &'a T {
     fn append(&self, i: &mut IterAppend) { (&**self).append(i) }
     #[inline]
     fn as_any(&self) -> &any::Any where T: 'static { (&**self).as_any() }
-
-/*    fn get<'b>(&mut self, i: &mut Iter<'b>) -> Result<(), ()> {
-        Err(()) // No way we can make this mutable here
-    } */
 }
 
 
@@ -91,11 +90,6 @@ impl<T: RefArg + ?Sized> RefArg for $t<T> {
     fn append(&self, i: &mut IterAppend) { (&**self).append(i) }
     #[inline]
     fn as_any(&self) -> &any::Any where T: 'static { (&**self).as_any() }
-    /* fn get<'a>(&mut self, i: &mut Iter<'a>) -> Result<(), ()> {
-        let $ss = self;
-        let q: &mut T = $make_mut; 
-        q.get(i)
-    } */
 }
 impl<T: DictKey> DictKey for $t<T> {}
 

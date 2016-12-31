@@ -113,12 +113,8 @@ impl RefArg for $t {
     fn arg_type(&self) -> ArgType { <$t as Arg>::arg_type() }
     #[inline]
     fn signature(&self) -> Signature<'static> { <$t as Arg>::signature() }
-    /* fn get<'a>(&mut self, i: &mut Iter<'a>) -> Result<(), ()> {
-        <$t as Get>::get(i).map(|q| { *self = q; }).ok_or(())
-    } */
     #[inline]
     fn append(&self, i: &mut IterAppend) { <$t as Append>::append(self.clone(), i) }
-
     #[inline]
     fn as_any(&self) -> &any::Any { self }
 }
@@ -227,16 +223,18 @@ impl Arg for OwnedFd {
 impl Append for OwnedFd {
     fn append(self, i: &mut IterAppend) {
         use std::os::unix::io::AsRawFd;
-        arg_append_basic(&mut i.0, Self::arg_type(), self.as_raw_fd() as i64)
+        arg_append_basic(&mut i.0, ArgType::UnixFd, self.as_raw_fd() as i64)
     }
 }
 impl DictKey for OwnedFd {}
 impl<'a> Get<'a> for OwnedFd {
     fn get(i: &mut Iter) -> Option<Self> {
         use std::os::unix::io::RawFd;
-        arg_get_basic(&mut i.0, Self::arg_type()).map(|q| OwnedFd::new(q as RawFd)) 
+        arg_get_basic(&mut i.0, ArgType::UnixFd).map(|q| OwnedFd::new(q as RawFd)) 
     }
 }
+
+refarg_impl!(OwnedFd);
 
 macro_rules! string_impl {
     ($t: ident, $s: ident, $f: expr) => {
@@ -249,12 +247,6 @@ impl<'a> Arg for $t<'a> {
 impl RefArg for $t<'static> {
     fn arg_type(&self) -> ArgType { ArgType::$s }
     fn signature(&self) -> Signature<'static> { unsafe { Signature::from_slice_unchecked($f) } }
-
-    /* fn get<'b>(&mut self, i: &mut Iter<'b>) -> Result<(), ()> {
-        unsafe { arg_get_str(&mut i.0, ArgType::$s).map(|s| {
-            *self = $t::from_slice_unchecked(s.to_bytes_with_nul()).into_static()
-        }).ok_or(()) }
-    } */
     fn append(&self, i: &mut IterAppend) { arg_append_str(&mut i.0, ArgType::$s, self.as_cstr()) }
     fn as_any(&self) -> &any::Any { self }
 }
