@@ -405,6 +405,16 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> where D::Property: arg::Appen
     }
 }
 
+
+impl<M: MethodType<D>, D: DataType> Property<M, D> where D::Property: arg::RefArg {
+    // Adds a "standard" get handler (for RefArgs).
+    pub fn default_get_refarg(mut self) -> Self {
+        let g = |i: &mut arg::IterAppend, p: &PropInfo<M, D>| { (p.prop.get_data() as &arg::RefArg).append(i); Ok(()) };
+        self.get_cb = Some(DebugGetProp(M::make_getprop(g)));
+        self
+    }
+}
+
 impl<M: MethodType<D>, D: DataType> Introspect for Property<M, D> {
     fn xml_name(&self) -> &'static str { "property" }
     fn xml_params(&self) -> String { format!(" type=\"{}\" access=\"{}\"", self.sig, self.rw.introspect()) }

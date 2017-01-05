@@ -33,6 +33,12 @@ impl Append for Variant<message::MessageItem> {
     }
 }
 
+impl Append for Variant<Box<RefArg>> {
+    fn append(self, i: &mut IterAppend) {
+        let z = self.0;
+        i.append_container(ArgType::Variant, Some(z.signature().as_cstr()), |s| z.append(s));
+    }
+}
 
 impl<'a, T: Get<'a>> Get<'a> for Variant<T> {
     fn get(i: &mut Iter<'a>) -> Option<Variant<T>> {
@@ -43,6 +49,12 @@ impl<'a, T: Get<'a>> Get<'a> for Variant<T> {
 impl<'a> Get<'a> for Variant<Iter<'a>> {
     fn get(i: &mut Iter<'a>) -> Option<Variant<Iter<'a>>> {
         i.recurse(ArgType::Variant).map(|v| Variant(v))
+    }
+}
+
+impl<'a> Get<'a> for Variant<Box<RefArg>> {
+    fn get(i: &mut Iter<'a>) -> Option<Variant<Box<RefArg>>> {
+        i.recurse(ArgType::Variant).and_then(|mut si| si.get_refarg().map(|v| Variant(v)))
     }
 }
 
