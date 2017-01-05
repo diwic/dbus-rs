@@ -82,6 +82,8 @@ impl<'a, T: RefArg + ?Sized> RefArg for &'a T {
     fn as_any(&self) -> &any::Any where T: 'static { (&**self).as_any() }
     #[inline]
     fn as_i64(&self) -> Option<i64> { (&**self).as_i64() }
+    #[inline]
+    fn as_str(&self) -> Option<&str> { (&**self).as_str() }
 }
 
 
@@ -98,6 +100,10 @@ impl<T: RefArg + ?Sized> RefArg for $t<T> {
     fn append(&self, i: &mut IterAppend) { (&**self).append(i) }
     #[inline]
     fn as_any(&self) -> &any::Any where T: 'static { (&**self).as_any() }
+    #[inline]
+    fn as_i64(&self) -> Option<i64> { (&**self).as_i64() }
+    #[inline]
+    fn as_str(&self) -> Option<&str> { (&**self).as_str() }
 }
 impl<T: DictKey> DictKey for $t<T> {}
 
@@ -148,6 +154,11 @@ mod test {
         let vi32 = vec![7i32, 9i32];
         let vstr: Vec<String> = ["This", "is", "dbus", "rs"].iter().map(|&s| s.into()).collect();
         let m = m.append_ref(&[&vi32 as &RefArg, &vstr as &RefArg]);
+        let mut map = HashMap::new();
+        map.insert(true, String::from("Yes"));
+        map.insert(false, String::from("No"));
+        let m = m.append_ref(&[&map]);
+
         c.send(m).unwrap();
 
         for n in c.iter(1000) {
@@ -160,6 +171,8 @@ mod test {
                 assert_eq!(Some(&false), rv[2].as_any().downcast_ref::<bool>());
                 assert_eq!(Some(&vi32), rv[4].as_any().downcast_ref::<Vec<i32>>());
                 assert_eq!(Some(&vstr), rv[5].as_any().downcast_ref::<Vec<String>>());
+                let mmap: &HashMap<bool, Variant<Box<RefArg>>> = rv[6].as_any().downcast_ref().unwrap();
+                assert_eq!(mmap[&true].as_str(), Some("Yes")); 
                 break;
             }
         }

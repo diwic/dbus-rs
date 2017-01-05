@@ -1,10 +1,12 @@
 use super::*;
-use {Signature, Path, Message, ffi};
+use {Signature, Path, Message, ffi, OwnedFd};
 use std::marker::PhantomData;
 use std::{ptr, mem, any, fmt};
 use super::check;
 use std::ffi::{CString};
 use std::os::raw::{c_void, c_int};
+use std::collections::HashMap;
+use std::hash::Hash;
 
 // Map DBus-Type -> Alignment. Copied from _dbus_marshal_write_fixed_multi in
 // http://dbus.freedesktop.org/doc/api/html/dbus-marshal-basic_8c_source.html#l01020
@@ -146,6 +148,42 @@ impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Iterator for Dict<'a, K, V, Ite
     }
 }
 
+impl<K: DictKey, V: Arg> Arg for HashMap<K, V> {
+    fn arg_type() -> ArgType { ArgType::Array }
+    fn signature() -> Signature<'static> {
+        Signature::from(format!("a{{{}{}}}", K::signature(), V::signature())) }
+}
+
+impl<K: DictKey + Append + Eq + Hash, V: Arg + Append> Append for HashMap<K, V> {
+    fn append(self, i: &mut IterAppend) {
+        Dict::new(self.into_iter()).append(i);
+    }
+}
+
+impl<'a, K: DictKey + Get<'a> + Eq + Hash, V: Arg + Get<'a>> Get<'a> for HashMap<K, V> {
+    fn get(i: &mut Iter<'a>) -> Option<Self> {
+        // TODO: Full element signature is not verified.
+        Dict::get(i).map(|d| d.into_iter().collect())
+    }
+}
+
+impl<K: DictKey + RefArg + Eq + Hash, V: RefArg + Arg> RefArg for HashMap<K, V> {
+    fn arg_type(&self) -> ArgType { ArgType::Array }
+    fn signature(&self) -> Signature<'static> { format!("a{{{}{}}}", <K as Arg>::signature(), <V as Arg>::signature()).into() }
+    fn append(&self, i: &mut IterAppend) {
+        let sig = CString::new(format!("{{{}{}}}", <K as Arg>::signature(), <V as Arg>::signature())).unwrap();
+        i.append_container(ArgType::Array, Some(&sig), |s| for (k, v) in self {
+            s.append_container(ArgType::DictEntry, None, |ss| {
+                k.append(ss);
+                v.append(ss);
+            })
+        });
+    }
+    fn as_any(&self) -> &any::Any where Self: 'static { self }
+} 
+
+
+
 #[derive(Copy, Clone, Debug)]
 /// Represents a D-Bus Array. Maximum flexibility (wraps an iterator of items to append). 
 /// Note: Slices of FixedArray can be faster.
@@ -212,6 +250,19 @@ fn get_var_array_refarg<'a, T: 'static + RefArg + Arg, F: FnMut(&mut Iter<'a>) -
     Box::new(v)
 }
 
+fn get_dict_refarg<'a, K, F: FnMut(&mut Iter<'a>) -> Option<K>>(i: &mut Iter<'a>, mut f: F) -> Box<RefArg>
+    where K: DictKey + 'static + RefArg + Hash + Eq
+ {
+    let mut r: HashMap<K, Variant<Box<RefArg>>> = HashMap::new();
+    let mut si = i.recurse(ArgType::Array).unwrap();
+    while let Some(mut d) = si.recurse(ArgType::DictEntry) {
+        let k = f(&mut d).unwrap();
+        d.next();
+        r.insert(k, Variant(d.get_refarg().unwrap()));
+        si.next();
+    }
+    Box::new(r)
+}
 
 pub fn get_array_refarg<'a>(i: &mut Iter<'a>) -> Box<RefArg> {
     debug_assert!(i.arg_type() == ArgType::Array);
@@ -234,8 +285,26 @@ pub fn get_array_refarg<'a>(i: &mut Iter<'a>) -> Box<RefArg> {
         // Unfortunately, we need to get an Array of Arrays as if it were an Array of structs.
         // Otherwise, we'll get type explosion. :-( 
         ArgType::Array => Box::new(i.recurse(ArgType::Array).unwrap().collect::<Vec<_>>()),
-        ArgType::DictEntry => unimplemented!(),
-        ArgType::UnixFd => unimplemented!(),
+        ArgType::DictEntry => {
+            let key = ArgType::from_i32(i.signature().as_bytes()[2] as i32).unwrap(); // The third character, after "a{", is our key.
+            match key {
+                ArgType::Byte => get_dict_refarg::<u8, _>(i, |si| si.get()),
+                ArgType::Int16 => get_dict_refarg::<i16, _>(i, |si| si.get()),
+                ArgType::UInt16 => get_dict_refarg::<u16, _>(i, |si| si.get()),
+                ArgType::Int32 => get_dict_refarg::<i32, _>(i, |si| si.get()),
+                ArgType::UInt32 => get_dict_refarg::<u32, _>(i, |si| si.get()),
+                ArgType::Int64 => get_dict_refarg::<i64, _>(i, |si| si.get()),
+                ArgType::UInt64 => get_dict_refarg::<u64, _>(i, |si| si.get()),
+                ArgType::Boolean => get_dict_refarg::<bool, _>(i, |si| si.get()),
+                // ArgType::UnixFd => get_dict_refarg::<OwnedFd, _>(i, |si| si.get()),
+                ArgType::String => get_dict_refarg::<String, _>(i, |si| si.get()),
+                ArgType::ObjectPath => get_dict_refarg::<Path<'static>, _>(i, |si| si.get::<Path>().map(|s| s.into_static())),
+                ArgType::Signature => get_dict_refarg::<Signature<'static>, _>(i, |si| si.get::<Signature>().map(|s| s.into_static())),
+                // Unfortunately, D-Bus allows Doubles as dict keys too, but Rust Hashmaps do not. :-(
+                _ => panic!("Array with invalid dictkey ({:?})", key),
+            }
+        }
+        ArgType::UnixFd => get_var_array_refarg::<OwnedFd, _>(i, |si| si.get()),
         ArgType::Struct => Box::new(i.recurse(ArgType::Array).unwrap().collect::<Vec<_>>()),
     }
 }

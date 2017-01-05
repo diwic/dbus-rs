@@ -72,7 +72,7 @@ pub use self::array_impl::{Array, Dict};
 pub use self::variantstruct_impl::Variant;
 
 use std::{fmt, mem, ptr, error};
-use {ffi, Message, message, Signature, Path};
+use {ffi, Message, message, Signature, Path, OwnedFd};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_void, c_int};
 
@@ -197,7 +197,7 @@ impl<'a> Iter<'a> {
 	    ArgType::Int64 => Box::new(self.get::<i64>().unwrap()),
 	    ArgType::UInt64 => Box::new(self.get::<u64>().unwrap()),
 	    ArgType::Double => Box::new(self.get::<f64>().unwrap()),
-	    ArgType::UnixFd => unimplemented!(),
+	    ArgType::UnixFd => Box::new(self.get::<OwnedFd>().unwrap()),
 	    ArgType::Struct => Box::new(self.recurse(ArgType::Struct).unwrap().collect::<Vec<_>>()),
 	    ArgType::ObjectPath => Box::new(self.get::<Path>().unwrap().into_static()),
 	    ArgType::Signature => Box::new(self.get::<Signature>().unwrap().into_static()),
