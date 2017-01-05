@@ -73,12 +73,19 @@ impl<'a, T: FixedArray> Get<'a> for &'a [T] {
     fn get(i: &mut Iter<'a>) -> Option<&'a [T]> {
         debug_assert!(FIXED_ARRAY_ALIGNMENTS.iter().any(|&v| v == (T::arg_type(), mem::size_of::<T>())));
         i.recurse(Self::arg_type()).and_then(|mut si| unsafe {
-            if ffi::dbus_message_iter_get_arg_type(&mut si.0) != T::arg_type() as c_int { return None };
+            let etype = ffi::dbus_message_iter_get_element_type(&mut i.0);
+
+            if etype != T::arg_type() as c_int { return None };
 
             let mut v = ptr::null_mut();
             let mut i = 0;
             ffi::dbus_message_iter_get_fixed_array(&mut si.0, &mut v as *mut _ as *mut c_void, &mut i);
-            Some(::std::slice::from_raw_parts(v, i as usize))
+            if v == ptr::null_mut() {
+                assert_eq!(i, 0);
+                Some(&[][..])
+            } else {
+                Some(::std::slice::from_raw_parts(v, i as usize))
+            }
         })
     }
 }
@@ -205,6 +212,7 @@ fn get_var_array_refarg<'a, T: 'static + RefArg + Arg, F: FnMut(&mut Iter<'a>) -
     Box::new(v)
 }
 
+
 pub fn get_array_refarg<'a>(i: &mut Iter<'a>) -> Box<RefArg> {
     debug_assert!(i.arg_type() == ArgType::Array);
     let etype = ArgType::from_i32(unsafe { ffi::dbus_message_iter_get_element_type(&mut i.0) } as i32).unwrap();
@@ -223,7 +231,12 @@ pub fn get_array_refarg<'a>(i: &mut Iter<'a>) -> Box<RefArg> {
 	ArgType::Variant => get_var_array_refarg::<Variant<Box<RefArg>>, _>(i, |si| Variant::new_refarg(si)),
 	ArgType::Boolean => get_var_array_refarg::<bool, _>(i, |si| si.get()),
 	ArgType::Invalid => panic!("Array with Invalid ArgType"),
-        _ => unimplemented!(),
+        // Unfortunately, we need to get an Array of Arrays as if it were an Array of structs.
+        // Otherwise, we'll get type explosion. :-( 
+        ArgType::Array => Box::new(i.recurse(ArgType::Array).unwrap().collect::<Vec<_>>()),
+        ArgType::DictEntry => unimplemented!(),
+        ArgType::UnixFd => unimplemented!(),
+        ArgType::Struct => Box::new(i.recurse(ArgType::Array).unwrap().collect::<Vec<_>>()),
     }
 }
 
