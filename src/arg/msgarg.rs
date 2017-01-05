@@ -34,7 +34,7 @@ pub trait Get<'a>: Sized {
 /// This trait is somewhat under development, which means that not all types are supported
 /// and that the API might change. Only use in case Arg is not dynamic enough for your needs. 
 pub trait RefArg: fmt::Debug {
-    /// The corresponding D-Bus argument type code. 
+    /// The corresponding D-Bus argument type code.
     fn arg_type(&self) -> ArgType;
     /// The corresponding D-Bus type signature for this type. 
     fn signature(&self) -> Signature<'static>;
@@ -42,6 +42,12 @@ pub trait RefArg: fmt::Debug {
     fn append(&self, &mut IterAppend);
     /// Transforms this argument to Any (which can be downcasted to read the current value).
     fn as_any(&self) -> &any::Any where Self: 'static;
+    /// Try to read the argument as an i64.
+    #[inline]
+    fn as_i64(&self) -> Option<i64> { None }
+    /// Try to read the argument as a str.
+    #[inline]
+    fn as_str(&self) -> Option<&str> { None }
 }
 
 /// If a type implements this trait, it means the size and alignment is the same
@@ -74,6 +80,8 @@ impl<'a, T: RefArg + ?Sized> RefArg for &'a T {
     fn append(&self, i: &mut IterAppend) { (&**self).append(i) }
     #[inline]
     fn as_any(&self) -> &any::Any where T: 'static { (&**self).as_any() }
+    #[inline]
+    fn as_i64(&self) -> Option<i64> { (&**self).as_i64() }
 }
 
 

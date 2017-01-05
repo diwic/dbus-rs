@@ -60,7 +60,11 @@ impl AsRawFd for OwnedFd {
 }
 
 /// MessageItem - used as parameters and return values from
-/// method calls, or as data added to a signal.
+/// method calls, or as data added to a signal (old, enum version).
+///
+/// Note that the newer generic design (see `arg` module) is both faster
+/// and less error prone than MessageItem, and should be your first hand choice
+/// whenever applicable.
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum MessageItem {
     /// A D-Bus array requires all elements to be of the same type.

@@ -67,6 +67,10 @@ impl<T: RefArg> RefArg for Variant<T> {
     }
     #[inline]
     fn as_any(&self) -> &any::Any where T: 'static { self }
+    #[inline]
+    fn as_i64(&self) -> Option<i64> { self.0.as_i64() }
+    #[inline]
+    fn as_str(&self) -> Option<&str> { self.0.as_str() }
 }
 
 macro_rules! struct_impl {
