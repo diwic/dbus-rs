@@ -71,6 +71,12 @@ impl<T: RefArg> RefArg for Variant<T> {
     fn as_i64(&self) -> Option<i64> { self.0.as_i64() }
     #[inline]
     fn as_str(&self) -> Option<&str> { self.0.as_str() }
+    #[inline]
+    fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> {
+        use std::iter;
+        let z: &RefArg = &self.0;
+        Some(Box::new(iter::once(z)))
+    }
 }
 
 macro_rules! struct_impl {
@@ -158,6 +164,9 @@ impl RefArg for Vec<Box<RefArg>> {
         });
     }
     fn as_any(&self) -> &any::Any where Self: 'static { self }
+    fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> {
+        Some(Box::new(self.iter().map(|b| &**b)))
+    }
 }
 
 impl Append for message::MessageItem {

@@ -181,6 +181,14 @@ impl<'a> Iter<'a> {
         T::get(self)
     }
 
+    /// Returns the current argument as a trait object (experimental).
+    ///
+    /// Note: For the more complex arguments (arrays / dicts / structs, and especially
+    /// combinations thereof), their internal representations are still a bit in flux.
+    /// Instead, use as_iter() to read the values of those.
+    ///
+    /// The rest are unlikely to change - Variants are Variant<Box<RefArg>>, strings are String,
+    /// paths are Path<'static>, signatures are Signature<'static>, Int32 are i32s and so on.
     pub fn get_refarg(&mut self) -> Option<Box<RefArg + 'static>> {
         Some(match self.arg_type() {
 	    ArgType::Array => array_impl::get_array_refarg(self),

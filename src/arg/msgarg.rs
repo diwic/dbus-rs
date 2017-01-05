@@ -48,6 +48,9 @@ pub trait RefArg: fmt::Debug {
     /// Try to read the argument as a str.
     #[inline]
     fn as_str(&self) -> Option<&str> { None }
+    /// Try to read the argument as an iterator.
+    #[inline]
+    fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> { None }
 }
 
 /// If a type implements this trait, it means the size and alignment is the same
@@ -84,6 +87,8 @@ impl<'a, T: RefArg + ?Sized> RefArg for &'a T {
     fn as_i64(&self) -> Option<i64> { (&**self).as_i64() }
     #[inline]
     fn as_str(&self) -> Option<&str> { (&**self).as_str() }
+    #[inline]
+    fn as_iter<'b>(&'b self) -> Option<Box<Iterator<Item=&'b RefArg> + 'b>> { (&**self).as_iter() }
 }
 
 
@@ -104,6 +109,8 @@ impl<T: RefArg + ?Sized> RefArg for $t<T> {
     fn as_i64(&self) -> Option<i64> { (&**self).as_i64() }
     #[inline]
     fn as_str(&self) -> Option<&str> { (&**self).as_str() }
+    #[inline]
+    fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> { (&**self).as_iter() }
 }
 impl<T: DictKey> DictKey for $t<T> {}
 
@@ -172,7 +179,13 @@ mod test {
                 assert_eq!(Some(&vi32), rv[4].as_any().downcast_ref::<Vec<i32>>());
                 assert_eq!(Some(&vstr), rv[5].as_any().downcast_ref::<Vec<String>>());
                 let mmap: &HashMap<bool, Variant<Box<RefArg>>> = rv[6].as_any().downcast_ref().unwrap();
-                assert_eq!(mmap[&true].as_str(), Some("Yes")); 
+                assert_eq!(mmap[&true].as_str(), Some("Yes"));
+                let mut iter = rv[6].as_iter().unwrap();
+                assert!(iter.next().unwrap().as_i64().is_some());
+                assert!(iter.next().unwrap().as_str().is_some());
+                assert!(iter.next().unwrap().as_str().is_none());
+                assert!(iter.next().unwrap().as_i64().is_none());
+                assert!(iter.next().is_none());
                 break;
             }
         }
