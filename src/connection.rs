@@ -1,4 +1,4 @@
-use super::{Error, ffi, libc, to_c_str, c_str_to_slice, Watch, Message};
+use super::{Error, ffi, libc, to_c_str, c_str_to_slice, Watch, Message, BusName, Path, ConnPath};
 use super::{RequestNameReply, ReleaseNameReply, BusType, WatchEvent};
 use super::watch::WatchList;
 use std::{fmt, mem, ptr};
@@ -290,6 +290,12 @@ impl Connection {
         ConnectionItems { c: self, timeout_ms: None }
     }
 
+
+    /// Create a convenience struct for easier calling of many methods on the same destination and path.
+    pub fn with_path<'a, D: Into<BusName<'a>>, P: Into<Path<'a>>>(&'a self, dest: D, path: P, timeout_ms: i32) ->
+        ConnPath<'a, &'a Connection> {
+        ConnPath { conn: self, dest: dest.into(), path: path.into(), timeout: timeout_ms }
+    }
 }
 
 impl Drop for Connection {

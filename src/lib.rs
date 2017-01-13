@@ -18,7 +18,7 @@ pub use ffi::DBusReleaseNameReply as ReleaseNameReply;
 pub use ffi::DBusMessageType as MessageType;
 pub use ffi::DBusWatchEvent as WatchEvent;
 
-pub use message::{Message, MessageItem, FromMessageItem, OwnedFd, ArrayError};
+pub use message::{Message, MessageItem, FromMessageItem, OwnedFd, ArrayError, ConnPath};
 pub use connection::{Connection, ConnectionItems, ConnectionItem};
 pub use prop::PropHandler;
 pub use prop::Props;
@@ -141,6 +141,11 @@ impl std::fmt::Display for Error {
     }
 }
 
+impl From<arg::TypeMismatchError> for Error {
+    fn from(t: arg::TypeMismatchError) -> Error {
+        Error::new_custom("org.freedesktop.DBus.Error.Failed", &format!("{}", t))
+    }
+}
 
 #[cfg(test)]
 mod test {

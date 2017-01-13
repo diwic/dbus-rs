@@ -107,30 +107,80 @@ fn make_type(s: &str, out: bool) -> Result<String, Box<error::Error>> {
     else { Ok(r) }
 }
 
+fn make_varname(n: &Option<String>, idx: usize) -> String {
+    if let Some(nn) = n.as_ref() {
+        make_snake(nn)
+    } else { format!("arg{}", idx) }
+}
+
+fn write_method_decl(s: &mut String, m: &Method) -> Result<(), Box<error::Error>> {
+    *s += &format!("    fn {}(&self", make_snake(&m.name));
+    for (idx, a) in m.iargs.iter().enumerate() {
+        let t = try!(make_type(&a.1, false));
+        *s += &format!(", {}: {}", make_varname(&a.0, idx), t);
+    }
+    match m.oargs.len() {
+        0 => { *s += ") -> Result<(), ::dbus::Error>"; }
+        1 => { *s += &format!(") -> Result<{}, ::dbus::Error>", try!(make_type(&m.oargs[0], true))); }
+        _ => {
+            *s += &format!(") -> Result<({}", try!(make_type(&m.oargs[0], true)));
+            for z in m.oargs.iter().skip(1) { *s += &format!(", {}", try!(make_type(&z, true))); }
+            *s += "), ::dbus::Error>";
+        }
+    }
+    Ok(())
+}
+
 fn write_intf(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
     
     let iname = make_camel(&i.name);  
     *s += &format!("\npub trait {} {{\n", iname);
     for m in &i.methods {
-        *s += &format!("   fn {}(&self", make_snake(&m.name));
-        for a in &m.iargs {
-            let t = try!(make_type(&a.1, false));
-            if a.0.is_some() { *s += &format!(", {}: {}", make_snake(&a.0.as_ref().unwrap()), t) }
-            else { *s += &format!(", {}", t) }
-        }
-        match m.oargs.len() {
-            0 => { *s += ") -> Result<(), ::dbus::Error>;\n"; }
-            1 => { *s += &format!(") -> Result<{}, ::dbus::Error>;\n", try!(make_type(&m.oargs[0], true))); }
-            _ => {
-                *s += &format!(") -> Result<({}", try!(make_type(&m.oargs[0], true)));
-                for z in m.oargs.iter().skip(1) { *s += &format!(", {}", try!(make_type(&z, true))); }
-                *s += "), ::dbus::Error>;";
-            }
-        }
+        try!(write_method_decl(s, &m));
+        *s += ";\n";
     }
     *s += "}\n";
     Ok(())
 }
+
+fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
+    *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> {} for ::dbus::ConnPath<'a, C> {{\n",
+        make_camel(&i.name));
+    for m in &i.methods {
+        *s += "\n";
+        try!(write_method_decl(s, &m));
+        *s += " {\n";
+        *s += &format!("        let mut m = try!(self.method_call_with_args(&\"{}\".into(), &\"{}\".into(), |{}| {{\n",
+            i.name, m.name, if m.iargs.len() > 0 { "msg" } else { "_" } );
+        if m.iargs.len() > 0 {
+                *s += "            let mut i = ::dbus::arg::IterAppend::new(msg);\n";
+        }
+        for (idx, a) in m.iargs.iter().enumerate() {
+                *s += &format!("            i.append({});\n", make_varname(&a.0, idx));
+        }
+        *s += "        }));\n";
+        *s += "        try!(m.as_result());\n";
+        if m.oargs.len() == 0 {
+            *s += "        Ok(())\n";
+        } else {
+            *s += "        let mut i = m.iter_init();\n";
+            for (idx, a) in m.oargs.iter().enumerate() {
+                *s += &format!("        let a{}: {} = try!(i.read());\n", idx, try!(make_type(a, true)));   
+            }
+            if m.oargs.len() == 1 {
+                *s += "        Ok(a0)\n";
+            } else {
+                let v: Vec<String> = (0..m.oargs.len()).into_iter().map(|idx| idx.to_string()).collect();
+                *s += &format!("        Ok((a{}))\n", v.join(", a"));
+            }
+        }
+        *s += "    }\n";
+    }
+    *s += "}\n";
+    Ok(())
+
+}
+
 
 // Should we implement this for
 // 1) MethodInfo? That's the only way receiver can check Sender, etc.
@@ -203,6 +253,7 @@ pub fn generate(xmldata: &str) -> Result<String, Box<error::Error>> {
                 if curintf.is_none() { try!(Err("End of Interface outside interface")) };
                 let intf = curintf.take().unwrap();
                 try!(write_intf(&mut s, &intf));
+                try!(write_intf_client(&mut s, &intf));
                 try!(write_intf_tree(&mut s, &intf));
             }
 

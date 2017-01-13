@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::{fmt, mem, ptr};
 use super::{ffi, Error, MessageType, TypeSig, libc, to_c_str, c_str_to_slice, init_dbus};
-use super::{BusName, Path, Interface, Member, ErrorName};
+use super::{BusName, Path, Interface, Member, ErrorName, Connection};
 use std::os::unix::io::{RawFd, AsRawFd};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_char, c_int};
@@ -862,6 +862,30 @@ pub fn message_from_ptr(ptr: *mut ffi::DBusMessage, add_ref: bool) -> Message {
 
 pub fn get_message_ptr<'a>(m: &Message) -> *mut ffi::DBusMessage {
     m.msg
+}
+
+
+/// A convenience struct that wraps connection, destination and path.
+///
+/// Useful if you want to make many method calls to the same destination path.
+pub struct ConnPath<'a, C> {
+    pub conn: C,
+    pub dest: BusName<'a>,
+    pub path: Path<'a>,
+    /// Timeout in milliseconds
+    pub timeout: i32,
+}
+
+impl<'a, C: ::std::ops::Deref<Target=Connection>> ConnPath<'a, C> {
+   // More methods to come.
+
+    /// Make a D-Bus method call, where you can append arguments inside the closure.
+    pub fn method_call_with_args<F: FnOnce(&mut Message)>(&self, i: &Interface, m: &Member, f: F) -> Result<Message, Error> {
+        let mut msg = Message::method_call(&self.dest, &self.path, i, m);
+        f(&mut msg);
+        self.conn.send_with_reply_and_block(msg, self.timeout)
+    }
+
 }
 
 // For purpose of testing the library only.
