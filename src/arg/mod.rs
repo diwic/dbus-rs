@@ -367,11 +367,12 @@ impl ArgType {
         ALL_ARG_TYPES.iter().skip_while(|a| a.0 != self).next().unwrap().1
     }
 
+    /// Converts an i32 to an ArgType (or an error).
     pub fn from_i32(i: i32) -> Result<ArgType, String> {
         for &(a, _) in &ALL_ARG_TYPES {
             if a as i32 == i { return Ok(a); }
         }
-        Err(format!("Invalid arg_type {}", i))
+        Err(format!("Invalid ArgType {} ({})", i, i as u8 as char))
     }
 }
 

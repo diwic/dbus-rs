@@ -189,6 +189,22 @@ impl<K: DictKey + RefArg + Eq + Hash, V: RefArg + Arg> RefArg for HashMap<K, V> 
 
 } 
 
+impl<T: Arg> Arg for Vec<T> {
+    fn arg_type() -> ArgType { ArgType::Array }
+    fn signature() -> Signature<'static> { Signature::from(format!("a{}", T::signature())) }
+}
+
+impl<T: Arg + Append> Append for Vec<T> {
+    fn append(self, i: &mut IterAppend) {
+        Array::new(self).append(i);
+    }
+}
+
+impl<'a, T: Arg + Get<'a>> Get<'a> for Vec<T> {
+    fn get(i: &mut Iter<'a>) -> Option<Self> {
+        <Array<T, Iter<'a>>>::get(i).map(|a| a.collect())
+    }
+}
 
 
 #[derive(Copy, Clone, Debug)]

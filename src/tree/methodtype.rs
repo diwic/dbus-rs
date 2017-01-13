@@ -6,6 +6,7 @@ use arg::{Iter, IterAppend, TypeMismatchError};
 use std::marker::PhantomData;
 use super::{Method, Interface, Property, ObjectPath, Tree};
 use std::cell::RefCell;
+use super::super::Error as dbusError; 
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 /// A D-Bus Method Error.
@@ -52,6 +53,15 @@ impl From<TypeMismatchError> for MethodErr {
 impl<T: Into<ErrorName<'static>>, M: Into<String>> From<(T, M)> for MethodErr {
     fn from((t, m): (T, M)) -> MethodErr { MethodErr(t.into(), m.into()) }
 }
+
+impl From<dbusError> for MethodErr {
+    fn from(t: dbusError) -> MethodErr {
+        let n = t.name().unwrap_or("org.freedesktop.DBus.Error.Failed");
+        let m = t.message().unwrap_or("Unknown error");
+        MethodErr(String::from(n).into(), m.into())
+    }
+}
+
 
 /// Result containing the Messages returned from the Method, or a MethodErr.
 pub type MethodResult = Result<Vec<Message>, MethodErr>;
