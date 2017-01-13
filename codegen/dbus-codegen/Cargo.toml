@@ -1,0 +1,9 @@
+[package]
+name = "dbus-codegen"
+version = "0.1.0"
+authors = ["David Henningsson <diwic@ubuntu.com>"]
+
+[dependencies]
+xml-rs = "0.3"
+dbus = { path = "../../" }
+
