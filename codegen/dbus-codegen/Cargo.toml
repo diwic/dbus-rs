@@ -3,7 +3,10 @@ name = "dbus-codegen"
 version = "0.1.0"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 
+[[bin]]
+name = "dbus-codegen-rust"
+
 [dependencies]
 xml-rs = "0.3"
 dbus = { path = "../../" }
-
+clap = "2.20"

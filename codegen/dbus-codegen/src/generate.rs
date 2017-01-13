@@ -1,8 +1,7 @@
-extern crate xml;
-extern crate dbus;
 
 use std::{io, error, iter};
 use dbus::arg::ArgType;
+use xml;
 
 fn find_attr<'a>(a: &'a Vec<xml::attribute::OwnedAttribute>, n: &str) -> Result<&'a str, Box<error::Error>> {
     a.into_iter().find(|q| q.name.local_name == n).map(|f| &*f.value).ok_or_else(|| "attribute not found".into())    
@@ -188,16 +187,16 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
 // 3) A user supplied struct?
 // 4) Something reachable from minfo?
 
-fn write_intf_tree(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
-    *s += &format!("\npub fn {}_server<F, T, D>(factory: &::dbus::tree::Factory<::dbus::tree::MTFn<D>, D>, data: D::Interface, f: F) -> ::dbus::tree::Interface<::dbus::tree::MTFn<D>, D>\n",
-        make_snake(&i.name));
+fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str) -> Result<(), Box<error::Error>> {
+    *s += &format!("\npub fn {}_server<F, T, D>(factory: &::dbus::tree::Factory<::dbus::tree::{}<D>, D>, data: D::Interface, f: F) -> ::dbus::tree::Interface<::dbus::tree::{}<D>, D>\n",
+        make_snake(&i.name), mtype, mtype);
     *s += &format!("where D: ::dbus::tree::DataType, D::Method: Default, T: {}, \n", make_camel(&i.name));
-    *s += "    F: 'static + for <'z> Fn(& 'z ::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>) -> & 'z T {\n";
+    *s += &format!("    F: 'static + for <'z> Fn(& 'z ::dbus::tree::MethodInfo<::dbus::tree::{}<D>, D>) -> & 'z T {{\n", mtype);
     *s += &format!("    let i = factory.interface(\"{}\", data);\n", i.name);
     *s += "    let f = ::std::sync::Arc::new(f);";
     for m in &i.methods {
         *s += "\n    let fclone = f.clone();\n";    
-        *s += "    let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {\n";
+        *s += &format!("    let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::{}<D>, D>| {{\n", mtype);
         if m.iargs.len() > 0 {
             *s += "        let mut i = minfo.msg.iter_init();\n";
         }
@@ -233,7 +232,7 @@ fn write_intf_tree(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
     Ok(())
 }
 
-pub fn generate(xmldata: &str) -> Result<String, Box<error::Error>> {
+pub fn generate(xmldata: &str, mtype: Option<&str>) -> Result<String, Box<error::Error>> {
     use xml::EventReader;
     use xml::reader::XmlEvent;
 
@@ -254,7 +253,9 @@ pub fn generate(xmldata: &str) -> Result<String, Box<error::Error>> {
                 let intf = curintf.take().unwrap();
                 try!(write_intf(&mut s, &intf));
                 try!(write_intf_client(&mut s, &intf));
-                try!(write_intf_tree(&mut s, &intf));
+                if let Some(mt) = mtype {
+                    try!(write_intf_tree(&mut s, &intf, mt));
+                }
             }
 
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "method" => {

@@ -868,6 +868,7 @@ pub fn get_message_ptr<'a>(m: &Message) -> *mut ffi::DBusMessage {
 /// A convenience struct that wraps connection, destination and path.
 ///
 /// Useful if you want to make many method calls to the same destination path.
+#[derive(Clone, Debug)]
 pub struct ConnPath<'a, C> {
     pub conn: C,
     pub dest: BusName<'a>,
