@@ -537,18 +537,18 @@ static FROM_POLICYKIT: &'static str = r#"
 
     #[test]
     fn from_dbus() {
-        let s = generate(FROM_DBUS).unwrap();
+        let s = generate(FROM_DBUS, Some("MTSync")).unwrap();
         println!("{}", s);
         //assert_eq!(s, "fdjsf");
     }
 
     #[test]
     fn from_policykit() {
-        let s = generate(FROM_POLICYKIT).unwrap();
+        let s = generate(FROM_POLICYKIT, Some("MTFn")).unwrap();
         println!("{}", s);
-        let mut f = ::std::fs::File::create("./tests/generated/mod.rs").unwrap();
+        /* let mut f = ::std::fs::File::create("./tests/generated/mod.rs").unwrap();
         (&mut f as &mut ::std::io::Write).write_all(s.as_bytes()).unwrap();
-        drop(f);
+        drop(f); */
         // assert_eq!(s, "fdjsf");
     }
 
