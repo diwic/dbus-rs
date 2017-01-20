@@ -259,9 +259,10 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
                         pi.append(&*p.name);
                         pi.append_dict(&Signature::make::<&str>(), &Signature::make::<Dict<&str,Variant<()>,()>>(), |pii| {
                             for ifaces in p.ifaces.values() {
+                                let m2 = MethodInfo { msg: m.msg, path: p, iface: ifaces, tree: m.tree, method: m.method };
                                 pii.append_dict_entry(|ppii| {
                                     ppii.append(&**ifaces.name);
-                                    result = prop_append_dict(ppii, ifaces.properties.values().map(|v| &**v), m);
+                                    result = prop_append_dict(ppii, ifaces.properties.values().map(|v| &**v), &m2);
                                 });
                                 if result.is_err() { break; }
                             }
