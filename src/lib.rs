@@ -147,6 +147,12 @@ impl From<arg::TypeMismatchError> for Error {
     }
 }
 
+impl From<tree::MethodErr> for Error {
+    fn from(t: tree::MethodErr) -> Error {
+        Error::new_custom(t.errorname(), t.description())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::{Connection, Message, BusType, MessageItem, ConnectionItem, NameFlag,
