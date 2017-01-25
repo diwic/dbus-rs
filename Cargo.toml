@@ -1,7 +1,7 @@
 [package]
 
 name = "dbus"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 
 description = "Bindings to D-Bus, which is a bus commonly used on Linux for inter-process communication."
@@ -9,7 +9,7 @@ repository = "https://github.com/diwic/dbus-rs"
 documentation = "http://docs.rs/dbus"
 keywords = ["D-Bus", "DBus"]
 license = "Apache-2.0/MIT"
-
+categories = ["os::unix", "api-bindings"]
 build = "build.rs"
 
 [dependencies]

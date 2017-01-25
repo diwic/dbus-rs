@@ -4,14 +4,14 @@ A D-Bus binding for Rust.
 Current state: Slowly maturing. Most stuff you need should be working:
  * Connect to system or session bus
  * Messages send/receive (method calls, method returns, signals, errors)
- * Message get/append arguments (through either generics or enums), all types (including Unix Fd).
+ * Message get/append arguments (through either generics, trait objects or enums), all types (including Unix Fd).
  * Build server side trees, with introspection and method dispatch (boxed closures)
  * Properties, on both client and server sides (set/get/getall methods, signals on server side)
  * Optional async API (for poll-based mainloops, e g mio)
 
 [API Documentation is here](http://docs.rs/dbus/). If you have further questions or comments, [filing an issue](https://github.com/diwic/dbus-rs/issues) with your question is fine.
 
-Requirements: [Libdbus](https://dbus.freedesktop.org/releases/dbus/) 1.6 or higher, and latest stable release of [Rust](https://www.rust-lang.org/). If you run Ubuntu, this translates to Ubuntu 14.04 or later, the `libdbus-1-dev` package installed while building, and the `libdbus-1-3` package installed while running.
+Requirements: [Libdbus](https://dbus.freedesktop.org/releases/dbus/) 1.6 or higher, and latest stable release of [Rust](https://www.rust-lang.org/). If you run Ubuntu, this translates to Ubuntu 14.04 or later, having the `libdbus-1-dev` package installed while building, and the `libdbus-1-3` package installed while running.
 
 Examples
 ========
