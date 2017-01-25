@@ -44,6 +44,8 @@ pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
 
 pub mod arg;
 
+pub mod stdintf;
+
 /// Contains functionality for the "server" of a D-Bus object. A remote application can
 /// introspect this object and call methods on it.
 /// Deprecated - use the `tree` module instead.

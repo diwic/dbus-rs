@@ -262,10 +262,23 @@ impl<'a> Append for $t<'a> {
         arg_append_str(&mut i.0, ArgType::$s, self.as_cstr())
     }
 }
+
+/*
+
+Unfortunately, this does not work because it conflicts with getting a $t<'static>.
+
 impl<'a> Get<'a> for $t<'a> {
     fn get(i: &mut Iter<'a>) -> Option<$t<'a>> { unsafe { arg_get_str(&mut i.0, ArgType::$s) }
         .map(|s| unsafe { $t::from_slice_unchecked(s.to_bytes_with_nul()) } ) }
 }
+*/
+
+impl<'a> Get<'a> for $t<'static> {
+    fn get(i: &mut Iter<'a>) -> Option<$t<'static>> { unsafe {
+        arg_get_str(&mut i.0, ArgType::$s).map(|s| $t::from_slice_unchecked(s.to_bytes_with_nul()).into_static())
+    }}
+}
+
 
     }
 }
