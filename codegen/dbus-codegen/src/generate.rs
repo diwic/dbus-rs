@@ -7,15 +7,35 @@ fn find_attr<'a>(a: &'a Vec<xml::attribute::OwnedAttribute>, n: &str) -> Result<
     a.into_iter().find(|q| q.name.local_name == n).map(|f| &*f.value).ok_or_else(|| "attribute not found".into())    
 }
 
+struct Arg {
+    name: String,
+    typ: String,
+    idx: i32,
+    is_out: bool,
+}
+
 struct Method {
     name: String,
-    iargs: Vec<(Option<String>, String)>,
-    oargs: Vec<String>,
+    iargs: Vec<Arg>,
+    oargs: Vec<Arg>,
+}
+
+struct Prop {
+    name: String,
+    typ: String,
+    access: String,
+}
+
+struct Signal {
+    _name: String,
+    args: Vec<Arg>,
 }
 
 struct Intf {
     name: String,
     methods: Vec<Method>,
+    props: Vec<Prop>,
+    signals: Vec<Signal>,
 }
 
 fn make_camel(s: &str) -> String {
@@ -51,7 +71,7 @@ fn make_snake(s: &str) -> String {
     r
 }
 
-fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool, instruct: bool) -> Result<String, Box<error::Error>> {
+fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool) -> Result<String, Box<error::Error>> {
     let c = try!(i.next().ok_or_else(|| "unexpected end of signature"));
     let atype = ArgType::from_i32(c as i32);
     Ok(match atype {
@@ -70,12 +90,12 @@ fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool
         Ok(ArgType::Variant) => "::dbus::arg::Variant<Box<::dbus::arg::RefArg>>".into(),
         Ok(ArgType::Array) => if i.peek() == Some(&'{') {
             i.next();
-            let n1 = try!(xml_to_rust_type(i, out, false));
-            let n2 = try!(xml_to_rust_type(i, out, false));
+            let n1 = try!(xml_to_rust_type(i, out));
+            let n2 = try!(xml_to_rust_type(i, out));
             if i.next() != Some('}') { return Err("No end of dict".into()); }
             format!("::std::collections::HashMap<{}, {}>", n1, n2)
         } else {
-            format!("Vec<{}>", try!(xml_to_rust_type(i, out, false)))
+            format!("Vec<{}>", try!(xml_to_rust_type(i, out)))
         },
 /*
  if out { format!("Vec<{}>", try!(xml_to_rust_type(i, out, false))) }
@@ -88,45 +108,67 @@ fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool
             },*/
         Err(_) if c == '(' => {
             let mut s: Vec<String> = vec!();
-            loop {
-                let n = try!(xml_to_rust_type(i, out, true));
-                if n == "" { return Ok(format!("({})", s.join(", "))) };
+            while i.peek() != Some(&')') {
+                let n = try!(xml_to_rust_type(i, out));
                 s.push(n);
-            }
+            };
+            i.next().unwrap();
+            format!("({})", s.join(", "))
         }
-        Err(_) if c == ')' && instruct => "".into(),
-        a @ _ => panic!(format!("{:?}", a)),
+        // Err(_) if c == ')' && instruct => "".into(),
+        a @ _ => panic!(format!("Unknown character in signature {:?}", a)),
     })
 }
 
 fn make_type(s: &str, out: bool) -> Result<String, Box<error::Error>> {
     let mut i = s.chars().peekable();
-    let r = try!(xml_to_rust_type(&mut i, out, false));
+    let r = try!(xml_to_rust_type(&mut i, out));
     if i.next().is_some() { Err("Expected type to end".into()) }
     else { Ok(r) }
 }
 
-fn make_varname(n: &Option<String>, idx: usize) -> String {
-    if let Some(nn) = n.as_ref() {
-        make_snake(nn)
-    } else { format!("arg{}", idx) }
+impl Arg {
+    fn varname(&self) -> String {
+        if self.name != "" {
+           make_snake(&self.name)
+        } else { format!("arg{}", self.idx) }
+    }
+    fn typename(&self) -> Result<String, Box<error::Error>> {
+        make_type(&self.typ, self.is_out)
+    }
+}
+
+impl Prop {
+    fn can_get(&self) -> bool { self.access != "write" }
+    fn can_set(&self) -> bool { self.access == "write" || self.access == "readwrite" }
 }
 
 fn write_method_decl(s: &mut String, m: &Method) -> Result<(), Box<error::Error>> {
     *s += &format!("    fn {}(&self", make_snake(&m.name));
-    for (idx, a) in m.iargs.iter().enumerate() {
-        let t = try!(make_type(&a.1, false));
-        *s += &format!(", {}: {}", make_varname(&a.0, idx), t);
+    for a in m.iargs.iter() {
+        let t = try!(a.typename());
+        *s += &format!(", {}: {}", a.varname(), t);
     }
     match m.oargs.len() {
         0 => { *s += ") -> Result<(), ::dbus::Error>"; }
-        1 => { *s += &format!(") -> Result<{}, ::dbus::Error>", try!(make_type(&m.oargs[0], true))); }
+        1 => { *s += &format!(") -> Result<{}, ::dbus::Error>", try!(m.oargs[0].typename())); }
         _ => {
-            *s += &format!(") -> Result<({}", try!(make_type(&m.oargs[0], true)));
-            for z in m.oargs.iter().skip(1) { *s += &format!(", {}", try!(make_type(&z, true))); }
+            *s += &format!(") -> Result<({}", try!(m.oargs[0].typename()));
+            for z in m.oargs.iter().skip(1) { *s += &format!(", {}", try!(z.typename())); }
             *s += "), ::dbus::Error>";
         }
     }
+    Ok(())
+}
+
+fn write_prop_decl(s: &mut String, p: &Prop, set: bool) -> Result<(), Box<error::Error>> {
+    if set {
+        *s += &format!("    fn set_{}(&self, value: {}) -> Result<(), ::dbus::Error>",
+            make_snake(&p.name), try!(make_type(&p.typ, true)));
+    } else {
+        *s += &format!("    fn get_{}(&self) -> Result<{}, ::dbus::Error>",
+            make_snake(&p.name), try!(make_type(&p.typ, true)));
+    };
     Ok(())
 }
 
@@ -137,6 +179,16 @@ fn write_intf(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
     for m in &i.methods {
         try!(write_method_decl(s, &m));
         *s += ";\n";
+    }
+    for p in &i.props {
+        if p.can_get() {
+            try!(write_prop_decl(s, &p, false));
+            *s += ";\n";
+        }
+        if p.can_set() {
+            try!(write_prop_decl(s, &p, true));
+            *s += ";\n";
+        }
     }
     *s += "}\n";
     Ok(())
@@ -154,8 +206,8 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
         if m.iargs.len() > 0 {
                 *s += "            let mut i = ::dbus::arg::IterAppend::new(msg);\n";
         }
-        for (idx, a) in m.iargs.iter().enumerate() {
-                *s += &format!("            i.append({});\n", make_varname(&a.0, idx));
+        for a in m.iargs.iter() {
+                *s += &format!("            i.append({});\n", a.varname());
         }
         *s += "        }));\n";
         *s += "        try!(m.as_result());\n";
@@ -163,18 +215,46 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
             *s += "        Ok(())\n";
         } else {
             *s += "        let mut i = m.iter_init();\n";
-            for (idx, a) in m.oargs.iter().enumerate() {
-                *s += &format!("        let a{}: {} = try!(i.read());\n", idx, try!(make_type(a, true)));   
+            for a in m.oargs.iter() {
+                *s += &format!("        let {}: {} = try!(i.read());\n", a.varname(), try!(a.typename()));   
             }
             if m.oargs.len() == 1 {
-                *s += "        Ok(a0)\n";
+                *s += &format!("        Ok({})\n", m.oargs[0].varname());
             } else {
-                let v: Vec<String> = (0..m.oargs.len()).into_iter().map(|idx| idx.to_string()).collect();
-                *s += &format!("        Ok((a{}))\n", v.join(", a"));
+                let v: Vec<String> = m.oargs.iter().map(|z| z.varname()).collect();
+                *s += &format!("        Ok(({}))\n", v.join(", "));
             }
         }
         *s += "    }\n";
     }
+
+    for p in i.props.iter().filter(|p| p.can_get()) {
+        *s += "\n";
+        try!(write_prop_decl(s, &p, false));
+        *s += " {\n";
+        *s += "        let mut m = try!(self.method_call_with_args(&\"Org.Freedesktop.DBus.Properties\".into(), &\"Get\".into(), move |msg| {\n";
+        *s += "            let mut i = ::dbus::arg::IterAppend::new(msg);\n";
+        *s += &format!("            i.append(\"{}\");\n", i.name);
+        *s += &format!("            i.append(\"{}\");\n", p.name);
+        *s += "        }));\n";
+        *s += "        Ok(try!(try!(m.as_result()).read1()))\n";
+        *s += "    }\n";
+    }
+
+    for p in i.props.iter().filter(|p| p.can_set()) {
+        *s += "\n";
+        try!(write_prop_decl(s, &p, true));
+        *s += " {\n";
+        *s += "        let mut m = try!(self.method_call_with_args(&\"Org.Freedesktop.DBus.Properties\".into(), &\"Set\".into(), move |msg| {\n";
+        *s += "            let mut i = ::dbus::arg::IterAppend::new(msg);\n";
+        *s += &format!("            i.append(\"{}\");\n", i.name);
+        *s += &format!("            i.append(\"{}\");\n", p.name);
+        *s += "            i.append(value);\n";
+        *s += "        }));\n";
+        *s += "        m.as_result()\n";
+        *s += "    }\n";
+    }
+
     *s += "}\n";
     Ok(())
 
@@ -191,6 +271,9 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str) -> Result<(), Box<erro
     *s += &format!("\npub fn {}_server<F, T, D>(factory: &::dbus::tree::Factory<::dbus::tree::{}<D>, D>, data: D::Interface, f: F) -> ::dbus::tree::Interface<::dbus::tree::{}<D>, D>\n",
         make_snake(&i.name), mtype, mtype);
     *s += &format!("where D: ::dbus::tree::DataType, D::Method: Default, T: {}, \n", make_camel(&i.name));
+    if i.props.len() > 0 {
+        *s += "    D::Property: Default,";
+    };
     *s += &format!("    F: 'static + for <'z> Fn(& 'z ::dbus::tree::MethodInfo<::dbus::tree::{}<D>, D>) -> & 'z T {{\n", mtype);
     *s += &format!("    let i = factory.interface(\"{}\", data);\n", i.name);
     *s += "    let f = ::std::sync::Arc::new(f);";
@@ -200,32 +283,60 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str) -> Result<(), Box<erro
         if m.iargs.len() > 0 {
             *s += "        let mut i = minfo.msg.iter_init();\n";
         }
-        for (idx, a) in m.iargs.iter().enumerate() {
-            *s += &format!("        let a{}: {} = try!(i.read());\n", idx, try!(make_type(&a.1, false)));
+        for a in &m.iargs {
+            *s += &format!("        let {}: {} = try!(i.read());\n", a.varname(), try!(a.typename()));
         }
         *s += "        let d = fclone(minfo);\n";
-        let argsvar = (0..m.iargs.len()).into_iter().map(|q| format!("a{}", q)).collect::<Vec<String>>().join(", ");
+        let argsvar = m.iargs.iter().map(|q| q.varname()).collect::<Vec<String>>().join(", ");
         let retargs = match m.oargs.len() {
             0 => String::new(),
-            1 => "let r0 = ".into(),
-            n @ _ => format!("let ({}) = ", (0..n).into_iter().map(|q| format!("r{}", q)).collect::<Vec<String>>().join(", ")),
+            1 => format!("let {} = ", m.oargs[0].varname()),
+            _ => format!("let ({}) = ", m.oargs.iter().map(|q| q.varname()).collect::<Vec<String>>().join(", ")),
         };
         *s += &format!("        {}try!(d.{}({}));\n",
             retargs, make_snake(&m.name), argsvar);
         *s += "        let rm = minfo.msg.method_return();\n";
-        for r in 0..m.oargs.len() {
-            *s += &format!("        let rm = rm.append1(r{});\n", r);
+        for r in &m.oargs {
+            *s += &format!("        let rm = rm.append1({});\n", r.varname());
         }
         *s += "        Ok(vec!(rm))\n";
         *s += "    };\n";
         *s += &format!("    let m = factory.method(\"{}\", Default::default(), h);\n", m.name);
         for a in &m.iargs {
-            *s += &format!("    let m = m.in_arg((\"{}\", \"{}\"));\n", a.0.as_ref().map(|s| &**s).unwrap_or(""), a.1);
+            *s += &format!("    let m = m.in_arg((\"{}\", \"{}\"));\n", a.name, a.typ);
         }
         for a in &m.oargs {
-            *s += &format!("    let m = m.out_arg((\"\", \"{}\"));\n", a); // FIXME: Oarg could use a name, too
+            *s += &format!("    let m = m.out_arg((\"{}\", \"{}\"));\n", a.name, a.typ);
         }
         *s +=          "    let i = i.add_m(m);\n";
+    }
+    for p in &i.props {
+        *s += &format!("\n    let p = factory.property::<{}, _>(\"{}\", Default::default());\n", try!(make_type(&p.typ, false)), p.name);
+        *s += &format!("    let p = p.access(::dbus::tree::Access::{});\n", match &*p.access {
+            "read" => "Read",
+            "readwrite" => "ReadWrite",
+            "write" => "Write",
+            _ => return Err(format!("Unexpected access value {}", p.access).into()),
+        });
+        if p.can_get() {
+            *s += "    let fclone = f.clone();\n";    
+            *s += "    let p = p.on_get(move |a, pinfo| {\n";
+            *s += "        let minfo = pinfo.to_method_info();\n";
+            *s += "        let d = fclone(&minfo);\n";
+            *s += &format!("        a.append(try!(d.get_{}()));\n", make_snake(&p.name));
+            *s += "        Ok(())\n";
+            *s += "    });\n";
+        }
+        if p.can_set() {
+            *s += "    let fclone = f.clone();\n";    
+            *s += "    let p = p.on_set(move |iter, pinfo| {\n";
+            *s += "        let minfo = pinfo.to_method_info();\n";
+            *s += "        let d = fclone(&minfo);\n";
+            *s += &format!("        try!(d.set_{}(try!(iter.read())));\n", make_snake(&p.name));
+            *s += "        Ok(())\n";
+            *s += "    });\n";
+        }
+        *s +=          "    let i = i.add_p(p);\n";
     }
     *s +=          "    i\n";
     *s +=          "}\n";
@@ -239,13 +350,16 @@ pub fn generate(xmldata: &str, mtype: Option<&str>) -> Result<String, Box<error:
     let mut s = String::new();
     let mut curintf = None;
     let mut curm = None;
+    let mut cursig = None;
+    let mut curprop = None;
     let parser = EventReader::new(io::Cursor::new(xmldata));
     for e in parser {
         match try!(e) {
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "interface" => {
                 if curm.is_some() { try!(Err("Start of Interface inside method")) };
                 if curintf.is_some() { try!(Err("Start of Interface inside interface")) };
-                curintf = Some(Intf { name: try!(find_attr(attributes, "name")).into(), methods: Vec::new() });
+                curintf = Some(Intf { name: try!(find_attr(attributes, "name")).into(), 
+                    methods: Vec::new(), signals: Vec::new(), props: Vec::new() });
             }
             XmlEvent::EndElement { ref name } if &name.local_name == "interface" => {
                 if curm.is_some() { try!(Err("End of Interface inside method")) };
@@ -268,18 +382,49 @@ pub fn generate(xmldata: &str, mtype: Option<&str>) -> Result<String, Box<error:
                 if curintf.is_none() { try!(Err("End of method outside interface")) };
                 curintf.as_mut().unwrap().methods.push(curm.take().unwrap());
             }
+
+            XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "signal" => {
+                if cursig.is_some() { try!(Err("Start of signal inside signal")) };
+                if curintf.is_none() { try!(Err("Start of signal outside interface")) };
+                cursig = Some(Signal { _name: try!(find_attr(attributes, "name")).into(), args: Vec::new() });
+            }
+            XmlEvent::EndElement { ref name } if &name.local_name == "signal" => {
+                if cursig.is_none() { try!(Err("End of signal outside signal")) };
+                if curintf.is_none() { try!(Err("End of signal outside interface")) };
+                curintf.as_mut().unwrap().signals.push(cursig.take().unwrap());
+            }
+
+            XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "property" => {
+                if curprop.is_some() { try!(Err("Start of property inside property")) };
+                if curintf.is_none() { try!(Err("Start of property outside interface")) };
+                curprop = Some(Prop {
+                    name: try!(find_attr(attributes, "name")).into(), 
+                    typ: try!(find_attr(attributes, "type")).into(), 
+                    access: try!(find_attr(attributes, "access")).into(), 
+                });
+            }
+            XmlEvent::EndElement { ref name } if &name.local_name == "property" => {
+                if curprop.is_none() { try!(Err("End of property outside property")) };
+                if curintf.is_none() { try!(Err("End of property outside interface")) };
+                curintf.as_mut().unwrap().props.push(curprop.take().unwrap());
+            }
+
+
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "arg" => {
-                if curm.is_none() { continue }; // this arg belongs to a signal
+                if curm.is_none() && cursig.is_none() { try!(Err("Start of arg outside method and signal")) };
                 if curintf.is_none() { try!(Err("Start of arg outside interface")) };
-                let tp = try!(find_attr(attributes, "type")).into();
-                let is_out = match find_attr(attributes, "direction") {
+                let typ = try!(find_attr(attributes, "type")).into();
+                let is_out = if cursig.is_some() { true } else { match find_attr(attributes, "direction") {
                     Err(_) => false,
                     Ok("in") => false,
                     Ok("out") => true,
                     _ => { try!(Err("Invalid direction")); unreachable!() }
-                };
-                if is_out { curm.as_mut().unwrap().oargs.push(tp) }
-                else { curm.as_mut().unwrap().iargs.push((find_attr(attributes, "name").ok().map(|q| q.into()), tp)) };
+                }};
+                let arr = if let Some(ref mut sig) = cursig { &mut sig.args }
+                    else if is_out { &mut curm.as_mut().unwrap().oargs } else { &mut curm.as_mut().unwrap().iargs }; 
+                let arg = Arg { name: find_attr(attributes, "name").unwrap_or("").into(),
+                    typ: typ, is_out: is_out, idx: arr.len() as i32 };
+                arr.push(arg);
             }
             _ => (),
         }
@@ -546,9 +691,9 @@ static FROM_POLICYKIT: &'static str = r#"
     fn from_policykit() {
         let s = generate(FROM_POLICYKIT, Some("MTFn")).unwrap();
         println!("{}", s);
-        /* let mut f = ::std::fs::File::create("./tests/generated/mod.rs").unwrap();
+        let mut f = ::std::fs::File::create("./tests/generated/mod.rs").unwrap();
         (&mut f as &mut ::std::io::Write).write_all(s.as_bytes()).unwrap();
-        drop(f); */
+        drop(f);
         // assert_eq!(s, "fdjsf");
     }
 

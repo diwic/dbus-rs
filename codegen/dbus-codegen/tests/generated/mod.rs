@@ -15,8 +15,8 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopDBusProp
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let a0: ::dbus::arg::Variant<Box<::dbus::arg::RefArg>> = try!(i.read());
-        Ok(a0)
+        let value: ::dbus::arg::Variant<Box<::dbus::arg::RefArg>> = try!(i.read());
+        Ok(value)
     }
 
     fn get_all(&self, interfacename: &str) -> Result<::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>, ::dbus::Error> {
@@ -26,8 +26,8 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopDBusProp
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let a0: ::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>> = try!(i.read());
-        Ok(a0)
+        let properties: ::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>> = try!(i.read());
+        Ok(properties)
     }
 
     fn set(&self, interfacename: &str, propertyname: &str, value: ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>) -> Result<(), ::dbus::Error> {
@@ -50,43 +50,43 @@ where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopDBusProper
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let a0: &str = try!(i.read());
-        let a1: &str = try!(i.read());
+        let interfacename: &str = try!(i.read());
+        let propertyname: &str = try!(i.read());
         let d = fclone(minfo);
-        let r0 = try!(d.get(a0, a1));
+        let value = try!(d.get(interfacename, propertyname));
         let rm = minfo.msg.method_return();
-        let rm = rm.append1(r0);
+        let rm = rm.append1(value);
         Ok(vec!(rm))
     };
     let m = factory.method("Get", Default::default(), h);
     let m = m.in_arg(("interface_name", "s"));
     let m = m.in_arg(("property_name", "s"));
-    let m = m.out_arg(("", "v"));
+    let m = m.out_arg(("value", "v"));
     let i = i.add_m(m);
 
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let a0: &str = try!(i.read());
+        let interfacename: &str = try!(i.read());
         let d = fclone(minfo);
-        let r0 = try!(d.get_all(a0));
+        let properties = try!(d.get_all(interfacename));
         let rm = minfo.msg.method_return();
-        let rm = rm.append1(r0);
+        let rm = rm.append1(properties);
         Ok(vec!(rm))
     };
     let m = factory.method("GetAll", Default::default(), h);
     let m = m.in_arg(("interface_name", "s"));
-    let m = m.out_arg(("", "a{sv}"));
+    let m = m.out_arg(("properties", "a{sv}"));
     let i = i.add_m(m);
 
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let a0: &str = try!(i.read());
-        let a1: &str = try!(i.read());
-        let a2: ::dbus::arg::Variant<Box<::dbus::arg::RefArg>> = try!(i.read());
+        let interfacename: &str = try!(i.read());
+        let propertyname: &str = try!(i.read());
+        let value: ::dbus::arg::Variant<Box<::dbus::arg::RefArg>> = try!(i.read());
         let d = fclone(minfo);
-        try!(d.set(a0, a1, a2));
+        try!(d.set(interfacename, propertyname, value));
         let rm = minfo.msg.method_return();
         Ok(vec!(rm))
     };
@@ -109,8 +109,8 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopDBusIntr
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let a0: String = try!(i.read());
-        Ok(a0)
+        let xmldata: String = try!(i.read());
+        Ok(xmldata)
     }
 }
 
@@ -122,13 +122,13 @@ where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopDBusIntros
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let d = fclone(minfo);
-        let r0 = try!(d.introspect());
+        let xmldata = try!(d.introspect());
         let rm = minfo.msg.method_return();
-        let rm = rm.append1(r0);
+        let rm = rm.append1(xmldata);
         Ok(vec!(rm))
     };
     let m = factory.method("Introspect", Default::default(), h);
-    let m = m.out_arg(("", "s"));
+    let m = m.out_arg(("xml_data", "s"));
     let i = i.add_m(m);
     i
 }
@@ -152,8 +152,8 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopDBusPeer
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let a0: String = try!(i.read());
-        Ok(a0)
+        let machineuuid: String = try!(i.read());
+        Ok(machineuuid)
     }
 }
 
@@ -175,13 +175,13 @@ where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopDBusPeer,
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let d = fclone(minfo);
-        let r0 = try!(d.get_machine_id());
+        let machineuuid = try!(d.get_machine_id());
         let rm = minfo.msg.method_return();
-        let rm = rm.append1(r0);
+        let rm = rm.append1(machineuuid);
         Ok(vec!(rm))
     };
     let m = factory.method("GetMachineId", Default::default(), h);
-    let m = m.out_arg(("", "s"));
+    let m = m.out_arg(("machine_uuid", "s"));
     let i = i.add_m(m);
     i
 }
@@ -198,6 +198,9 @@ pub trait OrgFreedesktopPolicyKit1Authority {
     fn enumerate_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<Vec<(String, String, (String, ::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), u64, u64)>, ::dbus::Error>;
     fn revoke_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<(), ::dbus::Error>;
     fn revoke_temporary_authorization_by_id(&self, id: &str) -> Result<(), ::dbus::Error>;
+    fn get_backend_name(&self) -> Result<String, ::dbus::Error>;
+    fn get_backend_version(&self) -> Result<String, ::dbus::Error>;
+    fn get_backend_features(&self) -> Result<u32, ::dbus::Error>;
 }
 
 impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKit1Authority for ::dbus::ConnPath<'a, C> {
@@ -209,8 +212,8 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKi
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let a0: Vec<(String, String, String, String, String, String, u32, u32, u32, ::std::collections::HashMap<String, String>)> = try!(i.read());
-        Ok(a0)
+        let actiondescriptions: Vec<(String, String, String, String, String, String, u32, u32, u32, ::std::collections::HashMap<String, String>)> = try!(i.read());
+        Ok(actiondescriptions)
     }
 
     fn check_authorization(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), actionid: &str, details: ::std::collections::HashMap<&str, &str>, flags: u32, cancellationid: &str) -> Result<(bool, bool, ::std::collections::HashMap<String, String>), ::dbus::Error> {
@@ -224,8 +227,8 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKi
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let a0: (bool, bool, ::std::collections::HashMap<String, String>) = try!(i.read());
-        Ok(a0)
+        let result: (bool, bool, ::std::collections::HashMap<String, String>) = try!(i.read());
+        Ok(result)
     }
 
     fn cancel_check_authorization(&self, cancellationid: &str) -> Result<(), ::dbus::Error> {
@@ -298,8 +301,8 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKi
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let a0: Vec<(String, String, (String, ::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), u64, u64)> = try!(i.read());
-        Ok(a0)
+        let temporaryauthorizations: Vec<(String, String, (String, ::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), u64, u64)> = try!(i.read());
+        Ok(temporaryauthorizations)
     }
 
     fn revoke_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<(), ::dbus::Error> {
@@ -319,40 +322,67 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKi
         try!(m.as_result());
         Ok(())
     }
+
+    fn get_backend_name(&self) -> Result<String, ::dbus::Error> {
+        let mut m = try!(self.method_call_with_args(&"Org.Freedesktop.DBus.Properties".into(), &"Get".into(), move |msg| {
+            let mut i = ::dbus::arg::IterAppend::new(msg);
+            i.append("org.freedesktop.PolicyKit1.Authority");
+            i.append("BackendName");
+        }));
+        Ok(try!(try!(m.as_result()).read1()))
+    }
+
+    fn get_backend_version(&self) -> Result<String, ::dbus::Error> {
+        let mut m = try!(self.method_call_with_args(&"Org.Freedesktop.DBus.Properties".into(), &"Get".into(), move |msg| {
+            let mut i = ::dbus::arg::IterAppend::new(msg);
+            i.append("org.freedesktop.PolicyKit1.Authority");
+            i.append("BackendVersion");
+        }));
+        Ok(try!(try!(m.as_result()).read1()))
+    }
+
+    fn get_backend_features(&self) -> Result<u32, ::dbus::Error> {
+        let mut m = try!(self.method_call_with_args(&"Org.Freedesktop.DBus.Properties".into(), &"Get".into(), move |msg| {
+            let mut i = ::dbus::arg::IterAppend::new(msg);
+            i.append("org.freedesktop.PolicyKit1.Authority");
+            i.append("BackendFeatures");
+        }));
+        Ok(try!(try!(m.as_result()).read1()))
+    }
 }
 
 pub fn orgfreedesktop_policy_kit1_authority_server<F, T, D>(factory: &::dbus::tree::Factory<::dbus::tree::MTFn<D>, D>, data: D::Interface, f: F) -> ::dbus::tree::Interface<::dbus::tree::MTFn<D>, D>
 where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1Authority, 
-    F: 'static + for <'z> Fn(& 'z ::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>) -> & 'z T {
+    D::Property: Default,    F: 'static + for <'z> Fn(& 'z ::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>) -> & 'z T {
     let i = factory.interface("org.freedesktop.PolicyKit1.Authority", data);
     let f = ::std::sync::Arc::new(f);
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let a0: &str = try!(i.read());
+        let locale: &str = try!(i.read());
         let d = fclone(minfo);
-        let r0 = try!(d.enumerate_actions(a0));
+        let actiondescriptions = try!(d.enumerate_actions(locale));
         let rm = minfo.msg.method_return();
-        let rm = rm.append1(r0);
+        let rm = rm.append1(actiondescriptions);
         Ok(vec!(rm))
     };
     let m = factory.method("EnumerateActions", Default::default(), h);
     let m = m.in_arg(("locale", "s"));
-    let m = m.out_arg(("", "a(ssssssuuua{ss})"));
+    let m = m.out_arg(("action_descriptions", "a(ssssssuuua{ss})"));
     let i = i.add_m(m);
 
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let a0: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
-        let a1: &str = try!(i.read());
-        let a2: ::std::collections::HashMap<&str, &str> = try!(i.read());
-        let a3: u32 = try!(i.read());
-        let a4: &str = try!(i.read());
+        let subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
+        let actionid: &str = try!(i.read());
+        let details: ::std::collections::HashMap<&str, &str> = try!(i.read());
+        let flags: u32 = try!(i.read());
+        let cancellationid: &str = try!(i.read());
         let d = fclone(minfo);
-        let r0 = try!(d.check_authorization(a0, a1, a2, a3, a4));
+        let result = try!(d.check_authorization(subject, actionid, details, flags, cancellationid));
         let rm = minfo.msg.method_return();
-        let rm = rm.append1(r0);
+        let rm = rm.append1(result);
         Ok(vec!(rm))
     };
     let m = factory.method("CheckAuthorization", Default::default(), h);
@@ -361,15 +391,15 @@ where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1
     let m = m.in_arg(("details", "a{ss}"));
     let m = m.in_arg(("flags", "u"));
     let m = m.in_arg(("cancellation_id", "s"));
-    let m = m.out_arg(("", "(bba{ss})"));
+    let m = m.out_arg(("result", "(bba{ss})"));
     let i = i.add_m(m);
 
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let a0: &str = try!(i.read());
+        let cancellationid: &str = try!(i.read());
         let d = fclone(minfo);
-        try!(d.cancel_check_authorization(a0));
+        try!(d.cancel_check_authorization(cancellationid));
         let rm = minfo.msg.method_return();
         Ok(vec!(rm))
     };
@@ -380,11 +410,11 @@ where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let a0: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
-        let a1: &str = try!(i.read());
-        let a2: &str = try!(i.read());
+        let subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
+        let locale: &str = try!(i.read());
+        let objectpath: &str = try!(i.read());
         let d = fclone(minfo);
-        try!(d.register_authentication_agent(a0, a1, a2));
+        try!(d.register_authentication_agent(subject, locale, objectpath));
         let rm = minfo.msg.method_return();
         Ok(vec!(rm))
     };
@@ -397,12 +427,12 @@ where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let a0: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
-        let a1: &str = try!(i.read());
-        let a2: &str = try!(i.read());
-        let a3: ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>> = try!(i.read());
+        let subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
+        let locale: &str = try!(i.read());
+        let objectpath: &str = try!(i.read());
+        let options: ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>> = try!(i.read());
         let d = fclone(minfo);
-        try!(d.register_authentication_agent_with_options(a0, a1, a2, a3));
+        try!(d.register_authentication_agent_with_options(subject, locale, objectpath, options));
         let rm = minfo.msg.method_return();
         Ok(vec!(rm))
     };
@@ -416,10 +446,10 @@ where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let a0: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
-        let a1: &str = try!(i.read());
+        let subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
+        let objectpath: &str = try!(i.read());
         let d = fclone(minfo);
-        try!(d.unregister_authentication_agent(a0, a1));
+        try!(d.unregister_authentication_agent(subject, objectpath));
         let rm = minfo.msg.method_return();
         Ok(vec!(rm))
     };
@@ -431,10 +461,10 @@ where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let a0: &str = try!(i.read());
-        let a1: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
+        let cookie: &str = try!(i.read());
+        let identity: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
         let d = fclone(minfo);
-        try!(d.authentication_agent_response(a0, a1));
+        try!(d.authentication_agent_response(cookie, identity));
         let rm = minfo.msg.method_return();
         Ok(vec!(rm))
     };
@@ -446,11 +476,11 @@ where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let a0: u32 = try!(i.read());
-        let a1: &str = try!(i.read());
-        let a2: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
+        let uid: u32 = try!(i.read());
+        let cookie: &str = try!(i.read());
+        let identity: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
         let d = fclone(minfo);
-        try!(d.authentication_agent_response2(a0, a1, a2));
+        try!(d.authentication_agent_response2(uid, cookie, identity));
         let rm = minfo.msg.method_return();
         Ok(vec!(rm))
     };
@@ -463,24 +493,24 @@ where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let a0: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
+        let subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
         let d = fclone(minfo);
-        let r0 = try!(d.enumerate_temporary_authorizations(a0));
+        let temporaryauthorizations = try!(d.enumerate_temporary_authorizations(subject));
         let rm = minfo.msg.method_return();
-        let rm = rm.append1(r0);
+        let rm = rm.append1(temporaryauthorizations);
         Ok(vec!(rm))
     };
     let m = factory.method("EnumerateTemporaryAuthorizations", Default::default(), h);
     let m = m.in_arg(("subject", "(sa{sv})"));
-    let m = m.out_arg(("", "a(ss(sa{sv})tt)"));
+    let m = m.out_arg(("temporary_authorizations", "a(ss(sa{sv})tt)"));
     let i = i.add_m(m);
 
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let a0: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
+        let subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) = try!(i.read());
         let d = fclone(minfo);
-        try!(d.revoke_temporary_authorizations(a0));
+        try!(d.revoke_temporary_authorizations(subject));
         let rm = minfo.msg.method_return();
         Ok(vec!(rm))
     };
@@ -491,14 +521,47 @@ where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1
     let fclone = f.clone();
     let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let a0: &str = try!(i.read());
+        let id: &str = try!(i.read());
         let d = fclone(minfo);
-        try!(d.revoke_temporary_authorization_by_id(a0));
+        try!(d.revoke_temporary_authorization_by_id(id));
         let rm = minfo.msg.method_return();
         Ok(vec!(rm))
     };
     let m = factory.method("RevokeTemporaryAuthorizationById", Default::default(), h);
     let m = m.in_arg(("id", "s"));
     let i = i.add_m(m);
+
+    let p = factory.property::<&str, _>("BackendName", Default::default());
+    let p = p.access(::dbus::tree::Access::Read);
+    let fclone = f.clone();
+    let p = p.on_get(move |a, pinfo| {
+        let minfo = pinfo.to_method_info();
+        let d = fclone(&minfo);
+        a.append(try!(d.get_backend_name()));
+        Ok(())
+    });
+    let i = i.add_p(p);
+
+    let p = factory.property::<&str, _>("BackendVersion", Default::default());
+    let p = p.access(::dbus::tree::Access::Read);
+    let fclone = f.clone();
+    let p = p.on_get(move |a, pinfo| {
+        let minfo = pinfo.to_method_info();
+        let d = fclone(&minfo);
+        a.append(try!(d.get_backend_version()));
+        Ok(())
+    });
+    let i = i.add_p(p);
+
+    let p = factory.property::<u32, _>("BackendFeatures", Default::default());
+    let p = p.access(::dbus::tree::Access::Read);
+    let fclone = f.clone();
+    let p = p.on_get(move |a, pinfo| {
+        let minfo = pinfo.to_method_info();
+        let d = fclone(&minfo);
+        a.append(try!(d.get_backend_features()));
+        Ok(())
+    });
+    let i = i.add_p(p);
     i
 }
