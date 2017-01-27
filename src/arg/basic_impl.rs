@@ -86,6 +86,8 @@ impl RefArg for $t {
     #[inline]
     fn as_any(&self) -> &any::Any { self }
     #[inline]
+    fn as_any_mut(&mut self) -> &mut any::Any { self }
+    #[inline]
     fn as_i64(&self) -> Option<i64> { let $i = *self; $ii }
 }
 
@@ -115,6 +117,8 @@ impl RefArg for $t {
     fn append(&self, i: &mut IterAppend) { <$t as Append>::append(self.clone(), i) }
     #[inline]
     fn as_any(&self) -> &any::Any { self }
+    #[inline]
+    fn as_any_mut(&mut self) -> &mut any::Any { self }
     #[inline]
     fn as_i64(&self) -> Option<i64> { let $i = self; $ii }
     #[inline]
@@ -250,7 +254,10 @@ impl RefArg for $t<'static> {
     fn arg_type(&self) -> ArgType { ArgType::$s }
     fn signature(&self) -> Signature<'static> { unsafe { Signature::from_slice_unchecked($f) } }
     fn append(&self, i: &mut IterAppend) { arg_append_str(&mut i.0, ArgType::$s, self.as_cstr()) }
+    #[inline]
     fn as_any(&self) -> &any::Any { self }
+    #[inline]
+    fn as_any_mut(&mut self) -> &mut any::Any { self }
     #[inline]
     fn as_str(&self) -> Option<&str> { Some(self) }
 }

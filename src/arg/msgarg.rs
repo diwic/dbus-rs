@@ -42,6 +42,8 @@ pub trait RefArg: fmt::Debug {
     fn append(&self, &mut IterAppend);
     /// Transforms this argument to Any (which can be downcasted to read the current value).
     fn as_any(&self) -> &any::Any where Self: 'static;
+    /// Transforms this argument to Any (which can be downcasted to read the current value).
+    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static;
     /// Try to read the argument as an i64.
     #[inline]
     fn as_i64(&self) -> Option<i64> { None }
@@ -52,6 +54,14 @@ pub trait RefArg: fmt::Debug {
     #[inline]
     fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> { None }
 }
+
+/// Cast a RefArg as a specific type (shortcut for any + downcast)
+#[inline]
+pub fn cast<'a, T: 'static>(a: &'a (RefArg + 'static)) -> Option<&'a T> { a.as_any().downcast_ref() }
+
+/// Cast a RefArg as a specific type (shortcut for any_mut + downcast_mut)
+#[inline]
+pub fn cast_mut<'a, T: 'static>(a: &'a mut (RefArg + 'static)) -> Option<&'a mut T> { a.as_any_mut().downcast_mut() }
 
 /// If a type implements this trait, it means the size and alignment is the same
 /// as in D-Bus. This means that you can quickly append and get slices of this type.
@@ -84,6 +94,8 @@ impl<'a, T: RefArg + ?Sized> RefArg for &'a T {
     #[inline]
     fn as_any(&self) -> &any::Any where T: 'static { (&**self).as_any() }
     #[inline]
+    fn as_any_mut(&mut self) -> &mut any::Any where T: 'static { unreachable!() }
+    #[inline]
     fn as_i64(&self) -> Option<i64> { (&**self).as_i64() }
     #[inline]
     fn as_str(&self) -> Option<&str> { (&**self).as_str() }
@@ -105,6 +117,8 @@ impl<T: RefArg + ?Sized> RefArg for $t<T> {
     fn append(&self, i: &mut IterAppend) { (&**self).append(i) }
     #[inline]
     fn as_any(&self) -> &any::Any where T: 'static { (&**self).as_any() }
+    #[inline]
+    fn as_any_mut<'a>(&'a mut self) -> &'a mut any::Any where T: 'static { $make_mut(self).as_any_mut() }
     #[inline]
     fn as_i64(&self) -> Option<i64> { (&**self).as_i64() }
     #[inline]
@@ -129,16 +143,16 @@ impl<T: Append> Append for Box<T> {
     fn append(self, i: &mut IterAppend) { let q: T = *self; q.append(i) }
 }
 
-deref_impl!(Box, ss, &mut **ss);
-deref_impl!(Rc, ss, Rc::get_mut(ss).unwrap());
-deref_impl!(Arc, ss, Arc::get_mut(ss).unwrap());
+deref_impl!(Box, ss, |q: &'a mut Box<T>| -> &'a mut T { &mut **q });
+deref_impl!(Rc, ss, |q| Rc::get_mut(q).unwrap());
+deref_impl!(Arc, ss, |q| Arc::get_mut(q).unwrap());
 
 #[cfg(test)]
 mod test {
     extern crate tempdir;
 
     use {Connection, ConnectionItem, Message, BusType, Path, Signature};
-    use arg::{Array, Variant, Dict, Iter, ArgType, TypeMismatchError, RefArg};
+    use arg::{Array, Variant, Dict, Iter, ArgType, TypeMismatchError, RefArg, cast};
 
     use std::collections::HashMap;
 
@@ -172,13 +186,13 @@ mod test {
             if let ConnectionItem::MethodCall(m) = n {
                 let rv: Vec<Box<RefArg + 'static>> = m.iter_init().collect();
                 println!("Receiving {:?}", rv);
-                let rv0: &Variant<Box<RefArg>> = rv[0].as_any().downcast_ref().unwrap(); 
-                let rv00: &i32 = rv0.0.as_any().downcast_ref().unwrap();
+                let rv0: &Variant<Box<RefArg>> = cast(&rv[0]).unwrap(); 
+                let rv00: &i32 = cast(&rv0.0).unwrap();
                 assert_eq!(rv00, &5i32);
                 assert_eq!(Some(&false), rv[2].as_any().downcast_ref::<bool>());
                 assert_eq!(Some(&vi32), rv[4].as_any().downcast_ref::<Vec<i32>>());
                 assert_eq!(Some(&vstr), rv[5].as_any().downcast_ref::<Vec<String>>());
-                let mmap: &HashMap<bool, Variant<Box<RefArg>>> = rv[6].as_any().downcast_ref().unwrap();
+                let mmap: &HashMap<bool, Variant<Box<RefArg>>> = cast(&rv[6]).unwrap();
                 assert_eq!(mmap[&true].as_str(), Some("Yes"));
                 let mut iter = rv[6].as_iter().unwrap();
                 assert!(iter.next().unwrap().as_i64().is_some());

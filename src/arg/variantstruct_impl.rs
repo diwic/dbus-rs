@@ -68,6 +68,8 @@ impl<T: RefArg> RefArg for Variant<T> {
     #[inline]
     fn as_any(&self) -> &any::Any where T: 'static { self }
     #[inline]
+    fn as_any_mut(&mut self) -> &mut any::Any where T: 'static { self }
+    #[inline]
     fn as_i64(&self) -> Option<i64> { self.0.as_i64() }
     #[inline]
     fn as_str(&self) -> Option<&str> { self.0.as_str() }
@@ -130,6 +132,7 @@ impl<$($t: RefArg),*> RefArg for ($($t,)*) {
         i.append_container(ArgType::Struct, None, |s| { $( $n.append(s); )* });
     }
     fn as_any(&self) -> &any::Any where Self: 'static { self }
+    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
 }
 
 
@@ -163,7 +166,10 @@ impl RefArg for Vec<Box<RefArg>> {
             for z in self { z.append(s); }
         });
     }
+    #[inline]
     fn as_any(&self) -> &any::Any where Self: 'static { self }
+    #[inline]
+    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
     fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> {
         Some(Box::new(self.iter().map(|b| &**b)))
     }
@@ -185,6 +191,9 @@ impl RefArg for message::MessageItem {
     fn arg_type(&self) -> ArgType { ArgType::from_i32(self.array_type()).unwrap() }
     fn signature(&self) -> Signature<'static> { Signature::from(self.type_sig()).into_static() }
     fn append(&self, i: &mut IterAppend) { message::append_messageitem(&mut i.0, self) }
+    #[inline]
     fn as_any(&self) -> &any::Any where Self: 'static { self }
+    #[inline]
+    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
 }
 

@@ -58,7 +58,10 @@ impl<'a, T: Arg + RefArg> RefArg for &'a [T] {
     fn append(&self, i: &mut IterAppend) {
         array_append(self, i, |arg, s| (arg as &RefArg).append(s));
     }
+    #[inline]
     fn as_any(&self) -> &any::Any where Self: 'static { self }
+    #[inline]
+    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
 }
 
 impl<T: Arg + RefArg> RefArg for Vec<T> {
@@ -67,7 +70,10 @@ impl<T: Arg + RefArg> RefArg for Vec<T> {
     fn append(&self, i: &mut IterAppend) {
         array_append(&self, i, |arg, s| (arg as &RefArg).append(s));
     }
+    #[inline]
     fn as_any(&self) -> &any::Any where Self: 'static { self }
+    #[inline]
+    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
     fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> {
         Some(Box::new(self.iter().map(|b| b as &RefArg)))
     }
@@ -182,7 +188,10 @@ impl<K: DictKey + RefArg + Eq + Hash, V: RefArg + Arg> RefArg for HashMap<K, V> 
             })
         });
     }
+    #[inline]
     fn as_any(&self) -> &any::Any where Self: 'static { self }
+    #[inline]
+    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
     fn as_iter<'b>(&'b self) -> Option<Box<Iterator<Item=&'b RefArg> + 'b>> {
         Some(Box::new(self.iter().flat_map(|(k, v)| vec![k as &RefArg, v as &RefArg].into_iter())))
     }
@@ -257,7 +266,10 @@ impl<'a, T: 'a + Arg + fmt::Debug + RefArg, I: fmt::Debug + Clone + Iterator<Ite
             for arg in z { (arg as &RefArg).append(s) }
         );
     }
+    #[inline]
     fn as_any(&self) -> &any::Any where Self: 'static { self }
+    #[inline]
+    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
 }
 
 fn get_fixed_array_refarg<'a, T: FixedArray + Clone + RefArg>(i: &mut Iter<'a>) -> Box<RefArg> {
