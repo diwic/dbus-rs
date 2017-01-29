@@ -43,6 +43,10 @@ pub trait RefArg: fmt::Debug {
     /// Transforms this argument to Any (which can be downcasted to read the current value).
     fn as_any(&self) -> &any::Any where Self: 'static;
     /// Transforms this argument to Any (which can be downcasted to read the current value).
+    ///
+    /// # Panic
+    /// Will panic if the interior cannot be made mutable, e g, if encapsulated
+    /// inside a Rc with a reference count > 1.
     fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static;
     /// Try to read the argument as an i64.
     #[inline]
@@ -60,6 +64,10 @@ pub trait RefArg: fmt::Debug {
 pub fn cast<'a, T: 'static>(a: &'a (RefArg + 'static)) -> Option<&'a T> { a.as_any().downcast_ref() }
 
 /// Cast a RefArg as a specific type (shortcut for any_mut + downcast_mut)
+///
+/// # Panic
+/// Will panic if the interior cannot be made mutable, e g, if encapsulated
+/// inside a Rc with a reference count > 1.
 #[inline]
 pub fn cast_mut<'a, T: 'static>(a: &'a mut (RefArg + 'static)) -> Option<&'a mut T> { a.as_any_mut().downcast_mut() }
 
@@ -118,7 +126,7 @@ impl<T: RefArg + ?Sized> RefArg for $t<T> {
     #[inline]
     fn as_any(&self) -> &any::Any where T: 'static { (&**self).as_any() }
     #[inline]
-    fn as_any_mut<'a>(&'a mut self) -> &'a mut any::Any where T: 'static { $make_mut(self).as_any_mut() }
+    fn as_any_mut<'a>(&'a mut $ss) -> &'a mut any::Any where T: 'static { $make_mut.as_any_mut() }
     #[inline]
     fn as_i64(&self) -> Option<i64> { (&**self).as_i64() }
     #[inline]
@@ -143,9 +151,9 @@ impl<T: Append> Append for Box<T> {
     fn append(self, i: &mut IterAppend) { let q: T = *self; q.append(i) }
 }
 
-deref_impl!(Box, ss, |q: &'a mut Box<T>| -> &'a mut T { &mut **q });
-deref_impl!(Rc, ss, |q| Rc::get_mut(q).unwrap());
-deref_impl!(Arc, ss, |q| Arc::get_mut(q).unwrap());
+deref_impl!(Box, self, &mut **self );
+deref_impl!(Rc, self, Rc::get_mut(self).unwrap());
+deref_impl!(Arc, self, Arc::get_mut(self).unwrap());
 
 #[cfg(test)]
 mod test {
