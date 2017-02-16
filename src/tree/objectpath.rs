@@ -309,6 +309,11 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
         self
     }
 
+    /// Get a reference to an object path from the tree.
+    pub fn get(&self, p: &Path<'static>) -> Option<&Arc<ObjectPath<M, D>>> {
+        self.paths.get(p)
+    }
+
     /// Non-builder function that adds an object path to this tree.
     ///
     /// Note: This does not register a path with the connection, so if the tree is currently registered,
