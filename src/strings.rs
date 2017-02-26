@@ -1,36 +1,49 @@
 // CString wrappers.
 
-use ffi;
 use std::{str, fmt, ops, default, hash};
 use std::ffi::{CStr, CString};
 use std::borrow::Cow;
-use Error;
 use std::os::raw::c_char;
+
+#[cfg(not(feature = "no-string-validation"))]
+use Error;
+#[cfg(not(feature = "no-string-validation"))]
+use ffi;
 
 macro_rules! cstring_wrapper {
     ($t: ident, $s: ident) => {
 
-
 impl<'m> $t<'m> {
+    #[cfg(feature = "no-string-validation")]
+    fn check_valid(_: *const c_char) -> Result<(), String> { Ok(()) }
+
+    #[cfg(not(feature = "no-string-validation"))]
+    fn check_valid(c: *const c_char) -> Result<(), String> {
+        let mut e = Error::empty();
+        let b = unsafe { ffi::$s(c, e.get_mut()) };
+        if b != 0 { Ok(()) } else { Err(e.message().unwrap().into()) }
+    }
+
     /// Creates a new instance of this struct.
+    ///
+    /// Note: If the no-string-validation feature is activated, this string
+    /// will not be checked for conformance with the D-Bus specification.
     pub fn new<S: Into<Vec<u8>>>(s: S) -> Result<$t<'m>, String> {
         let c = try!(CString::new(s).map_err(|e| e.to_string()));
-        let mut e = Error::empty();
-        let b = unsafe { ffi::$s(c.as_ptr(), e.get_mut()) };
-        if b != 0 { Ok($t(Cow::Owned(c))) } else { Err(e.message().unwrap().into()) }
+        $t::check_valid(c.as_ptr()).map(|_| $t(Cow::Owned(c)))
     }
 
     /// Creates a new instance of this struct. If you end it with \0,
     /// it can borrow the slice without extra allocation.
+    ///
+    /// Note: If the no-string-validation feature is activated, this string
+    /// will not be checked for conformance with the D-Bus specification.
     pub fn from_slice(s: &'m [u8]) -> Result<$t<'m>, String> {
         if s.len() == 0 || s[s.len()-1] != 0 { return $t::new(s) };
-        let mut e = Error::empty();
-        let b = unsafe { ffi::$s(s.as_ptr() as *const c_char, e.get_mut()) };
-        if b != 0 {
+        $t::check_valid(s.as_ptr() as *const i8).map(|_| {
             let c = unsafe { CStr::from_ptr(s.as_ptr() as *const c_char) };
-            Ok($t(Cow::Borrowed(c))) 
-        }
-            else { Err(e.message().unwrap().into()) }
+            $t(Cow::Borrowed(c)) 
+        })
     }
 
     /// This function creates a new instance of this struct, without checking.
@@ -165,7 +178,10 @@ fn some_path() {
     let p1: Path = "/valid".into();
     let p2 = Path::new("##invalid##");
     assert_eq!(p1, Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"/valid\0".as_ptr() as *const c_char) })));
+    #[cfg(not(feature = "no-string-validation"))]
     assert_eq!(p2, Err("Object path was not valid: '##invalid##'".into()));
+    #[cfg(feature = "no-string-validation")]
+    assert_eq!(p2, Ok(Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"##invalid##\0".as_ptr() as *const c_char) }))));
 }
 
 #[test]

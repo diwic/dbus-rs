@@ -23,3 +23,6 @@ tempdir = "0.3"
 
 [package.metadata.pkg-config]
 dbus-1 = "1.6"
+
+[features]
+no-string-validation = []

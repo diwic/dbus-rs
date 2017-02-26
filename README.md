@@ -11,8 +11,6 @@ Current state: Slowly maturing. Most stuff you need should be working:
 
 [API Documentation is here](http://docs.rs/dbus/). If you have further questions or comments, [filing an issue](https://github.com/diwic/dbus-rs/issues) with your question is fine.
 
-Requirements: [Libdbus](https://dbus.freedesktop.org/releases/dbus/) 1.6 or higher, and latest stable release of [Rust](https://www.rust-lang.org/). If you run Ubuntu, this translates to Ubuntu 14.04 or later, having the `libdbus-1-dev` package installed while building, and the `libdbus-1-3` package installed while running.
-
 Examples
 ========
 
@@ -77,12 +75,20 @@ You can try a this example by running:
 
     cargo run --example properties
 
-For an extended example, which also uses non-panicing error handling, see
+For an extended example, which also uses non-panicking error handling, see
 
     examples/rtkit.rs
+
+
+Requirements
+============
+
+[Libdbus](https://dbus.freedesktop.org/releases/dbus/) 1.6 or higher, and latest stable release of [Rust](https://www.rust-lang.org/). If you run Ubuntu, this translates to Ubuntu 14.04 or later, having the `libdbus-1-dev` package installed while building, and the `libdbus-1-3` package installed while running.
+
+However, if you enable the feature `no-string-validation`, you might be able to build and run with older versions of the D-Bus library. This feature skips an extra check that a specific string (e g a Path, ErrorName etc) conforms to the D-Bus specification, which might also make things a tiny bit faster. But - if you do so, and then actually send invalid strings to the D-Bus library, you might get a panic instead of a proper error.
 
 
 License
 =======
 
-Apache / MIT dual licensed. 
+Apache 2.0 / MIT dual licensed.
