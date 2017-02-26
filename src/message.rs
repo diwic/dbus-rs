@@ -887,6 +887,12 @@ impl<'a, C: ::std::ops::Deref<Target=Connection>> ConnPath<'a, C> {
         self.conn.send_with_reply_and_block(msg, self.timeout)
     }
 
+    pub fn signal_with_args<F: FnOnce(&mut Message)>(&self, i: &Interface, m: &Member, f: F) -> Result<u32, Error> {
+        let mut msg = Message::signal(&self.path, i, m);
+        f(&mut msg);
+        self.conn.send(msg).map_err(|_| Error::new_custom("org.freedesktop.DBus.Error.Failed", "Sending signal failed"))
+    }
+
 }
 
 // For purpose of testing the library only.
