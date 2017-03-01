@@ -40,7 +40,7 @@ impl<'m> $t<'m> {
     /// will not be checked for conformance with the D-Bus specification.
     pub fn from_slice(s: &'m [u8]) -> Result<$t<'m>, String> {
         if s.len() == 0 || s[s.len()-1] != 0 { return $t::new(s) };
-        $t::check_valid(s.as_ptr() as *const i8).map(|_| {
+        $t::check_valid(s.as_ptr() as *const c_char).map(|_| {
             let c = unsafe { CStr::from_ptr(s.as_ptr() as *const c_char) };
             $t(Cow::Borrowed(c)) 
         })
