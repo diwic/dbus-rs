@@ -154,6 +154,32 @@ impl Connection {
         Ok(c)
     }
 
+    /// Sends a message over the D-Bus and call the callback with the result when it is received.
+    /// This is usually used for asynchronous method calls.
+    pub fn send_with_reply<F: Fn(Result<Message, Error>)>(&self, msg: Message, pending_return: F, timeout_ms: i32) -> Result<(), ()> {
+        let mut pending_return_ptr = ptr::null_mut() as *mut ffi::DBusPendingCall;
+        let response = unsafe {
+            ffi::dbus_connection_send_with_reply(self.conn(), super::message::get_message_ptr(&msg),
+                &mut pending_return_ptr, timeout_ms as c_int)
+        };
+        if response == 0 {
+            return Err(());
+        }
+        let function: Box<Box<Fn(Result<Message, Error>)>> = Box::new(Box::new(pending_return));
+        let user_data: *mut c_void = Box::into_raw(function) as *mut _;
+        let trampoline: ffi::DBusPendingCallNotifyFunction = unsafe {
+            mem::transmute(dbus_pending_call_set_notify_trampoline as usize)
+        };
+        let response = unsafe {
+            ffi::dbus_pending_call_set_notify(pending_return_ptr, trampoline, user_data, None)
+        };
+        unsafe { ffi::dbus_pending_call_unref(pending_return_ptr) };
+        if response == 0 {
+            return Err(());
+        }
+        Ok(())
+    }
+
     /// Sends a message over the D-Bus and waits for a reply.
     /// This is usually used for method calls.
     pub fn send_with_reply_and_block(&self, msg: Message, timeout_ms: i32) -> Result<Message, Error> {
@@ -313,3 +339,11 @@ impl fmt::Debug for Connection {
     }
 }
 
+
+unsafe extern "C" fn dbus_pending_call_set_notify_trampoline(pending: *mut ffi::DBusPendingCall, user_data: *mut c_void) {
+    let response = ffi::dbus_pending_call_steal_reply(pending);
+    debug_assert_ne!(response, ptr::null_mut());
+    let message = super::message::message_from_ptr(response, false);
+    let f: &Box<Fn(Result<Message, Error>) + 'static> = &*(user_data as *const _);
+    f(Ok(message));
+}
