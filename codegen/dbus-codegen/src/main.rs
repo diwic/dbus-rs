@@ -62,8 +62,10 @@ fn main() {
         _ => panic!("Invalid methodtype specified"),
     };
 
+    let opts = generate::GenOpts { methodtype: mtype.map(|x| x.into()), dbuscrate: dbuscrate.into() };
+
     let mut stdout = std::io::stdout();
     let h: &mut std::io::Write = &mut stdout;
-    h.write(generate::generate(&s, mtype, dbuscrate).unwrap().as_bytes()).unwrap();
+    h.write(generate::generate(&s, &opts).unwrap().as_bytes()).unwrap();
     h.flush().unwrap();
 }
