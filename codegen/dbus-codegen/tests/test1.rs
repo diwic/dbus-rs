@@ -6,7 +6,8 @@ use std::sync::atomic::*;
 mod generated;
 
 impl generated::OrgFreedesktopDBusIntrospectable for () {
-   fn introspect(&self) -> Result<String, ::dbus::Error> { Ok("I feel so introspected right now".into()) }
+   type Err = dbus::tree::MethodErr;
+   fn introspect(&self) -> Result<String, Self::Err> { Ok("I feel so introspected right now".into()) }
 }
 
 #[test]

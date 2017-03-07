@@ -1,13 +1,15 @@
 
 pub trait OrgFreedesktopDBusProperties {
-    fn get(&self, interfacename: &str, propertyname: &str) -> Result<::dbus::arg::Variant<Box<::dbus::arg::RefArg>>, ::dbus::Error>;
-    fn get_all(&self, interfacename: &str) -> Result<::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>, ::dbus::Error>;
-    fn set(&self, interfacename: &str, propertyname: &str, value: ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>) -> Result<(), ::dbus::Error>;
+    type Err;
+    fn get(&self, interfacename: &str, propertyname: &str) -> Result<::dbus::arg::Variant<Box<::dbus::arg::RefArg>>, Self::Err>;
+    fn get_all(&self, interfacename: &str) -> Result<::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>, Self::Err>;
+    fn set(&self, interfacename: &str, propertyname: &str, value: ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>) -> Result<(), Self::Err>;
 }
 
 impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopDBusProperties for ::dbus::ConnPath<'a, C> {
+    type Err = ::dbus::Error;
 
-    fn get(&self, interfacename: &str, propertyname: &str) -> Result<::dbus::arg::Variant<Box<::dbus::arg::RefArg>>, ::dbus::Error> {
+    fn get(&self, interfacename: &str, propertyname: &str) -> Result<::dbus::arg::Variant<Box<::dbus::arg::RefArg>>, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"Get".into(), |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append(interfacename);
@@ -19,7 +21,7 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopDBusProp
         Ok(value)
     }
 
-    fn get_all(&self, interfacename: &str) -> Result<::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>, ::dbus::Error> {
+    fn get_all(&self, interfacename: &str) -> Result<::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"GetAll".into(), |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append(interfacename);
@@ -30,7 +32,7 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopDBusProp
         Ok(properties)
     }
 
-    fn set(&self, interfacename: &str, propertyname: &str, value: ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>) -> Result<(), ::dbus::Error> {
+    fn set(&self, interfacename: &str, propertyname: &str, value: ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"Set".into(), |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append(interfacename);
@@ -43,7 +45,7 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopDBusProp
 }
 
 pub fn orgfreedesktop_dbus_properties_server<F, T, D>(factory: &::dbus::tree::Factory<::dbus::tree::MTFn<D>, D>, data: D::Interface, f: F) -> ::dbus::tree::Interface<::dbus::tree::MTFn<D>, D>
-where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopDBusProperties, 
+where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopDBusProperties<Err=::dbus::tree::MethodErr>,
     F: 'static + for <'z> Fn(& 'z ::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>) -> & 'z T {
     let i = factory.interface("org.freedesktop.DBus.Properties", data);
     let f = ::std::sync::Arc::new(f);
@@ -99,12 +101,14 @@ where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopDBusProper
 }
 
 pub trait OrgFreedesktopDBusIntrospectable {
-    fn introspect(&self) -> Result<String, ::dbus::Error>;
+    type Err;
+    fn introspect(&self) -> Result<String, Self::Err>;
 }
 
 impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopDBusIntrospectable for ::dbus::ConnPath<'a, C> {
+    type Err = ::dbus::Error;
 
-    fn introspect(&self) -> Result<String, ::dbus::Error> {
+    fn introspect(&self) -> Result<String, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Introspectable".into(), &"Introspect".into(), |_| {
         }));
         try!(m.as_result());
@@ -115,7 +119,7 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopDBusIntr
 }
 
 pub fn orgfreedesktop_dbus_introspectable_server<F, T, D>(factory: &::dbus::tree::Factory<::dbus::tree::MTFn<D>, D>, data: D::Interface, f: F) -> ::dbus::tree::Interface<::dbus::tree::MTFn<D>, D>
-where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopDBusIntrospectable, 
+where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopDBusIntrospectable<Err=::dbus::tree::MethodErr>,
     F: 'static + for <'z> Fn(& 'z ::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>) -> & 'z T {
     let i = factory.interface("org.freedesktop.DBus.Introspectable", data);
     let f = ::std::sync::Arc::new(f);
@@ -134,20 +138,22 @@ where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopDBusIntros
 }
 
 pub trait OrgFreedesktopDBusPeer {
-    fn ping(&self) -> Result<(), ::dbus::Error>;
-    fn get_machine_id(&self) -> Result<String, ::dbus::Error>;
+    type Err;
+    fn ping(&self) -> Result<(), Self::Err>;
+    fn get_machine_id(&self) -> Result<String, Self::Err>;
 }
 
 impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopDBusPeer for ::dbus::ConnPath<'a, C> {
+    type Err = ::dbus::Error;
 
-    fn ping(&self) -> Result<(), ::dbus::Error> {
+    fn ping(&self) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Peer".into(), &"Ping".into(), |_| {
         }));
         try!(m.as_result());
         Ok(())
     }
 
-    fn get_machine_id(&self) -> Result<String, ::dbus::Error> {
+    fn get_machine_id(&self) -> Result<String, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Peer".into(), &"GetMachineId".into(), |_| {
         }));
         try!(m.as_result());
@@ -158,7 +164,7 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopDBusPeer
 }
 
 pub fn orgfreedesktop_dbus_peer_server<F, T, D>(factory: &::dbus::tree::Factory<::dbus::tree::MTFn<D>, D>, data: D::Interface, f: F) -> ::dbus::tree::Interface<::dbus::tree::MTFn<D>, D>
-where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopDBusPeer, 
+where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopDBusPeer<Err=::dbus::tree::MethodErr>,
     F: 'static + for <'z> Fn(& 'z ::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>) -> & 'z T {
     let i = factory.interface("org.freedesktop.DBus.Peer", data);
     let f = ::std::sync::Arc::new(f);
@@ -187,25 +193,27 @@ where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopDBusPeer,
 }
 
 pub trait OrgFreedesktopPolicyKit1Authority {
-    fn enumerate_actions(&self, locale: &str) -> Result<Vec<(String, String, String, String, String, String, u32, u32, u32, ::std::collections::HashMap<String, String>)>, ::dbus::Error>;
-    fn check_authorization(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), actionid: &str, details: ::std::collections::HashMap<&str, &str>, flags: u32, cancellationid: &str) -> Result<(bool, bool, ::std::collections::HashMap<String, String>), ::dbus::Error>;
-    fn cancel_check_authorization(&self, cancellationid: &str) -> Result<(), ::dbus::Error>;
-    fn register_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), locale: &str, objectpath: &str) -> Result<(), ::dbus::Error>;
-    fn register_authentication_agent_with_options(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), locale: &str, objectpath: &str, options: ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) -> Result<(), ::dbus::Error>;
-    fn unregister_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), objectpath: &str) -> Result<(), ::dbus::Error>;
-    fn authentication_agent_response(&self, cookie: &str, identity: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<(), ::dbus::Error>;
-    fn authentication_agent_response2(&self, uid: u32, cookie: &str, identity: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<(), ::dbus::Error>;
-    fn enumerate_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<Vec<(String, String, (String, ::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), u64, u64)>, ::dbus::Error>;
-    fn revoke_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<(), ::dbus::Error>;
-    fn revoke_temporary_authorization_by_id(&self, id: &str) -> Result<(), ::dbus::Error>;
-    fn get_backend_name(&self) -> Result<String, ::dbus::Error>;
-    fn get_backend_version(&self) -> Result<String, ::dbus::Error>;
-    fn get_backend_features(&self) -> Result<u32, ::dbus::Error>;
+    type Err;
+    fn enumerate_actions(&self, locale: &str) -> Result<Vec<(String, String, String, String, String, String, u32, u32, u32, ::std::collections::HashMap<String, String>)>, Self::Err>;
+    fn check_authorization(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), actionid: &str, details: ::std::collections::HashMap<&str, &str>, flags: u32, cancellationid: &str) -> Result<(bool, bool, ::std::collections::HashMap<String, String>), Self::Err>;
+    fn cancel_check_authorization(&self, cancellationid: &str) -> Result<(), Self::Err>;
+    fn register_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), locale: &str, objectpath: &str) -> Result<(), Self::Err>;
+    fn register_authentication_agent_with_options(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), locale: &str, objectpath: &str, options: ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) -> Result<(), Self::Err>;
+    fn unregister_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), objectpath: &str) -> Result<(), Self::Err>;
+    fn authentication_agent_response(&self, cookie: &str, identity: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<(), Self::Err>;
+    fn authentication_agent_response2(&self, uid: u32, cookie: &str, identity: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<(), Self::Err>;
+    fn enumerate_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<Vec<(String, String, (String, ::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), u64, u64)>, Self::Err>;
+    fn revoke_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<(), Self::Err>;
+    fn revoke_temporary_authorization_by_id(&self, id: &str) -> Result<(), Self::Err>;
+    fn get_backend_name(&self) -> Result<String, Self::Err>;
+    fn get_backend_version(&self) -> Result<String, Self::Err>;
+    fn get_backend_features(&self) -> Result<u32, Self::Err>;
 }
 
 impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKit1Authority for ::dbus::ConnPath<'a, C> {
+    type Err = ::dbus::Error;
 
-    fn enumerate_actions(&self, locale: &str) -> Result<Vec<(String, String, String, String, String, String, u32, u32, u32, ::std::collections::HashMap<String, String>)>, ::dbus::Error> {
+    fn enumerate_actions(&self, locale: &str) -> Result<Vec<(String, String, String, String, String, String, u32, u32, u32, ::std::collections::HashMap<String, String>)>, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"EnumerateActions".into(), |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append(locale);
@@ -216,7 +224,7 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKi
         Ok(actiondescriptions)
     }
 
-    fn check_authorization(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), actionid: &str, details: ::std::collections::HashMap<&str, &str>, flags: u32, cancellationid: &str) -> Result<(bool, bool, ::std::collections::HashMap<String, String>), ::dbus::Error> {
+    fn check_authorization(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), actionid: &str, details: ::std::collections::HashMap<&str, &str>, flags: u32, cancellationid: &str) -> Result<(bool, bool, ::std::collections::HashMap<String, String>), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"CheckAuthorization".into(), |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append(subject);
@@ -231,7 +239,7 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKi
         Ok(result)
     }
 
-    fn cancel_check_authorization(&self, cancellationid: &str) -> Result<(), ::dbus::Error> {
+    fn cancel_check_authorization(&self, cancellationid: &str) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"CancelCheckAuthorization".into(), |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append(cancellationid);
@@ -240,7 +248,7 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKi
         Ok(())
     }
 
-    fn register_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), locale: &str, objectpath: &str) -> Result<(), ::dbus::Error> {
+    fn register_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), locale: &str, objectpath: &str) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"RegisterAuthenticationAgent".into(), |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append(subject);
@@ -251,7 +259,7 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKi
         Ok(())
     }
 
-    fn register_authentication_agent_with_options(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), locale: &str, objectpath: &str, options: ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) -> Result<(), ::dbus::Error> {
+    fn register_authentication_agent_with_options(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), locale: &str, objectpath: &str, options: ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"RegisterAuthenticationAgentWithOptions".into(), |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append(subject);
@@ -263,7 +271,7 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKi
         Ok(())
     }
 
-    fn unregister_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), objectpath: &str) -> Result<(), ::dbus::Error> {
+    fn unregister_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), objectpath: &str) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"UnregisterAuthenticationAgent".into(), |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append(subject);
@@ -273,7 +281,7 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKi
         Ok(())
     }
 
-    fn authentication_agent_response(&self, cookie: &str, identity: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<(), ::dbus::Error> {
+    fn authentication_agent_response(&self, cookie: &str, identity: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"AuthenticationAgentResponse".into(), |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append(cookie);
@@ -283,7 +291,7 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKi
         Ok(())
     }
 
-    fn authentication_agent_response2(&self, uid: u32, cookie: &str, identity: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<(), ::dbus::Error> {
+    fn authentication_agent_response2(&self, uid: u32, cookie: &str, identity: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"AuthenticationAgentResponse2".into(), |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append(uid);
@@ -294,7 +302,7 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKi
         Ok(())
     }
 
-    fn enumerate_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<Vec<(String, String, (String, ::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), u64, u64)>, ::dbus::Error> {
+    fn enumerate_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<Vec<(String, String, (String, ::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>), u64, u64)>, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"EnumerateTemporaryAuthorizations".into(), |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append(subject);
@@ -305,7 +313,7 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKi
         Ok(temporaryauthorizations)
     }
 
-    fn revoke_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<(), ::dbus::Error> {
+    fn revoke_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>)) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"RevokeTemporaryAuthorizations".into(), |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append(subject);
@@ -314,7 +322,7 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKi
         Ok(())
     }
 
-    fn revoke_temporary_authorization_by_id(&self, id: &str) -> Result<(), ::dbus::Error> {
+    fn revoke_temporary_authorization_by_id(&self, id: &str) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"RevokeTemporaryAuthorizationById".into(), |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append(id);
@@ -323,36 +331,39 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopPolicyKi
         Ok(())
     }
 
-    fn get_backend_name(&self) -> Result<String, ::dbus::Error> {
-        let mut m = try!(self.method_call_with_args(&"Org.Freedesktop.DBus.Properties".into(), &"Get".into(), move |msg| {
+    fn get_backend_name(&self) -> Result<String, Self::Err> {
+        let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"Get".into(), move |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append("org.freedesktop.PolicyKit1.Authority");
             i.append("BackendName");
         }));
-        Ok(try!(try!(m.as_result()).read1()))
+        let v: ::dbus::arg::Variant<_> = try!(try!(m.as_result()).read1());
+        Ok(v.0)
     }
 
-    fn get_backend_version(&self) -> Result<String, ::dbus::Error> {
-        let mut m = try!(self.method_call_with_args(&"Org.Freedesktop.DBus.Properties".into(), &"Get".into(), move |msg| {
+    fn get_backend_version(&self) -> Result<String, Self::Err> {
+        let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"Get".into(), move |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append("org.freedesktop.PolicyKit1.Authority");
             i.append("BackendVersion");
         }));
-        Ok(try!(try!(m.as_result()).read1()))
+        let v: ::dbus::arg::Variant<_> = try!(try!(m.as_result()).read1());
+        Ok(v.0)
     }
 
-    fn get_backend_features(&self) -> Result<u32, ::dbus::Error> {
-        let mut m = try!(self.method_call_with_args(&"Org.Freedesktop.DBus.Properties".into(), &"Get".into(), move |msg| {
+    fn get_backend_features(&self) -> Result<u32, Self::Err> {
+        let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"Get".into(), move |msg| {
             let mut i = ::dbus::arg::IterAppend::new(msg);
             i.append("org.freedesktop.PolicyKit1.Authority");
             i.append("BackendFeatures");
         }));
-        Ok(try!(try!(m.as_result()).read1()))
+        let v: ::dbus::arg::Variant<_> = try!(try!(m.as_result()).read1());
+        Ok(v.0)
     }
 }
 
 pub fn orgfreedesktop_policy_kit1_authority_server<F, T, D>(factory: &::dbus::tree::Factory<::dbus::tree::MTFn<D>, D>, data: D::Interface, f: F) -> ::dbus::tree::Interface<::dbus::tree::MTFn<D>, D>
-where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1Authority, 
+where D: ::dbus::tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1Authority<Err=::dbus::tree::MethodErr>,
     D::Property: Default,    F: 'static + for <'z> Fn(& 'z ::dbus::tree::MethodInfo<::dbus::tree::MTFn<D>, D>) -> & 'z T {
     let i = factory.interface("org.freedesktop.PolicyKit1.Authority", data);
     let f = ::std::sync::Arc::new(f);

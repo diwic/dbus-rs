@@ -150,12 +150,12 @@ fn write_method_decl(s: &mut String, m: &Method) -> Result<(), Box<error::Error>
         *s += &format!(", {}: {}", a.varname(), t);
     }
     match m.oargs.len() {
-        0 => { *s += ") -> Result<(), ::dbus::Error>"; }
-        1 => { *s += &format!(") -> Result<{}, ::dbus::Error>", try!(m.oargs[0].typename())); }
+        0 => { *s += ") -> Result<(), Self::Err>"; }
+        1 => { *s += &format!(") -> Result<{}, Self::Err>", try!(m.oargs[0].typename())); }
         _ => {
             *s += &format!(") -> Result<({}", try!(m.oargs[0].typename()));
             for z in m.oargs.iter().skip(1) { *s += &format!(", {}", try!(z.typename())); }
-            *s += "), ::dbus::Error>";
+            *s += "), Self::Err>";
         }
     }
     Ok(())
@@ -163,10 +163,10 @@ fn write_method_decl(s: &mut String, m: &Method) -> Result<(), Box<error::Error>
 
 fn write_prop_decl(s: &mut String, p: &Prop, set: bool) -> Result<(), Box<error::Error>> {
     if set {
-        *s += &format!("    fn set_{}(&self, value: {}) -> Result<(), ::dbus::Error>",
+        *s += &format!("    fn set_{}(&self, value: {}) -> Result<(), Self::Err>",
             make_snake(&p.name), try!(make_type(&p.typ, true)));
     } else {
-        *s += &format!("    fn get_{}(&self) -> Result<{}, ::dbus::Error>",
+        *s += &format!("    fn get_{}(&self) -> Result<{}, Self::Err>",
             make_snake(&p.name), try!(make_type(&p.typ, true)));
     };
     Ok(())
@@ -176,6 +176,7 @@ fn write_intf(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
     
     let iname = make_camel(&i.name);  
     *s += &format!("\npub trait {} {{\n", iname);
+    *s += "    type Err;\n";
     for m in &i.methods {
         try!(write_method_decl(s, &m));
         *s += ";\n";
@@ -197,6 +198,7 @@ fn write_intf(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
 fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
     *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> {} for ::dbus::ConnPath<'a, C> {{\n",
         make_camel(&i.name));
+    *s += "    type Err = ::dbus::Error;\n";
     for m in &i.methods {
         *s += "\n";
         try!(write_method_decl(s, &m));
@@ -271,7 +273,7 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
 fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str) -> Result<(), Box<error::Error>> {
     *s += &format!("\npub fn {}_server<F, T, D>(factory: &::dbus::tree::Factory<::dbus::tree::{}<D>, D>, data: D::Interface, f: F) -> ::dbus::tree::Interface<::dbus::tree::{}<D>, D>\n",
         make_snake(&i.name), mtype, mtype);
-    *s += &format!("where D: ::dbus::tree::DataType, D::Method: Default, T: {}, \n", make_camel(&i.name));
+    *s += &format!("where D: ::dbus::tree::DataType, D::Method: Default, T: {}<Err=::dbus::tree::MethodErr>,\n", make_camel(&i.name));
     if i.props.len() > 0 {
         *s += "    D::Property: Default,";
     };

@@ -6,18 +6,19 @@ use std::sync::atomic::*;
 mod generated;
 
 impl generated::OrgFreedesktopDBusProperties for () {
+    type Err = ::dbus::tree::MethodErr;
 
-    fn get(&self, interfacename: &str, propertyname: &str) -> Result<::dbus::arg::Variant<Box<::dbus::arg::RefArg>>, ::dbus::Error> {
+    fn get(&self, interfacename: &str, propertyname: &str) -> Result<::dbus::arg::Variant<Box<::dbus::arg::RefArg>>, Self::Err> {
         assert_eq!(interfacename, "Interface.Name");
         assert_eq!(propertyname, "Property.Name");
         Ok(::dbus::arg::Variant(Box::new(5u8)))
     }
 
-    fn get_all(&self, _interfacename: &str) -> Result<::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>, ::dbus::Error> { unimplemented!() }
+    fn get_all(&self, _interfacename: &str) -> Result<::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>, Self::Err> { unimplemented!() }
 
-    fn set(&self, _interfacename: &str, _propertyname: &str, value: ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>) -> Result<(), ::dbus::Error> {
+    fn set(&self, _interfacename: &str, _propertyname: &str, value: ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>) -> Result<(), Self::Err> {
         assert_eq!((&value as &dbus::arg::RefArg).as_str(), Some("Hello")); 
-        Err(::dbus::Error::new_custom("A.B.C", "Error.Message"))
+        Err(("A.B.C", "Error.Message").into())
     }
 
 }
