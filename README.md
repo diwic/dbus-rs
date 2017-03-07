@@ -58,26 +58,28 @@ You can try a similar example (which has more comments) by running:
 
     cargo run --example server
 
+Or a more advanced server example:
+
+    cargo run --example adv_server
 
 Properties
 ----------
 
-This example gets the current version of the Policykit backend.
-
-```rust
-let c = Connection::get_private(BusType::System).unwrap();
-let p = Props::new(&c, "org.freedesktop.PolicyKit1", "/org/freedesktop/PolicyKit1/Authority",
-    "org.freedesktop.PolicyKit1.Authority", 10000);
-let v = p.get("BackendVersion").unwrap();
-```
-
-You can try a this example by running:
+There are two examples of getting properties in the examples directory, one
+which uses the newer `arg` style and one that uses the older `MessageItem` style. See:
 
     cargo run --example properties
+    cargo run --example properties_msgitem
 
 For an extended example, which also uses non-panicking error handling, see
 
     examples/rtkit.rs
+
+
+Code generation
+---------------
+
+In the codegen directory, you'll find a code generation utility that's still in alpha, but I'd appreciate testing and feedback. Given a destination and a path, the utility will generate Rust traits, and their implementations, for all interfaces found on that path.
 
 
 Requirements
