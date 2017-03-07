@@ -85,9 +85,9 @@ fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool
         Ok(ArgType::UInt64) => "u64".into(),
         Ok(ArgType::Double) => "f64".into(),
         Ok(ArgType::String) => if out { "String".into() } else { "&str".into() },
-        Ok(ArgType::ObjectPath) => if out { "::dbus::Path<'static>" } else { "::dbus::Path" }.into(),
-        Ok(ArgType::Signature) => if out { "::dbus::Signature<'static>" } else { "::dbus::Signature" }.into(),
-        Ok(ArgType::Variant) => "::dbus::arg::Variant<Box<::dbus::arg::RefArg>>".into(),
+        Ok(ArgType::ObjectPath) => if out { "dbus::Path<'static>" } else { "dbus::Path" }.into(),
+        Ok(ArgType::Signature) => if out { "dbus::Signature<'static>" } else { "dbus::Signature" }.into(),
+        Ok(ArgType::Variant) => "arg::Variant<Box<arg::RefArg>>".into(),
         Ok(ArgType::Array) => if i.peek() == Some(&'{') {
             i.next();
             let n1 = try!(xml_to_rust_type(i, out));
@@ -196,9 +196,9 @@ fn write_intf(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
 }
 
 fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
-    *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> {} for ::dbus::ConnPath<'a, C> {{\n",
+    *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> {} for dbus::ConnPath<'a, C> {{\n",
         make_camel(&i.name));
-    *s += "    type Err = ::dbus::Error;\n";
+    *s += "    type Err = dbus::Error;\n";
     for m in &i.methods {
         *s += "\n";
         try!(write_method_decl(s, &m));
@@ -206,7 +206,7 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
         *s += &format!("        let mut m = try!(self.method_call_with_args(&\"{}\".into(), &\"{}\".into(), |{}| {{\n",
             i.name, m.name, if m.iargs.len() > 0 { "msg" } else { "_" } );
         if m.iargs.len() > 0 {
-                *s += "            let mut i = ::dbus::arg::IterAppend::new(msg);\n";
+                *s += "            let mut i = arg::IterAppend::new(msg);\n";
         }
         for a in m.iargs.iter() {
                 *s += &format!("            i.append({});\n", a.varname());
@@ -235,11 +235,11 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
         try!(write_prop_decl(s, &p, false));
         *s += " {\n";
         *s += "        let mut m = try!(self.method_call_with_args(&\"org.freedesktop.DBus.Properties\".into(), &\"Get\".into(), move |msg| {\n";
-        *s += "            let mut i = ::dbus::arg::IterAppend::new(msg);\n";
+        *s += "            let mut i = arg::IterAppend::new(msg);\n";
         *s += &format!("            i.append(\"{}\");\n", i.name);
         *s += &format!("            i.append(\"{}\");\n", p.name);
         *s += "        }));\n";
-        *s += "        let v: ::dbus::arg::Variant<_> = try!(try!(m.as_result()).read1());\n";
+        *s += "        let v: arg::Variant<_> = try!(try!(m.as_result()).read1());\n";
         *s += "        Ok(v.0)\n";
         *s += "    }\n";
     }
@@ -249,10 +249,10 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
         try!(write_prop_decl(s, &p, true));
         *s += " {\n";
         *s += "        let mut m = try!(self.method_call_with_args(&\"org.freedesktop.DBus.Properties\".into(), &\"Set\".into(), move |msg| {\n";
-        *s += "            let mut i = ::dbus::arg::IterAppend::new(msg);\n";
+        *s += "            let mut i = arg::IterAppend::new(msg);\n";
         *s += &format!("            i.append(\"{}\");\n", i.name);
         *s += &format!("            i.append(\"{}\");\n", p.name);
-        *s += "            i.append(::dbus::arg::Variant(value));\n";
+        *s += "            i.append(arg::Variant(value));\n";
         *s += "        }));\n";
         *s += "        m.as_result().map(|_| ())\n";
         *s += "    }\n";
@@ -271,18 +271,18 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
 // 4) Something reachable from minfo?
 
 fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str) -> Result<(), Box<error::Error>> {
-    *s += &format!("\npub fn {}_server<F, T, D>(factory: &::dbus::tree::Factory<::dbus::tree::{}<D>, D>, data: D::Interface, f: F) -> ::dbus::tree::Interface<::dbus::tree::{}<D>, D>\n",
+    *s += &format!("\npub fn {}_server<F, T, D>(factory: &tree::Factory<tree::{}<D>, D>, data: D::Interface, f: F) -> tree::Interface<tree::{}<D>, D>\n",
         make_snake(&i.name), mtype, mtype);
-    *s += &format!("where D: ::dbus::tree::DataType, D::Method: Default, T: {}<Err=::dbus::tree::MethodErr>,\n", make_camel(&i.name));
+    *s += &format!("where D: tree::DataType, D::Method: Default, T: {}<Err=tree::MethodErr>,\n", make_camel(&i.name));
     if i.props.len() > 0 {
         *s += "    D::Property: Default,";
     };
-    *s += &format!("    F: 'static + for <'z> Fn(& 'z ::dbus::tree::MethodInfo<::dbus::tree::{}<D>, D>) -> & 'z T {{\n", mtype);
+    *s += &format!("    F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::{}<D>, D>) -> & 'z T {{\n", mtype);
     *s += &format!("    let i = factory.interface(\"{}\", data);\n", i.name);
     *s += "    let f = ::std::sync::Arc::new(f);";
     for m in &i.methods {
         *s += "\n    let fclone = f.clone();\n";    
-        *s += &format!("    let h = move |minfo: &::dbus::tree::MethodInfo<::dbus::tree::{}<D>, D>| {{\n", mtype);
+        *s += &format!("    let h = move |minfo: &tree::MethodInfo<tree::{}<D>, D>| {{\n", mtype);
         if m.iargs.len() > 0 {
             *s += "        let mut i = minfo.msg.iter_init();\n";
         }
@@ -315,7 +315,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str) -> Result<(), Box<erro
     }
     for p in &i.props {
         *s += &format!("\n    let p = factory.property::<{}, _>(\"{}\", Default::default());\n", try!(make_type(&p.typ, false)), p.name);
-        *s += &format!("    let p = p.access(::dbus::tree::Access::{});\n", match &*p.access {
+        *s += &format!("    let p = p.access(tree::Access::{});\n", match &*p.access {
             "read" => "Read",
             "readwrite" => "ReadWrite",
             "write" => "Write",
@@ -346,11 +346,20 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str) -> Result<(), Box<erro
     Ok(())
 }
 
-pub fn generate(xmldata: &str, mtype: Option<&str>) -> Result<String, Box<error::Error>> {
+fn write_module_header(s: &mut String, mtype: Option<&str>, dbuscrate: &str) {
+    *s += "// This code was autogenerated with dbus-codegen-rust, see https://github.com/diwic/dbus-rs\n\n";
+    if mtype.is_some() { *s += "#![allow(dead_code)]\n" }
+    *s += &format!("use {} as dbus;\n", dbuscrate);
+    *s += &format!("use {}::arg;\n", dbuscrate); 
+    if mtype.is_some() { *s += &format!("use {}::tree;\n", dbuscrate) }
+}
+
+pub fn generate(xmldata: &str, mtype: Option<&str>, dbuscrate: &str) -> Result<String, Box<error::Error>> {
     use xml::EventReader;
     use xml::reader::XmlEvent;
 
     let mut s = String::new();
+    write_module_header(&mut s, mtype, dbuscrate);
     let mut curintf = None;
     let mut curm = None;
     let mut cursig = None;
@@ -685,14 +694,14 @@ static FROM_POLICYKIT: &'static str = r#"
 
     #[test]
     fn from_dbus() {
-        let s = generate(FROM_DBUS, Some("MTSync")).unwrap();
+        let s = generate(FROM_DBUS, Some("MTSync"), "dbus").unwrap();
         println!("{}", s);
         //assert_eq!(s, "fdjsf");
     }
 
     #[test]
     fn from_policykit() {
-        let s = generate(FROM_POLICYKIT, Some("MTFn")).unwrap();
+        let s = generate(FROM_POLICYKIT, Some("MTFn"), "dbus").unwrap();
         println!("{}", s);
         let mut f = ::std::fs::File::create("./tests/generated/mod.rs").unwrap();
         (&mut f as &mut ::std::io::Write).write_all(s.as_bytes()).unwrap();

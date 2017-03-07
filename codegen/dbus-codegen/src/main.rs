@@ -34,6 +34,8 @@ fn main() {
              .help("Connects to system bus, if not specified, the session bus will be used. (Ignored if destination is not specified.)"))
         .arg(clap::Arg::with_name("methodtype").short("m").long("methodtype").takes_value(true).value_name("Fn")
              .help("Type of server method; valid values are: 'Fn', 'FnMut', 'Sync', and 'None'. Defaults to 'Fn'."))
+        .arg(clap::Arg::with_name("dbuscrate").long("dbuscrate").takes_value(true).value_name("dbus")
+             .help("Name of dbus crate, defaults to 'dbus'."))
         .get_matches();
 
     let s = 
@@ -49,6 +51,8 @@ fn main() {
         s
     };
 
+    let dbuscrate = matches.value_of("dbuscrate").unwrap_or("dbus");
+
     let mtype = matches.value_of("methodtype").map(|s| s.to_lowercase());
     let mtype = match mtype.as_ref().map(|s| &**s) {
         None | Some("fn") => Some("MTFn"),
@@ -60,6 +64,6 @@ fn main() {
 
     let mut stdout = std::io::stdout();
     let h: &mut std::io::Write = &mut stdout;
-    h.write(generate::generate(&s, mtype).unwrap().as_bytes()).unwrap();
+    h.write(generate::generate(&s, mtype, dbuscrate).unwrap().as_bytes()).unwrap();
     h.flush().unwrap();
 }
