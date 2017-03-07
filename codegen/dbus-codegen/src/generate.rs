@@ -32,7 +32,8 @@ struct Signal {
 }
 
 struct Intf {
-    name: String,
+    origname: String,
+    shortname: String,
     methods: Vec<Method>,
     props: Vec<Prop>,
     signals: Vec<Signal>,
@@ -45,10 +46,12 @@ pub struct GenOpts {
     pub dbuscrate: String,
     // MethodType for server impl, set to none for client impl only
     pub methodtype: Option<String>,
+    // Removes a prefix from interface names
+    pub skipprefix: Option<String>,
 }
 
 impl ::std::default::Default for GenOpts {
-    fn default() -> Self { GenOpts { dbuscrate: "dbus".into(), methodtype: Some("MTFn".into()) }}
+    fn default() -> Self { GenOpts { dbuscrate: "dbus".into(), methodtype: Some("MTFn".into()), skipprefix: None }}
 }
 
 fn make_camel(s: &str) -> String {
@@ -187,7 +190,7 @@ fn write_prop_decl(s: &mut String, p: &Prop, set: bool) -> Result<(), Box<error:
 
 fn write_intf(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
     
-    let iname = make_camel(&i.name);  
+    let iname = make_camel(&i.shortname);  
     *s += &format!("\npub trait {} {{\n", iname);
     *s += "    type Err;\n";
     for m in &i.methods {
@@ -210,14 +213,14 @@ fn write_intf(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
 
 fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
     *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> {} for dbus::ConnPath<'a, C> {{\n",
-        make_camel(&i.name));
+        make_camel(&i.shortname));
     *s += "    type Err = dbus::Error;\n";
     for m in &i.methods {
         *s += "\n";
         try!(write_method_decl(s, &m));
         *s += " {\n";
         *s += &format!("        let mut m = try!(self.method_call_with_args(&\"{}\".into(), &\"{}\".into(), |{}| {{\n",
-            i.name, m.name, if m.iargs.len() > 0 { "msg" } else { "_" } );
+            i.origname, m.name, if m.iargs.len() > 0 { "msg" } else { "_" } );
         if m.iargs.len() > 0 {
                 *s += "            let mut i = arg::IterAppend::new(msg);\n";
         }
@@ -249,7 +252,7 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
         *s += " {\n";
         *s += "        let mut m = try!(self.method_call_with_args(&\"org.freedesktop.DBus.Properties\".into(), &\"Get\".into(), move |msg| {\n";
         *s += "            let mut i = arg::IterAppend::new(msg);\n";
-        *s += &format!("            i.append(\"{}\");\n", i.name);
+        *s += &format!("            i.append(\"{}\");\n", i.origname);
         *s += &format!("            i.append(\"{}\");\n", p.name);
         *s += "        }));\n";
         *s += "        let v: arg::Variant<_> = try!(try!(m.as_result()).read1());\n";
@@ -263,7 +266,7 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
         *s += " {\n";
         *s += "        let mut m = try!(self.method_call_with_args(&\"org.freedesktop.DBus.Properties\".into(), &\"Set\".into(), move |msg| {\n";
         *s += "            let mut i = arg::IterAppend::new(msg);\n";
-        *s += &format!("            i.append(\"{}\");\n", i.name);
+        *s += &format!("            i.append(\"{}\");\n", i.origname);
         *s += &format!("            i.append(\"{}\");\n", p.name);
         *s += "            i.append(arg::Variant(value));\n";
         *s += "        }));\n";
@@ -285,13 +288,13 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
 
 fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str) -> Result<(), Box<error::Error>> {
     *s += &format!("\npub fn {}_server<F, T, D>(factory: &tree::Factory<tree::{}<D>, D>, data: D::Interface, f: F) -> tree::Interface<tree::{}<D>, D>\n",
-        make_snake(&i.name), mtype, mtype);
-    *s += &format!("where D: tree::DataType, D::Method: Default, T: {}<Err=tree::MethodErr>,\n", make_camel(&i.name));
+        make_snake(&i.shortname), mtype, mtype);
+    *s += &format!("where D: tree::DataType, D::Method: Default, T: {}<Err=tree::MethodErr>,\n", make_camel(&i.shortname));
     if i.props.len() > 0 {
         *s += "    D::Property: Default,";
     };
     *s += &format!("    F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::{}<D>, D>) -> & 'z T {{\n", mtype);
-    *s += &format!("    let i = factory.interface(\"{}\", data);\n", i.name);
+    *s += &format!("    let i = factory.interface(\"{}\", data);\n", i.origname);
     *s += "    let f = ::std::sync::Arc::new(f);";
     for m in &i.methods {
         *s += "\n    let fclone = f.clone();\n";    
@@ -383,7 +386,12 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<error::Erro
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "interface" => {
                 if curm.is_some() { try!(Err("Start of Interface inside method")) };
                 if curintf.is_some() { try!(Err("Start of Interface inside interface")) };
-                curintf = Some(Intf { name: try!(find_attr(attributes, "name")).into(), 
+                let n = try!(find_attr(attributes, "name"));
+                let mut n2 = n;
+                if let &Some(ref p) = &opts.skipprefix {
+                    if n.len() > p.len() && n.starts_with(p) { n2 = &n[p.len()..]; }
+                }
+                curintf = Some(Intf { origname: n.into(), shortname: n2.into(), 
                     methods: Vec::new(), signals: Vec::new(), props: Vec::new() });
             }
             XmlEvent::EndElement { ref name } if &name.local_name == "interface" => {
@@ -400,7 +408,8 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<error::Erro
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "method" => {
                 if curm.is_some() { try!(Err("Start of method inside method")) };
                 if curintf.is_none() { try!(Err("Start of method outside interface")) };
-                curm = Some(Method { name: try!(find_attr(attributes, "name")).into(), iargs: Vec::new(), oargs: Vec::new() });
+                curm = Some(Method { name: try!(find_attr(attributes, "name")).into(),
+                    iargs: Vec::new(), oargs: Vec::new() });
             }
             XmlEvent::EndElement { ref name } if &name.local_name == "method" => {
                 if curm.is_none() { try!(Err("End of method outside method")) };

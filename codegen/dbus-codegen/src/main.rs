@@ -36,6 +36,8 @@ fn main() {
              .help("Type of server method; valid values are: 'Fn', 'FnMut', 'Sync', and 'None'. Defaults to 'Fn'."))
         .arg(clap::Arg::with_name("dbuscrate").long("dbuscrate").takes_value(true).value_name("dbus")
              .help("Name of dbus crate, defaults to 'dbus'."))
+        .arg(clap::Arg::with_name("skipprefix").short("i").long("skipprefix").takes_value(true).value_name("PREFIX")
+             .help("If present, skips a specific prefix for interface names, e g 'org.freedesktop.DBus.'."))  
         .get_matches();
 
     let s = 
@@ -62,7 +64,8 @@ fn main() {
         _ => panic!("Invalid methodtype specified"),
     };
 
-    let opts = generate::GenOpts { methodtype: mtype.map(|x| x.into()), dbuscrate: dbuscrate.into() };
+    let opts = generate::GenOpts { methodtype: mtype.map(|x| x.into()), dbuscrate: dbuscrate.into(),
+        skipprefix: matches.value_of("skipprefix").map(|x| x.into()) };
 
     let mut stdout = std::io::stdout();
     let h: &mut std::io::Write = &mut stdout;
