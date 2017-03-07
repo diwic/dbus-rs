@@ -232,12 +232,13 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
         *s += "\n";
         try!(write_prop_decl(s, &p, false));
         *s += " {\n";
-        *s += "        let mut m = try!(self.method_call_with_args(&\"Org.Freedesktop.DBus.Properties\".into(), &\"Get\".into(), move |msg| {\n";
+        *s += "        let mut m = try!(self.method_call_with_args(&\"org.freedesktop.DBus.Properties\".into(), &\"Get\".into(), move |msg| {\n";
         *s += "            let mut i = ::dbus::arg::IterAppend::new(msg);\n";
         *s += &format!("            i.append(\"{}\");\n", i.name);
         *s += &format!("            i.append(\"{}\");\n", p.name);
         *s += "        }));\n";
-        *s += "        Ok(try!(try!(m.as_result()).read1()))\n";
+        *s += "        let v: ::dbus::arg::Variant<_> = try!(try!(m.as_result()).read1());\n";
+        *s += "        Ok(v.0)\n";
         *s += "    }\n";
     }
 
@@ -245,13 +246,13 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
         *s += "\n";
         try!(write_prop_decl(s, &p, true));
         *s += " {\n";
-        *s += "        let mut m = try!(self.method_call_with_args(&\"Org.Freedesktop.DBus.Properties\".into(), &\"Set\".into(), move |msg| {\n";
+        *s += "        let mut m = try!(self.method_call_with_args(&\"org.freedesktop.DBus.Properties\".into(), &\"Set\".into(), move |msg| {\n";
         *s += "            let mut i = ::dbus::arg::IterAppend::new(msg);\n";
         *s += &format!("            i.append(\"{}\");\n", i.name);
         *s += &format!("            i.append(\"{}\");\n", p.name);
-        *s += "            i.append(value);\n";
+        *s += "            i.append(::dbus::arg::Variant(value));\n";
         *s += "        }));\n";
-        *s += "        m.as_result()\n";
+        *s += "        m.as_result().map(|_| ())\n";
         *s += "    }\n";
     }
 
