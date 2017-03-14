@@ -143,7 +143,6 @@ pub struct DBusObjectPathVTable {
     pub dbus_internal_pad4: Option<extern fn()>,
 }
 
-#[link(name = "dbus-1")]
 extern "C" {
     pub fn dbus_bus_get_private(t: DBusBusType, error: *mut DBusError) -> *mut DBusConnection;
     pub fn dbus_bus_get_unique_name(conn: *mut DBusConnection) -> *const c_char;
