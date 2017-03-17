@@ -19,7 +19,7 @@ pub use ffi::DBusMessageType as MessageType;
 pub use ffi::DBusWatchEvent as WatchEvent;
 
 pub use message::{Message, MessageItem, FromMessageItem, OwnedFd, ArrayError, ConnPath};
-pub use connection::{Connection, ConnectionItems, ConnectionItem};
+pub use connection::{Connection, ConnectionItems, ConnectionItem, MsgHandler, MsgHandlerResult};
 pub use prop::PropHandler;
 pub use prop::Props;
 pub use watch::Watch;

@@ -63,5 +63,5 @@ fn main() {
     tree.set_registered(&c, true).unwrap();
 
     // ...and serve other peers forever.
-    for _ in tree.run(&c, c.iter(1000)) {}
+    c.iter(1000).with(tree).count();
 }

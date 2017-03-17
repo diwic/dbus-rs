@@ -40,6 +40,27 @@ pub enum ConnectionItem {
 pub struct ConnectionItems<'a> {
     c: &'a Connection,
     timeout_ms: Option<i32>,
+    handlers: Vec<Box<MsgHandler + 'a>>,
+}
+
+impl<'a> ConnectionItems<'a> {
+    pub fn with<H: MsgHandler + 'a>(mut self, h: H) -> Self {
+        self.handlers.push(Box::new(h)); self
+    }
+
+    // Returns true if processed, false if not
+    fn process_handlers(&mut self, ci: &ConnectionItem) -> bool {
+        let mut i = 0;
+        while i < self.handlers.len() {
+            if let Some(r) = self.handlers[i].handle_ci(ci) {
+                for msg in r.reply.into_iter() { self.c.send(msg).unwrap(); }
+                if r.done { self.handlers.remove(i); i -= 1; }
+                if r.handled { return true; }
+            }
+            i += 1;
+        }
+        false
+    }
 }
 
 impl<'a> Iterator for ConnectionItems<'a> {
@@ -47,7 +68,9 @@ impl<'a> Iterator for ConnectionItems<'a> {
     fn next(&mut self) -> Option<ConnectionItem> {
         loop {
             let i = self.c.i.pending_items.borrow_mut().pop_front();
-            if i.is_some() { return i; }
+            if let Some(ci) = i {
+                if !self.process_handlers(&ci) { return Some(ci); }
+            }
 
             match self.timeout_ms {
                 Some(t) => {
@@ -188,6 +211,7 @@ impl Connection {
         ConnectionItems {
             c: self,
             timeout_ms: Some(timeout_ms),
+            handlers: Vec::new(),
         }
     }
 
@@ -287,7 +311,7 @@ impl Connection {
     /// See the `Watch` struct for an example.
     pub fn watch_handle(&self, fd: RawFd, flags: c_uint) -> ConnectionItems {
         self.i.watches.as_ref().unwrap().watch_handle(fd, flags);
-        ConnectionItems { c: self, timeout_ms: None }
+        ConnectionItems { c: self, timeout_ms: None, handlers: Vec::new() }
     }
 
 
@@ -313,3 +337,28 @@ impl fmt::Debug for Connection {
     }
 }
 
+/// A trait for handling incoming messages. To use in combination with `ConnectionItems`.
+pub trait MsgHandler {
+    /// The default handle_ci function calls handle_msg, so implement the one that fits you better.
+    fn handle_ci(&mut self, ci: &ConnectionItem) -> Option<MsgHandlerResult> {
+        match *ci {
+            ConnectionItem::MethodReturn(ref msg) => self.handle_msg(msg),
+            ConnectionItem::Signal(ref msg) => self.handle_msg(msg),
+            ConnectionItem::MethodCall(ref msg) => self.handle_msg(msg),
+            ConnectionItem::WatchFd(_) => None,
+            ConnectionItem::Nothing => None,
+        }
+    }
+    fn handle_msg(&mut self, _msg: &Message) -> Option<MsgHandlerResult> { None }
+}
+
+/// The result from MsgHandler::handle.
+#[derive(Debug, Default)]
+pub struct MsgHandlerResult {
+    /// Indicates that the message has been dealt with and should not be processed further.
+    pub handled: bool,
+    /// Indicates that this MsgHandler no longer wants to receive messages and can be removed.
+    pub done: bool,
+    /// Messages to send (e g, a reply to a method call)
+    pub reply: Vec<Message>,
+}
