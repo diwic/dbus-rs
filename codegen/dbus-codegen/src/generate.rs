@@ -81,7 +81,10 @@ fn make_snake(s: &str) -> String {
                   lcase = false;
                   r.push(c.to_lowercase().next().unwrap());
              }
-             _ => { lcase = true; }
+             _ => {
+                  if lcase { r.push('_'); }
+                  lcase = false;
+             }
         }
     }
     r

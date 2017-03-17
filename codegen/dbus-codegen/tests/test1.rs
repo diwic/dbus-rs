@@ -13,7 +13,7 @@ impl generated::OrgFreedesktopDBusIntrospectable for () {
 #[test]
 fn test_main() {
     let f = dbus::tree::Factory::new_fn::<()>();
-    let i1 = generated::orgfreedesktop_dbus_introspectable_server(&f, (), |minfo| minfo.path.get_data());
+    let i1 = generated::org_freedesktop_dbus_introspectable_server(&f, (), |minfo| minfo.path.get_data());
     let t = f.tree(()).add(f.object_path("/test", ()).add(i1));
     let c = dbus::Connection::get_private(dbus::BusType::Session).unwrap();
     t.set_registered(&c, true).unwrap();

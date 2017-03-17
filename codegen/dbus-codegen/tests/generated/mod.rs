@@ -7,19 +7,19 @@ use dbus::tree;
 
 pub trait OrgFreedesktopDBusProperties {
     type Err;
-    fn get(&self, interfacename: &str, propertyname: &str) -> Result<arg::Variant<Box<arg::RefArg>>, Self::Err>;
-    fn get_all(&self, interfacename: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>, Self::Err>;
-    fn set(&self, interfacename: &str, propertyname: &str, value: arg::Variant<Box<arg::RefArg>>) -> Result<(), Self::Err>;
+    fn get(&self, interface_name: &str, property_name: &str) -> Result<arg::Variant<Box<arg::RefArg>>, Self::Err>;
+    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>, Self::Err>;
+    fn set(&self, interface_name: &str, property_name: &str, value: arg::Variant<Box<arg::RefArg>>) -> Result<(), Self::Err>;
 }
 
 impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopDBusProperties for dbus::ConnPath<'a, C> {
     type Err = dbus::Error;
 
-    fn get(&self, interfacename: &str, propertyname: &str) -> Result<arg::Variant<Box<arg::RefArg>>, Self::Err> {
+    fn get(&self, interface_name: &str, property_name: &str) -> Result<arg::Variant<Box<arg::RefArg>>, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"Get".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
-            i.append(interfacename);
-            i.append(propertyname);
+            i.append(interface_name);
+            i.append(property_name);
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
@@ -27,10 +27,10 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopDBusProper
         Ok(value)
     }
 
-    fn get_all(&self, interfacename: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>, Self::Err> {
+    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"GetAll".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
-            i.append(interfacename);
+            i.append(interface_name);
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
@@ -38,11 +38,11 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopDBusProper
         Ok(properties)
     }
 
-    fn set(&self, interfacename: &str, propertyname: &str, value: arg::Variant<Box<arg::RefArg>>) -> Result<(), Self::Err> {
+    fn set(&self, interface_name: &str, property_name: &str, value: arg::Variant<Box<arg::RefArg>>) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"Set".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
-            i.append(interfacename);
-            i.append(propertyname);
+            i.append(interface_name);
+            i.append(property_name);
             i.append(value);
         }));
         try!(m.as_result());
@@ -50,7 +50,7 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopDBusProper
     }
 }
 
-pub fn orgfreedesktop_dbus_properties_server<F, T, D>(factory: &tree::Factory<tree::MTFn<D>, D>, data: D::Interface, f: F) -> tree::Interface<tree::MTFn<D>, D>
+pub fn org_freedesktop_dbus_properties_server<F, T, D>(factory: &tree::Factory<tree::MTFn<D>, D>, data: D::Interface, f: F) -> tree::Interface<tree::MTFn<D>, D>
 where D: tree::DataType, D::Method: Default, T: OrgFreedesktopDBusProperties<Err=tree::MethodErr>,
     F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::MTFn<D>, D>) -> & 'z T {
     let i = factory.interface("org.freedesktop.DBus.Properties", data);
@@ -58,10 +58,10 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopDBusProperties<Err
     let fclone = f.clone();
     let h = move |minfo: &tree::MethodInfo<tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let interfacename: &str = try!(i.read());
-        let propertyname: &str = try!(i.read());
+        let interface_name: &str = try!(i.read());
+        let property_name: &str = try!(i.read());
         let d = fclone(minfo);
-        let value = try!(d.get(interfacename, propertyname));
+        let value = try!(d.get(interface_name, property_name));
         let rm = minfo.msg.method_return();
         let rm = rm.append1(value);
         Ok(vec!(rm))
@@ -75,9 +75,9 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopDBusProperties<Err
     let fclone = f.clone();
     let h = move |minfo: &tree::MethodInfo<tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let interfacename: &str = try!(i.read());
+        let interface_name: &str = try!(i.read());
         let d = fclone(minfo);
-        let properties = try!(d.get_all(interfacename));
+        let properties = try!(d.get_all(interface_name));
         let rm = minfo.msg.method_return();
         let rm = rm.append1(properties);
         Ok(vec!(rm))
@@ -90,11 +90,11 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopDBusProperties<Err
     let fclone = f.clone();
     let h = move |minfo: &tree::MethodInfo<tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let interfacename: &str = try!(i.read());
-        let propertyname: &str = try!(i.read());
+        let interface_name: &str = try!(i.read());
+        let property_name: &str = try!(i.read());
         let value: arg::Variant<Box<arg::RefArg>> = try!(i.read());
         let d = fclone(minfo);
-        try!(d.set(interfacename, propertyname, value));
+        try!(d.set(interface_name, property_name, value));
         let rm = minfo.msg.method_return();
         Ok(vec!(rm))
     };
@@ -106,12 +106,12 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopDBusProperties<Err
     i
 }
 
-pub fn orgfreedesktop_dbus_properties_properties_changed_emit<C: ::std::ops::Deref<Target=dbus::Connection>>(conn: &dbus::ConnPath<C>, interfacename: String, changedproperties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>, invalidatedproperties: Vec<String>) -> Result<(), dbus::Error> {
+pub fn org_freedesktop_dbus_properties_properties_changed_emit<C: ::std::ops::Deref<Target=dbus::Connection>>(conn: &dbus::ConnPath<C>, interface_name: String, changed_properties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>, invalidated_properties: Vec<String>) -> Result<(), dbus::Error> {
     conn.signal_with_args(&"org.freedesktop.DBus.Properties".into(), &"PropertiesChanged".into(), move |msg| {
          let mut i = arg::IterAppend::new(msg);
-         i.append(interfacename);
-         i.append(changedproperties);
-         i.append(invalidatedproperties);
+         i.append(interface_name);
+         i.append(changed_properties);
+         i.append(invalidated_properties);
     }).map(|_| ())
 }
 
@@ -128,12 +128,12 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopDBusIntros
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let xmldata: String = try!(i.read());
-        Ok(xmldata)
+        let xml_data: String = try!(i.read());
+        Ok(xml_data)
     }
 }
 
-pub fn orgfreedesktop_dbus_introspectable_server<F, T, D>(factory: &tree::Factory<tree::MTFn<D>, D>, data: D::Interface, f: F) -> tree::Interface<tree::MTFn<D>, D>
+pub fn org_freedesktop_dbus_introspectable_server<F, T, D>(factory: &tree::Factory<tree::MTFn<D>, D>, data: D::Interface, f: F) -> tree::Interface<tree::MTFn<D>, D>
 where D: tree::DataType, D::Method: Default, T: OrgFreedesktopDBusIntrospectable<Err=tree::MethodErr>,
     F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::MTFn<D>, D>) -> & 'z T {
     let i = factory.interface("org.freedesktop.DBus.Introspectable", data);
@@ -141,9 +141,9 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopDBusIntrospectable
     let fclone = f.clone();
     let h = move |minfo: &tree::MethodInfo<tree::MTFn<D>, D>| {
         let d = fclone(minfo);
-        let xmldata = try!(d.introspect());
+        let xml_data = try!(d.introspect());
         let rm = minfo.msg.method_return();
-        let rm = rm.append1(xmldata);
+        let rm = rm.append1(xml_data);
         Ok(vec!(rm))
     };
     let m = factory.method("Introspect", Default::default(), h);
@@ -173,12 +173,12 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopDBusPeer f
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let machineuuid: String = try!(i.read());
-        Ok(machineuuid)
+        let machine_uuid: String = try!(i.read());
+        Ok(machine_uuid)
     }
 }
 
-pub fn orgfreedesktop_dbus_peer_server<F, T, D>(factory: &tree::Factory<tree::MTFn<D>, D>, data: D::Interface, f: F) -> tree::Interface<tree::MTFn<D>, D>
+pub fn org_freedesktop_dbus_peer_server<F, T, D>(factory: &tree::Factory<tree::MTFn<D>, D>, data: D::Interface, f: F) -> tree::Interface<tree::MTFn<D>, D>
 where D: tree::DataType, D::Method: Default, T: OrgFreedesktopDBusPeer<Err=tree::MethodErr>,
     F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::MTFn<D>, D>) -> & 'z T {
     let i = factory.interface("org.freedesktop.DBus.Peer", data);
@@ -196,9 +196,9 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopDBusPeer<Err=tree:
     let fclone = f.clone();
     let h = move |minfo: &tree::MethodInfo<tree::MTFn<D>, D>| {
         let d = fclone(minfo);
-        let machineuuid = try!(d.get_machine_id());
+        let machine_uuid = try!(d.get_machine_id());
         let rm = minfo.msg.method_return();
-        let rm = rm.append1(machineuuid);
+        let rm = rm.append1(machine_uuid);
         Ok(vec!(rm))
     };
     let m = factory.method("GetMachineId", Default::default(), h);
@@ -210,11 +210,11 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopDBusPeer<Err=tree:
 pub trait OrgFreedesktopPolicyKit1Authority {
     type Err;
     fn enumerate_actions(&self, locale: &str) -> Result<Vec<(String, String, String, String, String, String, u32, u32, u32, ::std::collections::HashMap<String, String>)>, Self::Err>;
-    fn check_authorization(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), actionid: &str, details: ::std::collections::HashMap<&str, &str>, flags: u32, cancellationid: &str) -> Result<(bool, bool, ::std::collections::HashMap<String, String>), Self::Err>;
-    fn cancel_check_authorization(&self, cancellationid: &str) -> Result<(), Self::Err>;
-    fn register_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), locale: &str, objectpath: &str) -> Result<(), Self::Err>;
-    fn register_authentication_agent_with_options(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), locale: &str, objectpath: &str, options: ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>) -> Result<(), Self::Err>;
-    fn unregister_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), objectpath: &str) -> Result<(), Self::Err>;
+    fn check_authorization(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), action_id: &str, details: ::std::collections::HashMap<&str, &str>, flags: u32, cancellation_id: &str) -> Result<(bool, bool, ::std::collections::HashMap<String, String>), Self::Err>;
+    fn cancel_check_authorization(&self, cancellation_id: &str) -> Result<(), Self::Err>;
+    fn register_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), locale: &str, object_path: &str) -> Result<(), Self::Err>;
+    fn register_authentication_agent_with_options(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), locale: &str, object_path: &str, options: ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>) -> Result<(), Self::Err>;
+    fn unregister_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), object_path: &str) -> Result<(), Self::Err>;
     fn authentication_agent_response(&self, cookie: &str, identity: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>)) -> Result<(), Self::Err>;
     fn authentication_agent_response2(&self, uid: u32, cookie: &str, identity: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>)) -> Result<(), Self::Err>;
     fn enumerate_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>)) -> Result<Vec<(String, String, (String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>), u64, u64)>, Self::Err>;
@@ -235,18 +235,18 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopPolicyKit1
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let actiondescriptions: Vec<(String, String, String, String, String, String, u32, u32, u32, ::std::collections::HashMap<String, String>)> = try!(i.read());
-        Ok(actiondescriptions)
+        let action_descriptions: Vec<(String, String, String, String, String, String, u32, u32, u32, ::std::collections::HashMap<String, String>)> = try!(i.read());
+        Ok(action_descriptions)
     }
 
-    fn check_authorization(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), actionid: &str, details: ::std::collections::HashMap<&str, &str>, flags: u32, cancellationid: &str) -> Result<(bool, bool, ::std::collections::HashMap<String, String>), Self::Err> {
+    fn check_authorization(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), action_id: &str, details: ::std::collections::HashMap<&str, &str>, flags: u32, cancellation_id: &str) -> Result<(bool, bool, ::std::collections::HashMap<String, String>), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"CheckAuthorization".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
             i.append(subject);
-            i.append(actionid);
+            i.append(action_id);
             i.append(details);
             i.append(flags);
-            i.append(cancellationid);
+            i.append(cancellation_id);
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
@@ -254,43 +254,43 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopPolicyKit1
         Ok(result)
     }
 
-    fn cancel_check_authorization(&self, cancellationid: &str) -> Result<(), Self::Err> {
+    fn cancel_check_authorization(&self, cancellation_id: &str) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"CancelCheckAuthorization".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
-            i.append(cancellationid);
+            i.append(cancellation_id);
         }));
         try!(m.as_result());
         Ok(())
     }
 
-    fn register_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), locale: &str, objectpath: &str) -> Result<(), Self::Err> {
+    fn register_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), locale: &str, object_path: &str) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"RegisterAuthenticationAgent".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
             i.append(subject);
             i.append(locale);
-            i.append(objectpath);
+            i.append(object_path);
         }));
         try!(m.as_result());
         Ok(())
     }
 
-    fn register_authentication_agent_with_options(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), locale: &str, objectpath: &str, options: ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>) -> Result<(), Self::Err> {
+    fn register_authentication_agent_with_options(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), locale: &str, object_path: &str, options: ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"RegisterAuthenticationAgentWithOptions".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
             i.append(subject);
             i.append(locale);
-            i.append(objectpath);
+            i.append(object_path);
             i.append(options);
         }));
         try!(m.as_result());
         Ok(())
     }
 
-    fn unregister_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), objectpath: &str) -> Result<(), Self::Err> {
+    fn unregister_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), object_path: &str) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"UnregisterAuthenticationAgent".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
             i.append(subject);
-            i.append(objectpath);
+            i.append(object_path);
         }));
         try!(m.as_result());
         Ok(())
@@ -324,8 +324,8 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopPolicyKit1
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let temporaryauthorizations: Vec<(String, String, (String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>), u64, u64)> = try!(i.read());
-        Ok(temporaryauthorizations)
+        let temporary_authorizations: Vec<(String, String, (String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>), u64, u64)> = try!(i.read());
+        Ok(temporary_authorizations)
     }
 
     fn revoke_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>)) -> Result<(), Self::Err> {
@@ -377,7 +377,7 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopPolicyKit1
     }
 }
 
-pub fn orgfreedesktop_policy_kit1_authority_server<F, T, D>(factory: &tree::Factory<tree::MTFn<D>, D>, data: D::Interface, f: F) -> tree::Interface<tree::MTFn<D>, D>
+pub fn org_freedesktop_policy_kit1_authority_server<F, T, D>(factory: &tree::Factory<tree::MTFn<D>, D>, data: D::Interface, f: F) -> tree::Interface<tree::MTFn<D>, D>
 where D: tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1Authority<Err=tree::MethodErr>,
     D::Property: Default,    F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::MTFn<D>, D>) -> & 'z T {
     let i = factory.interface("org.freedesktop.PolicyKit1.Authority", data);
@@ -387,9 +387,9 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1Authorit
         let mut i = minfo.msg.iter_init();
         let locale: &str = try!(i.read());
         let d = fclone(minfo);
-        let actiondescriptions = try!(d.enumerate_actions(locale));
+        let action_descriptions = try!(d.enumerate_actions(locale));
         let rm = minfo.msg.method_return();
-        let rm = rm.append1(actiondescriptions);
+        let rm = rm.append1(action_descriptions);
         Ok(vec!(rm))
     };
     let m = factory.method("EnumerateActions", Default::default(), h);
@@ -401,12 +401,12 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1Authorit
     let h = move |minfo: &tree::MethodInfo<tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
         let subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>) = try!(i.read());
-        let actionid: &str = try!(i.read());
+        let action_id: &str = try!(i.read());
         let details: ::std::collections::HashMap<&str, &str> = try!(i.read());
         let flags: u32 = try!(i.read());
-        let cancellationid: &str = try!(i.read());
+        let cancellation_id: &str = try!(i.read());
         let d = fclone(minfo);
-        let result = try!(d.check_authorization(subject, actionid, details, flags, cancellationid));
+        let result = try!(d.check_authorization(subject, action_id, details, flags, cancellation_id));
         let rm = minfo.msg.method_return();
         let rm = rm.append1(result);
         Ok(vec!(rm))
@@ -423,9 +423,9 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1Authorit
     let fclone = f.clone();
     let h = move |minfo: &tree::MethodInfo<tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
-        let cancellationid: &str = try!(i.read());
+        let cancellation_id: &str = try!(i.read());
         let d = fclone(minfo);
-        try!(d.cancel_check_authorization(cancellationid));
+        try!(d.cancel_check_authorization(cancellation_id));
         let rm = minfo.msg.method_return();
         Ok(vec!(rm))
     };
@@ -438,9 +438,9 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1Authorit
         let mut i = minfo.msg.iter_init();
         let subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>) = try!(i.read());
         let locale: &str = try!(i.read());
-        let objectpath: &str = try!(i.read());
+        let object_path: &str = try!(i.read());
         let d = fclone(minfo);
-        try!(d.register_authentication_agent(subject, locale, objectpath));
+        try!(d.register_authentication_agent(subject, locale, object_path));
         let rm = minfo.msg.method_return();
         Ok(vec!(rm))
     };
@@ -455,10 +455,10 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1Authorit
         let mut i = minfo.msg.iter_init();
         let subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>) = try!(i.read());
         let locale: &str = try!(i.read());
-        let objectpath: &str = try!(i.read());
+        let object_path: &str = try!(i.read());
         let options: ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>> = try!(i.read());
         let d = fclone(minfo);
-        try!(d.register_authentication_agent_with_options(subject, locale, objectpath, options));
+        try!(d.register_authentication_agent_with_options(subject, locale, object_path, options));
         let rm = minfo.msg.method_return();
         Ok(vec!(rm))
     };
@@ -473,9 +473,9 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1Authorit
     let h = move |minfo: &tree::MethodInfo<tree::MTFn<D>, D>| {
         let mut i = minfo.msg.iter_init();
         let subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>) = try!(i.read());
-        let objectpath: &str = try!(i.read());
+        let object_path: &str = try!(i.read());
         let d = fclone(minfo);
-        try!(d.unregister_authentication_agent(subject, objectpath));
+        try!(d.unregister_authentication_agent(subject, object_path));
         let rm = minfo.msg.method_return();
         Ok(vec!(rm))
     };
@@ -521,9 +521,9 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1Authorit
         let mut i = minfo.msg.iter_init();
         let subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>) = try!(i.read());
         let d = fclone(minfo);
-        let temporaryauthorizations = try!(d.enumerate_temporary_authorizations(subject));
+        let temporary_authorizations = try!(d.enumerate_temporary_authorizations(subject));
         let rm = minfo.msg.method_return();
-        let rm = rm.append1(temporaryauthorizations);
+        let rm = rm.append1(temporary_authorizations);
         Ok(vec!(rm))
     };
     let m = factory.method("EnumerateTemporaryAuthorizations", Default::default(), h);
@@ -592,6 +592,6 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1Authorit
     i
 }
 
-pub fn orgfreedesktop_policy_kit1_authority_changed_emit<C: ::std::ops::Deref<Target=dbus::Connection>>(conn: &dbus::ConnPath<C>) -> Result<(), dbus::Error> {
+pub fn org_freedesktop_policy_kit1_authority_changed_emit<C: ::std::ops::Deref<Target=dbus::Connection>>(conn: &dbus::ConnPath<C>) -> Result<(), dbus::Error> {
     conn.signal_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"Changed".into(),  |_| {}).map(|_| ())
 }
