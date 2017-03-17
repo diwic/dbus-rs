@@ -27,7 +27,7 @@ struct Prop {
 }
 
 struct Signal {
-    _name: String,
+    name: String,
     args: Vec<Arg>,
 }
 
@@ -132,7 +132,7 @@ fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool
             format!("({})", s.join(", "))
         }
         // Err(_) if c == ')' && instruct => "".into(),
-        a @ _ => panic!(format!("Unknown character in signature {:?}", a)),
+        a @ _ => return Err(format!("Unknown character in signature {:?}", a).into()),
     })
 }
 
@@ -279,6 +279,29 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
 
 }
 
+fn write_signals_emit(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
+    for ss in i.signals.iter() {
+        *s += &format!("\npub fn {}_{}_emit<C: ::std::ops::Deref<Target=dbus::Connection>>(conn: &dbus::ConnPath<C>", make_snake(&i.shortname), make_snake(&ss.name));
+        for a in ss.args.iter() {
+            let t = try!(a.typename());
+            *s += &format!(", {}: {}", a.varname(), t);
+        }
+        *s += ") -> Result<(), dbus::Error> {\n";
+        *s += &format!("    conn.signal_with_args(&\"{}\".into(), &\"{}\".into(), ", i.origname, ss.name);
+        if ss.args.len() > 0 {
+            *s += "move |msg| {\n";
+            *s += "         let mut i = arg::IterAppend::new(msg);\n";
+            for a in ss.args.iter() {
+                *s += &format!("         i.append({});\n", a.varname());
+            }
+            *s += "    ";
+        } else { *s += " |_| {" }
+        *s += "}).map(|_| ())\n";
+        *s += "}\n";
+    }
+    Ok(())
+}
+
 
 // Should we implement this for
 // 1) MethodInfo? That's the only way receiver can check Sender, etc.
@@ -403,6 +426,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<error::Erro
                 if let Some(ref mt) = opts.methodtype {
                     try!(write_intf_tree(&mut s, &intf, &mt));
                 }
+                try!(write_signals_emit(&mut s, &intf));
             }
 
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "method" => {
@@ -420,7 +444,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<error::Erro
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "signal" => {
                 if cursig.is_some() { try!(Err("Start of signal inside signal")) };
                 if curintf.is_none() { try!(Err("Start of signal outside interface")) };
-                cursig = Some(Signal { _name: try!(find_attr(attributes, "name")).into(), args: Vec::new() });
+                cursig = Some(Signal { name: try!(find_attr(attributes, "name")).into(), args: Vec::new() });
             }
             XmlEvent::EndElement { ref name } if &name.local_name == "signal" => {
                 if cursig.is_none() { try!(Err("End of signal outside signal")) };

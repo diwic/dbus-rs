@@ -106,6 +106,15 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopDBusProperties<Err
     i
 }
 
+pub fn orgfreedesktop_dbus_properties_properties_changed_emit<C: ::std::ops::Deref<Target=dbus::Connection>>(conn: &dbus::ConnPath<C>, interfacename: String, changedproperties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>, invalidatedproperties: Vec<String>) -> Result<(), dbus::Error> {
+    conn.signal_with_args(&"org.freedesktop.DBus.Properties".into(), &"PropertiesChanged".into(), move |msg| {
+         let mut i = arg::IterAppend::new(msg);
+         i.append(interfacename);
+         i.append(changedproperties);
+         i.append(invalidatedproperties);
+    }).map(|_| ())
+}
+
 pub trait OrgFreedesktopDBusIntrospectable {
     type Err;
     fn introspect(&self) -> Result<String, Self::Err>;
@@ -581,4 +590,8 @@ where D: tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1Authorit
     });
     let i = i.add_p(p);
     i
+}
+
+pub fn orgfreedesktop_policy_kit1_authority_changed_emit<C: ::std::ops::Deref<Target=dbus::Connection>>(conn: &dbus::ConnPath<C>) -> Result<(), dbus::Error> {
+    conn.signal_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"Changed".into(),  |_| {}).map(|_| ())
 }
