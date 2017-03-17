@@ -4,6 +4,7 @@ use std::os::raw::{c_void, c_char, c_uint, c_int};
 
 pub type DBusConnection = c_void;
 pub type DBusMessage = c_void;
+pub type DBusPendingCall = c_void;
 pub type DBusCallback = extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> DBusHandlerResult;
 pub type DBusWatch = c_void;
 
@@ -132,6 +133,8 @@ pub type DBusHandleMessageFunction = Option<
 pub type DBusAddWatchFunction = Option<extern fn(watch: *mut DBusWatch, user_data: *mut c_void) -> u32>;
 pub type DBusRemoveWatchFunction = Option<extern fn(watch: *mut DBusWatch, user_data: *mut c_void)>;
 pub type DBusWatchToggledFunction = Option<extern fn(watch: *mut DBusWatch, user_data: *mut c_void)>;
+pub type DBusPendingCallNotifyFunction = Option<extern fn(pending: *mut DBusPendingCall, user_data: *mut c_void)>;
+pub type DBusFreeFunction = Option<extern fn(memory: *mut c_void)>;
 
 #[repr(C)]
 pub struct DBusObjectPathVTable {
@@ -160,6 +163,9 @@ extern "C" {
     pub fn dbus_connection_flush(conn: *mut DBusConnection);
     pub fn dbus_connection_unref(conn: *mut DBusConnection);
     pub fn dbus_connection_set_exit_on_disconnect(conn: *mut DBusConnection, enable: u32);
+    pub fn dbus_connection_send_with_reply(conn: *mut DBusConnection,
+        message: *mut DBusMessage, pending_call: *mut *mut DBusPendingCall,
+        timeout_milliseconds: c_int) -> u32;
     pub fn dbus_connection_send_with_reply_and_block(conn: *mut DBusConnection,
         message: *mut DBusMessage, timeout_milliseconds: c_int, error: *mut DBusError) -> *mut DBusMessage;
     pub fn dbus_connection_send(conn: *mut DBusConnection,
@@ -222,6 +228,13 @@ extern "C" {
     pub fn dbus_message_iter_open_container(iter: *mut DBusMessageIter, _type: c_int,
         contained_signature: *const c_char, sub: *mut DBusMessageIter) -> u32;
     pub fn dbus_message_iter_close_container(iter: *mut DBusMessageIter, sub: *mut DBusMessageIter) -> u32;
+
+    pub fn dbus_pending_call_block(pending: *mut DBusPendingCall);
+    pub fn dbus_pending_call_get_completed(pending: *mut DBusPendingCall) -> u32;
+    pub fn dbus_pending_call_set_notify(pending: *mut DBusPendingCall, function: DBusPendingCallNotifyFunction,
+        user_data: *mut c_void, free_user_data: DBusFreeFunction) -> u32;
+    pub fn dbus_pending_call_steal_reply(pending: *mut DBusPendingCall) -> *mut DBusMessage;
+    pub fn dbus_pending_call_unref(pending: *mut DBusPendingCall);
 
     pub fn dbus_free(memory: *mut c_void);
     pub fn dbus_free_string_array(str_array: *mut *mut c_char) -> c_void;
