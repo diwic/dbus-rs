@@ -44,6 +44,7 @@ pub struct ConnectionItems<'a> {
 }
 
 impl<'a> ConnectionItems<'a> {
+    /// Builder method that adds a new msg handler.
     pub fn with<H: MsgHandler + 'a>(mut self, h: H) -> Self {
         self.handlers.push(Box::new(h)); self
     }
@@ -54,13 +55,15 @@ impl<'a> ConnectionItems<'a> {
         while i < self.handlers.len() {
             if let Some(r) = self.handlers[i].handle_ci(ci) {
                 for msg in r.reply.into_iter() { self.c.send(msg).unwrap(); }
-                if r.done { self.handlers.remove(i); i -= 1; }
+                if r.done { self.handlers.remove(i); } else { i += 1; }
                 if r.handled { return true; }
             }
-            i += 1;
+            else { i += 1; }
         }
         false
     }
+
+    pub fn msg_handlers(&mut self) -> &mut Vec<Box<MsgHandler + 'a>> { &mut self.handlers }
 }
 
 impl<'a> Iterator for ConnectionItems<'a> {
@@ -198,6 +201,12 @@ impl Connection {
         if r == 0 { return Err(()); }
         unsafe { ffi::dbus_connection_flush(self.conn()) };
         Ok(serial)
+    }
+
+    /// Sends a message over the D-Bus. The resulting handler can be added to a connectionitem handler.
+    pub fn send_with_reply<'a, F: FnMut(&Message) + 'a>(&self, msg: Message, f: F) -> MessageReply<'a> {
+        let serial = self.send(msg).unwrap();
+        MessageReply(Box::new(f), serial)
     }
 
     /// Get the connection's unique name.
@@ -362,3 +371,33 @@ pub struct MsgHandlerResult {
     /// Messages to send (e g, a reply to a method call)
     pub reply: Vec<Message>,
 }
+
+pub struct MessageReply<'a>(Box<FnMut(&Message) + 'a>, u32);
+
+impl<'a> MsgHandler for MessageReply<'a> {
+    fn handle_ci(&mut self, ci: &ConnectionItem) -> Option<MsgHandlerResult> {
+        if let ConnectionItem::MethodReturn(ref msg) = *ci {
+            if msg.get_reply_serial() == Some(self.1) {
+                self.0(msg);
+                return Some(MsgHandlerResult { handled: true, done: true, reply: Vec::new() })
+            }
+        }
+        None
+    }
+}
+
+
+#[test]
+fn message_reply() {
+    let c = Connection::get_private(BusType::Session).unwrap();
+    let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
+    let quit = ::std::cell::Cell::new(false);
+    let reply = c.send_with_reply(m, |result| {
+        let r = result;
+        let _: ::arg::Array<&str, _>  = r.get1().unwrap();
+        quit.set(true);
+    });
+    for _ in c.iter(1000).with(reply) { if quit.get() { return; } }
+    assert!(false);
+}
+
