@@ -1,0 +1,11 @@
+[package]
+authors = ["David Henningsson <diwic@ubuntu.com>"]
+name = "dbus-tokio"
+version = "0.1.0"
+
+[dependencies]
+dbus = "0.5.2"
+futures = "0.1.12"
+
+[dev-dependencies]
+tokio-timer = "0.1.0"
