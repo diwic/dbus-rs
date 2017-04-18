@@ -4,7 +4,7 @@ A D-Bus binding for Rust.
 Current state: Slowly maturing. Most stuff you need should be working:
  * Connect to system or session bus
  * Messages send/receive (method calls, method returns, signals, errors)
- * Message get/append arguments (through either generics, trait objects or enums), all types (including Unix Fd).
+ * Message get/append arguments (through either generics, trait objects or enums), all types (including Unix Fd). See [argument guide](examples/argument_guide.md).
  * Build server side trees, with introspection and method dispatch (boxed closures)
  * Properties, on both client and server sides (set/get/getall methods, signals on server side)
  * Optional async API (for poll-based mainloops, e g mio)

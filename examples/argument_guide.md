@@ -2,7 +2,8 @@ The different ways you can append and get message arguments can be a bit bewilde
 
 This guide is to help you on your way.
 
-=== Code generation ===
+Code generation
+---------------
 
 Preamble - what's emerging is code generation. It's far from done, but if you have D-Bus introspection data, run it through the dbus-codegen tool (look in the codegen directory) and get Rust code out. There is pre-generated code for standard D-Bus interfaces in the `stdintf` module. Here's an example:
 
@@ -23,7 +24,8 @@ For server side there is no pre-generated code yet and its implementation is sli
 
 Codegen isn't really there yet for many use cases though, so let's move on:
 
-=== Append / get basic types ===
+Append / get basic types
+------------------------
 
 If you just want to get/append simple types, just use `append1` / `append2` / `append3`, and 
 `read1` / `read2` / `read3`. The imaginary method below takes one byte parameter and one string parameter, and returns one string parameter and one int parameter.
@@ -34,7 +36,8 @@ let r = try!(c.send_with_reply_and_block(m, 2000));
 let (data1, data2): (&str, i32) = try!(c.read2());
 ```
 
-=== Arrays and dictionaries ===
+Arrays and dictionaries
+-----------------------
 
 D-Bus arrays and dictionaries usually correspond to `Vec` and `HashMap`. You can just append and get them like basic types:
 
@@ -53,7 +56,8 @@ Or combine them as you wish, e g, use a `Vec<Vec<u8>>`, a `HashMap<u64, Vec<Stri
 
 Slices can sometimes be used as arrays - e g, `&[&str]` can be appended, but only very simple types can be used with `get` and `read`, e g `&[u8]`.
 
-=== Variants ===
+Variants
+--------
 
 Things are getting slightly more complex with Variants though, because they are not strongly typed and thus not fit as well into Rust's strongly typed as arrays and dicts.
 
@@ -82,20 +86,23 @@ Ok, so we retrieved our `Box<RefArg>`. We now need to use the `RefArg` methods t
 
 Dicts and variants are sometimes combined, e g, you might need to read a D-Bus dictionary of String to Variants. You can then read these as `HashMap<String, Variant<Box<RefArg>>>`.
 
-=== Structs ===
+Structs
+-------
 
 D-Bus structs are implemented as Rust tuples. You can append and get tuples like you do with other types of arguments.
 
 TODO: Example
 
-=== Iter / IterAppend ===
+Iter / IterAppend
+-----------------
 
 Iter and IterAppend are more low-level, direct methods to get and append arguments. They can, e g, come handy if you have more than five arguments to read.
 
 E g, for appending a variant with IterAppend you can use `IterAppend::new(&msg).append_variant(|i| i.append(5000i32))` to append what you need to your variant inside the closure.
 To read a variant you can use `let i = try!(msg.read1::<Variant<Iter>>::())` and then examine the methods on `i.0` to probe the variant.
 
-=== Array and Dict types ===
+Array and Dict types
+--------------------
 
 These provide slightly better flexibility than using `Vec` and `HashMap` but at the expense of being less ergonomic to use.
 
@@ -103,7 +110,8 @@ An edge case where this is necessary is having floating point keys in a dictiona
 
 TODO: Example
 
-=== MessageItem ===
+MessageItem
+-----------
 
 MessageItem was the first design - an enum representing a D-Bus argument. It still works, but I doubt you'll ever need to use it. Newer methods provide better type safety, speed, and ergonomics.
 
