@@ -397,7 +397,7 @@ impl<D: DataType> Property<MTSync<D>, D> {
 
 
 impl<M: MethodType<D>, D: DataType> Property<M, D> where D::Property: arg::Append + Clone {
-    // Adds a "standard" get handler.
+    /// Adds a "standard" get handler.
     pub fn default_get(mut self) -> Self {
         let g = |i: &mut arg::IterAppend, p: &PropInfo<M, D>| { i.append(p.prop.get_data()); Ok(()) };
         self.get_cb = Some(DebugGetProp(M::make_getprop(g)));
@@ -407,7 +407,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> where D::Property: arg::Appen
 
 
 impl<M: MethodType<D>, D: DataType> Property<M, D> where D::Property: arg::RefArg {
-    // Adds a "standard" get handler (for RefArgs).
+    /// Adds a "standard" get handler (for RefArgs).
     pub fn default_get_refarg(mut self) -> Self {
         let g = |i: &mut arg::IterAppend, p: &PropInfo<M, D>| { (p.prop.get_data() as &arg::RefArg).append(i); Ok(()) };
         self.get_cb = Some(DebugGetProp(M::make_getprop(g)));

@@ -63,6 +63,7 @@ impl<'a> ConnectionItems<'a> {
         false
     }
 
+    /// Access and modify message handlers 
     pub fn msg_handlers(&mut self) -> &mut Vec<Box<MsgHandler + 'a>> { &mut self.handlers }
 }
 
@@ -358,6 +359,8 @@ pub trait MsgHandler {
             ConnectionItem::Nothing => None,
         }
     }
+
+    /// Called for all incoming method calls, method returns, and signals.
     fn handle_msg(&mut self, _msg: &Message) -> Option<MsgHandlerResult> { None }
 }
 

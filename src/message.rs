@@ -670,6 +670,8 @@ impl Message {
         self
     }
 
+    /// Appends RefArgs to this message.
+    /// Use in builder style: e g `m.method_return().append_ref(&[7i32, 6u8, true])`
     pub fn append_ref<A: RefArg>(mut self, r: &[A]) -> Self {
         {
             let mut m = IterAppend::new(&mut self);
@@ -870,10 +872,13 @@ pub fn get_message_ptr<'a>(m: &Message) -> *mut ffi::DBusMessage {
 /// Useful if you want to make many method calls to the same destination path.
 #[derive(Clone, Debug)]
 pub struct ConnPath<'a, C> {
+    /// Some way to access the connection, e g a &Connection or Rc<Connection>
     pub conn: C,
+    /// Destination, i e what D-Bus service you're communicating with
     pub dest: BusName<'a>,
+    /// Object path on the destination
     pub path: Path<'a>,
-    /// Timeout in milliseconds
+    /// Timeout in milliseconds for blocking method calls
     pub timeout: i32,
 }
 
@@ -887,12 +892,12 @@ impl<'a, C: ::std::ops::Deref<Target=Connection>> ConnPath<'a, C> {
         self.conn.send_with_reply_and_block(msg, self.timeout)
     }
 
+    /// Emit a D-Bus signal, where you can append arguments inside the closure.
     pub fn signal_with_args<F: FnOnce(&mut Message)>(&self, i: &Interface, m: &Member, f: F) -> Result<u32, Error> {
         let mut msg = Message::signal(&self.path, i, m);
         f(&mut msg);
         self.conn.send(msg).map_err(|_| Error::new_custom("org.freedesktop.DBus.Error.Failed", "Sending signal failed"))
     }
-
 }
 
 // For purpose of testing the library only.

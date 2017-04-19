@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use super::super::Error as dbusError; 
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
-/// A D-Bus Method Error.
+/// A D-Bus Method Error, containing an error name and a description.
 pub struct MethodErr(ErrorName<'static>, String);
 
 impl MethodErr {
@@ -42,7 +42,9 @@ impl MethodErr {
         ("org.freedesktop.DBus.Error.PropertyReadOnly", format!("Property {} is read only", a)).into()
     }
 
+    /// Error name accessor
     pub fn errorname(&self) -> &ErrorName<'static> { &self.0 }
+    /// Description accessor
     pub fn description(&self) -> &str { &self.1 }
 }
 
@@ -70,11 +72,17 @@ pub type MethodResult = Result<Vec<Message>, MethodErr>;
 ///
 /// These currently require a debug bound, due to https://github.com/rust-lang/rust/issues/31518
 pub trait DataType: Sized + Default {
+    /// Type of associated data on the Tree.
     type Tree: fmt::Debug;
+    /// Type of associated data on every ObjectPath.
     type ObjectPath: fmt::Debug;
+    /// Type of associated data on every Property.
     type Property: fmt::Debug;
+    /// Type of associated data on every Interface.
     type Interface: fmt::Debug + Default;
+    /// Type of associated data on every Method.
     type Method: fmt::Debug + Default;
+    /// Type of associated data on every Signal.
     type Signal: fmt::Debug;
 }
 
@@ -92,16 +100,24 @@ impl DataType for () {
 ///
 /// You should not need to call these methods directly, it's primarily for internal use.
 pub trait MethodType<D: DataType>: Sized + Default {
+    /// For internal use.
     type Method: ?Sized;
+    /// For internal use.
     type GetProp: ?Sized;
+    /// For internal use.
     type SetProp: ?Sized;
 
+    /// For internal use.
     fn call_getprop(&Self::GetProp, &mut IterAppend, &PropInfo<Self, D>) -> Result<(), MethodErr>;
+    /// For internal use.
     fn call_setprop(&Self::SetProp, &mut Iter, &PropInfo<Self, D>) -> Result<(), MethodErr>;
+    /// For internal use.
     fn call_method(&Self::Method, &MethodInfo<Self, D>) -> MethodResult;
 
+    /// For internal use.
     fn make_getprop<H>(h: H) -> Box<Self::GetProp>
     where H: Fn(&mut IterAppend, &PropInfo<Self,D>) -> Result<(), MethodErr> + Send + Sync + 'static;
+    /// For internal use.
     fn make_method<H>(h: H) -> Box<Self::Method>
     where H: Fn(&MethodInfo<Self,D>) -> MethodResult + Send + Sync + 'static;
 }
@@ -179,14 +195,20 @@ impl<D: DataType> MethodType<D> for MTSync<D> {
 #[derive(Debug, Copy, Clone)]
 /// Contains information about the incoming method call.
 pub struct MethodInfo<'a, M: 'a + MethodType<D>, D: 'a + DataType> {
+    /// Message
     pub msg: &'a Message,
+    /// The method to be called
     pub method: &'a Method<M, D>,
+    /// Interface
     pub iface: &'a Interface<M, D>,
+    /// Object path
     pub path: &'a ObjectPath<M, D>,
+    /// Tree
     pub tree: &'a Tree<M, D>,
 }
 
 impl<'a, M: 'a + MethodType<D>, D: 'a + DataType> MethodInfo<'a, M, D> {
+    /// MethodInfo to PropInfo conversion
     pub fn to_prop_info(&self, iface: &'a Interface<M, D>, prop: &'a Property<M, D>) -> PropInfo<'a, M, D> {
         PropInfo { msg: self.msg, method: self.method, iface: iface, prop: prop, path: self.path, tree: self.tree }
     }
@@ -195,15 +217,22 @@ impl<'a, M: 'a + MethodType<D>, D: 'a + DataType> MethodInfo<'a, M, D> {
 #[derive(Debug, Copy, Clone)]
 /// Contains information about the incoming property get/set request.
 pub struct PropInfo<'a, M: 'a + MethodType<D>, D: 'a + DataType> {
+    /// Message
     pub msg: &'a Message,
+    /// Get, Set or GetAll
     pub method: &'a Method<M, D>,
+    /// The property to be set/get
     pub prop: &'a Property<M, D>,
+    /// The interface the property belongs to
     pub iface: &'a Interface<M, D>,
+    /// Object path
     pub path: &'a ObjectPath<M, D>,
+    /// Tree
     pub tree: &'a Tree<M, D>,
 }
 
 impl<'a, M: 'a + MethodType<D>, D: 'a + DataType> PropInfo<'a, M, D> {
+    /// PropInfo to MethodInfo conversion.
     pub fn to_method_info(&self) -> MethodInfo<'a, M, D> {
         MethodInfo { msg: self.msg, method: self.method, iface: self.iface, path: self.path, tree: self.tree }
     }

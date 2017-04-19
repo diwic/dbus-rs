@@ -15,6 +15,8 @@
 //! ```
 //!
 
+#![allow(missing_docs)]
+
 /// Methods of the [org.freedesktop.DBus.Peer](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-peer) interface.
 pub trait OrgFreedesktopDBusPeer {
     fn ping(&self) -> Result<(), super::Error>;

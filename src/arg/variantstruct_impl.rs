@@ -10,6 +10,7 @@ use std::any;
 pub struct Variant<T>(pub T);
 
 impl Variant<Box<RefArg>> {
+    /// Creates a new refarg from an Iter. Mainly for internal use.
     pub fn new_refarg<'a>(i: &mut Iter<'a>) -> Option<Self> {
         i.recurse(ArgType::Variant).and_then(|mut si| si.get_refarg()).map(|v| Variant(v))
     }

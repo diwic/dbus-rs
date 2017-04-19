@@ -13,7 +13,7 @@
 //! code from D-Bus introspection data, and dbus-tokio for integrating D-Bus with [Tokio](http://tokio.rs).
 //! However, at the time of this writing, these are far less mature than this crate. 
 
-// #![warn(missing_docs)]
+#![warn(missing_docs)]
 
 extern crate libc;
 

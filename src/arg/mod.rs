@@ -317,23 +317,39 @@ impl<'a> Iterator for Iter<'a> {
 pub enum ArgType {
     /// Dicts are Arrays of dict entries, so Dict types will have Array as ArgType.
     Array = ffi::DBUS_TYPE_ARRAY as u8,
+    /// Variant
     Variant = ffi::DBUS_TYPE_VARIANT as u8,
+    /// bool
     Boolean = ffi::DBUS_TYPE_BOOLEAN as u8,
-    /// This is also the ArgType returned when there are no more arguments available.
+    /// Invalid arg type - this is also the ArgType returned when there are no more arguments available.
     Invalid = ffi::DBUS_TYPE_INVALID as u8,
+    /// String
     String = ffi::DBUS_TYPE_STRING as u8,
+    /// Dict entry; you'll usually not encounter this one as dicts are arrays of dict entries.
     DictEntry = ffi::DBUS_TYPE_DICT_ENTRY as u8,
+    /// u8
     Byte = ffi::DBUS_TYPE_BYTE as u8,
+    /// i16
     Int16 = ffi::DBUS_TYPE_INT16 as u8,
+    /// u16
     UInt16 = ffi::DBUS_TYPE_UINT16 as u8,
+    /// i32
     Int32 = ffi::DBUS_TYPE_INT32 as u8,
+    /// u32
     UInt32 = ffi::DBUS_TYPE_UINT32 as u8,
+    /// i64
     Int64 = ffi::DBUS_TYPE_INT64 as u8,
+    /// u64
     UInt64 = ffi::DBUS_TYPE_UINT64 as u8,
+    /// f64
     Double = ffi::DBUS_TYPE_DOUBLE as u8,
+    /// OwnedFd
     UnixFd = ffi::DBUS_TYPE_UNIX_FD as u8,
+    /// Use tuples or Vec<Box<RefArg>> to read/write structs.
     Struct = ffi::DBUS_TYPE_STRUCT as u8,
+    /// Path
     ObjectPath = ffi::DBUS_TYPE_OBJECT_PATH as u8,
+    /// Signature
     Signature = ffi::DBUS_TYPE_SIGNATURE as u8,
 }
 
