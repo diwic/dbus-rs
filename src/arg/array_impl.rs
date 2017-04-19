@@ -104,6 +104,8 @@ impl<'a, T: FixedArray> Get<'a> for &'a [T] {
 
 #[derive(Copy, Clone, Debug)]
 /// Append a D-Bus dict type (i e, an array of dict entries).
+///
+/// See the argument guide and module level documentation for details and alternatives.
 pub struct Dict<'a, K: DictKey, V: Arg, I>(I, PhantomData<(&'a Message, *const K, *const V)>);
 
 impl<'a, K: DictKey, V: Arg, I> Dict<'a, K, V, I> {
@@ -218,7 +220,8 @@ impl<'a, T: Arg + Get<'a>> Get<'a> for Vec<T> {
 
 #[derive(Copy, Clone, Debug)]
 /// Represents a D-Bus Array. Maximum flexibility (wraps an iterator of items to append). 
-/// Note: Slices of FixedArray can be faster.
+///
+/// See the argument guide and module level documentation for details and alternatives.
 pub struct Array<'a, T, I>(I, PhantomData<(*const T, &'a Message)>);
 
 impl<'a, T: 'a, I: Iterator<Item=T>> Array<'a, T, I> {

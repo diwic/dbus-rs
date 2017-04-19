@@ -1,6 +1,6 @@
 The different ways you can append and get message arguments can be a bit bewildering. I've iterated a few times on the design and didn't want to lose backwards compatibility.
 
-This guide is to help you on your way.
+This guide is to help you on your way. In addition, many of the examples in the examples directory append and read arguments.
 
 Code generation
 ---------------
@@ -56,10 +56,12 @@ Or combine them as you wish, e g, use a `Vec<Vec<u8>>`, a `HashMap<u64, Vec<Stri
 
 Slices can sometimes be used as arrays - e g, `&[&str]` can be appended, but only very simple types can be used with `get` and `read`, e g `&[u8]`.
 
+This is the easiest way to get started, but in case you want to avoid the overhead of creating `Vec` or `HashMap`s, the "Array and Dict types" and "Iter / IterAppend" sections offer useful alternatives.
+
 Variants
 --------
 
-Things are getting slightly more complex with Variants though, because they are not strongly typed and thus not fit as well into Rust's strongly typed as arrays and dicts.
+Things are getting slightly more complex with Variants, because they are not strongly typed and thus not fit as well into Rust's strongly typed as arrays and dicts.
 
 If you know the type beforehand, it's still easy:
 
@@ -93,6 +95,20 @@ D-Bus structs are implemented as Rust tuples. You can append and get tuples like
 
 TODO: Example
 
+Declare method arguments
+------------------------
+
+When you make a `Tree`, you want to declare what input and output arguments your method expects - so that correct D-Bus introspection data can be generated. You'll use the same types as you learned earlier in this guide:
+
+```rust
+factory.method( /* ... */ )
+.inarg::<HashMap<i32, Vec<(i32, bool, String)>>,_>("request")
+.outarg::<&str,_>("reply")
+```
+
+The types are just for generating a correct signature, they are never instantiated. Many different types can generate the same signature - e g, `Array<u8, _>`, `Vec<u8>` and `&[u8]` will all generate the same signature. `Variant` will generate the same type signature regardless of what's inside, so just write `Variant<()>` for simplicity.
+
+
 Iter / IterAppend
 -----------------
 
@@ -104,11 +120,24 @@ To read a variant you can use `let i = try!(msg.read1::<Variant<Iter>>::())` and
 Array and Dict types
 --------------------
 
-These provide slightly better flexibility than using `Vec` and `HashMap` but at the expense of being less ergonomic to use.
+These provide slightly better flexibility than using `Vec` and `HashMap` by instead integrating with `Iterator`. Here's an example where you can append and get a dictionary without having to create a HashMap:
+
+```rust
+let x = &[("Hello", true), ("World", false)];
+let m = try!(Message::new_method_call(dest, path, intf, member)).append1(Dict::new(x));
+let r = try!(c.send_with_reply_and_block(m, 2000));
+let z: Dict<i32, &str, _> = try!(r.read1());
+for (key, value) in z { /* do something */ }
+```
 
 An edge case where this is necessary is having floating point keys in a dictionary - this is supported in D-Bus but not in Rust's `HashMap`. I have never seen this in practice, though.
 
-TODO: Example
+Unusual types
+-------------
+
+The types `Path`, `Signature` and `OwnedFd` are not often used, but they can be appended and read as other argument types. `Path` and `Signature` will return strings with a borrowed lifetime - use `.into_static()` if you want to untie that lifetime.
+
+For `OwnedFd`, which a wrapper around a file descriptor, remember that the file descriptor will be closed when it goes out of scope.
 
 MessageItem
 -----------

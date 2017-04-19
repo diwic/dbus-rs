@@ -5,6 +5,8 @@ use std::any;
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 /// A simple wrapper to specify a D-Bus variant.
+///
+/// See the argument guide and module level documentation for details and examples.
 pub struct Variant<T>(pub T);
 
 impl Variant<Box<RefArg>> {

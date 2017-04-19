@@ -5,7 +5,13 @@
 //! Linux distribution out there, and runs in two instances - one per session, and one
 //! system-wide.
 //!
-//! See the examples directory for some examples to get you started.
+//! In addition to the API documentation, which you're currently reading, you might want to
+//! look in the examples directory, which contains many examples and an argument guide.
+//! README.md also contain a few quick "getting started" examples.
+//!
+//! In addition to this crate, there are two companion crates, dbus-codegen for generating Rust
+//! code from D-Bus introspection data, and dbus-tokio for integrating D-Bus with [Tokio](http://tokio.rs).
+//! However, at the time of this writing, these are far less mature than this crate. 
 
 // #![warn(missing_docs)]
 

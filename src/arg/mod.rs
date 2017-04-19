@@ -1,12 +1,8 @@
 //! Types and traits for easily getting a message's arguments, or appening a message with arguments.
 //!
-//! Using this module should be faster than
-//! using MessageItem, especially when large arrays need to be appended.
-//! It also encodes more of D-Bus restrictions into Rust's type system, so
-//! trying to append anything that D-Bus would not allow should result in a
-//! compile-time error.
+//! Also see the arguments guide (in the examples directory).
 //!
-//! A message has `get1`, `get2` etc, and `append1`, `append2` etc, which is your
+//! A message has `read1`, `read2` etc, and `append1`, `append2` etc, which is your
 //! starting point into this module's types. 
 //!
 //! **Append a**:
@@ -35,7 +31,7 @@
 //!
 //! `OwnedFd` - shares the file descriptor with the remote side.
 //!
-//! **Get a**:
+//! **Get / read a**:
 //!
 //! `bool, u8, u16, u32, u64, i16, i32, i64, f64` - the corresponding D-Bus basic type
 //!
