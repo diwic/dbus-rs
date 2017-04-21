@@ -56,11 +56,12 @@ fn main() {
                 let sender = m.msg.sender().unwrap().into_static();
                 let (pname, iname) = (m.path.get_name().clone(), m.iface.get_name().clone());
                 let mret = m.msg.method_return();
+                let signal3 = signal.clone();
 
                 sleep_future.and_then(move |_| {
                     let s = format!("Hello {}!", sender);
                     let mret = mret.append1(s);
-                    let sig = signal.msg(&pname, &iname).append1(&*sender);
+                    let sig = signal3.msg(&pname, &iname).append1(&*sender);
 
                     // Two messages will be returned - one is the method return (and should always be there),
                     // and in our case we also have a signal we want to send at the same time.
