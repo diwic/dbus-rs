@@ -1,11 +1,11 @@
 /// Async server-side trees
 
-use std::{ops, fmt};
-use dbus::tree::{Factory, MethodType, DataType, MTFn, Method, MethodInfo};
+use std::{ops, fmt, error};
+use dbus::tree::{Factory, MethodType, DataType, MTFn, Method, MethodInfo, MethodErr, MethodResult};
 use dbus::{Member, Message};
 use std::marker::PhantomData;
 use std::cell::RefCell;
-use futures::Future;
+use futures::{IntoFuture, Future, Poll};
 
 pub trait ADataType: fmt::Debug + Sized + Default {
     type ObjectPath: fmt::Debug;
@@ -52,11 +52,12 @@ impl<M: MethodType<D>, D: DataType> ops::Deref for AFactory<M, D> {
 }
 
 impl<D: ADataType> AFactory<MTFn<ATree<D>>, ATree<D>> {
-    pub fn amethod<H, R, T>(&self, t: T, data: D::Method, handler: H) -> Method<MTFn<ATree<D>>, ATree<D>>
-    where H: 'static + Fn(&MethodInfo<MTFn<ATree<D>>, ATree<D>>) -> R, T: Into<Member<'static>>, R: Into<AMethodResult> {
+    pub fn amethod<H, R, T, E>(&self, t: T, data: D::Method, handler: H) -> Method<MTFn<ATree<D>>, ATree<D>>
+    where H: 'static + Fn(&MethodInfo<MTFn<ATree<D>>, ATree<D>>) -> R, T: Into<Member<'static>>,
+        E: error::Error, R: IntoFuture<Item=Vec<Message>, Error=E> {
         self.0.method(t, data, move |minfo| {
             let r = handler(minfo);
-            minfo.tree.get_data().push(r.into());
+            minfo.tree.get_data().push(AMethodResult::new(r));
             Ok(Vec::new())
         })
     }
@@ -66,7 +67,13 @@ impl<D: ADataType> AFactory<MTFn<ATree<D>>, ATree<D>> {
 /// TODO
 pub struct AMethodResult(());
 
-impl<F: Future<Item=Vec<Message>>> From<F> for AMethodResult {
-    fn from(f: F) -> Self { unimplemented!() }
+impl AMethodResult {
+    fn new<E: error::Error, F: IntoFuture<Item=Vec<Message>, Error=E>>(_: F) -> Self { unimplemented!() }
+}
+
+impl Future for AMethodResult {
+    type Item = Vec<Message>;
+    type Error = MethodErr;
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> { unimplemented!() }
 }
 

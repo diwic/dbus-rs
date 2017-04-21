@@ -6,6 +6,7 @@ version = "0.1.0"
 [dependencies]
 dbus = "0.5.2"
 futures = "0.1.12"
+tokio-core = "0.1.6"
 
 [dev-dependencies]
 tokio-timer = "0.1.0"
