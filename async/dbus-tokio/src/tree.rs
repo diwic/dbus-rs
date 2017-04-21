@@ -52,9 +52,9 @@ impl<M: MethodType<D>, D: DataType> ops::Deref for AFactory<M, D> {
 }
 
 impl<D: ADataType> AFactory<MTFn<ATree<D>>, ATree<D>> {
-    pub fn amethod<H, R, T, E>(&self, t: T, data: D::Method, handler: H) -> Method<MTFn<ATree<D>>, ATree<D>>
+    pub fn amethod<H, R, T>(&self, t: T, data: D::Method, handler: H) -> Method<MTFn<ATree<D>>, ATree<D>>
     where H: 'static + Fn(&MethodInfo<MTFn<ATree<D>>, ATree<D>>) -> R, T: Into<Member<'static>>,
-        E: error::Error, R: IntoFuture<Item=Vec<Message>, Error=E> {
+        R: 'static + IntoFuture<Item=Vec<Message>, Error=MethodErr> {
         self.0.method(t, data, move |minfo| {
             let r = handler(minfo);
             minfo.tree.get_data().push(AMethodResult::new(r));
@@ -63,17 +63,24 @@ impl<D: ADataType> AFactory<MTFn<ATree<D>>, ATree<D>> {
     }
 }
 
-#[derive(Debug)]
-/// TODO
-pub struct AMethodResult(());
+
+pub struct AMethodResult(Box<Future<Item=Vec<Message>, Error=MethodErr>>);
+
+impl fmt::Debug for AMethodResult {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "AMethodResult") }
+}
 
 impl AMethodResult {
-    fn new<E: error::Error, F: IntoFuture<Item=Vec<Message>, Error=E>>(_: F) -> Self { unimplemented!() }
+    fn new<F: 'static + IntoFuture<Item=Vec<Message>, Error=MethodErr>>(f: F) -> Self {
+        AMethodResult(Box::new(f.into_future()))
+    }
 }
 
 impl Future for AMethodResult {
     type Item = Vec<Message>;
     type Error = MethodErr;
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> { unimplemented!() }
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        self.0.poll()
+    }
 }
 

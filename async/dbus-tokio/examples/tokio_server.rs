@@ -16,6 +16,7 @@ extern crate dbus_tokio;
 use std::time::Duration;
 use std::sync::Arc;
 use dbus::{Connection, BusType, NameFlag};
+use dbus::tree::MethodErr;
 use dbus_tokio::tree::{AFactory, ATree};
 use tokio_timer::*;
 
@@ -66,7 +67,7 @@ fn main() {
                     // Two messages will be returned - one is the method return (and should always be there),
                     // and in our case we also have a signal we want to send at the same time.
                     Ok(vec!(mret, sig))
-                })
+                }).map_err(|e| MethodErr::failed(&e))
 
             // Our method has one output argument, no input arguments.
             }).outarg::<&str,_>("reply")
