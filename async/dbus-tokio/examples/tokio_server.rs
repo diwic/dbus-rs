@@ -12,13 +12,15 @@ extern crate dbus;
 extern crate futures;
 extern crate tokio_timer;
 extern crate dbus_tokio;
+extern crate tokio_core;
 
 use std::time::Duration;
 use std::sync::Arc;
 use dbus::{Connection, BusType, NameFlag};
 use dbus::tree::MethodErr;
-use dbus_tokio::tree::{AFactory, ATree};
+use dbus_tokio::tree::{AFactory, ATree, ATreeServer};
 use tokio_timer::*;
+use tokio_core::reactor::Core;
 
 use futures::Future;
 
@@ -79,10 +81,11 @@ fn main() {
     // We register all object paths in the tree.
     tree.set_registered(&c, true).unwrap();
 
-/*    let mut core = Core::new().unwrap();
-    let dbus = TokioServer::new(dbus, core.handle());
+    let mut core = Core::new().unwrap();
+    let server = ATreeServer::new(&c, &tree, core.handle());
 
-    // This dbus_events future contains a poll implementation that pulls messages
+    
+    // This AServer future contains a poll implementation that pulls messages
     // off the wire and dispatches them to the above-defined callbacks to create futures
-    core.run(dbus).unwrap(); */
+ //   core.run(server).unwrap(); 
 }

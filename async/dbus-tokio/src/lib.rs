@@ -1,11 +1,14 @@
 extern crate dbus;
 extern crate futures;
 extern crate tokio_core;
+extern crate mio;
 
 /// Tokio integration for dbus
 
 pub mod tree;
 
-mod aconnection;
+// mod aconnection;
 
-pub use aconnection::AConnection as AConnection;
+// pub use aconnection::AConnection as AConnection;
+
+pub mod awatch;

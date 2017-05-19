@@ -1,11 +1,12 @@
 /// Async server-side trees
 
-use std::{ops, fmt, error};
-use dbus::tree::{Factory, MethodType, DataType, MTFn, Method, MethodInfo, MethodErr, MethodResult};
-use dbus::{Member, Message};
+use std::{ops, fmt};
+use dbus::tree::{Factory, Tree, MethodType, DataType, MTFn, Method, MethodInfo, MethodErr};
+use dbus::{Member, Message, Connection};
 use std::marker::PhantomData;
 use std::cell::RefCell;
 use futures::{IntoFuture, Future, Poll};
+use tokio_core::reactor;
 
 pub trait ADataType: fmt::Debug + Sized + Default {
     type ObjectPath: fmt::Debug;
@@ -83,4 +84,16 @@ impl Future for AMethodResult {
         self.0.poll()
     }
 }
+
+
+#[derive(Debug)]
+pub struct ATreeServer<'a, D: ADataType + 'a, C>(&'a Tree<MTFn<ATree<D>>, ATree<D>>, C);
+
+impl<'a, D: ADataType, C: ops::Deref<Target=Connection>> ATreeServer<'a, D, C> {
+    pub fn new(c: C, t: &'a Tree<MTFn<ATree<D>>, ATree<D>>, _h: reactor::Handle) -> Self {
+        
+        ATreeServer(t, c)
+    }
+}
+
 
