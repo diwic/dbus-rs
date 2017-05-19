@@ -1,8 +1,8 @@
 // Low-level details, dealing with file descriptors etc
 
 use mio::{self, unix};
-use std::io;
-use dbus::{Connection, ConnectionItems, ConnectionItem, Watch, WatchEvent};
+use std::{io, mem, fmt};
+use dbus::{Connection, ConnectionItems, ConnectionItem, Watch, WatchEvent, MsgHandler};
 use futures::{Async, Future, task, Stream, Poll};
 use tokio_core::reactor::{PollEvented, Handle as CoreHandle};
 use std::rc::Rc;
@@ -10,19 +10,32 @@ use std::os::raw::c_uint;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 
-#[derive(Debug)]
-struct AWInner(Rc<Connection>, RefCell<Option<task::Task>>, RefCell<VecDeque<ConnectionItem>>);
+//#[derive(Debug)]
+struct AWInner {
+    conn: Rc<Connection>,
+    task: RefCell<Option<task::Task>>,
+    items: RefCell<VecDeque<ConnectionItem>>,
+    handlers: RefCell<Vec<Box<MsgHandler>>>
+}
+
+impl fmt::Debug for AWInner {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "AWInner {{ task: {:?}, items: {:?} }}", self.task, self.items)
+    }
+}
 
 impl AWInner {
-    fn handle_items(&self, items: ConnectionItems) {
+    fn handle_items(&self, mut items: ConnectionItems) {
         {
-            let mut ci = self.2.borrow_mut();
-            for item in items {
+            mem::swap(items.msg_handlers(), &mut *self.handlers.borrow_mut());
+            let mut ci = self.items.borrow_mut();
+            while let Some(item) = items.next() {
                 println!("Transfer {:?}", item);
                 ci.push_back(item);
             }
+            mem::swap(items.msg_handlers(), &mut *self.handlers.borrow_mut());
         }
-        let t = self.1.borrow_mut().take();
+        let t = self.task.borrow_mut().take();
         println!("Unparking stream {:?}", t);
         t.map(|t| t.unpark());
     }
@@ -33,11 +46,21 @@ pub struct AWatcher(Rc<AWInner>);
 
 impl AWatcher {
     pub fn new(c: Rc<Connection>, h: &CoreHandle) -> io::Result<AWatcher> {
-        let i = Rc::new(AWInner(c, RefCell::new(None), RefCell::new(VecDeque::new())));
-        for w in i.0.watch_fds() {
+        let i = Rc::new(AWInner { conn: c, task: RefCell::new(None), items: RefCell::new(VecDeque::new()), handlers: RefCell::new(vec!()) });
+        for w in i.conn.watch_fds() {
             h.spawn(AWatch2(PollEvented::new(AWatch(w), h)?, i.clone()).map_err(|e| panic!(e)));
         }
         Ok(AWatcher(i))
+    }
+
+    /// Builder method that adds a new msg handler.
+    pub fn with<H: 'static + MsgHandler>(self, h: H) -> Self {
+        self.append(h); self
+    }
+
+    /// Non-builder method that adds a new msg handler.
+    pub fn append<H: 'static + MsgHandler>(&self, h: H) {
+        self.0.handlers.borrow_mut().push(Box::new(h));
     }
 }
 
@@ -47,14 +70,14 @@ impl Stream for AWatcher {
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         println!("Poll stream");
         let inner = &*self.0;
-        match inner.2.borrow_mut().pop_front() {
+        match inner.items.borrow_mut().pop_front() {
             Some(item) => {
                 Ok(Async::Ready(Some(item)))
             }
             None => {
                 let p = task::park();
                 println!("Parking stream {:?}", p);
-                *inner.1.borrow_mut() = Some(p);
+                *inner.task.borrow_mut() = Some(p);
                 Ok(Async::NotReady)
             }
         }
@@ -109,7 +132,7 @@ impl Future for AWatch2 {
 
         if flags == 0 { return Ok(Async::NotReady) }; // Not sure why are we woken up if we can't do anything, but seems to happen in practice
 
-        let items = (self.1).0.watch_handle(self.0.get_ref().0.fd(), flags);
+        let items = (self.1).conn.watch_handle(self.0.get_ref().0.fd(), flags);
         self.1.handle_items(items);
         if canread { self.0.need_read() };
         if canwrite { self.0.need_write() };
@@ -125,7 +148,6 @@ fn watch_test() {
     conn.register_object_path("/test").unwrap();
 
     let awatcher = AWatcher::new(conn.clone(), &core.handle()).unwrap();
-    let conn2 = conn.clone();
 
     let m = ::dbus::Message::new_method_call(&conn.unique_name(), "/test", "com.example.dbusrs.asynctest", "AsyncTest").unwrap();
     let serial = conn.send(m).unwrap();
@@ -133,6 +155,7 @@ fn watch_test() {
 
     let (tx, rx) = ::futures::sync::oneshot::channel();
     let mut tx = Some(tx);
+    let conn2 = conn.clone();
     let f = awatcher.for_each(move |i| {
         println!("Received {:?}", i);
         match i {
@@ -156,5 +179,23 @@ fn watch_test() {
 
     core.handle().spawn(f);
     core.run(rx).unwrap();
-    // core.run(::futures::empty::<(), ()>()).unwrap();
+}
+
+#[test]
+fn watch2_test() {
+    let conn = Rc::new(Connection::get_private(::dbus::BusType::Session).unwrap());
+    let mut core = ::tokio_core::reactor::Core::new().unwrap();
+    let awatcher = AWatcher::new(conn.clone(), &core.handle()).unwrap();
+
+    let (tx, rx) = ::futures::sync::oneshot::channel();
+    let mut tx = Some(tx);
+    let m = ::dbus::Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
+    awatcher.append(conn.send_with_reply(m, move |r| {
+        let z: Vec<&str> = r.get1().unwrap();
+        println!("got reply: {:?}", z);
+        tx.take().unwrap().send(()).unwrap();
+    }));
+
+    core.handle().spawn(awatcher.for_each(|i| { println!("Received {:?}", i); Ok(()) } ));
+    core.run(rx).unwrap();
 }

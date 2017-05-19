@@ -40,12 +40,12 @@ pub enum ConnectionItem {
 pub struct ConnectionItems<'a> {
     c: &'a Connection,
     timeout_ms: Option<i32>,
-    handlers: Vec<Box<MsgHandler + 'a>>,
+    handlers: Vec<Box<MsgHandler>>,
 }
 
 impl<'a> ConnectionItems<'a> {
     /// Builder method that adds a new msg handler.
-    pub fn with<H: MsgHandler + 'a>(mut self, h: H) -> Self {
+    pub fn with<H: 'static + MsgHandler>(mut self, h: H) -> Self {
         self.handlers.push(Box::new(h)); self
     }
 
@@ -64,7 +64,7 @@ impl<'a> ConnectionItems<'a> {
     }
 
     /// Access and modify message handlers 
-    pub fn msg_handlers(&mut self) -> &mut Vec<Box<MsgHandler + 'a>> { &mut self.handlers }
+    pub fn msg_handlers(&mut self) -> &mut Vec<Box<MsgHandler>> { &mut self.handlers }
 }
 
 impl<'a> Iterator for ConnectionItems<'a> {
