@@ -205,9 +205,9 @@ impl Connection {
     }
 
     /// Sends a message over the D-Bus. The resulting handler can be added to a connectionitem handler.
-    pub fn send_with_reply<'a, F: FnMut(&Message) + 'a>(&self, msg: Message, f: F) -> MessageReply<'a> {
+    pub fn send_with_reply<'a, F: FnOnce(&Message) + 'a>(&self, msg: Message, f: F) -> MessageReply<F> {
         let serial = self.send(msg).unwrap();
-        MessageReply(Box::new(f), serial)
+        MessageReply(Some(f), serial)
     }
 
     /// Get the connection's unique name.
@@ -365,6 +365,8 @@ pub trait MsgHandler {
 }
 
 /// The result from MsgHandler::handle.
+///
+/// WIP: field names are still unstable
 #[derive(Debug, Default)]
 pub struct MsgHandlerResult {
     /// Indicates that the message has been dealt with and should not be processed further.
@@ -375,13 +377,13 @@ pub struct MsgHandlerResult {
     pub reply: Vec<Message>,
 }
 
-pub struct MessageReply<'a>(Box<FnMut(&Message) + 'a>, u32);
+pub struct MessageReply<F>(Option<F>, u32);
 
-impl<'a> MsgHandler for MessageReply<'a> {
+impl<'a, F: FnOnce(&Message) + 'a> MsgHandler for MessageReply<F> {
     fn handle_ci(&mut self, ci: &ConnectionItem) -> Option<MsgHandlerResult> {
         if let ConnectionItem::MethodReturn(ref msg) = *ci {
             if msg.get_reply_serial() == Some(self.1) {
-                self.0(msg);
+                self.0.take().unwrap()(msg);
                 return Some(MsgHandlerResult { handled: true, done: true, reply: Vec::new() })
             }
         }
@@ -392,13 +394,15 @@ impl<'a> MsgHandler for MessageReply<'a> {
 
 #[test]
 fn message_reply() {
+    use std::{cell, rc};
     let c = Connection::get_private(BusType::Session).unwrap();
     let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
-    let quit = ::std::cell::Cell::new(false);
-    let reply = c.send_with_reply(m, |result| {
+    let quit = rc::Rc::new(cell::Cell::new(false));
+    let quit2 = quit.clone();
+    let reply = c.send_with_reply(m, move |result| {
         let r = result;
         let _: ::arg::Array<&str, _>  = r.get1().unwrap();
-        quit.set(true);
+        quit2.set(true);
     });
     for _ in c.iter(1000).with(reply) { if quit.get() { return; } }
     assert!(false);

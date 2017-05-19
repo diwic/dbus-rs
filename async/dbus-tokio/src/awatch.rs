@@ -182,12 +182,11 @@ fn watch2_test() {
     let awatcher = AWatcher::new(conn.clone(), &core.handle()).unwrap();
 
     let (tx, rx) = ::futures::sync::oneshot::channel();
-    let mut tx = Some(tx);
     let m = ::dbus::Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
     awatcher.append(conn.send_with_reply(m, move |r| {
         let z: Vec<&str> = r.get1().unwrap();
         println!("got reply: {:?}", z);
-        tx.take().unwrap().send(()).unwrap();
+        tx.send(()).unwrap();
     }));
 
     core.handle().spawn(awatcher.for_each(|i| { println!("Received {:?}", i); Ok(()) } ));
