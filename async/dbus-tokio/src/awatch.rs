@@ -30,13 +30,11 @@ impl AWInner {
             mem::swap(items.msg_handlers(), &mut *self.handlers.borrow_mut());
             let mut ci = self.items.borrow_mut();
             while let Some(item) = items.next() {
-                println!("Transfer {:?}", item);
                 ci.push_back(item);
             }
             mem::swap(items.msg_handlers(), &mut *self.handlers.borrow_mut());
         }
         let t = self.task.borrow_mut().take();
-        println!("Unparking stream {:?}", t);
         t.map(|t| t.unpark());
     }
 }
@@ -68,7 +66,6 @@ impl Stream for AWatcher {
     type Item = ConnectionItem;
     type Error = ();
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        println!("Poll stream");
         let inner = &*self.0;
         match inner.items.borrow_mut().pop_front() {
             Some(item) => {
@@ -76,7 +73,6 @@ impl Stream for AWatcher {
             }
             None => {
                 let p = task::park();
-                println!("Parking stream {:?}", p);
                 *inner.task.borrow_mut() = Some(p);
                 Ok(Async::NotReady)
             }
@@ -96,7 +92,6 @@ impl mio::Evented for AWatch {
     {
         if !self.0.readable() { interest.remove(mio::Ready::readable()) };
         if !self.0.writable() { interest.remove(mio::Ready::writable()) };
-        println!("Register: {:?} {:?}", self, interest);
         unix::EventedFd(&self.0.fd()).register(poll, token, interest, opts)
     }
 
@@ -122,15 +117,14 @@ impl Future for AWatch2 {
     type Error = io::Error;
     
     fn poll(&mut self) -> io::Result<Async<()>> {
-        println!("Wakeup: {:?} {:?} {:?}", self, self.0.poll_read(), self.0.poll_write());
-
         let canread = self.0.poll_read().is_ready();
         let canwrite = self.0.poll_write().is_ready();
         let flags = 
            if canread { WatchEvent::Readable as c_uint } else { 0 } +
            if canwrite { WatchEvent::Writable as c_uint } else { 0 };
 
-        if flags == 0 { return Ok(Async::NotReady) }; // Not sure why are we woken up if we can't do anything, but seems to happen in practice
+        // Not sure why are we woken up if we can't do anything, but seems to happen in practice
+        if flags == 0 { return Ok(Async::NotReady) };
 
         let items = (self.1).conn.watch_handle(self.0.get_ref().0.fd(), flags);
         self.1.handle_items(items);
