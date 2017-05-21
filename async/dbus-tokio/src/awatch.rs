@@ -4,18 +4,21 @@ use mio::{self, unix};
 use std::{io, mem, fmt};
 use dbus::{Connection, ConnectionItems, ConnectionItem, Watch, WatchEvent, MsgHandler};
 use futures::{Async, Future, task, Stream, Poll};
+use futures::sync::oneshot;
 use tokio_core::reactor::{PollEvented, Handle as CoreHandle};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::os::raw::c_uint;
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{VecDeque, HashMap};
+
 
 //#[derive(Debug)]
 struct AWInner {
     conn: Rc<Connection>,
-    task: RefCell<Option<task::Task>>,
     items: RefCell<VecDeque<ConnectionItem>>,
-    handlers: RefCell<Vec<Box<MsgHandler>>>
+    handlers: RefCell<Vec<Box<MsgHandler>>>,
+    task: RefCell<Option<task::Task>>,
+    fds: Rc<RefCell<HashMap<i32, AWatch>>>,
 }
 
 impl fmt::Debug for AWInner {
@@ -25,6 +28,7 @@ impl fmt::Debug for AWInner {
 }
 
 impl AWInner {
+    // Called from child's task
     fn handle_items(&self, mut items: ConnectionItems) {
         {
             mem::swap(items.msg_handlers(), &mut *self.handlers.borrow_mut());
@@ -39,14 +43,28 @@ impl AWInner {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AWatcher(Rc<AWInner>);
 
 impl AWatcher {
     pub fn new(c: Rc<Connection>, h: &CoreHandle) -> io::Result<AWatcher> {
-        let i = Rc::new(AWInner { conn: c, task: RefCell::new(None), items: RefCell::new(VecDeque::new()), handlers: RefCell::new(vec!()) });
+        let i = Rc::new(AWInner {
+            conn: c,
+            task: RefCell::new(None),
+            items: RefCell::new(VecDeque::new()),
+            handlers: RefCell::new(vec!()),
+            fds: RefCell::new(HashMap::new()),
+
+        });
         for w in i.conn.watch_fds() {
-            h.spawn(AWatch2(PollEvented::new(AWatch(w), h)?, i.clone()).map_err(|e| panic!(e)));
+            let (tx, rx) = oneshot::channel();
+            i.subtasks.borrow_mut().insert(w.fd(), tx);
+            let child = AWatch2 {
+                io: PollEvented::new(AWatch(w), h)?,
+                parent: Rc::downgrade(&i),
+                quitrx: rx,
+            };
+            h.spawn(child);
         }
         Ok(AWatcher(i))
     }
@@ -110,15 +128,22 @@ impl mio::Evented for AWatch {
 }
 
 #[derive(Debug)]
-struct AWatch2(PollEvented<AWatch>, Rc<AWInner>);
+struct AWatch2 {
+    io: PollEvented<AWatch>, 
+    parent: Weak<AWInner>,
+    quitrx: oneshot::Receiver<()>,
+}
 
 impl Future for AWatch2 {
     type Item = ();
-    type Error = io::Error;
+    type Error = ();
     
-    fn poll(&mut self) -> io::Result<Async<()>> {
-        let canread = self.0.poll_read().is_ready();
-        let canwrite = self.0.poll_write().is_ready();
+    fn poll(&mut self) -> Result<Async<()>, ()> {
+        let q = self.quitrx.poll();
+        if q != Ok(Async::NotReady) { return Ok(Async::Ready(())); }
+
+        let canread = self.io.poll_read().is_ready();
+        let canwrite = self.io.poll_write().is_ready();
         let flags = 
            if canread { WatchEvent::Readable as c_uint } else { 0 } +
            if canwrite { WatchEvent::Writable as c_uint } else { 0 };
@@ -126,11 +151,14 @@ impl Future for AWatch2 {
         // Not sure why are we woken up if we can't do anything, but seems to happen in practice
         if flags == 0 { return Ok(Async::NotReady) };
 
-        let items = (self.1).conn.watch_handle(self.0.get_ref().0.fd(), flags);
-        self.1.handle_items(items);
-        if canread { self.0.need_read() };
-        if canwrite { self.0.need_write() };
-        Ok(Async::NotReady) // Continue forever
+        if let Some(parent) = self.parent.upgrade() {
+            let items = parent.conn.watch_handle(self.io.get_ref().0.fd(), flags);
+            parent.handle_items(items);
+
+            if canread { self.io.need_read() };
+            if canwrite { self.io.need_write() };
+            Ok(Async::NotReady) // Continue as normal
+        } else { Ok(Async::Ready(())) }
     }
 }
 
