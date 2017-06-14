@@ -130,6 +130,10 @@ extern "C" fn filter_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::D
             i.pending_items.borrow_mut().push_back(ConnectionItem::MethodReturn(m));
             ffi::DBusHandlerResult::NotYetHandled
         }
+        ffi::DBusMessageType::Error => {
+            i.pending_items.borrow_mut().push_back(ConnectionItem::MethodReturn(m));
+            ffi::DBusHandlerResult::NotYetHandled
+        }
         _ => ffi::DBusHandlerResult::NotYetHandled,
     };
 
