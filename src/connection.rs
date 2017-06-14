@@ -122,26 +122,15 @@ extern "C" fn filter_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::D
 
     let mtype: ffi::DBusMessageType = unsafe { mem::transmute(ffi::dbus_message_get_type(msg)) };
     let r = match mtype {
-        ffi::DBusMessageType::Signal => {
-            i.pending_items.borrow_mut().push_back(ConnectionItem::Signal(m));
-            ffi::DBusHandlerResult::Handled
-        }
-        ffi::DBusMessageType::MethodReturn => {
-            i.pending_items.borrow_mut().push_back(ConnectionItem::MethodReturn(m));
-            ffi::DBusHandlerResult::NotYetHandled
-        }
-        ffi::DBusMessageType::Error => {
-            i.pending_items.borrow_mut().push_back(ConnectionItem::MethodReturn(m));
-            ffi::DBusHandlerResult::NotYetHandled
-        }
-        ffi::DBusMessageType::MethodCall => {
-            i.pending_items.borrow_mut().push_back(ConnectionItem::MethodCall(m));
-            ffi::DBusHandlerResult::NotYetHandled
-        }
-        _ => ffi::DBusHandlerResult::NotYetHandled,
+        ffi::DBusMessageType::Signal => ConnectionItem::Signal(m),
+        ffi::DBusMessageType::MethodReturn => ConnectionItem::MethodReturn(m),
+        ffi::DBusMessageType::Error => ConnectionItem::MethodReturn(m),
+        ffi::DBusMessageType::MethodCall => ConnectionItem::MethodCall(m),
+        _ => return ffi::DBusHandlerResult::NotYetHandled,
     };
 
-    r
+    i.pending_items.borrow_mut().push_back(r);
+    if mtype == ffi::DBusMessageType::Signal { ffi::DBusHandlerResult::Handled } else { ffi::DBusHandlerResult::NotYetHandled }
 }
 
 extern "C" fn object_path_message_cb(_conn: *mut ffi::DBusConnection, _msg: *mut ffi::DBusMessage,
