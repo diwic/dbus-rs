@@ -134,19 +134,20 @@ extern "C" fn filter_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::D
             i.pending_items.borrow_mut().push_back(ConnectionItem::MethodReturn(m));
             ffi::DBusHandlerResult::NotYetHandled
         }
+        ffi::DBusMessageType::MethodCall => {
+            i.pending_items.borrow_mut().push_back(ConnectionItem::MethodCall(m));
+            ffi::DBusHandlerResult::NotYetHandled
+        }
         _ => ffi::DBusHandlerResult::NotYetHandled,
     };
 
     r
 }
 
-extern "C" fn object_path_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::DBusMessage,
-    user_data: *mut c_void) -> ffi::DBusHandlerResult {
-
-    let m = super::message::message_from_ptr(msg, true);
-    let i: &IConnection = unsafe { mem::transmute(user_data) };
-    assert!(i.conn.get() == conn);
-    i.pending_items.borrow_mut().push_back(ConnectionItem::MethodCall(m));
+extern "C" fn object_path_message_cb(_conn: *mut ffi::DBusConnection, _msg: *mut ffi::DBusMessage,
+    _user_data: *mut c_void) -> ffi::DBusHandlerResult {
+    /* Already pushed in filter_message_cb, so we just set the handled flag here to disable the 
+       "default" handler. */
     ffi::DBusHandlerResult::Handled
 }
 
