@@ -1,6 +1,7 @@
 // Low-level details, dealing with file descriptors etc
 
-use mio::{self, unix};
+use mio::{self, unix, Ready};
+use mio::unix::UnixReady;
 use std::{io, mem, fmt};
 use dbus::{Connection, ConnectionItems, ConnectionItem, Watch, WatchEvent, MsgHandler};
 use futures::{Async, Future, task, Stream, Poll};
@@ -10,7 +11,75 @@ use std::rc::{Rc, Weak};
 use std::os::raw::c_uint;
 use std::cell::RefCell;
 use std::collections::{VecDeque, HashMap};
+use std::os::unix::io::RawFd;
 
+pub struct AConnection {
+    conn: Rc<Connection>,
+    core: CoreHandle,
+    fds: HashMap<RawFd, PollEvented<AWatch>>,
+    quit: Option<Box<Future<Item=(), Error=()>>>,
+}
+
+impl AConnection {
+    fn modify_watch(&mut self, w: Watch) -> io::Result<()> {
+        if !w.readable() && !w.writable() {
+            self.fds.remove(&w.fd());
+        } else {
+            let z = PollEvented::new(AWatch(w), &self.core)?;
+            self.fds.insert(w.fd(), z);
+        }
+        Ok(())
+    }
+
+    pub fn new(c: Rc<Connection>, h: CoreHandle) -> io::Result<AConnection> {
+        let mut i = AConnection {
+            conn: c,
+            core: h,
+            fds: HashMap::new(),
+            quit: None,
+        };
+        for w in i.conn.watch_fds() { i.modify_watch(w)?; }
+        Ok(i)
+    }
+
+    fn handle_items(&mut self, items: ConnectionItems) {
+        for i in items {
+            println!("Got: {:?}", i); 
+        }
+    }
+}
+
+impl Future for AConnection {
+    type Item = ();
+    type Error = ();
+
+    fn poll(&mut self) -> Result<Async<()>, ()> {
+        if let &mut Some(ref mut qrx) = &mut self.quit {
+            let q = qrx.poll();
+            if q != Ok(Async::NotReady) { return Ok(Async::Ready(())); }
+        }
+        let cc = self.conn.clone(); // Borrow checker made me do this
+        let mut items = None;
+        for w in self.fds.values() {
+            let mut mask = UnixReady::hup() | UnixReady::error();
+            if w.get_ref().0.readable() { mask = mask | Ready::readable().into(); }
+            if w.get_ref().0.writable() { mask = mask | Ready::writable().into(); }
+            let pr = w.poll_ready(*mask);
+            let ur = if let Async::Ready(t) = pr { UnixReady::from(t) } else { continue };
+            let flags =
+                if ur.is_readable() { WatchEvent::Readable as c_uint } else { 0 } +
+                if ur.is_writable() { WatchEvent::Writable as c_uint } else { 0 } +
+                if ur.is_hup() { WatchEvent::Hangup as c_uint } else { 0 } +
+                if ur.is_error() { WatchEvent::Error as c_uint } else { 0 };
+            println!("{:?} is {:?}", w.get_ref().0.fd(), ur);
+            items = Some(cc.watch_handle(w.get_ref().0.fd(), flags));
+            if ur.is_readable() { w.need_read() };
+            if ur.is_writable() { w.need_write() };
+        };
+        if let Some(items) = items { self.handle_items(items) };
+        Ok(Async::NotReady)
+    }
+}
 
 //#[derive(Debug)]
 struct AWInner {
@@ -18,7 +87,7 @@ struct AWInner {
     items: RefCell<VecDeque<ConnectionItem>>,
     handlers: RefCell<Vec<Box<MsgHandler>>>,
     task: RefCell<Option<task::Task>>,
-    fds: Rc<RefCell<HashMap<i32, AWatch>>>,
+    fds: RefCell<HashMap<i32, AWatch>>,
 }
 
 impl fmt::Debug for AWInner {
@@ -58,7 +127,7 @@ impl AWatcher {
         });
         for w in i.conn.watch_fds() {
             let (tx, rx) = oneshot::channel();
-            i.subtasks.borrow_mut().insert(w.fd(), tx);
+            // i.subtasks.borrow_mut().insert(w.fd(), tx);
             let child = AWatch2 {
                 io: PollEvented::new(AWatch(w), h)?,
                 parent: Rc::downgrade(&i),
@@ -163,6 +232,26 @@ impl Future for AWatch2 {
 }
 
 #[test]
+fn aconnection_test() {
+    let conn = Rc::new(Connection::get_private(::dbus::BusType::Session).unwrap());
+    let mut core = ::tokio_core::reactor::Core::new().unwrap();
+    let aconn = AConnection::new(conn.clone(), core.handle()).unwrap();
+
+    let (tx, rx) = ::futures::sync::oneshot::channel();
+    let m = ::dbus::Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
+    let reply = conn.send_with_reply(m, move |r| {
+        let z: Vec<&str> = r.get1().unwrap();
+        println!("got reply: {:?}", z);
+        tx.send(()).unwrap();
+    });
+    // awatcher.append();
+
+    core.handle().spawn(aconn);
+    core.run(rx).unwrap();
+}
+
+/*
+#[test]
 fn watch_test() {
     let conn = Rc::new(Connection::get_private(::dbus::BusType::Session).unwrap());
     let mut core = ::tokio_core::reactor::Core::new().unwrap();
@@ -219,4 +308,4 @@ fn watch2_test() {
 
     core.handle().spawn(awatcher.for_each(|i| { println!("Received {:?}", i); Ok(()) } ));
     core.run(rx).unwrap();
-}
+} */
