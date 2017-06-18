@@ -1,7 +1,7 @@
-use super::{Error, ffi, libc, to_c_str, c_str_to_slice, Watch, Message, BusName, Path, ConnPath};
+use super::{Error, ffi, libc, to_c_str, c_str_to_slice, Watch, Message, MessageType, BusName, Path, ConnPath};
 use super::{RequestNameReply, ReleaseNameReply, BusType, WatchEvent};
 use super::watch::WatchList;
-use std::{fmt, mem, ptr};
+use std::{fmt, mem, ptr, thread, panic};
 use std::collections::LinkedList;
 use std::cell::{Cell, RefCell};
 use std::os::unix::io::RawFd;
@@ -71,6 +71,7 @@ impl<'a> Iterator for ConnectionItems<'a> {
     type Item = ConnectionItem;
     fn next(&mut self) -> Option<ConnectionItem> {
         loop {
+            if self.c.i.filter_cb.borrow().is_none() { panic!("Cannot call ConnectionItems iterator recursively"); }
             let i = self.c.i.pending_items.borrow_mut().pop_front();
             if let Some(ci) = i {
                 if !self.process_handlers(&ci) { return Some(ci); }
@@ -79,12 +80,20 @@ impl<'a> Iterator for ConnectionItems<'a> {
             match self.timeout_ms {
                 Some(t) => {
                     let r = unsafe { ffi::dbus_connection_read_write_dispatch(self.c.conn(), t as c_int) };
+
+                    let p = mem::replace(&mut *self.c.i.filter_cb_panic.borrow_mut(), Ok(()));
+                    if let Err(perr) = p { panic::resume_unwind(perr); }
+
                     if !self.c.i.pending_items.borrow().is_empty() { continue };
                     if r == 0 { return None; }
                     return Some(ConnectionItem::Nothing);
                 }
                 None => {
                     let r = unsafe { ffi::dbus_connection_dispatch(self.c.conn()) };
+
+                    let p = mem::replace(&mut *self.c.i.filter_cb_panic.borrow_mut(), Ok(()));
+                    if let Err(perr) = p { panic::resume_unwind(perr); }
+
                     if !self.c.i.pending_items.borrow().is_empty() { continue };
                     if r == ffi::DBusDispatchStatus::DataRemains { continue };
                     if r == ffi::DBusDispatchStatus::Complete { return None };
@@ -102,6 +111,9 @@ struct IConnection {
     conn: Cell<*mut ffi::DBusConnection>,
     pending_items: RefCell<LinkedList<ConnectionItem>>,
     watches: Option<Box<WatchList>>,
+
+    filter_cb: RefCell<Option<Box<FnMut(&Connection, Message) -> bool>>>,
+    filter_cb_panic: RefCell<thread::Result<()>>,
 }
 
 /// A D-Bus connection. Start here if you want to get on the D-Bus!
@@ -116,21 +128,50 @@ pub fn conn_handle(c: &Connection) -> *mut ffi::DBusConnection {
 extern "C" fn filter_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::DBusMessage,
     user_data: *mut c_void) -> ffi::DBusHandlerResult {
 
-    let m = super::message::message_from_ptr(msg, true);
     let i: &IConnection = unsafe { mem::transmute(user_data) };
-    assert!(i.conn.get() == conn);
+    let connref: panic::AssertUnwindSafe<&Connection> = unsafe { mem::transmute(&i) };
+    if i.conn.get() != conn || i.filter_cb_panic.try_borrow().is_err() {
+        // This should never happen, but let's be extra sure
+        // process::abort(); ??
+        return ffi::DBusHandlerResult::Handled;
+    }
+    if i.filter_cb_panic.borrow().is_err() {
+        // We're in panic mode. Let's quit this ASAP
+        return ffi::DBusHandlerResult::Handled;
+    }
 
-    let mtype: ffi::DBusMessageType = unsafe { mem::transmute(ffi::dbus_message_get_type(msg)) };
+    let fcb = panic::AssertUnwindSafe(&i.filter_cb);
+    let r = panic::catch_unwind(|| {
+        let m = super::message::message_from_ptr(msg, true);
+        let mut cb = fcb.borrow_mut().take().unwrap(); // Take the callback out while we call it.
+        let r = cb(connref.0, m);
+        let mut cb2 = fcb.borrow_mut(); // If the filter callback has not been replaced, put it back in.
+        if cb2.is_none() { *cb2 = Some(cb) };
+        r
+    });
+
+    match r {
+        Ok(false) => ffi::DBusHandlerResult::NotYetHandled, 
+        Ok(true) => ffi::DBusHandlerResult::Handled, 
+        Err(e) => {
+            *i.filter_cb_panic.borrow_mut() = Err(e);
+            ffi::DBusHandlerResult::Handled
+        }
+    }
+}
+
+fn default_filter_callback(c: &Connection, m: Message) -> bool {
+    let mtype = m.msg_type();
     let r = match mtype {
-        ffi::DBusMessageType::Signal => ConnectionItem::Signal(m),
-        ffi::DBusMessageType::MethodReturn => ConnectionItem::MethodReturn(m),
-        ffi::DBusMessageType::Error => ConnectionItem::MethodReturn(m),
-        ffi::DBusMessageType::MethodCall => ConnectionItem::MethodCall(m),
-        _ => return ffi::DBusHandlerResult::NotYetHandled,
+        MessageType::Signal => ConnectionItem::Signal(m),
+        MessageType::MethodReturn => ConnectionItem::MethodReturn(m),
+        MessageType::Error => ConnectionItem::MethodReturn(m),
+        MessageType::MethodCall => ConnectionItem::MethodCall(m),
+        _ => return false,
     };
 
-    i.pending_items.borrow_mut().push_back(r);
-    if mtype == ffi::DBusMessageType::Signal { ffi::DBusHandlerResult::Handled } else { ffi::DBusHandlerResult::NotYetHandled }
+    c.i.pending_items.borrow_mut().push_back(r);
+    mtype == MessageType::Signal
 }
 
 extern "C" fn object_path_message_cb(_conn: *mut ffi::DBusConnection, _msg: *mut ffi::DBusMessage,
@@ -141,7 +182,6 @@ extern "C" fn object_path_message_cb(_conn: *mut ffi::DBusConnection, _msg: *mut
 }
 
 impl Connection {
-
     #[inline(always)]
     fn conn(&self) -> *mut ffi::DBusConnection {
         self.i.conn.get()
@@ -158,6 +198,8 @@ impl Connection {
             conn: Cell::new(conn),
             pending_items: RefCell::new(LinkedList::new()),
             watches: None,
+            filter_cb: RefCell::new(Some(Box::new(default_filter_callback))),
+            filter_cb_panic: RefCell::new(Ok(())),
         })};
 
         /* No, we don't want our app to suddenly quit if dbus goes down */
@@ -323,6 +365,24 @@ impl Connection {
     pub fn with_path<'a, D: Into<BusName<'a>>, P: Into<Path<'a>>>(&'a self, dest: D, path: P, timeout_ms: i32) ->
         ConnPath<'a, &'a Connection> {
         ConnPath { conn: self, dest: dest.into(), path: path.into(), timeout: timeout_ms }
+    }
+
+    /// Replace the default message callback.
+    ///
+    /// By default, when you call ConnectionItems::next, all relevant incoming messages
+    /// are returned through the ConnectionItems iterator, and 
+    /// irrelevant messages are passed on to libdbus's default handler.
+    /// If you need to customize this behaviour (i e, to handle all incoming messages yourself),
+    /// you can set this message callback yourself. A few caveats apply:
+    ///
+    /// Return true from the callback to disable libdbus's internal handling of the message, or
+    /// false to allow it.
+    ///
+    /// Don't call ConnectionItems::next from inside the message callback (you'll likely get a panic).
+    ///
+    /// If your message callback panics, ConnectionItems::next will panic, too.  
+    pub fn set_message_callback<F: 'static + FnMut(&Connection, Message) -> bool>(&self, f: F) {
+        *self.i.filter_cb.borrow_mut() = Some(Box::new(f));
     }
 }
 
