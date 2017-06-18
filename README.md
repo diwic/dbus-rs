@@ -76,18 +76,18 @@ For an extended example, which also uses non-panicking error handling, see
     examples/rtkit.rs
 
 
-Code generation
----------------
-
-In the codegen directory, you'll find a code generation utility that's still in alpha, but I'd appreciate testing and feedback. Given a destination and a path, the utility will generate Rust traits, and their implementations, for all interfaces found on that path.
-
-
 Requirements
 ============
 
 [Libdbus](https://dbus.freedesktop.org/releases/dbus/) 1.6 or higher, and latest stable release of [Rust](https://www.rust-lang.org/). If you run Ubuntu, this translates to Ubuntu 14.04 or later, having the `libdbus-1-dev` package installed while building, and the `libdbus-1-3` package installed while running.
 
 However, if you enable the feature `no-string-validation`, you might be able to build and run with older versions of the D-Bus library. This feature skips an extra check that a specific string (e g a Path, ErrorName etc) conforms to the D-Bus specification, which might also make things a tiny bit faster. But - if you do so, and then actually send invalid strings to the D-Bus library, you might get a panic instead of a proper error.
+
+
+Code generation
+===============
+
+In the codegen directory, you'll find a code generation utility that's still in alpha, but I'd appreciate testing and feedback. Given a destination and a path, the utility will generate Rust traits, and their implementations, for all interfaces found on that path.
 
 
 License
