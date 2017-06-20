@@ -10,19 +10,13 @@ documentation = "http://docs.rs/dbus"
 keywords = ["D-Bus", "DBus"]
 license = "Apache-2.0/MIT"
 categories = ["os::unix-apis", "api-bindings"]
-build = "build.rs"
 
 [dependencies]
 libc = "0.2.7"
-
-[build-dependencies]
-metadeps = "1"
+libdbus-sys = { version = "0.1.0", path = "libdbus-sys" }
 
 [dev-dependencies]
 tempdir = "0.3"
-
-[package.metadata.pkg-config]
-dbus-1 = "1.6"
 
 [features]
 no-string-validation = []

@@ -1,0 +1,19 @@
+[package]
+
+name = "libdbus-sys"
+version = "0.1.0"
+authors = ["David Henningsson <diwic@ubuntu.com>"]
+
+description = "FFI bindings to libdbus."
+repository = "https://github.com/diwic/dbus-rs"
+documentation = "http://docs.rs/libdbus-sys"
+keywords = ["D-Bus", "DBus", "libdbus"]
+license = "Apache-2.0/MIT"
+categories = ["os::unix-apis", "external-ffi-bindings"]
+build = "build.rs"
+
+[build-dependencies]
+metadeps = "1"
+
+[package.metadata.pkg-config]
+dbus-1 = "1.6"

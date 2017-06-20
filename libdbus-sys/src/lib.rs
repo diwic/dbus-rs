@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::os::raw::{c_void, c_char, c_uint, c_int};
 
 pub type DBusConnection = c_void;
@@ -130,8 +128,7 @@ pub struct DBusMessageIter {
     pub pad3: *mut c_void,
 }
 
-pub type DBusHandleMessageFunction = Option<
-        extern fn(conn: *mut DBusConnection, msg: *mut DBusMessage, user_data: *mut c_void) -> DBusHandlerResult>;
+pub type DBusHandleMessageFunction = Option<extern fn(conn: *mut DBusConnection, msg: *mut DBusMessage, user_data: *mut c_void) -> DBusHandlerResult>;
 
 pub type DBusAddWatchFunction = Option<extern fn(watch: *mut DBusWatch, user_data: *mut c_void) -> u32>;
 pub type DBusRemoveWatchFunction = Option<extern fn(watch: *mut DBusWatch, user_data: *mut c_void)>;
@@ -146,6 +143,7 @@ pub type DBusDispatchStatusFunction = Option<extern fn(conn: *mut DBusConnection
 pub type DBusWakeupMainFunction = Option<extern fn(conn: *mut DBusConnection, user_data: *mut c_void)>;
 
 pub type DBusPendingCallNotifyFunction = Option<extern fn(pending: *mut DBusPendingCall, user_data: *mut c_void)>;
+
 pub type DBusFreeFunction = Option<extern fn(memory: *mut c_void)>;
 
 #[repr(C)]

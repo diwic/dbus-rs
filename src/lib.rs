@@ -37,7 +37,7 @@ use std::ptr;
 use std::os::raw::c_char;
 
 #[allow(missing_docs)]
-mod ffi;
+extern crate libdbus_sys as ffi;
 mod message;
 mod prop;
 mod objpath;
