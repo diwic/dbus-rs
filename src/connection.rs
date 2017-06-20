@@ -1,23 +1,11 @@
-use super::{Error, ffi, libc, to_c_str, c_str_to_slice, Watch, Message, MessageType, BusName, Path, ConnPath};
-use super::{RequestNameReply, ReleaseNameReply, BusType, WatchEvent};
+use super::{Error, ffi, to_c_str, c_str_to_slice, Watch, Message, MessageType, BusName, Path, ConnPath};
+use super::{RequestNameReply, ReleaseNameReply, BusType};
 use super::watch::WatchList;
 use std::{fmt, mem, ptr, thread, panic};
 use std::collections::LinkedList;
 use std::cell::{Cell, RefCell};
 use std::os::unix::io::RawFd;
 use std::os::raw::{c_void, c_char, c_int, c_uint};
-
-
-impl WatchEvent {
-    /// After running poll, this transforms the revents into a parameter you can send into `Connection::watch_handle`
-    pub fn from_revents(revents: libc::c_short) -> c_uint {
-        0 +
-        if (revents & libc::POLLIN) != 0 { WatchEvent::Readable as c_uint } else { 0 } +
-        if (revents & libc::POLLOUT) != 0 { WatchEvent::Writable as c_uint } else { 0 } +
-        if (revents & libc::POLLERR) != 0 { WatchEvent::Error as c_uint } else { 0 } +
-        if (revents & libc::POLLHUP) != 0 { WatchEvent::Hangup as c_uint } else { 0 } 
-    }
-}
 
 /// When listening for incoming events on the D-Bus, this enum will tell you what type
 /// of incoming event has happened.

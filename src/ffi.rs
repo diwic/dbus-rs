@@ -91,7 +91,7 @@ pub enum DBusDispatchStatus {
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Copy, Clone)]
-pub enum DBusWatchEvent {
+pub enum DBusWatchFlags {
     Readable = 1,
     Writable = 2,
     Error = 4,

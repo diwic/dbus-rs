@@ -22,13 +22,12 @@ pub use ffi::DBusNameFlag as NameFlag;
 pub use ffi::DBusRequestNameReply as RequestNameReply;
 pub use ffi::DBusReleaseNameReply as ReleaseNameReply;
 pub use ffi::DBusMessageType as MessageType;
-pub use ffi::DBusWatchEvent as WatchEvent;
 
 pub use message::{Message, MessageItem, FromMessageItem, OwnedFd, ArrayError, ConnPath};
 pub use connection::{Connection, ConnectionItems, ConnectionItem, MsgHandler, MsgHandlerResult};
 pub use prop::PropHandler;
 pub use prop::Props;
-pub use watch::Watch;
+pub use watch::{Watch, WatchEvent};
 
 /// A TypeSig describes the type of a MessageItem.
 pub type TypeSig<'a> = std::borrow::Cow<'a, str>;
