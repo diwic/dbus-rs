@@ -34,6 +34,26 @@ use std::os::raw::{c_void, c_uint};
 /// }
 /// ```
 
+#[repr(C)]
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum WatchEvent {
+    Readable = 1,
+    Writable = 2,
+    Error = 4,
+    Hangup = 8,
+}
+
+impl WatchEvent {
+    /// After running poll, this transforms the revents into a parameter you can send into `Connection::watch_handle`
+    pub fn from_revents(revents: libc::c_short) -> c_uint {
+        0 +
+        if (revents & libc::POLLIN) != 0 { WatchEvent::Readable as c_uint } else { 0 } +
+        if (revents & libc::POLLOUT) != 0 { WatchEvent::Writable as c_uint } else { 0 } +
+        if (revents & libc::POLLERR) != 0 { WatchEvent::Error as c_uint } else { 0 } +
+        if (revents & libc::POLLHUP) != 0 { WatchEvent::Hangup as c_uint } else { 0 }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Watch {
     fd: RawFd,
@@ -100,8 +120,8 @@ impl WatchList {
         let enabled = self.watches.borrow().contains(&watch) && unsafe { ffi::dbus_watch_get_enabled(watch) != 0 };
         let flags = unsafe { ffi::dbus_watch_get_flags(watch) };
         if enabled {
-            w.read = (flags & ffi::DBusWatchEvent::Readable as c_uint) != 0;
-            w.write = (flags & ffi::DBusWatchEvent::Writable as c_uint) != 0;
+            w.read = (flags & WatchEvent::Readable as c_uint) != 0;
+            w.write = (flags & WatchEvent::Writable as c_uint) != 0;
         }
         // println!("Get watch fd {:?} ptr {:?} enabled {:?} flags {:?}", w, watch, enabled, flags);
         w
