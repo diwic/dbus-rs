@@ -36,10 +36,17 @@ use std::os::raw::{c_void, c_uint};
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Copy, Clone)]
+/// The enum is here for backwards compatibility mostly.
+///
+/// It should really be bitflags instead.
 pub enum WatchEvent {
+    /// The fd is readable
     Readable = 1,
+    /// The fd is writable
     Writable = 2,
+    /// An error occured on the fd
     Error = 4,
+    /// The fd received a hangup.
     Hangup = 8,
 }
 
@@ -55,6 +62,7 @@ impl WatchEvent {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+/// A file descriptor, and an indication whether it should be read from, written to, or both.
 pub struct Watch {
     fd: RawFd,
     read: bool,
