@@ -205,7 +205,7 @@ impl Connection {
         /* No, we don't want our app to suddenly quit if dbus goes down */
         unsafe { ffi::dbus_connection_set_exit_on_disconnect(conn, 0) };
         assert!(unsafe {
-            ffi::dbus_connection_add_filter(c.conn(), Some(filter_message_cb as ffi::DBusCallback), mem::transmute(&*c.i), None)
+            ffi::dbus_connection_add_filter(c.conn(), Some(filter_message_cb), mem::transmute(&*c.i), None)
         } != 0);
 
         let iconn: *const IConnection = &*c.i;
@@ -267,7 +267,7 @@ impl Connection {
         let p = to_c_str(path);
         let vtable = ffi::DBusObjectPathVTable {
             unregister_function: None,
-            message_function: Some(object_path_message_cb as ffi::DBusCallback),
+            message_function: Some(object_path_message_cb),
             dbus_internal_pad1: None,
             dbus_internal_pad2: None,
             dbus_internal_pad3: None,

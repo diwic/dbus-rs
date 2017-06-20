@@ -4,7 +4,6 @@ use std::os::raw::{c_void, c_char, c_uint, c_int};
 
 pub type DBusConnection = c_void;
 pub type DBusMessage = c_void;
-pub type DBusCallback = extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> DBusHandlerResult;
 pub type DBusWatch = c_void;
 pub type DBusPendingCall = c_void;
 pub type DBusTimeout = c_void;
