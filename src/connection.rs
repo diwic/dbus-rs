@@ -366,11 +366,14 @@ impl Connection {
     /// Return true from the callback to disable libdbus's internal handling of the message, or
     /// false to allow it.
     ///
+    /// This function will return the previous message callback, unless you're calling it from inside
+    /// a message callback, in which case it will return None.
+    ///
     /// Don't call ConnectionItems::next from inside the message callback (you'll likely get a panic).
     ///
-    /// If your message callback panics, ConnectionItems::next will panic, too.  
-    pub fn set_message_callback<F: 'static + FnMut(&Connection, Message) -> bool>(&self, f: F) {
-        *self.i.filter_cb.borrow_mut() = Some(Box::new(f));
+    /// If your message callback panics, ConnectionItems::next will panic, too.
+    pub fn set_message_callback<F: 'static + FnMut(&Connection, Message) -> bool>(&self, f: F) -> Option<Box<FnMut(&Connection, Message) -> bool>> {
+        mem::replace(&mut *self.i.filter_cb.borrow_mut(), Some(Box::new(f)))
     }
 }
 
