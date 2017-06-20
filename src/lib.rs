@@ -40,6 +40,7 @@ use std::os::raw::c_char;
 #[allow(missing_docs)]
 mod ffi;
 mod message;
+mod pending;
 mod prop;
 mod objpath;
 mod watch;

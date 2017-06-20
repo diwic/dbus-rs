@@ -181,6 +181,22 @@ extern "C" fn object_path_message_cb(_conn: *mut ffi::DBusConnection, _msg: *mut
     ffi::DBusHandlerResult::Handled
 }
 
+extern "C" fn pending_call_cb<F: FnOnce(Message)>(pending: *mut ffi::DBusPendingCall, user_data: *mut c_void) {
+    let message = unsafe { ffi::dbus_pending_call_steal_reply(pending) };
+    assert!(!message.is_null());
+    let message = super::message::message_from_ptr(message, false);
+
+    let user_closure: *mut Option<Box<F>> = user_data as *mut Option<Box<F>>;
+    let user_closure = unsafe { (*user_closure).take().unwrap() };
+    (*user_closure)(message);
+}
+
+extern "C" fn pending_call_data_free_cb<F: FnOnce(Message)>(user_data: *mut c_void) {
+    let user_closure: *mut Option<Box<F>> = user_data as *mut Option<Box<F>>;
+    let user_closure = unsafe { Box::from_raw(user_closure) };
+    drop(user_closure)
+}
+
 impl Connection {
     #[inline(always)]
     fn conn(&self) -> *mut ffi::DBusConnection {
@@ -240,10 +256,39 @@ impl Connection {
         Ok(serial)
     }
 
-    /// Sends a message over the D-Bus. The resulting handler can be added to a connectionitem handler.
-    pub fn send_with_reply<'a, F: FnOnce(&Message) + 'a>(&self, msg: Message, f: F) -> MessageReply<F> {
-        let serial = self.send(msg).unwrap();
-        MessageReply(Some(f), serial)
+    /// Sends a message over the D-Bus without waiting, but calls the given closure when the reply is received.
+    pub fn send_with_reply<'a, F: FnOnce(Message) + 'a>(&self, mut msg: Message, f: F) -> Result<(),()> {
+        // Ensure allocation of a fresh serial, so that callbacks work as expected.
+        super::message::message_set_serial(&mut msg, 0);
+
+        let mut pc: *mut ffi::DBusPendingCall = ::std::ptr::null_mut();
+        let r = unsafe {
+            ffi::dbus_connection_send_with_reply(
+                self.conn(),
+                super::message::get_message_ptr(&msg),
+                &mut pc,
+                ffi::DBUS_TIMEOUT_INFINITE
+            )
+        };
+        if pc.is_null() { return Err(()); }
+        let pc = super::pending::pending_call_from_ptr(pc, false);
+        if r == 0 { return Err(()); }
+
+        let callback: Box<Option<Box<F>>> = Box::new(Some(Box::new(f)));
+        let callback = Box::into_raw(callback) as *mut c_void;
+        let r = unsafe {
+            ffi::dbus_pending_call_set_notify(
+                super::pending::get_pending_call_ptr(&pc),
+                Some(pending_call_cb::<F>),
+                callback,
+                Some(pending_call_data_free_cb::<F>)
+            )
+        };
+        if r == 0 {
+            drop(unsafe { Box::from_raw(callback) });
+            return Err(());
+        }
+        Ok(())
     }
 
     /// Get the connection's unique name.
@@ -431,21 +476,6 @@ pub struct MsgHandlerResult {
     pub reply: Vec<Message>,
 }
 
-pub struct MessageReply<F>(Option<F>, u32);
-
-impl<'a, F: FnOnce(&Message) + 'a> MsgHandler for MessageReply<F> {
-    fn handle_ci(&mut self, ci: &ConnectionItem) -> Option<MsgHandlerResult> {
-        if let ConnectionItem::MethodReturn(ref msg) = *ci {
-            if msg.get_reply_serial() == Some(self.1) {
-                self.0.take().unwrap()(msg);
-                return Some(MsgHandlerResult { handled: true, done: true, reply: Vec::new() })
-            }
-        }
-        None
-    }
-}
-
-
 #[test]
 fn message_reply() {
     use std::{cell, rc};
@@ -453,12 +483,12 @@ fn message_reply() {
     let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
     let quit = rc::Rc::new(cell::Cell::new(false));
     let quit2 = quit.clone();
-    let reply = c.send_with_reply(m, move |result| {
+    c.send_with_reply(m, move |result| {
         let r = result;
         let _: ::arg::Array<&str, _>  = r.get1().unwrap();
         quit2.set(true);
-    });
-    for _ in c.iter(1000).with(reply) { if quit.get() { return; } }
+    }).unwrap();
+    for _ in c.iter(1000) { if quit.get() { return; } }
     assert!(false);
 }
 
