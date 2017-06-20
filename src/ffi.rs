@@ -6,6 +6,8 @@ pub type DBusConnection = c_void;
 pub type DBusMessage = c_void;
 pub type DBusCallback = extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> DBusHandlerResult;
 pub type DBusWatch = c_void;
+pub type DBusPendingCall = c_void;
+pub type DBusTimeout = c_void;
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -33,6 +35,9 @@ pub const DBUS_TYPE_UNIX_FD: c_int = 'h' as c_int;
 pub const DBUS_TYPE_STRUCT: c_int = 'r' as c_int;
 pub const DBUS_TYPE_OBJECT_PATH: c_int = 'o' as c_int;
 pub const DBUS_TYPE_SIGNATURE: c_int = 'g' as c_int;
+
+pub const DBUS_TIMEOUT_USE_DEFAULT: c_int = -1;
+pub const DBUS_TIMEOUT_INFINITE: c_int = 0x7fffffff;
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -133,6 +138,17 @@ pub type DBusAddWatchFunction = Option<extern fn(watch: *mut DBusWatch, user_dat
 pub type DBusRemoveWatchFunction = Option<extern fn(watch: *mut DBusWatch, user_data: *mut c_void)>;
 pub type DBusWatchToggledFunction = Option<extern fn(watch: *mut DBusWatch, user_data: *mut c_void)>;
 
+pub type DBusAddTimeoutFunction = Option<extern fn(timeout: *mut DBusTimeout, user_data: *mut c_void) -> u32>;
+pub type DBusTimeoutToggledFunction = Option<extern fn(timeout: *mut DBusTimeout, user_data: *mut c_void)>;
+pub type DBusRemoveTimeoutFunction = Option<extern fn(timeout: *mut DBusTimeout, user_data: *mut c_void)>;
+
+pub type DBusDispatchStatusFunction = Option<extern fn(conn: *mut DBusConnection, new_status: DBusDispatchStatus, user_data: *mut c_void)>;
+
+pub type DBusWakeupMainFunction = Option<extern fn(conn: *mut DBusConnection, user_data: *mut c_void)>;
+
+pub type DBusPendingCallNotifyFunction = Option<extern fn(pending: *mut DBusPendingCall, user_data: *mut c_void)>;
+pub type DBusFreeFunction = Option<extern fn(memory: *mut c_void)>;
+
 #[repr(C)]
 pub struct DBusObjectPathVTable {
     pub unregister_function: Option<extern fn(conn: *mut DBusConnection, user_data: *mut c_void)>,
@@ -162,6 +178,8 @@ extern "C" {
     pub fn dbus_connection_set_exit_on_disconnect(conn: *mut DBusConnection, enable: u32);
     pub fn dbus_connection_send_with_reply_and_block(conn: *mut DBusConnection,
         message: *mut DBusMessage, timeout_milliseconds: c_int, error: *mut DBusError) -> *mut DBusMessage;
+    pub fn dbus_connection_send_with_reply(conn: *mut DBusConnection,
+        message: *mut DBusMessage, pending_return: *mut *mut DBusPendingCall, timeout_milliseconds: c_int) -> u32;
     pub fn dbus_connection_send(conn: *mut DBusConnection,
         message: *mut DBusMessage, serial: *mut u32) -> u32;
     pub fn dbus_connection_read_write_dispatch(conn: *mut DBusConnection,
@@ -174,12 +192,19 @@ extern "C" {
     pub fn dbus_connection_list_registered(conn: *mut DBusConnection,
         parent_path: *const c_char, child_entries: *mut *mut *mut c_char) -> u32;
     pub fn dbus_connection_add_filter(conn: *mut DBusConnection, function: DBusHandleMessageFunction,
-        user_data: *mut c_void, free_data_function: Option<extern fn(memory: *mut c_void)>) -> u32;
+        user_data: *mut c_void, free_data_function: DBusFreeFunction) -> u32;
     pub fn dbus_connection_remove_filter(conn: *mut DBusConnection, function: DBusHandleMessageFunction,
         user_data: *mut c_void) -> u32;
     pub fn dbus_connection_set_watch_functions(conn: *mut DBusConnection, add_function: DBusAddWatchFunction,
         remove_function: DBusRemoveWatchFunction, toggled_function: DBusWatchToggledFunction,
-        data: *mut c_void, free_data_function: Option<extern fn(memory: *mut c_void)>) -> u32;
+        data: *mut c_void, free_data_function: DBusFreeFunction) -> u32;
+    pub fn dbus_connection_set_timeout_functions(conn: *mut DBusConnection, add_function: DBusAddTimeoutFunction,
+        remove_function: DBusRemoveTimeoutFunction, toggled_function: DBusTimeoutToggledFunction,
+        data: *mut c_void, free_data_function: DBusFreeFunction) -> u32;
+    pub fn dbus_connection_set_dispatch_status_function(conn: *mut DBusConnection,
+        dispatch_function: DBusDispatchStatusFunction, data: *mut c_void, free_data_function: DBusFreeFunction);
+    pub fn dbus_connection_set_wakeup_main_function(conn: *mut DBusConnection,
+        wakeup_function: DBusWakeupMainFunction, data: *mut c_void, free_data_function: DBusFreeFunction);
 
     pub fn dbus_error_init(error: *mut DBusError);
     pub fn dbus_error_free(error: *mut DBusError);
@@ -240,4 +265,20 @@ extern "C" {
     pub fn dbus_watch_get_flags(watch: *mut DBusWatch) -> c_uint;
     pub fn dbus_watch_get_unix_fd(watch: *mut DBusWatch) -> c_int;
     pub fn dbus_watch_handle(watch: *mut DBusWatch, flags: c_uint) -> u32;
+    pub fn dbus_watch_get_data(watch: *mut DBusWatch) -> *mut c_void;
+    pub fn dbus_watch_set_data(watch: *mut DBusWatch, user_data: *mut c_void,
+        free_data_function: DBusFreeFunction);
+
+    pub fn dbus_timeout_get_enabled(timeout: *mut DBusTimeout) -> u32;
+    pub fn dbus_timeout_get_interval(timeout: *mut DBusTimeout) -> c_int;
+    pub fn dbus_timeout_handle(timeout: *mut DBusTimeout) -> u32;
+    pub fn dbus_timeout_get_data(timeout: *mut DBusTimeout) -> *mut c_void;
+    pub fn dbus_timeout_set_data(timeout: *mut DBusTimeout, user_data: *mut c_void,
+        free_data_function: DBusFreeFunction);
+
+    pub fn dbus_pending_call_ref(pending: *mut DBusPendingCall) -> *mut DBusPendingCall;
+    pub fn dbus_pending_call_unref(pending: *mut DBusPendingCall);
+    pub fn dbus_pending_call_set_notify(pending: *mut DBusPendingCall, n: DBusPendingCallNotifyFunction,
+        user_data: *mut c_void, free_user_data: DBusFreeFunction) -> u32;
+    pub fn dbus_pending_call_steal_reply(pending: *mut DBusPendingCall) -> *mut DBusMessage;
 }
