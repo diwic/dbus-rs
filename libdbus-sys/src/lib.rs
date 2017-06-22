@@ -36,13 +36,14 @@ pub const DBUS_TYPE_SIGNATURE: c_int = 'g' as c_int;
 pub const DBUS_TIMEOUT_USE_DEFAULT: c_int = -1;
 pub const DBUS_TIMEOUT_INFINITE: c_int = 0x7fffffff;
 
-#[repr(C)]
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum DBusNameFlag {
-    AllowReplacement = 1,
-    ReplaceExisting = 2,
-    DoNotQueue = 4,
-}
+pub const DBUS_NAME_FLAG_ALLOW_REPLACEMENT: c_int = 1;
+pub const DBUS_NAME_FLAG_REPLACE_EXISTING: c_int = 2;
+pub const DBUS_NAME_FLAG_DO_NOT_QUEUE: c_int = 4;
+
+pub const DBUS_WATCH_READABLE: c_int = 1;
+pub const DBUS_WATCH_WRITABLE: c_int = 2;
+pub const DBUS_WATCH_ERROR: c_int = 4;
+pub const DBUS_WATCH_HANGUP: c_int = 8;
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -85,15 +86,6 @@ pub enum DBusDispatchStatus {
     DataRemains = 0,
     Complete = 1,
     NeedMemory = 2,
-}
-
-#[repr(C)]
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum DBusWatchFlags {
-    Readable = 1,
-    Writable = 2,
-    Error = 4,
-    Hangup = 8,
 }
 
 #[repr(C)]

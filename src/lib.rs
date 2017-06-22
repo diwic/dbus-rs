@@ -18,7 +18,7 @@
 extern crate libc;
 
 pub use ffi::DBusBusType as BusType;
-pub use ffi::DBusNameFlag as NameFlag;
+pub use connection::DBusNameFlag as NameFlag;
 pub use ffi::DBusRequestNameReply as RequestNameReply;
 pub use ffi::DBusReleaseNameReply as ReleaseNameReply;
 pub use ffi::DBusMessageType as MessageType;

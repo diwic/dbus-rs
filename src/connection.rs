@@ -7,6 +7,25 @@ use std::cell::{Cell, RefCell};
 use std::os::unix::io::RawFd;
 use std::os::raw::{c_void, c_char, c_int, c_uint};
 
+#[repr(C)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
+/// Flags to use for Connection::register_name.
+///
+/// More than one flag can be specified, if so just add their values.
+pub enum DBusNameFlag {
+    /// Allow another service to become the primary owner if requested
+    AllowReplacement = ffi::DBUS_NAME_FLAG_ALLOW_REPLACEMENT as isize,
+    /// Request to replace the current primary owner
+    ReplaceExisting = ffi::DBUS_NAME_FLAG_REPLACE_EXISTING as isize,
+    /// If we can not become the primary owner do not place us in the queue
+    DoNotQueue = ffi::DBUS_NAME_FLAG_DO_NOT_QUEUE as isize,
+}
+
+impl DBusNameFlag {
+    /// u32 value of flag.
+    pub fn value(self) -> u32 { self as u32 }
+}
+
 /// When listening for incoming events on the D-Bus, this enum will tell you what type
 /// of incoming event has happened.
 #[derive(Debug)]
