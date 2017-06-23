@@ -41,13 +41,13 @@ use std::os::raw::{c_void, c_uint};
 /// It should really be bitflags instead.
 pub enum WatchEvent {
     /// The fd is readable
-    Readable = 1,
+    Readable = ffi::DBUS_WATCH_READABLE as isize,
     /// The fd is writable
-    Writable = 2,
+    Writable = ffi::DBUS_WATCH_WRITABLE as isize,
     /// An error occured on the fd
-    Error = 4,
+    Error = ffi::DBUS_WATCH_ERROR as isize,
     /// The fd received a hangup.
-    Hangup = 8,
+    Hangup = ffi::DBUS_WATCH_HANGUP as isize,
 }
 
 impl WatchEvent {
