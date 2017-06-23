@@ -7,6 +7,11 @@ use std::cell::{Cell, RefCell};
 use std::os::unix::io::RawFd;
 use std::os::raw::{c_void, c_char, c_int, c_uint};
 
+/// The type of function to use for replacing the message callback.
+///
+/// See the documentation for Connection::replace_message_callback for more information.
+pub type MessageCallback = Box<FnMut(&Connection, Message) -> bool + 'static>;
+
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 /// Flags to use for Connection::register_name.
@@ -36,7 +41,7 @@ pub enum ConnectionItem {
     MethodCall(Message),
     /// Incoming signal
     Signal(Message),
-    /// Incoming method return (mostly used for Async I/O)
+    /// Incoming method return, including method return errors (mostly used for Async I/O)
     MethodReturn(Message),
     /// Indicates whether a file descriptor should be monitored or not.
     /// Unless you're doing Async I/O, you can simply ignore this variant.
@@ -78,7 +83,7 @@ impl<'a> Iterator for ConnectionItems<'a> {
     type Item = ConnectionItem;
     fn next(&mut self) -> Option<ConnectionItem> {
         loop {
-            if self.c.i.filter_cb.borrow().is_none() { panic!("Cannot call ConnectionItems iterator recursively"); }
+            if self.c.i.filter_cb.borrow().is_none() { panic!("ConnectionItems::next called recursively or without a message callback"); }
             let i = self.c.i.pending_items.borrow_mut().pop_front();
             if let Some(ci) = i {
                 if !self.process_handlers(&ci) { return Some(ci); }
@@ -385,14 +390,14 @@ impl Connection {
     /// Return true from the callback to disable libdbus's internal handling of the message, or
     /// false to allow it.
     ///
-    /// This function will return the previous message callback, unless you're calling it from inside
-    /// a message callback, in which case it will return None.
-    ///
-    /// Don't call ConnectionItems::next from inside the message callback (you'll likely get a panic).
+    /// You can unset the message callback (might be useful to satisfy the borrow checker), but
+    /// you will get a panic if you call ConnectionItems::next while the message callback is unset.
+    /// The message callback will be temporary unset while inside a message callback, so calling
+    /// ConnectionItems::next recursively will also result in a panic.
     ///
     /// If your message callback panics, ConnectionItems::next will panic, too.
-    pub fn set_message_callback<F: 'static + FnMut(&Connection, Message) -> bool>(&self, f: F) -> Option<Box<FnMut(&Connection, Message) -> bool>> {
-        mem::replace(&mut *self.i.filter_cb.borrow_mut(), Some(Box::new(f)))
+    pub fn replace_message_callback(&self, f: Option<MessageCallback>) -> Option<MessageCallback> {
+        mem::replace(&mut *self.i.filter_cb.borrow_mut(), f)
     }
 }
 
