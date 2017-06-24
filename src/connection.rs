@@ -83,7 +83,7 @@ impl<'a> Iterator for ConnectionItems<'a> {
     type Item = ConnectionItem;
     fn next(&mut self) -> Option<ConnectionItem> {
         loop {
-            if self.c.i.filter_cb.borrow().is_none() { panic!("ConnectionItems::next called recursively or without a message callback"); }
+            if self.c.i.filter_cb.borrow().is_none() { panic!("ConnectionItems::next called recursively or with a MessageCallback set to None"); }
             let i = self.c.i.pending_items.borrow_mut().pop_front();
             if let Some(ci) = i {
                 if !self.process_handlers(&ci) { return Some(ci); }
@@ -124,7 +124,7 @@ struct IConnection {
     pending_items: RefCell<LinkedList<ConnectionItem>>,
     watches: Option<Box<WatchList>>,
 
-    filter_cb: RefCell<Option<Box<FnMut(&Connection, Message) -> bool>>>,
+    filter_cb: RefCell<Option<MessageCallback>>,
     filter_cb_panic: RefCell<thread::Result<()>>,
 }
 
@@ -379,7 +379,7 @@ impl Connection {
         ConnPath { conn: self, dest: dest.into(), path: path.into(), timeout: timeout_ms }
     }
 
-    /// Replace the default message callback.
+    /// Replace the default message callback. Returns the previously set callback.
     ///
     /// By default, when you call ConnectionItems::next, all relevant incoming messages
     /// are returned through the ConnectionItems iterator, and 
@@ -388,7 +388,11 @@ impl Connection {
     /// you can set this message callback yourself. A few caveats apply:
     ///
     /// Return true from the callback to disable libdbus's internal handling of the message, or
-    /// false to allow it.
+    /// false to allow it. In other words, true and false correspond to
+    /// `DBUS_HANDLER_RESULT_HANDLED` and `DBUS_HANDLER_RESULT_NOT_YET_HANDLED` respectively.
+    ///
+    /// Be sure to call the previously set callback from inside your callback,
+    /// if you want, e.g. ConnectionItems::next to yield the message.
     ///
     /// You can unset the message callback (might be useful to satisfy the borrow checker), but
     /// you will get a panic if you call ConnectionItems::next while the message callback is unset.
@@ -396,6 +400,53 @@ impl Connection {
     /// ConnectionItems::next recursively will also result in a panic.
     ///
     /// If your message callback panics, ConnectionItems::next will panic, too.
+    ///
+    /// # Examples
+    ///
+    /// Replace the default callback with our own:
+    ///
+    /// ```ignore
+    /// use dbus::{Connection, BusType};
+    /// let c = Connection::get_private(BusType::Session).unwrap();
+    /// // Set our callback
+    /// c.replace_message_callback(Some(Box::new(move |conn, msg| {
+    ///     println!("Got message: {:?}", msg.get_items());
+    ///     // Let libdbus handle some things by default,
+    ///     // like "nonexistent object" error replies to method calls
+    ///     false
+    /// })));
+    ///
+    /// for _ in c.iter(1000) {
+    ///    // Only `ConnectionItem::Nothing` and `ConnectionItem::WatchFd` would be ever yielded here.
+    /// }
+    /// ```
+    ///
+    /// Chain our callback to filter out some messages before `iter().next()`:
+    ///
+    /// ```
+    /// use dbus::{Connection, BusType, MessageType};
+    /// let c = Connection::get_private(BusType::Session).unwrap();
+    /// // Take the previously set callback
+    /// let mut old_cb = c.replace_message_callback(None).unwrap();
+    /// // Set our callback
+    /// c.replace_message_callback(Some(Box::new(move |conn, msg| {
+    ///     // Handle all signals on the spot
+    ///     if msg.msg_type() == MessageType::Signal {
+    ///         println!("Got signal: {:?}", msg.get_items());
+    ///         // Stop all further processing of the message
+    ///         return true;
+    ///     }
+    ///     // Delegate the rest of the messages to the previous callback
+    ///     // in chain, e.g. to have them yielded by `iter().next()`
+    ///     old_cb(conn, msg)
+    /// })));
+    ///
+    /// # if false {
+    /// for _ in c.iter(1000) {
+    ///    // `ConnectionItem::Signal` would never be yielded here.
+    /// }
+    /// # }
+    /// ```
     pub fn replace_message_callback(&self, f: Option<MessageCallback>) -> Option<MessageCallback> {
         mem::replace(&mut *self.i.filter_cb.borrow_mut(), f)
     }
