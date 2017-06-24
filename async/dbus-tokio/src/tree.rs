@@ -5,8 +5,9 @@ use dbus::tree::{Factory, Tree, MethodType, DataType, MTFn, Method, MethodInfo, 
 use dbus::{Member, Message, Connection};
 use std::marker::PhantomData;
 use std::cell::RefCell;
-use futures::{IntoFuture, Future, Poll};
-use tokio_core::reactor;
+use futures::{IntoFuture, Future, Poll, Stream, Async};
+use std::rc::Rc;
+use super::AMessageStream;
 
 pub trait ADataType: fmt::Debug + Sized + Default {
     type ObjectPath: fmt::Debug;
@@ -87,13 +88,35 @@ impl Future for AMethodResult {
 
 
 #[derive(Debug)]
-pub struct ATreeServer<'a, D: ADataType + 'a, C>(&'a Tree<MTFn<ATree<D>>, ATree<D>>, C);
+pub struct ATreeServer<'a, D: ADataType + 'a> {
+   conn: Rc<Connection>,
+   tree: &'a Tree<MTFn<ATree<D>>, ATree<D>>,
+   stream: AMessageStream,
+}
 
-impl<'a, D: ADataType, C: ops::Deref<Target=Connection>> ATreeServer<'a, D, C> {
-    pub fn new(c: C, t: &'a Tree<MTFn<ATree<D>>, ATree<D>>, _h: reactor::Handle) -> Self {
-        
-        ATreeServer(t, c)
+impl<'a, D: ADataType> ATreeServer<'a, D> {
+    pub fn new(c: Rc<Connection>, t: &'a Tree<MTFn<ATree<D>>, ATree<D>>, stream: AMessageStream) -> Self {
+        ATreeServer { conn: c, tree: t, stream: stream }
     }
 }
 
+impl<'a, D: ADataType> Stream for ATreeServer<'a, D> {
+    type Item = Message;
+    type Error = ();
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        let z = self.stream.poll()?;
+println!("treeserver {:?}", z);
+        if let Async::Ready(Some(z)) = z {
+            let hh = self.tree.handle(&z);
+println!("hh: {:?}", hh); 
+            match hh {
+                None => Ok(Async::Ready(Some(z))),
+                Some(v) => {
+                    for msg in v { self.conn.send(msg)?; };
+                    Ok(Async::NotReady)
+                },
+            }
+        } else { Ok(z) }
+    }
+}
 

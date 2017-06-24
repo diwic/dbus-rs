@@ -13,4 +13,6 @@ pub mod tree;
 
 // pub mod awatch;
 
-pub mod adriver;
+mod adriver;
+
+pub use adriver::{AConnection, AMessageStream, AMethodCall};

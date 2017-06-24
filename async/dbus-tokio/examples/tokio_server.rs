@@ -16,18 +16,20 @@ extern crate tokio_core;
 
 use std::time::Duration;
 use std::sync::Arc;
+use std::rc::Rc;
 use dbus::{Connection, BusType, NameFlag};
 use dbus::tree::MethodErr;
 use dbus_tokio::tree::{AFactory, ATree, ATreeServer};
+use dbus_tokio::AConnection;
 use tokio_timer::*;
 use tokio_core::reactor::Core;
 
-use futures::Future;
+use futures::{Future, Stream};
 
 fn main() {
     // Let's start by starting up a connection to the session bus and register a name.
-    let c = Connection::get_private(BusType::Session).unwrap();
-    // TODO: Should we have a TokioConnection???
+    let c = Rc::new(Connection::get_private(BusType::Session).unwrap());
+
     c.register_name("com.example.dbustest", NameFlag::ReplaceExisting as u32).unwrap();
 
     // The choice of factory tells us what type of tree we want,
@@ -47,7 +49,6 @@ fn main() {
 
             // ...and a method inside the interface.
             f.amethod("Hello", (), move |m| {
-
                 // This is the callback that will be called when another peer on the bus calls our method.
                 // the callback receives "MethodInfo" struct and can return either an error, or a list of
                 // messages to send back.
@@ -81,11 +82,12 @@ fn main() {
     // We register all object paths in the tree.
     tree.set_registered(&c, true).unwrap();
 
+    // Setup Tokio
     let mut core = Core::new().unwrap();
-    let server = ATreeServer::new(&c, &tree, core.handle());
-
+    let aconn = AConnection::new(c.clone(), core.handle()).unwrap();
+    let server = ATreeServer::new(c.clone(), &tree, aconn.messages().unwrap());
     
-    // This AServer future contains a poll implementation that pulls messages
-    // off the wire and dispatches them to the above-defined callbacks to create futures
- //   core.run(server).unwrap(); 
+    // Make the server run forever
+    let server = server.for_each(|m| { println!("Unhandled message: {:?}", m); Ok(()) });
+    core.run(server).unwrap(); 
 }
