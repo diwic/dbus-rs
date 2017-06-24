@@ -16,7 +16,7 @@ use std::os::unix::io::RawFd;
 pub struct AConnection {
     conn: Rc<Connection>,
     core: CoreHandle,
-    fds: HashMap<RawFd, PollEvented<AWatch>>,
+    // fds: HashMap<RawFd, PollEvented<AWatch>>,
     quit: Option<Box<Future<Item=(), Error=()>>>,
 }
 
@@ -108,7 +108,7 @@ impl AWInner {
             mem::swap(items.msg_handlers(), &mut *self.handlers.borrow_mut());
         }
         let t = self.task.borrow_mut().take();
-        t.map(|t| t.unpark());
+        t.map(|t| t.notify());
     }
 }
 
@@ -126,7 +126,7 @@ impl AWatcher {
 
         });
         for w in i.conn.watch_fds() {
-            let (tx, rx) = oneshot::channel();
+            let (_tx, rx) = oneshot::channel();
             // i.subtasks.borrow_mut().insert(w.fd(), tx);
             let child = AWatch2 {
                 io: PollEvented::new(AWatch(w), h)?,
@@ -159,7 +159,7 @@ impl Stream for AWatcher {
                 Ok(Async::Ready(Some(item)))
             }
             None => {
-                let p = task::park();
+                let p = task::current();
                 *inner.task.borrow_mut() = Some(p);
                 Ok(Async::NotReady)
             }
