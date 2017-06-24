@@ -86,6 +86,7 @@ impl ADriver {
     }
 
     fn handle_items(&mut self, items: ConnectionItems) {
+        // TODO: What about all unwrapping in this function
         for i in items {
             println!("Got: {:?}", i);
             match i {
