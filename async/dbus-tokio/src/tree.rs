@@ -1,6 +1,6 @@
 /// Async server-side trees
 
-use std::{ops, fmt};
+use std::{ops, fmt, mem};
 use dbus::tree::{Factory, Tree, MethodType, DataType, MTFn, Method, MethodInfo, MethodErr};
 use dbus::{Member, Message, Connection};
 use std::marker::PhantomData;
@@ -8,6 +8,7 @@ use std::cell::RefCell;
 use futures::{IntoFuture, Future, Poll, Stream, Async};
 use std::rc::Rc;
 use super::AMessageStream;
+use std::ffi::CString;
 
 pub trait ADataType: fmt::Debug + Sized + Default {
     type ObjectPath: fmt::Debug;
@@ -66,15 +67,15 @@ impl<D: ADataType> AFactory<MTFn<ATree<D>>, ATree<D>> {
 }
 
 
-pub struct AMethodResult(Box<Future<Item=Vec<Message>, Error=MethodErr>>);
+pub struct AMethodResult(Box<Future<Item=Vec<Message>, Error=MethodErr>>, Option<Message>);
 
 impl fmt::Debug for AMethodResult {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "AMethodResult") }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "AMethodResult({:?})", self.1) }
 }
 
 impl AMethodResult {
     fn new<F: 'static + IntoFuture<Item=Vec<Message>, Error=MethodErr>>(f: F) -> Self {
-        AMethodResult(Box::new(f.into_future()))
+        AMethodResult(Box::new(f.into_future()), None)
     }
 }
 
@@ -92,11 +93,40 @@ pub struct ATreeServer<'a, D: ADataType + 'a> {
    conn: Rc<Connection>,
    tree: &'a Tree<MTFn<ATree<D>>, ATree<D>>,
    stream: AMessageStream,
+   pendingresults: Vec<AMethodResult>,
 }
 
 impl<'a, D: ADataType> ATreeServer<'a, D> {
     pub fn new(c: Rc<Connection>, t: &'a Tree<MTFn<ATree<D>>, ATree<D>>, stream: AMessageStream) -> Self {
-        ATreeServer { conn: c, tree: t, stream: stream }
+        ATreeServer { conn: c, tree: t, stream: stream, pendingresults: vec![] }
+    }
+
+    fn spawn_method_results(&mut self, msg: Message) {
+        let v = mem::replace(&mut *self.tree.get_data().0.borrow_mut(), vec![]);
+        let mut msg = Some(msg);
+        for mut r in v {
+            if r.1.is_none() { r.1 = msg.take() };
+            println!("Pushing {:?}", r);
+            self.pendingresults.push(r);
+        }
+    }
+
+    fn check_pending_results(&mut self) {
+        let v = mem::replace(&mut self.pendingresults, vec!());
+        self.pendingresults = v.into_iter().filter_map(|mut mr| {
+            let z = mr.poll();
+            println!("Polling {:?} returned {:?}", mr, z);
+            match z {
+                Ok(Async::NotReady) => Some(mr),
+                Ok(Async::Ready(t)) => { for msg in t { println!("Sending {:?}", msg); self.conn.send(msg).expect("D-Bus send error"); }; None },
+                Err(e) => {
+                    let m = mr.1.take().unwrap(); 
+                    let msg = m.error(&e.errorname(), &CString::new(e.description()).unwrap());
+                    self.conn.send(msg).expect("D-Bus send error");
+                    None
+                }
+            }
+        }).collect();
     }
 }
 
@@ -104,19 +134,20 @@ impl<'a, D: ADataType> Stream for ATreeServer<'a, D> {
     type Item = Message;
     type Error = ();
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let z = self.stream.poll()?;
-println!("treeserver {:?}", z);
-        if let Async::Ready(Some(z)) = z {
-            let hh = self.tree.handle(&z);
-println!("hh: {:?}", hh); 
-            match hh {
-                None => Ok(Async::Ready(Some(z))),
-                Some(v) => {
-                    for msg in v { self.conn.send(msg)?; };
-                    Ok(Async::NotReady)
-                },
-            }
-        } else { Ok(z) }
+        loop {
+            self.check_pending_results();
+            let z = self.stream.poll();
+            if let Ok(Async::Ready(Some(m))) = z {
+                println!("treeserver {:?}", m);
+                let hh = self.tree.handle(&m);
+                println!("hh: {:?}", hh);
+                if let Some(v) = hh {
+                    self.spawn_method_results(m);
+                    for msg in v { self.conn.send(msg)?; }
+                    // We consumed the message. Poll again
+                } else { return Ok(Async::Ready(Some(m))) }
+            } else { return z }
+        }
     }
 }
 
