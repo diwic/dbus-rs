@@ -84,6 +84,11 @@ Requirements
 However, if you enable the feature `no-string-validation`, you might be able to build and run with older versions of the D-Bus library. This feature skips an extra check that a specific string (e g a Path, ErrorName etc) conforms to the D-Bus specification, which might also make things a tiny bit faster. But - if you do so, and then actually send invalid strings to the D-Bus library, you might get a panic instead of a proper error.
 
 
+Tokio integration
+=================
+
+In the async/dbus-tokio directory, you'll find a crate for integrating D-Bus with [Tokio](http://tokio.rs).
+
 Code generation
 ===============
 
