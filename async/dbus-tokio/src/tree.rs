@@ -43,6 +43,7 @@ impl ADataType for () {
     type Signal = ();
 }
 
+/// A Tree factory that allows both synchronous and asynchronous methods.
 pub struct AFactory<M: MethodType<D>, D: DataType = ()>(Factory<M, D>);
 
 impl AFactory<MTFn<()>, ()> {
@@ -55,6 +56,10 @@ impl<M: MethodType<D>, D: DataType> ops::Deref for AFactory<M, D> {
 }
 
 impl<D: ADataType> AFactory<MTFn<ATree<D>>, ATree<D>> {
+    /// Creates an async method, for methods whose result cannot be returned immediately.
+    ///
+    /// The method handler supplied to amethod returns a future, which resolves into the method result.
+    /// See the tokio_server example for some hints on how to use it.
     pub fn amethod<H, R, T>(&self, t: T, data: D::Method, handler: H) -> Method<MTFn<ATree<D>>, ATree<D>>
     where H: 'static + Fn(&MethodInfo<MTFn<ATree<D>>, ATree<D>>) -> R, T: Into<Member<'static>>,
         R: 'static + IntoFuture<Item=Vec<Message>, Error=MethodErr> {
@@ -66,8 +71,10 @@ impl<D: ADataType> AFactory<MTFn<ATree<D>>, ATree<D>> {
     }
 }
 
-
-pub struct AMethodResult(Box<Future<Item=Vec<Message>, Error=MethodErr>>, Option<Message>);
+/// A Future method result
+///
+/// When method results cannot be returned right away, the AMethodResult holds it temporarily
+struct AMethodResult(Box<Future<Item=Vec<Message>, Error=MethodErr>>, Option<Message>);
 
 impl fmt::Debug for AMethodResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "AMethodResult({:?})", self.1) }
@@ -89,6 +96,9 @@ impl Future for AMethodResult {
 
 
 #[derive(Debug)]
+/// Creates a filter for incoming messages, that handles messages in the tree.
+///
+/// See the tokio_server example for some hints on how to use it.
 pub struct ATreeServer<'a, D: ADataType + 'a> {
    conn: Rc<Connection>,
    tree: &'a Tree<MTFn<ATree<D>>, ATree<D>>,
@@ -106,7 +116,7 @@ impl<'a, D: ADataType> ATreeServer<'a, D> {
         let mut msg = Some(msg);
         for mut r in v {
             if r.1.is_none() { r.1 = msg.take() };
-            println!("Pushing {:?}", r);
+            // println!("Pushing {:?}", r);
             self.pendingresults.push(r);
         }
     }
@@ -115,10 +125,10 @@ impl<'a, D: ADataType> ATreeServer<'a, D> {
         let v = mem::replace(&mut self.pendingresults, vec!());
         self.pendingresults = v.into_iter().filter_map(|mut mr| {
             let z = mr.poll();
-            println!("Polling {:?} returned {:?}", mr, z);
+            // println!("Polling {:?} returned {:?}", mr, z);
             match z {
                 Ok(Async::NotReady) => Some(mr),
-                Ok(Async::Ready(t)) => { for msg in t { println!("Sending {:?}", msg); self.conn.send(msg).expect("D-Bus send error"); }; None },
+                Ok(Async::Ready(t)) => { for msg in t { self.conn.send(msg).expect("D-Bus send error"); }; None },
                 Err(e) => {
                     let m = mr.1.take().unwrap(); 
                     let msg = m.error(&e.errorname(), &CString::new(e.description()).unwrap());
@@ -138,9 +148,9 @@ impl<'a, D: ADataType> Stream for ATreeServer<'a, D> {
             self.check_pending_results();
             let z = self.stream.poll();
             if let Ok(Async::Ready(Some(m))) = z {
-                println!("treeserver {:?}", m);
+                // println!("treeserver {:?}", m);
                 let hh = self.tree.handle(&m);
-                println!("hh: {:?}", hh);
+                // println!("hh: {:?}", hh);
                 if let Some(v) = hh {
                     self.spawn_method_results(m);
                     for msg in v { self.conn.send(msg)?; }

@@ -115,7 +115,7 @@ impl ADriver {
     }
 
     fn send_stream(&self, m: Message) {
-        self.msgstream.borrow().as_ref().map(|z| { println!("sendstream {:?}", m); z.send(m).unwrap() });
+        self.msgstream.borrow().as_ref().map(|z| { z.send(m).unwrap() });
     }
 
     fn handle_items(&mut self, items: ConnectionItems) {
@@ -242,9 +242,9 @@ impl Stream for AMessageStream {
     type Item = Message;
     type Error = ();
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        println!("Polling message stream");
+        // println!("Polling message stream");
         let r = self.inner.poll();
-        println!("msgstream {:?}", r);
+        // println!("msgstream {:?}", r);
         r
     }
 }
@@ -265,6 +265,7 @@ fn aconnection_test() {
     let reply = core.run(aconn.method_call(m).unwrap()).unwrap();
     let z: Vec<&str> = reply.get1().unwrap();
     println!("got reply: {:?}", z);
+    assert!(z.iter().any(|v| *v == "org.freedesktop.DBus"));
 }
 
 #[test]
@@ -277,5 +278,6 @@ fn astream_test() {
     let signals = items.filter_map(|m| if m.msg_type() == ::dbus::MessageType::Signal { Some(m) } else { None });
     let firstsig = core.run(signals.into_future()).map(|(x, _)| x).map_err(|(x, _)| x).unwrap();
     println!("first signal was: {:?}", firstsig);
+    assert_eq!(firstsig.unwrap().msg_type(), ::dbus::MessageType::Signal);
 }
 
