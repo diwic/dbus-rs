@@ -1,8 +1,3 @@
-extern crate dbus;
-extern crate futures;
-extern crate tokio_core;
-extern crate mio;
-
 //! Tokio integration for dbus
 //!
 //! What's currently working is:
@@ -14,6 +9,11 @@ extern crate mio;
 //!    you can return a future that will reply when that future resolves - see `tree::AFactory::amethod`
 //! 
 //! For examples to get you started, see the examples directory and the Readme.
+
+extern crate dbus;
+extern crate futures;
+extern crate tokio_core;
+extern crate mio;
 
 pub mod tree;
 

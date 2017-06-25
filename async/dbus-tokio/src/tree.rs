@@ -18,11 +18,16 @@ pub trait ADataType: fmt::Debug + Sized + Default {
 }
 
 #[derive(Debug, Default)]
-pub struct ATree<D: ADataType>(RefCell<Vec<AMethodResult>>, PhantomData<*const D>);
+/// A Tree that allows both synchronous and asynchronous methods.
+pub struct ATree<D: ADataType>(RefCell<Option<AMethodResult>>, PhantomData<*const D>);
 
 impl<D: ADataType> ATree<D> {
     pub fn new() -> Self { Default::default() }
-    fn push(&self, a: AMethodResult) { self.0.borrow_mut().push(a); }
+    fn push(&self, a: AMethodResult) {
+        let mut z = self.0.borrow_mut();
+        assert!(z.is_none(), "Same message handled twice");
+        *z = Some(a);
+    }
 }
 
 impl<D: ADataType> DataType for ATree<D> {
@@ -111,10 +116,9 @@ impl<'a, D: ADataType, S: Stream<Item=Message, Error=()>> ATreeServer<'a, D, S> 
     }
 
     fn spawn_method_results(&mut self, msg: Message) {
-        let v = mem::replace(&mut *self.tree.get_data().0.borrow_mut(), vec![]);
-        let mut msg = Some(msg);
-        for mut r in v {
-            if r.1.is_none() { r.1 = msg.take() };
+        let v = self.tree.get_data().0.borrow_mut().take();
+        if let Some(mut r) = v {
+            if r.1.is_none() { r.1 = Some(msg); };
             // println!("Pushing {:?}", r);
             self.pendingresults.push(r);
         }
