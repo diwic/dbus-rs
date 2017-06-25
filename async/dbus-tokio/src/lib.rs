@@ -4,14 +4,10 @@ extern crate tokio_core;
 extern crate mio;
 
 /// Tokio integration for dbus
+///
+/// For examples to get you started, see the examples directory and the Readme.
 
 pub mod tree;
-
-// mod aconnection;
-
-// pub use aconnection::AConnection as AConnection;
-
-// pub mod awatch;
 
 mod adriver;
 
