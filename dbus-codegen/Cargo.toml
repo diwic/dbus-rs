@@ -8,5 +8,5 @@ name = "dbus-codegen-rust"
 
 [dependencies]
 xml-rs = "0.3"
-dbus = { path = "../../" }
+dbus = { path = "../dbus", version = "0.5.3" }
 clap = "2.20"

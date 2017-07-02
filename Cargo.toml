@@ -1,0 +1,2 @@
+[workspace]
+members = ["libdbus-sys", "dbus", "dbus-tokio", "dbus-codegen"]

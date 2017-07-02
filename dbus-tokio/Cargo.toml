@@ -11,7 +11,7 @@ license = "Apache-2.0/MIT"
 categories = ["os::unix-apis", "api-bindings", "asynchronous"]
 
 [dependencies]
-dbus = "0.5.3"
+dbus = { path = "../dbus", version = "0.5.3" }
 futures = "0.1.12"
 mio = "0.6.9"
 tokio-core = "0.1.8"
