@@ -103,7 +103,9 @@ impl ADriver {
 
             if let Some(evented) = self.fds.get(&w.fd()) {
                 let ww = evented.get_ref().0;
-                if ww.readable() == w.readable() || ww.readable() == w.readable() { return Ok(()) }; 
+                if ww.readable() == w.readable() && ww.writable() == w.writable() {
+                    return Ok(())
+                };
             }
             self.fds.remove(&w.fd());
 
