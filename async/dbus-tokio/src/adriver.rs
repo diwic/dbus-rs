@@ -103,7 +103,9 @@ impl ADriver {
 
             if let Some(evented) = self.fds.get(&w.fd()) {
                 let ww = evented.get_ref().0;
-                if ww.readable() == w.readable() || ww.readable() == w.readable() { return Ok(()) }; 
+                if ww.readable() == w.readable() && ww.writable() == w.writable() {
+                    return Ok(())
+                };
             }
             self.fds.remove(&w.fd());
 
@@ -179,20 +181,26 @@ impl mio::Evented for AWatch {
                 poll: &mio::Poll,
                 token: mio::Token,
                 mut interest: mio::Ready,
-                opts: mio::PollOpt) -> io::Result<()>
+                mut opts: mio::PollOpt) -> io::Result<()>
     {
         if !self.0.readable() { interest.remove(mio::Ready::readable()) };
         if !self.0.writable() { interest.remove(mio::Ready::writable()) };
+        opts.remove(mio::PollOpt::edge());
+        opts.insert(mio::PollOpt::level());
         unix::EventedFd(&self.0.fd()).register(poll, token, interest, opts)
     }
 
     fn reregister(&self,
                   poll: &mio::Poll,
                   token: mio::Token,
-                  interest: mio::Ready,
-                  opts: mio::PollOpt) -> io::Result<()>
+                  mut interest: mio::Ready,
+                  mut opts: mio::PollOpt) -> io::Result<()>
     {
-        self.register(poll, token, interest, opts)
+        if !self.0.readable() { interest.remove(mio::Ready::readable()) };
+        if !self.0.writable() { interest.remove(mio::Ready::writable()) };
+        opts.remove(mio::PollOpt::edge());
+        opts.insert(mio::PollOpt::level());
+        unix::EventedFd(&self.0.fd()).reregister(poll, token, interest, opts)
     }
 
     fn deregister(&self, poll: &mio::Poll) -> io::Result<()> {
