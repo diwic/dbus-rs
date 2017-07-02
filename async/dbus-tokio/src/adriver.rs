@@ -189,10 +189,12 @@ impl mio::Evented for AWatch {
     fn reregister(&self,
                   poll: &mio::Poll,
                   token: mio::Token,
-                  interest: mio::Ready,
+                  mut interest: mio::Ready,
                   opts: mio::PollOpt) -> io::Result<()>
     {
-        self.register(poll, token, interest, opts)
+        if !self.0.readable() { interest.remove(mio::Ready::readable()) };
+        if !self.0.writable() { interest.remove(mio::Ready::writable()) };
+        unix::EventedFd(&self.0.fd()).reregister(poll, token, interest, opts)
     }
 
     fn deregister(&self, poll: &mio::Poll) -> io::Result<()> {
