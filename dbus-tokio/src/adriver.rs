@@ -168,9 +168,7 @@ impl Future for ADriver {
             if ur.is_readable() { w.need_read() };
             if ur.is_writable() { w.need_write() };
         };
-        if let Some(items) = items {
-            self.handle_items(items);
-        }
+        self.handle_items(items.unwrap_or(cc.watch_handle(-1, 0)));
         Ok(Async::NotReady)
     }
 }
