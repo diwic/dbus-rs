@@ -133,7 +133,7 @@ impl ADriver {
                     if let Some(r) = r { r.send(m).unwrap(); }
                     else { self.send_stream(m) }
                 }
-                ConnectionItem::Nothing => return,
+                ConnectionItem::Nothing => unreachable!(),
                 ConnectionItem::Signal(m) => self.send_stream(m),
                 ConnectionItem::MethodCall(m) => self.send_stream(m),
             }
@@ -168,7 +168,9 @@ impl Future for ADriver {
             if ur.is_readable() { w.need_read() };
             if ur.is_writable() { w.need_write() };
         };
-        self.handle_items(items.unwrap_or(cc.iter(0)));
+        if let Some(items) = items {
+            self.handle_items(items);
+        }
         Ok(Async::NotReady)
     }
 }
