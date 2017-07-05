@@ -20,3 +20,7 @@ tempdir = "0.3"
 
 [features]
 no-string-validation = []
+
+[badges]
+is-it-maintained-open-issues = { repository = "https://github.com/diwic/dbus-rs" }
+is-it-maintained-issue-resolution = { repository = "https://github.com/diwic/dbus-rs" }
