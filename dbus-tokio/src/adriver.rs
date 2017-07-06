@@ -52,7 +52,7 @@ impl AConnection {
             callmap: map,
             msgstream: istream,
         };
-        for w in i.conn.watch_fds() { d.modify_watch(w)?; }
+        for w in i.conn.watch_fds() { d.modify_watch(w, false)?; }
         h.spawn(d);
         Ok(i)
     }
@@ -96,7 +96,7 @@ struct ADriver {
 }
 
 impl ADriver {
-    fn modify_watch(&mut self, w: Watch) -> io::Result<()> {
+    fn modify_watch(&mut self, w: Watch, poll_now: bool) -> io::Result<()> {
         if !w.readable() && !w.writable() {
             self.fds.remove(&w.fd());
         } else {
@@ -110,6 +110,9 @@ impl ADriver {
             self.fds.remove(&w.fd());
 
             let z = PollEvented::new(AWatch(w), &self.core)?;
+
+            if poll_now && z.get_ref().0.readable() { z.need_read() };
+            if poll_now && z.get_ref().0.writable() { z.need_write() };
 
             self.fds.insert(w.fd(), z);
         }
@@ -125,7 +128,7 @@ impl ADriver {
         for i in items {
             // println!("Got: {:?}", i);
             match i {
-                ConnectionItem::WatchFd(w) => { self.modify_watch(w).unwrap(); },
+                ConnectionItem::WatchFd(w) => { self.modify_watch(w, true).unwrap(); },
                 ConnectionItem::MethodReturn(m) => {
                     let mut map = self.callmap.borrow_mut();
                     let serial = m.get_reply_serial().unwrap();
