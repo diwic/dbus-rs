@@ -1,4 +1,4 @@
-use std::os::raw::{c_void, c_char, c_uint, c_int};
+use std::os::raw::{c_void, c_char, c_uint, c_int, c_long};
 
 pub type DBusConnection = c_void;
 pub type DBusMessage = c_void;
@@ -270,4 +270,22 @@ extern "C" {
     pub fn dbus_pending_call_set_notify(pending: *mut DBusPendingCall, n: DBusPendingCallNotifyFunction,
         user_data: *mut c_void, free_user_data: DBusFreeFunction) -> u32;
     pub fn dbus_pending_call_steal_reply(pending: *mut DBusPendingCall) -> *mut DBusMessage;
+
+    pub fn dbus_message_marshal(msg: *mut DBusMessage, marshalled_data_p: *mut *mut c_char, len_p: *mut c_int) -> u32;
+    pub fn dbus_message_demarshal(s: *const c_char, len: c_int, error: *mut DBusError) -> *mut DBusMessage;
+    pub fn dbus_message_demarshal_bytes_needed(buf: *const c_char, len: c_int) -> c_int;
+
+    pub fn dbus_connection_set_max_message_size(conn: *mut DBusConnection, size: c_long);
+    pub fn dbus_connection_get_max_message_size(conn: *mut DBusConnection) -> c_long;
+    pub fn dbus_connection_set_max_message_unix_fds(conn: *mut DBusConnection, n: c_long);
+    pub fn dbus_connection_get_max_message_unix_fds(conn: *mut DBusConnection) -> c_long;
+
+    pub fn dbus_connection_set_max_received_size(conn: *mut DBusConnection, size: c_long);
+    pub fn dbus_connection_get_max_received_size(conn: *mut DBusConnection) -> c_long;
+    pub fn dbus_connection_set_max_received_unix_fds(conn: *mut DBusConnection, n: c_long);
+    pub fn dbus_connection_get_max_received_unix_fds(conn: *mut DBusConnection) -> c_long;
+
+    pub fn dbus_connection_get_outgoing_size(conn: *mut DBusConnection) -> c_long;
+    pub fn dbus_connection_get_outgoing_unix_fds(conn: *mut DBusConnection) -> c_long;
+    pub fn dbus_connection_has_messages_to_send(conn: *mut DBusConnection) -> u32;
 }
