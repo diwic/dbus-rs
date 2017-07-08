@@ -153,7 +153,6 @@ impl Future for ADriver {
         if q != Ok(Async::NotReady) { return Ok(Async::Ready(())); }
 
         let cc = self.conn.clone(); // Borrow checker made me do this
-        let mut items = None;
         for w in self.fds.values() {
             let mut mask = UnixReady::hup() | UnixReady::error();
             if w.get_ref().0.readable() { mask = mask | Ready::readable().into(); }
@@ -167,11 +166,11 @@ impl Future for ADriver {
                 if ur.is_hup() { WatchEvent::Hangup as c_uint } else { 0 } +
                 if ur.is_error() { WatchEvent::Error as c_uint } else { 0 };
             // println!("{:?} is {:?}", w.get_ref().0.fd(), ur);
-            items = Some(cc.watch_handle(w.get_ref().0.fd(), flags));
+            cc.watch_handle(w.get_ref().0.fd(), flags);
             if ur.is_readable() { w.need_read() };
             if ur.is_writable() { w.need_write() };
         };
-        self.handle_items(items.unwrap_or(cc.watch_handle(-1, 0)));
+        self.handle_items(ConnectionItems::new(&cc, None, true));
         Ok(Async::NotReady)
     }
 }

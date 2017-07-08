@@ -52,6 +52,7 @@ pub enum ConnectionItem {
 pub struct ConnectionItems<'a> {
     c: &'a Connection,
     timeout_ms: Option<i32>,
+    end_on_timeout: bool,
     handlers: Vec<Box<MsgHandler>>,
 }
 
@@ -77,6 +78,28 @@ impl<'a> ConnectionItems<'a> {
 
     /// Access and modify message handlers 
     pub fn msg_handlers(&mut self) -> &mut Vec<Box<MsgHandler>> { &mut self.handlers }
+
+    fn check_panic(&self) {
+        let p = mem::replace(&mut *self.c.i.filter_cb_panic.borrow_mut(), Ok(()));
+        if let Err(perr) = p { panic::resume_unwind(perr); }
+    }
+
+    /// Creates a new ConnectionItems iterator
+    ///
+    /// For io_timeout, setting None means the fds will not be read/written. I e, only pending 
+    /// items in libdbus's internal queue will be processed.
+    ///
+    /// For end_on_timeout, setting false will means that the iterator will never finish (unless
+    /// the D-Bus server goes down). Instead, ConnectionItem::Nothing will be returned in case no
+    /// items are in queue.
+    pub fn new(conn: &'a Connection, io_timeout: Option<i32>, end_on_timeout: bool) -> Self {
+        ConnectionItems {
+            c: conn,
+            timeout_ms: io_timeout,
+            end_on_timeout: end_on_timeout,
+            handlers: Vec::new(),
+        }
+    }
 }
 
 impl<'a> Iterator for ConnectionItems<'a> {
@@ -89,29 +112,20 @@ impl<'a> Iterator for ConnectionItems<'a> {
                 if !self.process_handlers(&ci) { return Some(ci); }
             }
 
-            match self.timeout_ms {
-                Some(t) => {
-                    let r = unsafe { ffi::dbus_connection_read_write_dispatch(self.c.conn(), t as c_int) };
-
-                    let p = mem::replace(&mut *self.c.i.filter_cb_panic.borrow_mut(), Ok(()));
-                    if let Err(perr) = p { panic::resume_unwind(perr); }
-
-                    if !self.c.i.pending_items.borrow().is_empty() { continue };
-                    if r == 0 { return None; }
-                    return Some(ConnectionItem::Nothing);
-                }
-                None => {
-                    let r = unsafe { ffi::dbus_connection_dispatch(self.c.conn()) };
-
-                    let p = mem::replace(&mut *self.c.i.filter_cb_panic.borrow_mut(), Ok(()));
-                    if let Err(perr) = p { panic::resume_unwind(perr); }
-
-                    if !self.c.i.pending_items.borrow().is_empty() { continue };
-                    if r == ffi::DBusDispatchStatus::DataRemains { continue };
-                    if r == ffi::DBusDispatchStatus::Complete { return None };
-                    panic!("dbus_connection_dispatch failed");
-                }
+            if let Some(t) = self.timeout_ms {
+		let r = unsafe { ffi::dbus_connection_read_write_dispatch(self.c.conn(), t as c_int) };
+		self.check_panic();
+		if !self.c.i.pending_items.borrow().is_empty() { continue };
+		if r == 0 { return None; }
             }
+
+            let r = unsafe { ffi::dbus_connection_dispatch(self.c.conn()) };
+            self.check_panic();
+
+            if !self.c.i.pending_items.borrow().is_empty() { continue };
+            if r == ffi::DBusDispatchStatus::DataRemains { continue };
+            if r == ffi::DBusDispatchStatus::Complete { return if self.end_on_timeout { None } else { Some(ConnectionItem::Nothing) } };
+            panic!("dbus_connection_dispatch failed");
         }
     }
 }
@@ -265,12 +279,11 @@ impl Connection {
     }
 
     /// Check if there are new incoming events
+    ///
+    /// If there are no incoming events, ConnectionItems::Nothing will be returned.
+    /// See ConnectionItems::new if you want to customize this behaviour.
     pub fn iter(&self, timeout_ms: i32) -> ConnectionItems {
-        ConnectionItems {
-            c: self,
-            timeout_ms: Some(timeout_ms),
-            handlers: Vec::new(),
-        }
+        ConnectionItems::new(self, Some(timeout_ms), false)
     }
 
     /// Register an object path.
@@ -369,7 +382,7 @@ impl Connection {
     /// See the `Watch` struct for an example.
     pub fn watch_handle(&self, fd: RawFd, flags: c_uint) -> ConnectionItems {
         self.i.watches.as_ref().unwrap().watch_handle(fd, flags);
-        ConnectionItems { c: self, timeout_ms: None, handlers: Vec::new() }
+        ConnectionItems::new(self, None, true)
     }
 
 
