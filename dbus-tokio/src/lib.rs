@@ -15,6 +15,9 @@ extern crate futures;
 extern crate tokio_core;
 extern crate mio;
 
+#[macro_use]
+extern crate log;
+
 pub mod tree;
 
 mod adriver;

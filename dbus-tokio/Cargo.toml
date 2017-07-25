@@ -15,6 +15,7 @@ dbus = { path = "../dbus", version = "0.5.3" }
 futures = "0.1.12"
 mio = "0.6.9"
 tokio-core = "0.1.8"
+log = "0.3"
 
 [dev-dependencies]
 tokio-timer = "0.1.0"

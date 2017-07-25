@@ -81,7 +81,10 @@ impl AConnection {
 }
 
 impl Drop for AConnection {
-    fn drop(&mut self) { let _ = self.quit.take().unwrap().send(()); }
+    fn drop(&mut self) {
+        debug!("Dropping AConnection");
+        let _ = self.quit.take().unwrap().send(());
+    }
 }
 
 #[derive(Debug)]
@@ -97,6 +100,7 @@ struct ADriver {
 
 impl ADriver {
     fn modify_watch(&mut self, w: Watch, poll_now: bool) -> io::Result<()> {
+        debug!("Modify_watch: {:?}, poll_now: {:?}", w, poll_now);
         if !w.readable() && !w.writable() {
             self.fds.remove(&w.fd());
         } else {
@@ -126,13 +130,14 @@ impl ADriver {
     fn handle_items(&mut self, items: ConnectionItems) {
         // TODO: What about all unwrapping in this function
         for i in items {
-            // println!("Got: {:?}", i);
+            debug!("handle_items: {:?}", i);
             match i {
                 ConnectionItem::WatchFd(w) => { self.modify_watch(w, true).unwrap(); },
                 ConnectionItem::MethodReturn(m) => {
                     let mut map = self.callmap.borrow_mut();
                     let serial = m.get_reply_serial().unwrap();
                     let r = map.remove(&serial);
+                    debug!("Serial {:?}, found: {:?}", serial, r.is_some());
                     if let Some(r) = r { r.send(m).unwrap(); }
                     else { self.send_stream(m) }
                 }
@@ -158,14 +163,14 @@ impl Future for ADriver {
             if w.get_ref().0.readable() { mask = mask | Ready::readable().into(); }
             if w.get_ref().0.writable() { mask = mask | Ready::writable().into(); }
             let pr = w.poll_ready(*mask);
-            // println!("{:?} is {:?}", w.get_ref().0.fd(), pr);
+            debug!("D-Bus i/o poll ready: {:?} is {:?}", w.get_ref().0.fd(), pr);
             let ur = if let Async::Ready(t) = pr { UnixReady::from(t) } else { continue };
             let flags =
                 if ur.is_readable() { WatchEvent::Readable as c_uint } else { 0 } +
                 if ur.is_writable() { WatchEvent::Writable as c_uint } else { 0 } +
                 if ur.is_hup() { WatchEvent::Hangup as c_uint } else { 0 } +
                 if ur.is_error() { WatchEvent::Error as c_uint } else { 0 };
-            // println!("{:?} is {:?}", w.get_ref().0.fd(), ur);
+            debug!("D-Bus i/o unix ready: {:?} is {:?}", w.get_ref().0.fd(), ur);
             cc.watch_handle(w.get_ref().0.fd(), flags);
             if ur.is_readable() { w.need_read() };
             if ur.is_writable() { w.need_write() };
@@ -252,9 +257,9 @@ impl Stream for AMessageStream {
     type Item = Message;
     type Error = ();
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        // println!("Polling message stream");
+        debug!("Polling message stream");
         let r = self.inner.poll();
-        // println!("msgstream {:?}", r);
+        debug!("msgstream found {:?}", r);
         r
     }
 }
