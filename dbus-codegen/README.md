@@ -1,3 +1,5 @@
+# dbus-codegen
+
 From a D-Bus interface like this:
 
     <node>
@@ -31,7 +33,7 @@ let myString = try!(myConnPath.foo(myInteger));
 This is slightly trickier, because you need to hand out a reference to that struct, like this:
 
 ```rust
-myInterface = orgexampletest_server(&myFactory, (), |minfo| { /* return a reference to the struct here */ }); 
+myInterface = orgexampletest_server(&myFactory, (), |minfo| { /* return a reference to the struct here */ });
 ```
 
 I'm not certain this will be the final design of the server part.
@@ -40,3 +42,16 @@ I'm not certain this will be the final design of the server part.
 
 5. For signals, there is some simple code generated for emitting them. There's no code is currently generated for matching/receiving signals.
 
+# Usage
+
+Once you have installed dbus-codegen, use the following command to import your XML:
+
+```
+dbus-codegen-rust < mydefinition.xml
+```
+
+This will print the generated Rust code to stdout, so you can pipe it into another file if you want:
+
+```
+dbus-codegen-rust < mydefinition.xml > mod.rs
+```
