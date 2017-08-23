@@ -55,3 +55,16 @@ This will print the generated Rust code to stdout, so you can pipe it into anoth
 ```
 dbus-codegen-rust < mydefinition.xml > mod.rs
 ```
+
+Dbus-codegen can also fetch the xml definition for you. Here's an example that generates client definitions for PolicyKit:
+
+```
+dbus-codegen-rust -s -d org.freedesktop.PolicyKit1 -p "/org/freedesktop/PolicyKit1/Authority" -m None > policykit.rs
+```
+
+See available options:
+
+```
+dbus-codegen-rust --help
+```
+
