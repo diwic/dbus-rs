@@ -6,7 +6,7 @@ use arg::{Iter, IterAppend, TypeMismatchError};
 use std::marker::PhantomData;
 use super::{Method, Interface, Property, ObjectPath, Tree};
 use std::cell::RefCell;
-use super::super::Error as dbusError; 
+use super::super::Error as dbusError;
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 /// A D-Bus Method Error, containing an error name and a description.
@@ -240,7 +240,6 @@ where
     let i = i.add_m(m);
     i
 }
-
 
 #[derive(Debug, Copy, Clone)]
 /// Contains information about the incoming property get/set request.

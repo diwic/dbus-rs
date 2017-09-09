@@ -17,28 +17,32 @@
 
 #![allow(missing_docs)]
 
+use arg;
+
 /// Methods of the [org.freedesktop.DBus.Peer](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-peer) interface.
 pub trait OrgFreedesktopDBusPeer {
-    fn ping(&self) -> Result<(), super::Error>;
-    fn get_machine_id(&self) -> Result<String, super::Error>;
+    type Err;
+    fn ping(&self) -> Result<(), Self::Err>;
+    fn get_machine_id(&self) -> Result<String, Self::Err>;
 }
 
 impl<'a, C: ::std::ops::Deref<Target=super::Connection>> OrgFreedesktopDBusPeer for super::ConnPath<'a, C> {
+    type Err = super::Error;
 
-    fn ping(&self) -> Result<(), super::Error> {
+    fn ping(&self) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Peer".into(), &"Ping".into(), |_| {
         }));
         try!(m.as_result());
         Ok(())
     }
 
-    fn get_machine_id(&self) -> Result<String, super::Error> {
+    fn get_machine_id(&self) -> Result<String, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Peer".into(), &"GetMachineId".into(), |_| {
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let a0: String = try!(i.read());
-        Ok(a0)
+        let machine_uuid: String = try!(i.read());
+        Ok(machine_uuid)
     }
 }
 
@@ -63,41 +67,43 @@ impl<'a, C: ::std::ops::Deref<Target=super::Connection>> OrgFreedesktopDBusIntro
 
 /// Methods of the [org.freedesktop.DBus.Properties](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-properties) interface.
 pub trait OrgFreedesktopDBusProperties {
-    fn get(&self, interfacename: &str, propertyname: &str) -> Result<super::arg::Variant<Box<super::arg::RefArg>>, super::Error>;
-    fn get_all(&self, interfacename: &str) -> Result<::std::collections::HashMap<String, super::arg::Variant<Box<super::arg::RefArg>>>, super::Error>;
-    fn set(&self, interfacename: &str, propertyname: &str, value: super::arg::Variant<Box<super::arg::RefArg>>) -> Result<(), super::Error>;
+    type Err;
+    fn get(&self, interface_name: &str, property_name: &str) -> Result<arg::Variant<Box<arg::RefArg>>, Self::Err>;
+    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>, Self::Err>;
+    fn set(&self, interface_name: &str, property_name: &str, value: arg::Variant<Box<arg::RefArg>>) -> Result<(), Self::Err>;
 }
 
 impl<'a, C: ::std::ops::Deref<Target=super::Connection>> OrgFreedesktopDBusProperties for super::ConnPath<'a, C> {
+    type Err = super::Error;
 
-    fn get(&self, interfacename: &str, propertyname: &str) -> Result<super::arg::Variant<Box<super::arg::RefArg>>, super::Error> {
+    fn get(&self, interface_name: &str, property_name: &str) -> Result<arg::Variant<Box<arg::RefArg>>, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"Get".into(), |msg| {
-            let mut i = super::arg::IterAppend::new(msg);
-            i.append(interfacename);
-            i.append(propertyname);
+            let mut i = arg::IterAppend::new(msg);
+            i.append(interface_name);
+            i.append(property_name);
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let a0: super::arg::Variant<Box<super::arg::RefArg>> = try!(i.read());
-        Ok(a0)
+        let value: arg::Variant<Box<arg::RefArg>> = try!(i.read());
+        Ok(value)
     }
 
-    fn get_all(&self, interfacename: &str) -> Result<::std::collections::HashMap<String, super::arg::Variant<Box<super::arg::RefArg>>>, super::Error> {
+    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"GetAll".into(), |msg| {
-            let mut i = super::arg::IterAppend::new(msg);
-            i.append(interfacename);
+            let mut i = arg::IterAppend::new(msg);
+            i.append(interface_name);
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let a0: ::std::collections::HashMap<String, super::arg::Variant<Box<super::arg::RefArg>>> = try!(i.read());
-        Ok(a0)
+        let properties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>> = try!(i.read());
+        Ok(properties)
     }
 
-    fn set(&self, interfacename: &str, propertyname: &str, value: super::arg::Variant<Box<super::arg::RefArg>>) -> Result<(), super::Error> {
+    fn set(&self, interface_name: &str, property_name: &str, value: arg::Variant<Box<arg::RefArg>>) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"Set".into(), |msg| {
-            let mut i = super::arg::IterAppend::new(msg);
-            i.append(interfacename);
-            i.append(propertyname);
+            let mut i = arg::IterAppend::new(msg);
+            i.append(interface_name);
+            i.append(property_name);
             i.append(value);
         }));
         try!(m.as_result());
@@ -107,18 +113,20 @@ impl<'a, C: ::std::ops::Deref<Target=super::Connection>> OrgFreedesktopDBusPrope
 
 /// Method of the [org.freedesktop.DBus.ObjectManager](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-objectmanager) interface.
 pub trait OrgFreedesktopDBusObjectManager {
-    fn get_managed_objects(&self) -> Result<::std::collections::HashMap<super::Path<'static>, ::std::collections::HashMap<String, ::std::collections::HashMap<String, super::arg::Variant<Box<super::arg::RefArg>>>>>, super::Error>;
+    type Err;
+    fn get_managed_objects(&self) -> Result<::std::collections::HashMap<super::Path<'static>, ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>>>, Self::Err>;
 }
 
 impl<'a, C: ::std::ops::Deref<Target=super::Connection>> OrgFreedesktopDBusObjectManager for super::ConnPath<'a, C> {
+    type Err = super::Error;
 
-    fn get_managed_objects(&self) -> Result<::std::collections::HashMap<super::Path<'static>, ::std::collections::HashMap<String, ::std::collections::HashMap<String, super::arg::Variant<Box<super::arg::RefArg>>>>>, super::Error> {
+    fn get_managed_objects(&self) -> Result<::std::collections::HashMap<super::Path<'static>, ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>>>, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.ObjectManager".into(), &"GetManagedObjects".into(), |_| {
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let a0 = try!(i.read());
-        Ok(a0)
+        let objects: ::std::collections::HashMap<super::Path<'static>, ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>>> = try!(i.read());
+        Ok(objects)
     }
 }
 
