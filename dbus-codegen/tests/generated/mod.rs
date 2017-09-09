@@ -51,8 +51,12 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopDBusProper
 }
 
 pub fn org_freedesktop_dbus_properties_server<F, T, D>(factory: &tree::Factory<tree::MTFn<D>, D>, data: D::Interface, f: F) -> tree::Interface<tree::MTFn<D>, D>
-where D: tree::DataType, D::Method: Default, T: OrgFreedesktopDBusProperties<Err=tree::MethodErr>,
-    F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::MTFn<D>, D>) -> & 'z T {
+where
+    D: tree::DataType,
+    D::Method: Default,
+    T: OrgFreedesktopDBusProperties<Err=tree::MethodErr>,
+    F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::MTFn<D>, D>) -> & 'z T,
+{
     let i = factory.interface("org.freedesktop.DBus.Properties", data);
     let f = ::std::sync::Arc::new(f);
     let fclone = f.clone();
@@ -134,8 +138,12 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopDBusIntros
 }
 
 pub fn org_freedesktop_dbus_introspectable_server<F, T, D>(factory: &tree::Factory<tree::MTFn<D>, D>, data: D::Interface, f: F) -> tree::Interface<tree::MTFn<D>, D>
-where D: tree::DataType, D::Method: Default, T: OrgFreedesktopDBusIntrospectable<Err=tree::MethodErr>,
-    F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::MTFn<D>, D>) -> & 'z T {
+where
+    D: tree::DataType,
+    D::Method: Default,
+    T: OrgFreedesktopDBusIntrospectable<Err=tree::MethodErr>,
+    F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::MTFn<D>, D>) -> & 'z T,
+{
     let i = factory.interface("org.freedesktop.DBus.Introspectable", data);
     let f = ::std::sync::Arc::new(f);
     let fclone = f.clone();
@@ -179,8 +187,12 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopDBusPeer f
 }
 
 pub fn org_freedesktop_dbus_peer_server<F, T, D>(factory: &tree::Factory<tree::MTFn<D>, D>, data: D::Interface, f: F) -> tree::Interface<tree::MTFn<D>, D>
-where D: tree::DataType, D::Method: Default, T: OrgFreedesktopDBusPeer<Err=tree::MethodErr>,
-    F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::MTFn<D>, D>) -> & 'z T {
+where
+    D: tree::DataType,
+    D::Method: Default,
+    T: OrgFreedesktopDBusPeer<Err=tree::MethodErr>,
+    F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::MTFn<D>, D>) -> & 'z T,
+{
     let i = factory.interface("org.freedesktop.DBus.Peer", data);
     let f = ::std::sync::Arc::new(f);
     let fclone = f.clone();
@@ -378,8 +390,13 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopPolicyKit1
 }
 
 pub fn org_freedesktop_policy_kit1_authority_server<F, T, D>(factory: &tree::Factory<tree::MTFn<D>, D>, data: D::Interface, f: F) -> tree::Interface<tree::MTFn<D>, D>
-where D: tree::DataType, D::Method: Default, T: OrgFreedesktopPolicyKit1Authority<Err=tree::MethodErr>,
-    D::Property: Default,    F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::MTFn<D>, D>) -> & 'z T {
+where
+    D: tree::DataType,
+    D::Method: Default,
+    D::Property: Default,
+    T: OrgFreedesktopPolicyKit1Authority<Err=tree::MethodErr>,
+    F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::MTFn<D>, D>) -> & 'z T,
+{
     let i = factory.interface("org.freedesktop.PolicyKit1.Authority", data);
     let f = ::std::sync::Arc::new(f);
     let fclone = f.clone();

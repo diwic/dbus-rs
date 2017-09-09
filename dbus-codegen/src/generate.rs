@@ -315,10 +315,11 @@ fn write_signals_emit(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>>
     Ok(())
 }
 
-fn write_server_access(s: &mut String, i: &Intf, saccess: ServerAccess) {
+fn write_server_access(s: &mut String, i: &Intf, saccess: ServerAccess, minfo_is_ref: bool) {
+    let z = if minfo_is_ref {""} else {"&"};
     match saccess {
-        ServerAccess::RefClosure => *s += "        let d = fclone(minfo);\n",
-        ServerAccess::MethodInfo => *s += &format!("        let d: &{}<Err=tree::MethodErr> = minfo;\n", make_camel(&i.shortname)),
+        ServerAccess::RefClosure => *s += &format!("        let d = fclone({}minfo);\n", z),
+        ServerAccess::MethodInfo => *s += &format!("        let d: &{}<Err=tree::MethodErr> = {}minfo;\n", make_camel(&i.shortname), z),
     }
 }
 
@@ -367,7 +368,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess)
         for a in &m.iargs {
             *s += &format!("        let {}: {} = try!(i.read());\n", a.varname(), try!(a.typename()));
         }
-        write_server_access(s, i, saccess);
+        write_server_access(s, i, saccess, true);
         let argsvar = m.iargs.iter().map(|q| q.varname()).collect::<Vec<String>>().join(", ");
         let retargs = match m.oargs.len() {
             0 => String::new(),
@@ -405,7 +406,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess)
             }
             *s += "    let p = p.on_get(move |a, pinfo| {\n";
             *s += "        let minfo = pinfo.to_method_info();\n";
-            write_server_access(s, i, saccess);
+            write_server_access(s, i, saccess, false);
             *s += &format!("        a.append(try!(d.get_{}()));\n", make_snake(&p.name));
             *s += "        Ok(())\n";
             *s += "    });\n";
@@ -416,7 +417,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess)
             }
             *s += "    let p = p.on_set(move |iter, pinfo| {\n";
             *s += "        let minfo = pinfo.to_method_info();\n";
-            write_server_access(s, i, saccess);
+            write_server_access(s, i, saccess, false);
             *s += &format!("        try!(d.set_{}(try!(iter.read())));\n", make_snake(&p.name));
             *s += "        Ok(())\n";
             *s += "    });\n";
