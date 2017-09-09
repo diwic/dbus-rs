@@ -154,7 +154,7 @@ impl<'a> IterAppend<'a> {
     /// for the subiterator - do this as many times as the number of dict entries.
     pub fn append_dict<F: FnOnce(&mut IterAppend<'a>)>(&mut self, key_sig: &Signature, value_sig: &Signature, f: F) {
         let sig = format!("{{{}{}}}", key_sig, value_sig);
-        self.append_container(Array::<bool,()>::arg_type(), Some(&CString::new(sig).unwrap()), f);
+        self.append_container(Array::<bool,()>::ARG_TYPE, Some(&CString::new(sig).unwrap()), f);
     }
 }
 
@@ -265,7 +265,7 @@ impl<'a> Iter<'a> {
     /// ```
     pub fn read<T: Arg + Get<'a>>(&mut self) -> Result<T, TypeMismatchError> {
         let r = try!(self.get().ok_or_else(||
-             TypeMismatchError { expected: T::arg_type(), found: self.arg_type(), position: self.2 }));
+             TypeMismatchError { expected: T::ARG_TYPE, found: self.arg_type(), position: self.2 }));
         self.next();
         Ok(r)
     }

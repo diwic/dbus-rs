@@ -25,7 +25,7 @@ const FIXED_ARRAY_ALIGNMENTS: [(ArgType, usize); 9] = [
 
 /// Represents a D-Bus array.
 impl<'a, T: Arg> Arg for &'a [T] {
-    fn arg_type() -> ArgType { ArgType::Array }
+    const ARG_TYPE: ArgType = ArgType::Array;
     fn signature() -> Signature<'static> { Signature::from(format!("a{}", T::signature())) }
 }
 
@@ -34,7 +34,7 @@ fn array_append<T: Arg, F: FnMut(&T, &mut IterAppend)>(z: &[T], i: &mut IterAppe
     let zlen = z.len() as i32;
 
     // Can we do append_fixed_array?
-    let a = (T::arg_type(), mem::size_of::<T>());
+    let a = (T::ARG_TYPE, mem::size_of::<T>());
     let can_fixed_array = (zlen > 1) && (z.len() == zlen as usize) && FIXED_ARRAY_ALIGNMENTS.iter().any(|&v| v == a);
 
     i.append_container(ArgType::Array, Some(T::signature().as_cstr()), |s|
@@ -82,11 +82,11 @@ impl<T: Arg + RefArg> RefArg for Vec<T> {
 
 impl<'a, T: FixedArray> Get<'a> for &'a [T] {
     fn get(i: &mut Iter<'a>) -> Option<&'a [T]> {
-        debug_assert!(FIXED_ARRAY_ALIGNMENTS.iter().any(|&v| v == (T::arg_type(), mem::size_of::<T>())));
-        i.recurse(Self::arg_type()).and_then(|mut si| unsafe {
+        debug_assert!(FIXED_ARRAY_ALIGNMENTS.iter().any(|&v| v == (T::ARG_TYPE, mem::size_of::<T>())));
+        i.recurse(Self::ARG_TYPE).and_then(|mut si| unsafe {
             let etype = ffi::dbus_message_iter_get_element_type(&mut i.0);
 
-            if etype != T::arg_type() as c_int { return None };
+            if etype != T::ARG_TYPE as c_int { return None };
 
             let mut v = ptr::null_mut();
             let mut i = 0;
@@ -118,7 +118,7 @@ impl<'a, K: 'a + DictKey, V: 'a + Append + Arg, I: Iterator<Item=(K, V)>> Dict<'
 }
 
 impl<'a, K: DictKey, V: Arg, I> Arg for Dict<'a, K, V, I> {
-    fn arg_type() -> ArgType { ArgType::Array }
+    const ARG_TYPE: ArgType = ArgType::Array;
     fn signature() -> Signature<'static> {
         Signature::from(format!("a{}", Self::entry_sig())) }
 }
@@ -126,7 +126,7 @@ impl<'a, K: DictKey, V: Arg, I> Arg for Dict<'a, K, V, I> {
 impl<'a, K: 'a + DictKey + Append, V: 'a + Append + Arg, I: Iterator<Item=(K, V)>> Append for Dict<'a, K, V, I> {
     fn append(self, i: &mut IterAppend) {
         let z = self.0;
-        i.append_container(Self::arg_type(), Some(&CString::new(Self::entry_sig()).unwrap()), |s| for (k, v) in z {
+        i.append_container(Self::ARG_TYPE, Some(&CString::new(Self::entry_sig()).unwrap()), |s| for (k, v) in z {
             s.append_container(ArgType::DictEntry, None, |ss| {
                 k.append(ss);
                 v.append(ss);
@@ -138,7 +138,7 @@ impl<'a, K: 'a + DictKey + Append, V: 'a + Append + Arg, I: Iterator<Item=(K, V)
 
 impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Get<'a> for Dict<'a, K, V, Iter<'a>> {
     fn get(i: &mut Iter<'a>) -> Option<Self> {
-        i.recurse(Self::arg_type()).map(|si| Dict(si, PhantomData))
+        i.recurse(Self::ARG_TYPE).map(|si| Dict(si, PhantomData))
         // TODO: Verify full element signature?
     }
 }
@@ -160,7 +160,7 @@ impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Iterator for Dict<'a, K, V, Ite
 }
 
 impl<K: DictKey, V: Arg> Arg for HashMap<K, V> {
-    fn arg_type() -> ArgType { ArgType::Array }
+    const ARG_TYPE: ArgType = ArgType::Array;
     fn signature() -> Signature<'static> {
         Signature::from(format!("a{{{}{}}}", K::signature(), V::signature())) }
 }
@@ -201,7 +201,7 @@ impl<K: DictKey + RefArg + Eq + Hash, V: RefArg + Arg> RefArg for HashMap<K, V> 
 } 
 
 impl<T: Arg> Arg for Vec<T> {
-    fn arg_type() -> ArgType { ArgType::Array }
+    const ARG_TYPE: ArgType = ArgType::Array;
     fn signature() -> Signature<'static> { Signature::from(format!("a{}", T::signature())) }
 }
 
@@ -230,7 +230,7 @@ impl<'a, T: 'a, I: Iterator<Item=T>> Array<'a, T, I> {
 }
 
 impl<'a, T: Arg, I> Arg for Array<'a, T, I> {
-    fn arg_type() -> ArgType { ArgType::Array }
+    const ARG_TYPE: ArgType = ArgType::Array;
     fn signature() -> Signature<'static> { Signature::from(format!("a{}", T::signature())) }
 }
 
@@ -243,7 +243,7 @@ impl<'a, T: 'a + Arg + Append, I: Iterator<Item=T>> Append for Array<'a, T, I> {
 
 impl<'a, T: Arg + Get<'a>> Get<'a> for Array<'a, T, Iter<'a>> {
     fn get(i: &mut Iter<'a>) -> Option<Array<'a, T, Iter<'a>>> {
-        i.recurse(Self::arg_type()).map(|si| Array(si, PhantomData))
+        i.recurse(Self::ARG_TYPE).map(|si| Array(si, PhantomData))
         // TODO: Verify full element signature?
     }
 }

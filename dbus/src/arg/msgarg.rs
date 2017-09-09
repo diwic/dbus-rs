@@ -12,7 +12,12 @@ use super::{Iter, IterAppend, ArgType};
 /// Types should also implement either Append or Get to be useful. 
 pub trait Arg {
     /// The corresponding D-Bus argument type code. 
-    fn arg_type() -> ArgType;
+    const ARG_TYPE: ArgType;
+    /// The corresponding D-Bus argument type code; just returns ARG_TYPE. 
+    ///
+    /// For backwards compatibility.
+    #[deprecated(note = "Use associated constant ARG_TYPE instead")]
+    fn arg_type() -> ArgType { return Self::ARG_TYPE; }
     /// The corresponding D-Bus type signature for this type. 
     fn signature() -> Signature<'static>;
 }
@@ -84,7 +89,7 @@ pub trait DictKey: Arg {}
 
 /// Simple lift over reference to value - this makes some iterators more ergonomic to use
 impl<'a, T: Arg> Arg for &'a T {
-    fn arg_type() -> ArgType { T::arg_type() }
+    const ARG_TYPE: ArgType = T::ARG_TYPE;
     fn signature() -> Signature<'static> { T::signature() }
 }
 impl<'a, T: Append + Clone> Append for &'a T {
@@ -137,7 +142,7 @@ impl<T: RefArg + ?Sized> RefArg for $t<T> {
 impl<T: DictKey> DictKey for $t<T> {}
 
 impl<T: Arg> Arg for $t<T> {
-    fn arg_type() -> ArgType { T::arg_type() }
+    const ARG_TYPE: ArgType = T::ARG_TYPE;
     fn signature() -> Signature<'static> { T::signature() }
 }
 impl<'a, T: Get<'a>> Get<'a> for $t<T> {
@@ -254,7 +259,7 @@ mod test {
                     assert!(g.next() && g.next());
                     let v: Variant<Iter> = g.get().unwrap();
                     let mut viter = v.0;
-                    assert_eq!(viter.arg_type(), Array::<&str,()>::arg_type());
+                    assert_eq!(viter.arg_type(), Array::<&str,()>::ARG_TYPE);
                     let a: Array<&str, _> = viter.get().unwrap();
                     assert_eq!(a.collect::<Vec<&str>>(), vec!["Hello", "world"]);
 

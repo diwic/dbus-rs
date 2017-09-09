@@ -288,7 +288,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
             return Err(MethodErr::ro_property(&self.name))
         }
         if let Some(mut i) = i {
-            let mut subiter = try!(i.recurse(arg::Variant::<bool>::arg_type()).ok_or_else(|| MethodErr::invalid_arg(&2)));
+            let mut subiter = try!(i.recurse(arg::Variant::<bool>::ARG_TYPE).ok_or_else(|| MethodErr::invalid_arg(&2)));
             if &*subiter.signature() != &*self.sig {
                return Err(MethodErr::failed(&format!("Property {} cannot change type", &self.name)))
             }
@@ -302,7 +302,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
     /// Note: Will panic if set_cb is not set.
     pub fn set_as_variant(&self, i: &mut arg::Iter, pinfo: &PropInfo<M, D>) -> Result<Option<Message>, MethodErr> {
         use arg::Arg;
-        let mut subiter = try!(i.recurse(arg::Variant::<bool>::arg_type()).ok_or_else(|| MethodErr::invalid_arg(&2)));
+        let mut subiter = try!(i.recurse(arg::Variant::<bool>::ARG_TYPE).ok_or_else(|| MethodErr::invalid_arg(&2)));
         try!(M::call_setprop(&*self.set_cb.as_ref().unwrap().0, &mut subiter, pinfo));
         self.get_emits_changed_signal(pinfo)
     }

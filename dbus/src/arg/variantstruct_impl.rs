@@ -17,7 +17,7 @@ impl Variant<Box<RefArg>> {
 }
 
 impl<T> Arg for Variant<T> {
-    fn arg_type() -> ArgType { ArgType::Variant }
+    const ARG_TYPE: ArgType = ArgType::Variant;
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"v\0") } }
 }
 
@@ -89,7 +89,7 @@ macro_rules! struct_impl {
 
 /// Tuples are represented as D-Bus structs. 
 impl<$($t: Arg),*> Arg for ($($t,)*) {
-    fn arg_type() -> ArgType { ArgType::Struct }
+    const ARG_TYPE: ArgType = ArgType::Struct;
     fn signature() -> Signature<'static> {
         let mut s = String::from("(");
         $( s.push_str(&$t::signature()); )*
