@@ -1,5 +1,5 @@
 use super::utils::{ArcMap, Annotations, Introspect};
-use super::{MethodType, MethodInfo, MethodResult, MethodErr, DataType, Property, Method, Signal};
+use super::{Factory, MethodType, MethodInfo, MethodResult, MethodErr, DataType, Property, Method, Signal, methodtype};
 use std::sync::{Arc, Mutex};
 use {Member, Message, Path, Signature, MessageType, Connection, ConnectionItem, Error, arg, MsgHandler, MsgHandlerResult};
 use Interface as IfaceName;
@@ -105,6 +105,16 @@ impl<M: MethodType<D>, D: DataType> IfaceCache<M, D> {
         }).clone()
     }
 
+    pub fn get_factory<S: Into<IfaceName<'static>> + Clone, F>(&self, s: S, f: F) -> Arc<Interface<M, D>>
+        where F: FnOnce() -> Interface<M, D> {
+        let s2 = s.clone().into();
+        let mut m = self.0.lock().unwrap();
+        m.entry(s2).or_insert_with(|| {
+            Arc::new(f())
+        }).clone()
+    }
+
+
     pub fn new() -> Arc<Self> { Arc::new(IfaceCache(Mutex::new(ArcMap::new()))) }
 }
 
@@ -134,12 +144,9 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
 
     /// Adds introspection support for this object path.
     pub fn introspectable(self) -> Self {
-        let z = self.ifacecache.get("org.freedesktop.DBus.Introspectable", |i| {
-            i.add_m(
-                super::leaves::new_method("Introspect".into(), Default::default(), M::make_method(|m| {
-                    Ok(vec!(m.msg.method_return().append1(m.path.introspect(m.tree))))
-                })).out_arg(("xml_data", "s"))
-             )
+        let z = self.ifacecache.get_factory("org.freedesktop.DBus.Introspectable", || {
+            let f = Factory::from(self.ifacecache.clone());
+            methodtype::org_freedesktop_dbus_introspectable_server(&f, Default::default())
         });
         self.add(z)
     }
@@ -162,7 +169,7 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
     }
 
 
-    fn introspect(&self, tree: &Tree<M, D>) -> String {
+    pub(super) fn introspect(&self, tree: &Tree<M, D>) -> String {
         let ifacestr = introspect_map(&self.ifaces, "  ");
         let olen = self.name.len()+1;
         let childstr = tree.children(self, true).iter().fold("".to_string(), |na, n|
@@ -284,7 +291,6 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
     }
 
 }
-
 
 pub fn new_objectpath<M: MethodType<D>, D: DataType>(n: Path<'static>, d: D::ObjectPath, cache: Arc<IfaceCache<M, D>>)
     -> ObjectPath<M, D> {

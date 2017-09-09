@@ -21,6 +21,9 @@ use std::cell::RefCell;
 #[derive(Debug, Clone)]
 pub struct Factory<M: MethodType<D>, D: DataType=()>(Arc<IfaceCache<M, D>>);
 
+impl<M: MethodType<D>, D: DataType> From<Arc<IfaceCache<M, D>>> for Factory<M, D> {
+    fn from(f: Arc<IfaceCache<M, D>>) -> Self { Factory(f) }
+}
 
 impl Factory<MTFn<()>, ()> {
     /// Creates a new factory for single-thread use.
@@ -87,6 +90,14 @@ impl<M: MethodType<D>, D: DataType> Factory<M, D> {
     /// Creates a new tree.
     pub fn tree(&self, data: D::Tree) -> Tree<M, D> {
         super::objectpath::new_tree(data)
+    }
+
+    /// Creates a new method - usually you'll use "method" instead.
+    ///
+    /// This is useful for being able to create methods in code which is generic over methodtype.
+    pub fn method_sync<H, T>(&self, t: T, data: D::Method, handler: H) -> Method<M, D>
+    where H: Fn(&MethodInfo<M, D>) -> MethodResult + Send + Sync + 'static, T: Into<Member<'static>> {
+        super::leaves::new_method(t.into(), data, M::make_method(handler))
     }
 }
 

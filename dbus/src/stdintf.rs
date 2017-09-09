@@ -44,18 +44,20 @@ impl<'a, C: ::std::ops::Deref<Target=super::Connection>> OrgFreedesktopDBusPeer 
 
 /// Method of the [org.freedesktop.DBus.Introspectable](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-introspectable) interface.
 pub trait OrgFreedesktopDBusIntrospectable {
-    fn introspect(&self) -> Result<String, super::Error>;
+    type Err;
+    fn introspect(&self) -> Result<String, Self::Err>;
 }
 
 impl<'a, C: ::std::ops::Deref<Target=super::Connection>> OrgFreedesktopDBusIntrospectable for super::ConnPath<'a, C> {
+    type Err = super::Error;
 
-    fn introspect(&self) -> Result<String, super::Error> {
+    fn introspect(&self) -> Result<String, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Introspectable".into(), &"Introspect".into(), |_| {
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let a0: String = try!(i.read());
-        Ok(a0)
+        let arg0: String = try!(i.read());
+        Ok(arg0)
     }
 }
 
