@@ -124,7 +124,7 @@ impl ADriver {
     }
 
     fn send_stream(&self, m: Message) {
-        self.msgstream.borrow().as_ref().map(|z| { z.send(m).unwrap() });
+        self.msgstream.borrow().as_ref().map(|z| { z.unbounded_send(m).unwrap() });
     }
 
     fn handle_items(&mut self, items: ConnectionItems) {

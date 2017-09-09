@@ -1,7 +1,7 @@
 [package]
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 name = "dbus-tokio"
-version = "0.1.1"
+version = "0.1.2"
 
 description = "Makes it possible to use Tokio with D-Bus, which is a bus commonly used on Linux for inter-process communication."
 repository = "https://github.com/diwic/dbus-rs"
@@ -11,7 +11,7 @@ license = "Apache-2.0/MIT"
 categories = ["os::unix-apis", "api-bindings", "asynchronous"]
 
 [dependencies]
-dbus = { path = "../dbus", version = "0.5.3" }
+dbus = { path = "../dbus", version = "0.5.4" }
 futures = "0.1.12"
 mio = "0.6.9"
 tokio-core = "0.1.8"
@@ -19,3 +19,7 @@ log = "0.3"
 
 [dev-dependencies]
 tokio-timer = "0.1.0"
+
+[badges]
+is-it-maintained-open-issues = { repository = "diwic/dbus-rs" }
+is-it-maintained-issue-resolution = { repository = "diwic/dbus-rs" }
