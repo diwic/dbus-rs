@@ -39,6 +39,14 @@ struct Intf {
     signals: Vec<Signal>,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum ServerAccess {
+    // Supply a closure from ref to ref
+    RefClosure,
+    // The interface is implemented for MethodInfo
+    MethodInfo
+}
+
 // Code generation options
 #[derive(Clone, Debug)]
 pub struct GenOpts {
@@ -48,10 +56,12 @@ pub struct GenOpts {
     pub methodtype: Option<String>,
     // Removes a prefix from interface names
     pub skipprefix: Option<String>,
+    // Type of server access
+    pub serveraccess: ServerAccess,
 }
 
 impl ::std::default::Default for GenOpts {
-    fn default() -> Self { GenOpts { dbuscrate: "dbus".into(), methodtype: Some("MTFn".into()), skipprefix: None }}
+    fn default() -> Self { GenOpts { dbuscrate: "dbus".into(), methodtype: Some("MTFn".into()), skipprefix: None, serveraccess: ServerAccess::RefClosure }}
 }
 
 fn make_camel(s: &str) -> String {
@@ -307,23 +317,36 @@ fn write_signals_emit(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>>
 
 
 // Should we implement this for
-// 1) MethodInfo? That's the only way receiver can check Sender, etc.
+// 1) MethodInfo? That's the only way receiver can check Sender, etc - ServerAccess::MethodInfo
 // 2) D::ObjectPath?  
 // 3) A user supplied struct?
-// 4) Something reachable from minfo?
+// 4) Something reachable from minfo - ServerAccess::RefClosure
 
-fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str) -> Result<(), Box<error::Error>> {
-    *s += &format!("\npub fn {}_server<F, T, D>(factory: &tree::Factory<tree::{}<D>, D>, data: D::Interface, f: F) -> tree::Interface<tree::{}<D>, D>\n",
-        make_snake(&i.shortname), mtype, mtype);
-    *s += &format!("where D: tree::DataType, D::Method: Default, T: {}<Err=tree::MethodErr>,\n", make_camel(&i.shortname));
+fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess) -> Result<(), Box<error::Error>> {
+    let hasf = saccess == ServerAccess::RefClosure;
+    *s += &format!("\npub fn {}_server<{}D>(factory: &tree::Factory<tree::{}<D>, D>, data: D::Interface{}) -> tree::Interface<tree::{}<D>, D>\n",
+        make_snake(&i.shortname), if hasf {"F, T, "} else {""}, mtype, if hasf {", f: F"} else {""}, mtype);
+
+    let mut wheres: Vec<String> = vec!["D: tree::DataType".into(), "D::Method: Default".into()];
     if i.props.len() > 0 {
-        *s += "    D::Property: Default,";
+        wheres.push("D::Property: Default".into());
     };
-    *s += &format!("    F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::{}<D>, D>) -> & 'z T {{\n", mtype);
+    if hasf {
+        wheres.push(format!("T: {}<Err=tree::MethodErr>", make_camel(&i.shortname)));
+        wheres.push(format!("F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::{}<D>, D>) -> & 'z T", mtype));
+    };
+    *s += "where\n";
+    for w in wheres { *s += &format!("    {},\n", w); }
+    *s += "{\n";
+
     *s += &format!("    let i = factory.interface(\"{}\", data);\n", i.origname);
-    *s += "    let f = ::std::sync::Arc::new(f);";
+    if hasf {
+        *s += "    let f = ::std::sync::Arc::new(f);";
+    }
     for m in &i.methods {
-        *s += "\n    let fclone = f.clone();\n";    
+        if hasf {
+            *s += "\n    let fclone = f.clone();\n";
+        }
         *s += &format!("    let h = move |minfo: &tree::MethodInfo<tree::{}<D>, D>| {{\n", mtype);
         if m.iargs.len() > 0 {
             *s += "        let mut i = minfo.msg.iter_init();\n";
@@ -331,7 +354,10 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str) -> Result<(), Box<erro
         for a in &m.iargs {
             *s += &format!("        let {}: {} = try!(i.read());\n", a.varname(), try!(a.typename()));
         }
-        *s += "        let d = fclone(minfo);\n";
+        match saccess {
+             ServerAccess::RefClosure => *s += "        let d = fclone(minfo);\n",
+             ServerAccess::MethodInfo => *s += &format!("        let d: &{}<Err=tree::MethodErr> = minfo;\n", make_camel(&i.shortname)),
+        }
         let argsvar = m.iargs.iter().map(|q| q.varname()).collect::<Vec<String>>().join(", ");
         let retargs = match m.oargs.len() {
             0 => String::new(),
@@ -427,7 +453,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<error::Erro
                 try!(write_intf(&mut s, &intf));
                 try!(write_intf_client(&mut s, &intf));
                 if let Some(ref mt) = opts.methodtype {
-                    try!(write_intf_tree(&mut s, &intf, &mt));
+                    try!(write_intf_tree(&mut s, &intf, &mt, opts.serveraccess));
                 }
                 try!(write_signals_emit(&mut s, &intf));
             }

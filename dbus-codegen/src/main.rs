@@ -4,6 +4,8 @@ extern crate clap;
 
 mod generate;
 
+use generate::ServerAccess;
+
 // Copy-pasted from the output of this program :-)
 pub trait OrgFreedesktopDBusIntrospectable {
     fn introspect(&self) -> Result<String, ::dbus::Error>;
@@ -34,6 +36,9 @@ fn main() {
              .help("Connects to system bus, if not specified, the session bus will be used. (Ignored if destination is not specified.)"))
         .arg(clap::Arg::with_name("methodtype").short("m").long("methodtype").takes_value(true).value_name("Fn")
              .help("Type of server method; valid values are: 'Fn', 'FnMut', 'Sync', and 'None'. Defaults to 'Fn'."))
+        .arg(clap::Arg::with_name("methodaccess").short("a").long("methodaccess").takes_value(true).value_name("RefClosure")
+             .help("Specifies how to access the type implementing the interface (experimental). Valid values are: 'RefClosure', 'MethodInfo'. \
+Defaults to 'RefClosure'."))
         .arg(clap::Arg::with_name("dbuscrate").long("dbuscrate").takes_value(true).value_name("dbus")
              .help("Name of dbus crate, defaults to 'dbus'."))
         .arg(clap::Arg::with_name("skipprefix").short("i").long("skipprefix").takes_value(true).value_name("PREFIX")
@@ -64,8 +69,15 @@ fn main() {
         _ => panic!("Invalid methodtype specified"),
     };
 
+    let maccess = matches.value_of("methodaccess").map(|s| s.to_lowercase());
+    let maccess = match maccess.as_ref().map(|s| &**s) {
+        None | Some("refclosure") => ServerAccess::RefClosure,
+        Some("methodinfo") => ServerAccess::MethodInfo,
+        _ => panic!("Invalid methodaccess specified"),
+    };
+
     let opts = generate::GenOpts { methodtype: mtype.map(|x| x.into()), dbuscrate: dbuscrate.into(),
-        skipprefix: matches.value_of("skipprefix").map(|x| x.into()) };
+        skipprefix: matches.value_of("skipprefix").map(|x| x.into()), serveraccess: maccess };
 
     let mut stdout = std::io::stdout();
     let h: &mut std::io::Write = &mut stdout;
