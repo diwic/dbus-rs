@@ -44,7 +44,9 @@ pub enum ConnectionItem {
     /// Incoming method return, including method return errors (mostly used for Async I/O)
     MethodReturn(Message),
     /// Indicates whether a file descriptor should be monitored or not.
+    ///
     /// Unless you're doing Async I/O, you can simply ignore this variant.
+    /// Note: This variant will likely be removed in future releases, see issue #99
     WatchFd(Watch),
 }
 
@@ -58,6 +60,8 @@ pub struct ConnectionItems<'a> {
 
 impl<'a> ConnectionItems<'a> {
     /// Builder method that adds a new msg handler.
+    ///
+    /// Note: Likely to changed/refactored/removed in next release
     pub fn with<H: 'static + MsgHandler>(mut self, h: H) -> Self {
         self.handlers.push(Box::new(h)); self
     }
@@ -77,6 +81,8 @@ impl<'a> ConnectionItems<'a> {
     }
 
     /// Access and modify message handlers 
+    ///
+    /// Note: Likely to changed/refactored/removed in next release
     pub fn msg_handlers(&mut self) -> &mut Vec<Box<MsgHandler>> { &mut self.handlers }
 
     fn check_panic(&self) {
@@ -481,6 +487,8 @@ impl fmt::Debug for Connection {
 }
 
 /// A trait for handling incoming messages. To use in combination with `ConnectionItems`.
+///
+/// Note: Likely to changed/refactored/removed in next release
 pub trait MsgHandler {
     /// The default handle_ci function calls handle_msg, so implement the one that fits you better.
     fn handle_ci(&mut self, ci: &ConnectionItem) -> Option<MsgHandlerResult> {
