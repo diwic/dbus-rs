@@ -315,6 +315,12 @@ fn write_signals_emit(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>>
     Ok(())
 }
 
+fn write_server_access(s: &mut String, i: &Intf, saccess: ServerAccess) {
+    match saccess {
+        ServerAccess::RefClosure => *s += "        let d = fclone(minfo);\n",
+        ServerAccess::MethodInfo => *s += &format!("        let d: &{}<Err=tree::MethodErr> = minfo;\n", make_camel(&i.shortname)),
+    }
+}
 
 // Should we implement this for
 // 1) MethodInfo? That's the only way receiver can check Sender, etc - ServerAccess::MethodInfo
@@ -323,13 +329,20 @@ fn write_signals_emit(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>>
 // 4) Something reachable from minfo - ServerAccess::RefClosure
 
 fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess) -> Result<(), Box<error::Error>> {
-    let hasf = saccess == ServerAccess::RefClosure;
-    *s += &format!("\npub fn {}_server<{}D>(factory: &tree::Factory<tree::{}<D>, D>, data: D::Interface{}) -> tree::Interface<tree::{}<D>, D>\n",
-        make_snake(&i.shortname), if hasf {"F, T, "} else {""}, mtype, if hasf {", f: F"} else {""}, mtype);
+    let hasf = saccess != ServerAccess::MethodInfo;
+    let hasm = mtype == "MethodType";
+
+    let treem: String = if hasm { "M".into() } else { format!("tree::{}<D>", mtype) };
+
+    *s += &format!("\npub fn {}_server<{}{}D>(factory: &tree::Factory<{}, D>, data: D::Interface{}) -> tree::Interface<{}, D>\n",
+        make_snake(&i.shortname), if hasf {"F, T, "} else {""}, if hasm {"M, "} else {""}, treem, if hasf {", f: F"} else {""}, treem);
 
     let mut wheres: Vec<String> = vec!["D: tree::DataType".into(), "D::Method: Default".into()];
     if i.props.len() > 0 {
         wheres.push("D::Property: Default".into());
+    };
+    if hasm {
+        wheres.push("M: MethodType<D>".into());
     };
     if hasf {
         wheres.push(format!("T: {}<Err=tree::MethodErr>", make_camel(&i.shortname)));
@@ -347,17 +360,14 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess)
         if hasf {
             *s += "\n    let fclone = f.clone();\n";
         }
-        *s += &format!("    let h = move |minfo: &tree::MethodInfo<tree::{}<D>, D>| {{\n", mtype);
+        *s += &format!("    let h = move |minfo: &tree::MethodInfo<{}, D>| {{\n", treem);
         if m.iargs.len() > 0 {
             *s += "        let mut i = minfo.msg.iter_init();\n";
         }
         for a in &m.iargs {
             *s += &format!("        let {}: {} = try!(i.read());\n", a.varname(), try!(a.typename()));
         }
-        match saccess {
-             ServerAccess::RefClosure => *s += "        let d = fclone(minfo);\n",
-             ServerAccess::MethodInfo => *s += &format!("        let d: &{}<Err=tree::MethodErr> = minfo;\n", make_camel(&i.shortname)),
-        }
+        write_server_access(s, i, saccess);
         let argsvar = m.iargs.iter().map(|q| q.varname()).collect::<Vec<String>>().join(", ");
         let retargs = match m.oargs.len() {
             0 => String::new(),
@@ -372,7 +382,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess)
         }
         *s += "        Ok(vec!(rm))\n";
         *s += "    };\n";
-        *s += &format!("    let m = factory.method(\"{}\", Default::default(), h);\n", m.name);
+        *s += &format!("    let m = factory.method{}(\"{}\", Default::default(), h);\n", if hasm {"_sync"} else {""}, m.name);
         for a in &m.iargs {
             *s += &format!("    let m = m.in_arg((\"{}\", \"{}\"));\n", a.name, a.typ);
         }
@@ -390,19 +400,23 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess)
             _ => return Err(format!("Unexpected access value {}", p.access).into()),
         });
         if p.can_get() {
-            *s += "    let fclone = f.clone();\n";    
+            if hasf {
+                *s += "    let fclone = f.clone();\n";
+            }
             *s += "    let p = p.on_get(move |a, pinfo| {\n";
             *s += "        let minfo = pinfo.to_method_info();\n";
-            *s += "        let d = fclone(&minfo);\n";
+            write_server_access(s, i, saccess);
             *s += &format!("        a.append(try!(d.get_{}()));\n", make_snake(&p.name));
             *s += "        Ok(())\n";
             *s += "    });\n";
         }
         if p.can_set() {
-            *s += "    let fclone = f.clone();\n";    
+            if hasf {
+                *s += "    let fclone = f.clone();\n";
+            }
             *s += "    let p = p.on_set(move |iter, pinfo| {\n";
             *s += "        let minfo = pinfo.to_method_info();\n";
-            *s += "        let d = fclone(&minfo);\n";
+            write_server_access(s, i, saccess);
             *s += &format!("        try!(d.set_{}(try!(iter.read())));\n", make_snake(&p.name));
             *s += "        Ok(())\n";
             *s += "    });\n";

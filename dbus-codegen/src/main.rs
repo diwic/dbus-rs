@@ -35,7 +35,7 @@ fn main() {
         .arg(clap::Arg::with_name("systembus").short("s").long("system-bus")
              .help("Connects to system bus, if not specified, the session bus will be used. (Ignored if destination is not specified.)"))
         .arg(clap::Arg::with_name("methodtype").short("m").long("methodtype").takes_value(true).value_name("Fn")
-             .help("Type of server method; valid values are: 'Fn', 'FnMut', 'Sync', and 'None'. Defaults to 'Fn'."))
+             .help("Type of server method; valid values are: 'Fn', 'FnMut', 'Sync', 'Generic', and 'None'. Defaults to 'Fn'."))
         .arg(clap::Arg::with_name("methodaccess").short("a").long("methodaccess").takes_value(true).value_name("RefClosure")
              .help("Specifies how to access the type implementing the interface (experimental). Valid values are: 'RefClosure', 'MethodInfo'. \
 Defaults to 'RefClosure'."))
@@ -65,6 +65,7 @@ Defaults to 'RefClosure'."))
         None | Some("fn") => Some("MTFn"),
         Some("fnmut") => Some("MTFnMut"),
         Some("sync") => Some("MTSync"),
+        Some("generic") => Some("MethodType"),
         Some("none") => None,
         _ => panic!("Invalid methodtype specified"),
     };
