@@ -5,8 +5,9 @@ authors = ["David Henningsson <diwic@ubuntu.com>"]
 
 [[bin]]
 name = "dbus-codegen-rust"
+path = "src/main.rs"
 
 [dependencies]
 xml-rs = "0.3"
-dbus = { path = "../dbus", version = "0.5.3" }
+dbus = { path = "../dbus", version = "0.5.4" }
 clap = "2.20"
