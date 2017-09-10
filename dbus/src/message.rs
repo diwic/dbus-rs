@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::{fmt, mem, ptr};
 use super::{ffi, Error, MessageType, TypeSig, libc, to_c_str, c_str_to_slice, init_dbus};
-use super::{BusName, Path, Interface, Member, ErrorName, Connection};
+use super::{BusName, Path, Interface, Member, ErrorName, Connection, SignalArgs};
 use std::os::unix::io::{RawFd, AsRawFd};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_char, c_int};
@@ -883,8 +883,6 @@ pub struct ConnPath<'a, C> {
 }
 
 impl<'a, C: ::std::ops::Deref<Target=Connection>> ConnPath<'a, C> {
-   // More methods to come.
-
     /// Make a D-Bus method call, where you can append arguments inside the closure.
     pub fn method_call_with_args<F: FnOnce(&mut Message)>(&self, i: &Interface, m: &Member, f: F) -> Result<Message, Error> {
         let mut msg = Message::method_call(&self.dest, &self.path, i, m);
@@ -896,6 +894,12 @@ impl<'a, C: ::std::ops::Deref<Target=Connection>> ConnPath<'a, C> {
     pub fn signal_with_args<F: FnOnce(&mut Message)>(&self, i: &Interface, m: &Member, f: F) -> Result<u32, Error> {
         let mut msg = Message::signal(&self.path, i, m);
         f(&mut msg);
+        self.conn.send(msg).map_err(|_| Error::new_custom("org.freedesktop.DBus.Error.Failed", "Sending signal failed"))
+    }
+
+    /// Emit a D-Bus signal, where the arguments are in a struct.
+    pub fn emit<S: SignalArgs>(&self, signal: &S) -> Result<u32, Error> {
+        let msg = signal.to_emit_message(&self.path);
         self.conn.send(msg).map_err(|_| Error::new_custom("org.freedesktop.DBus.Error.Failed", "Sending signal failed"))
     }
 }

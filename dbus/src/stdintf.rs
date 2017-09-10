@@ -130,3 +130,43 @@ impl<'a, C: ::std::ops::Deref<Target=super::Connection>> OrgFreedesktopDBusObjec
     }
 }
 
+#[derive(Debug, Default)]
+pub struct OrgFreedesktopDBusObjectManagerInterfacesAdded {
+    pub object: super::Path<'static>,
+    pub interfaces: ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>>,
+}
+
+impl super::SignalArgs for OrgFreedesktopDBusObjectManagerInterfacesAdded {
+    const NAME: &'static str = "InterfacesAdded";
+    const INTERFACE: &'static str = "org.freedesktop.DBus.ObjectManager";
+    fn append(&self, i: &mut arg::IterAppend) {
+        (&self.object as &arg::RefArg).append(i);
+        (&self.interfaces as &arg::RefArg).append(i);
+    }
+    fn get(&mut self, i: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {
+        self.object = try!(i.read());
+        self.interfaces = try!(i.read());
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct OrgFreedesktopDBusObjectManagerInterfacesRemoved {
+    pub object: super::Path<'static>,
+    pub interfaces: Vec<String>,
+}
+
+impl super::SignalArgs for OrgFreedesktopDBusObjectManagerInterfacesRemoved {
+    const NAME: &'static str = "InterfacesRemoved";
+    const INTERFACE: &'static str = "org.freedesktop.DBus.ObjectManager";
+    fn append(&self, i: &mut arg::IterAppend) {
+        (&self.object as &arg::RefArg).append(i);
+        (&self.interfaces as &arg::RefArg).append(i);
+    }
+    fn get(&mut self, i: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {
+        self.object = try!(i.read());
+        self.interfaces = try!(i.read());
+        Ok(())
+    }
+}
+

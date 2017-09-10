@@ -28,6 +28,7 @@ pub use connection::{Connection, ConnectionItems, ConnectionItem, MsgHandler, Ms
 pub use prop::PropHandler;
 pub use prop::Props;
 pub use watch::{Watch, WatchEvent};
+pub use signalargs::SignalArgs;
 
 /// A TypeSig describes the type of a MessageItem.
 pub type TypeSig<'a> = std::borrow::Cow<'a, str>;
@@ -43,6 +44,7 @@ mod prop;
 mod objpath;
 mod watch;
 mod connection;
+mod signalargs;
 
 mod strings;
 pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
