@@ -111,6 +111,32 @@ impl<'a, C: ::std::ops::Deref<Target=super::Connection>> OrgFreedesktopDBusPrope
     }
 }
 
+#[derive(Debug, Default)]
+/// Struct to send/receive the PropertiesChanged signal of the
+/// [org.freedesktop.DBus.Properties](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-properties) interface.
+pub struct OrgFreedesktopDBusPropertiesPropertiesChanged {
+    pub interface_name: String,
+    pub changed_properties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>,
+    pub invalidated_properties: Vec<String>,
+}
+
+impl super::SignalArgs for OrgFreedesktopDBusPropertiesPropertiesChanged {
+    const NAME: &'static str = "PropertiesChanged";
+    const INTERFACE: &'static str = "org.freedesktop.DBus.Properties";
+    fn append(&self, i: &mut arg::IterAppend) {
+        (&self.interface_name as &arg::RefArg).append(i);
+        (&self.changed_properties as &arg::RefArg).append(i);
+        (&self.invalidated_properties as &arg::RefArg).append(i);
+    }
+    fn get(&mut self, i: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {
+        self.interface_name = try!(i.read());
+        self.changed_properties = try!(i.read());
+        self.invalidated_properties = try!(i.read());
+        Ok(())
+    }
+}
+
+
 /// Method of the [org.freedesktop.DBus.ObjectManager](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-objectmanager) interface.
 pub trait OrgFreedesktopDBusObjectManager {
     type Err;
@@ -131,6 +157,8 @@ impl<'a, C: ::std::ops::Deref<Target=super::Connection>> OrgFreedesktopDBusObjec
 }
 
 #[derive(Debug, Default)]
+/// Struct to send/receive the InterfacesAdded signal of the
+/// [org.freedesktop.DBus.ObjectManager](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-objectmanager) interface.
 pub struct OrgFreedesktopDBusObjectManagerInterfacesAdded {
     pub object: super::Path<'static>,
     pub interfaces: ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>>,
@@ -151,6 +179,8 @@ impl super::SignalArgs for OrgFreedesktopDBusObjectManagerInterfacesAdded {
 }
 
 #[derive(Debug, Default)]
+/// Struct to send/receive the InterfacesRemoved signal of the
+/// [org.freedesktop.DBus.ObjectManager](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-objectmanager) interface.
 pub struct OrgFreedesktopDBusObjectManagerInterfacesRemoved {
     pub object: super::Path<'static>,
     pub interfaces: Vec<String>,
