@@ -292,26 +292,35 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
 
 }
 
-fn write_signals_emit(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
-    for ss in i.signals.iter() {
-        *s += &format!("\npub fn {}_{}_emit<C: ::std::ops::Deref<Target=dbus::Connection>>(conn: &dbus::ConnPath<C>", make_snake(&i.shortname), make_snake(&ss.name));
-        for a in ss.args.iter() {
-            let t = try!(a.typename());
-            *s += &format!(", {}: {}", a.varname(), t);
-        }
-        *s += ") -> Result<(), dbus::Error> {\n";
-        *s += &format!("    conn.signal_with_args(&\"{}\".into(), &\"{}\".into(), ", i.origname, ss.name);
-        if ss.args.len() > 0 {
-            *s += "move |msg| {\n";
-            *s += "         let mut i = arg::IterAppend::new(msg);\n";
-            for a in ss.args.iter() {
-                *s += &format!("         i.append({});\n", a.varname());
-            }
-            *s += "    ";
-        } else { *s += " |_| {" }
-        *s += "}).map(|_| ())\n";
-        *s += "}\n";
+fn write_signal(s: &mut String, i: &Intf, ss: &Signal) -> Result<(), Box<error::Error>> {
+    let structname = format!("{}{}", make_camel(&i.shortname), make_camel(&ss.name));
+    *s += "\n#[derive(Debug, Default)]\n";
+    *s += &format!("pub struct {} {{\n", structname);
+    for a in ss.args.iter() {
+        *s += &format!("    pub {}: {},\n", a.varname(), a.typename()?);
     }
+    *s += "}\n\n";
+
+    *s += &format!("impl dbus::SignalArgs for {} {{\n", structname);
+    *s += &format!("    const NAME: &'static str = \"{}\";\n", ss.name);
+    *s += &format!("    const INTERFACE: &'static str = \"{}\";\n", i.origname);
+    *s += "    fn append(&self, i: &mut arg::IterAppend) {\n";
+    for a in ss.args.iter() {
+        *s += &format!("        (&self.{} as &arg::RefArg).append(i);\n", a.varname());
+    }
+    *s += "    }\n";
+    *s += "    fn get(&mut self, i: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {\n";
+    for a in ss.args.iter() {
+        *s += &format!("        self.{} = try!(i.read());\n", a.varname());
+    }
+    *s += "        Ok(())\n";
+    *s += "    }\n";
+    *s += "}\n";
+    Ok(())
+}
+
+fn write_signals(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
+    for ss in i.signals.iter() { write_signal(s, i, ss)?; }
     Ok(())
 }
 
@@ -470,7 +479,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<error::Erro
                 if let Some(ref mt) = opts.methodtype {
                     try!(write_intf_tree(&mut s, &intf, &mt, opts.serveraccess));
                 }
-                try!(write_signals_emit(&mut s, &intf));
+                try!(write_signals(&mut s, &intf));
             }
 
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "method" => {
