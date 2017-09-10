@@ -3,7 +3,6 @@
 //! See the [D-Bus specification](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces) for more information about these standard interfaces.
 //! 
 //! The code here was originally created by dbus-codegen.
-//! Signal handling is not yet implemented here - use `Message::signal` to emit or `Connection.add_match` to receive, as usual.
 //!
 //! # Example
 //! ```
