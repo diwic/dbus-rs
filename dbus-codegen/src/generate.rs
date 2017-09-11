@@ -43,6 +43,8 @@ struct Intf {
 pub enum ServerAccess {
     // Supply a closure from ref to ref
     RefClosure,
+    // Supply a closure from ref to owned object which asrefs 
+    AsRefClosure,
     // The interface is implemented for MethodInfo
     MethodInfo
 }
@@ -304,12 +306,12 @@ fn write_signal(s: &mut String, i: &Intf, ss: &Signal) -> Result<(), Box<error::
     *s += &format!("impl dbus::SignalArgs for {} {{\n", structname);
     *s += &format!("    const NAME: &'static str = \"{}\";\n", ss.name);
     *s += &format!("    const INTERFACE: &'static str = \"{}\";\n", i.origname);
-    *s += "    fn append(&self, i: &mut arg::IterAppend) {\n";
+    *s += &format!("    fn append(&self, {}: &mut arg::IterAppend) {{\n", if ss.args.len() > 0 {"i"} else {"_"});
     for a in ss.args.iter() {
         *s += &format!("        (&self.{} as &arg::RefArg).append(i);\n", a.varname());
     }
     *s += "    }\n";
-    *s += "    fn get(&mut self, i: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {\n";
+    *s += &format!("    fn get(&mut self, {}: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {{\n", if ss.args.len() > 0 {"i"} else {"_"});
     for a in ss.args.iter() {
         *s += &format!("        self.{} = try!(i.read());\n", a.varname());
     }
@@ -327,6 +329,10 @@ fn write_signals(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
 fn write_server_access(s: &mut String, i: &Intf, saccess: ServerAccess, minfo_is_ref: bool) {
     let z = if minfo_is_ref {""} else {"&"};
     match saccess {
+        ServerAccess::AsRefClosure => {
+            *s += &format!("        let dd = fclone({}minfo);\n", z);
+            *s += "        let d = dd.as_ref();\n";
+        },
         ServerAccess::RefClosure => *s += &format!("        let d = fclone({}minfo);\n", z),
         ServerAccess::MethodInfo => *s += &format!("        let d: &{}<Err=tree::MethodErr> = {}minfo;\n", make_camel(&i.shortname), z),
     }
@@ -354,9 +360,16 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess)
     if hasm {
         wheres.push("M: MethodType<D>".into());
     };
-    if hasf {
-        wheres.push(format!("T: {}<Err=tree::MethodErr>", make_camel(&i.shortname)));
-        wheres.push(format!("F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::{}<D>, D>) -> & 'z T", mtype));
+    match saccess {
+        ServerAccess::RefClosure => {
+            wheres.push(format!("T: {}<Err=tree::MethodErr>", make_camel(&i.shortname)));
+            wheres.push(format!("F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::{}<D>, D>) -> & 'z T", mtype));
+        },
+        ServerAccess::AsRefClosure => {
+            wheres.push(format!("T: AsRef<{}<Err=tree::MethodErr>>", make_camel(&i.shortname)));
+            wheres.push(format!("F: 'static + Fn(&tree::MethodInfo<tree::{}<D>, D>) -> T", mtype));
+        },
+        ServerAccess::MethodInfo => {},
     };
     *s += "where\n";
     for w in wheres { *s += &format!("    {},\n", w); }
@@ -547,7 +560,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<error::Erro
 #[cfg(test)]
 mod tests {
 
-use super::{generate, GenOpts};
+use super::{generate, ServerAccess, GenOpts};
 
 static FROM_DBUS: &'static str = r#"
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
@@ -808,4 +821,12 @@ static FROM_POLICYKIT: &'static str = r#"
         // assert_eq!(s, "fdjsf");
     }
 
+    #[test]
+    fn from_policykit_asref_generic() {
+        let g = GenOpts { methodtype: Some("Generic".into()), serveraccess: ServerAccess::AsRefClosure, ..Default::default() };
+        let s = generate(FROM_POLICYKIT, &g).unwrap();
+        println!("{}", s);
+        let mut f = ::std::fs::File::create("./tests/generated/asref.rs").unwrap();
+        (&mut f as &mut ::std::io::Write).write_all(s.as_bytes()).unwrap();
+    }
 }

@@ -37,7 +37,7 @@ fn main() {
         .arg(clap::Arg::with_name("methodtype").short("m").long("methodtype").takes_value(true).value_name("Fn")
              .help("Type of server method; valid values are: 'Fn', 'FnMut', 'Sync', 'Generic', and 'None'. Defaults to 'Fn'."))
         .arg(clap::Arg::with_name("methodaccess").short("a").long("methodaccess").takes_value(true).value_name("RefClosure")
-             .help("Specifies how to access the type implementing the interface (experimental). Valid values are: 'RefClosure', 'MethodInfo'. \
+             .help("Specifies how to access the type implementing the interface (experimental). Valid values are: 'RefClosure', 'AsRefClosure', 'MethodInfo'. \
 Defaults to 'RefClosure'."))
         .arg(clap::Arg::with_name("dbuscrate").long("dbuscrate").takes_value(true).value_name("dbus")
              .help("Name of dbus crate, defaults to 'dbus'."))
@@ -73,6 +73,7 @@ Defaults to 'RefClosure'."))
     let maccess = matches.value_of("methodaccess").map(|s| s.to_lowercase());
     let maccess = match maccess.as_ref().map(|s| &**s) {
         None | Some("refclosure") => ServerAccess::RefClosure,
+        Some("asrefclosure") => ServerAccess::AsRefClosure,
         Some("methodinfo") => ServerAccess::MethodInfo,
         _ => panic!("Invalid methodaccess specified"),
     };

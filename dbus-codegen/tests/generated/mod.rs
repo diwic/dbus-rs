@@ -110,13 +110,27 @@ where
     i
 }
 
-pub fn org_freedesktop_dbus_properties_properties_changed_emit<C: ::std::ops::Deref<Target=dbus::Connection>>(conn: &dbus::ConnPath<C>, interface_name: String, changed_properties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>, invalidated_properties: Vec<String>) -> Result<(), dbus::Error> {
-    conn.signal_with_args(&"org.freedesktop.DBus.Properties".into(), &"PropertiesChanged".into(), move |msg| {
-         let mut i = arg::IterAppend::new(msg);
-         i.append(interface_name);
-         i.append(changed_properties);
-         i.append(invalidated_properties);
-    }).map(|_| ())
+#[derive(Debug, Default)]
+pub struct OrgFreedesktopDBusPropertiesPropertiesChanged {
+    pub interface_name: String,
+    pub changed_properties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>,
+    pub invalidated_properties: Vec<String>,
+}
+
+impl dbus::SignalArgs for OrgFreedesktopDBusPropertiesPropertiesChanged {
+    const NAME: &'static str = "PropertiesChanged";
+    const INTERFACE: &'static str = "org.freedesktop.DBus.Properties";
+    fn append(&self, i: &mut arg::IterAppend) {
+        (&self.interface_name as &arg::RefArg).append(i);
+        (&self.changed_properties as &arg::RefArg).append(i);
+        (&self.invalidated_properties as &arg::RefArg).append(i);
+    }
+    fn get(&mut self, i: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {
+        self.interface_name = try!(i.read());
+        self.changed_properties = try!(i.read());
+        self.invalidated_properties = try!(i.read());
+        Ok(())
+    }
 }
 
 pub trait OrgFreedesktopDBusIntrospectable {
@@ -609,6 +623,16 @@ where
     i
 }
 
-pub fn org_freedesktop_policy_kit1_authority_changed_emit<C: ::std::ops::Deref<Target=dbus::Connection>>(conn: &dbus::ConnPath<C>) -> Result<(), dbus::Error> {
-    conn.signal_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"Changed".into(),  |_| {}).map(|_| ())
+#[derive(Debug, Default)]
+pub struct OrgFreedesktopPolicyKit1AuthorityChanged {
+}
+
+impl dbus::SignalArgs for OrgFreedesktopPolicyKit1AuthorityChanged {
+    const NAME: &'static str = "Changed";
+    const INTERFACE: &'static str = "org.freedesktop.PolicyKit1.Authority";
+    fn append(&self, _: &mut arg::IterAppend) {
+    }
+    fn get(&mut self, _: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {
+        Ok(())
+    }
 }

@@ -1,4 +1,8 @@
-# dbus-codegen
+# dbus-codegen-rust
+
+This program takes D-Bus XML Introspection data and generates Rust code for calling and implementing the interfaces in the introspection data.
+
+## Example
 
 From a D-Bus interface like this:
 
@@ -8,12 +12,17 @@ From a D-Bus interface like this:
                 <arg type="i" name="bar" direction="in"/>
                 <arg type="s" name="baz" direction="out"/>
             </method>
+            <signal name="Laundry">
+                <arg type="b" name="eaten"/>
+            </signal>
         </interface>
      </node>
 
-This code will generate three things.
+This code will generate a few things.
 
-1. A trait, like this:
+## Common for client and server sides
+
+ * A trait for calling/implementing the methods of the interfaces, like this:
 
 ```rust
 pub trait OrgExampleTest {
@@ -22,29 +31,98 @@ pub trait OrgExampleTest {
 }
 ```
 
-2. It will implement this trait for `ConnPath`, which makes the method easy to call for a client, like this:
+For properties, `get_xx` and `set_xx` methods will be generated. There is currently no `get_all` method.
+
+ * A struct for each signal, like this:
+
+```rust
+#[derive(Debug, Default)]
+pub struct OrgExampleTestLaundry {
+    pub eaten: bool,
+}
+
+impl dbus::SignalArgs for OrgExampleTestLaundry { /* code here */ }
+```
+
+## Client side
+
+ * The trait will be implemented for `ConnPath`, which makes methods easy to call for a client, like this:
 
 ```rust
 use OrgExampleTest;
 let myString = try!(myConnPath.foo(myInteger));
 ```
 
-3. It will create a method which returns a `tree::Interface`, given a struct that implements OrgExampleTest.
-This is slightly trickier, because you need to hand out a reference to that struct, like this:
+ * To help catch signals emitted from the server, you can use `match_str` and `from_message`, like this:
 
 ```rust
-myInterface = orgexampletest_server(&myFactory, (), |minfo| { /* return a reference to the struct here */ });
+use SignalArgs;
+myConnection.add_match(OrgExampleTestLaundry::match_str(None, None));
+for n in myConnection.iter(1000) {
+    if let ConnectionItem::Signal(msg) = n {
+        if let Some(laundrySignal) = OrgExampleTestLaundry::from_message(&msg) {
+            println!("Laundry was eaten: {:?}", laundrySignal.eaten);
+        }
+    }
 ```
 
-I'm not certain this will be the final design of the server part.
+## Server side
 
-4. For properties, get_xxx and set_xxx methods are being generated. There is currently no get_all method.
+ * A method will be generated, which you can call to get a `tree::Interface`. This interface can then be added
+to a `tree::ObjectPath`, like this:
 
-5. For signals, there is some simple code generated for emitting them. There's no code is currently generated for matching/receiving signals.
+```rust
+myInterface = orgexampletest_server(&myFactory, ());
+```
+
+In addition, you also need to implement the interface's methods, like this:
+
+```rust
+impl OrgExampleTest for MyStruct {
+    type Err = tree::MethodErr;
+    fn foo(&self, bar: i32) -> Result<String, Self::Err> {
+        /* Your code here */
+    }
+}
+```
+
+I've been experimenting with different ways of how to make the generated server function reach the implementing struct,
+this is controlled by the command line parameter `methodaccess`.
+
+ 1. If `methodaccess` is `MethodInfo`, then you need to implement the interface for the `MethodInfo` struct, like this:
+
+```rust
+impl<M: tree::MethodType<D>, D> OrgExampleTest for tree::MethodInfo<M, D> {
+    type Err = tree::MethodErr;
+    fn foo(&self, bar: i32) -> Result<String, Self::Err> {
+        /* Your code here */
+    }
+}
+```
+
+ 2. If `methodaccess` is `RefClosure`, then you need to supply a closure that returns a reference to the implementing struct.
+This is a good option if the struct is stored in tree (this means implementing `tree::DataType`). 
+
+```rust
+myInterface = orgexampletest_server(&myFactory, (), |m| m.path.get_data());
+```
+
+ 3. If `methodaccess` is `AsRefClosure`, then you need to supply a closure that returns an object which can reference to the implementing struct.
+The object is dropped after the method is called. This works well with `Arc`/`Rc`, like this:
+
+```rust
+let myRc = Rc::new(myStruct);
+myInterface = orgexampletest_server(&myFactory, (), move |_| myRc.clone());
+```
+
+There is also a `methodtype` parameter that controls whether the server function will work well with `MTFn`, `MTFnMut` or `MTSync` trees,
+or all three (called `Generic`). Or not generate a server function at all (`None`).
+
+ * To emit a signal, you can call `SignalArgs::to_emit_message` or `ConnPath::emit` to get a message which can be sent over the connection.
 
 # Usage
 
-Once you have installed dbus-codegen, use the following command to import your XML:
+Once you have installed dbus-codegen-rust, use the following command to import your XML:
 
 ```
 dbus-codegen-rust < mydefinition.xml
@@ -56,7 +134,7 @@ This will print the generated Rust code to stdout, so you can pipe it into anoth
 dbus-codegen-rust < mydefinition.xml > mod.rs
 ```
 
-Dbus-codegen can also fetch the xml definition for you. Here's an example that generates client definitions for PolicyKit:
+Dbus-codegen-rust can also fetch the xml definition for you. Here's an example that generates client definitions for PolicyKit:
 
 ```
 dbus-codegen-rust -s -d org.freedesktop.PolicyKit1 -p "/org/freedesktop/PolicyKit1/Authority" -m None > policykit.rs
