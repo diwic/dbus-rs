@@ -45,9 +45,10 @@ let f = Factory::new_fn::<()>();
 let tree = f.tree(()).add(f.object_path("/hello", ()).introspectable().add(
     f.interface("com.example.dbustest", ()).add_m(
         f.method("Hello", (), |m| {
-            let s = format!("Hello {}!", m.msg.sender().unwrap());
+            let s = format!("Hello {}!", m.msg.get1().unwrap());
             Ok(vec!(m.msg.method_return().append1(s)))
-        }).outarg::<&str,_>("reply")
+        }).inarg::<&str,_>("name")
+          .outarg::<&str,_>("reply")
     )
 ));
 tree.set_registered(&c, true).unwrap();

@@ -53,7 +53,8 @@ fn main() {
                 // the callback receives "MethodInfo" struct and can return either an error, or a list of
                 // messages to send back.
                 let timer = Timer::default();
-                let sleep_future = timer.sleep(Duration::from_millis(500));
+                let t = m.msg.get1().unwrap();
+                let sleep_future = timer.sleep(Duration::from_millis(t));
 
                 // These are the variables we need after the timeout period. We need to 
                 // clone all strings now, because the tree might get destroyed during the sleep.
@@ -73,7 +74,8 @@ fn main() {
                 }).map_err(|e| MethodErr::failed(&e))
 
             // Our method has one output argument, no input arguments.
-            }).outarg::<&str,_>("reply")
+            }).inarg::<u32,_>("sleep_millis")
+              .outarg::<&str,_>("reply")
 
         // We also add the signal to the interface. This is mainly for introspection.
         ).add_s(signal2)
