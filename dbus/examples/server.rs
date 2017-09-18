@@ -41,19 +41,20 @@ fn main() {
                 // the callback receives "MethodInfo" struct and can return either an error, or a list of
                 // messages to send back.
 
-                let sender = m.msg.sender().unwrap();
-                let s = format!("Hello {}!", sender);
+                let name: &str = m.msg.read1()?;
+                let s = format!("Hello {}!", name);
                 let mret = m.msg.method_return().append1(s);
 
                 let sig = signal.msg(m.path.get_name(), m.iface.get_name())
-                    .append1(&*sender);
+                    .append1(&*name);
 
                 // Two messages will be returned - one is the method return (and should always be there),
                 // and in our case we also have a signal we want to send at the same time.
                 Ok(vec!(mret, sig))
 
-            // Our method has one output argument, no input arguments.
+            // Our method has one output argument and one input argument.
             }).outarg::<&str,_>("reply")
+            .inarg::<&str,_>("name")
 
         // We also add the signal to the interface. This is mainly for introspection.
         ).add_s(signal2)

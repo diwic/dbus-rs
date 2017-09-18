@@ -45,7 +45,8 @@ let f = Factory::new_fn::<()>();
 let tree = f.tree(()).add(f.object_path("/hello", ()).introspectable().add(
     f.interface("com.example.dbustest", ()).add_m(
         f.method("Hello", (), |m| {
-            let s = format!("Hello {}!", m.msg.get1().unwrap());
+            let n: &str = m.msg.read1()?;
+            let s = format!("Hello {}!", n);
             Ok(vec!(m.msg.method_return().append1(s)))
         }).inarg::<&str,_>("name")
           .outarg::<&str,_>("reply")
