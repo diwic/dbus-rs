@@ -68,12 +68,14 @@ for n in myConnection.iter(1000) {
 
 ## Server side
 
- * A method will be generated, which you can call to get a `tree::Interface`. This interface can then be added
-to a `tree::ObjectPath`, like this:
+ * A method will be generated, which you can call to get a `tree::Interface`, like this:
 
 ```rust
 myInterface = orgexampletest_server(&myFactory, ());
 ```
+
+This interface can then be added to a `tree::ObjectPath`, as shown in the [main page](../README.md#server).
+
 
 In addition, you also need to implement the interface's methods, like this:
 
