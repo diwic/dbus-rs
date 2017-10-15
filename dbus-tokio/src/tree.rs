@@ -6,7 +6,6 @@ use dbus::{Member, Message, Connection};
 use std::marker::PhantomData;
 use std::cell::RefCell;
 use futures::{IntoFuture, Future, Poll, Stream, Async};
-use std::rc::Rc;
 use std::ffi::CString;
 
 pub trait ADataType: fmt::Debug + Sized + Default {
@@ -103,15 +102,22 @@ impl Future for AMethodResult {
 /// Creates a filter for incoming messages, that handles messages in the tree.
 ///
 /// See the tokio_server example for some hints on how to use it.
-pub struct ATreeServer<'a, D: ADataType + 'a, S> {
-   conn: Rc<Connection>,
-   tree: &'a Tree<MTFn<ATree<D>>, ATree<D>>,
+pub struct ATreeServer<C,T,D,S>
+where C: ops::Deref<Target=Connection>,
+      T: ops::Deref<Target=Tree<MTFn<ATree<D>>, ATree<D>>>,
+      D: ADataType {
+   conn: C,
+   tree: T,
    stream: S,
    pendingresults: Vec<AMethodResult>,
 }
 
-impl<'a, D: ADataType, S: Stream<Item=Message, Error=()>> ATreeServer<'a, D, S> {
-    pub fn new(c: Rc<Connection>, t: &'a Tree<MTFn<ATree<D>>, ATree<D>>, stream: S) -> Self {
+impl<C,T,D,S> ATreeServer<C,T,D,S>
+where C: ops::Deref<Target=Connection>,
+      T: ops::Deref<Target=Tree<MTFn<ATree<D>>, ATree<D>>>,
+      S: Stream<Item=Message, Error=()>,
+      D: ADataType {
+    pub fn new(c: C, t: T, stream: S) -> Self {
         ATreeServer { conn: c, tree: t, stream: stream, pendingresults: vec![] }
     }
 
@@ -143,7 +149,11 @@ impl<'a, D: ADataType, S: Stream<Item=Message, Error=()>> ATreeServer<'a, D, S> 
     }
 }
 
-impl<'a, D: ADataType, S: Stream<Item=Message, Error=()>> Stream for ATreeServer<'a, D, S> {
+impl<C,T,D,S> Stream for ATreeServer<C,T,D,S>
+where C: ops::Deref<Target=Connection>,
+      T: ops::Deref<Target=Tree<MTFn<ATree<D>>, ATree<D>>>,
+      S: Stream<Item=Message, Error=()>,
+      D: ADataType {
     type Item = Message;
     type Error = ();
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
