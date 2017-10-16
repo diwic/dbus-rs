@@ -2,6 +2,12 @@
 name = "dbus-codegen"
 version = "0.1.0"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
+description = "Binary crate to generate Rust code from XML introspection data"
+license = "Apache-2.0/MIT"
+categories = ["os::unix-apis", "api-bindings"]
+repository = "https://github.com/diwic/dbus-rs"
+keywords = ["D-Bus", "DBus"]
+readme = "README.md"
 
 [[bin]]
 name = "dbus-codegen-rust"
@@ -11,3 +17,7 @@ path = "src/main.rs"
 xml-rs = "0.3"
 dbus = { path = "../dbus", version = "0.5.4" }
 clap = "2.20"
+
+[badges]
+is-it-maintained-open-issues = { repository = "diwic/dbus-rs" }
+is-it-maintained-issue-resolution = { repository = "diwic/dbus-rs" }
