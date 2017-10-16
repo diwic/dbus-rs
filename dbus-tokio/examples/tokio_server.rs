@@ -53,6 +53,8 @@ fn main() {
                 // the callback receives "MethodInfo" struct and can return either an error, or a list of
                 // messages to send back.
                 let timer = Timer::default();
+
+                // FIXME: This error should be properly handled instead of being unwrapped!
                 let t = m.msg.get1().unwrap();
                 let sleep_future = timer.sleep(Duration::from_millis(t));
 
