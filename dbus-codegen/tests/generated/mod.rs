@@ -373,33 +373,15 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopPolicyKit1
     }
 
     fn get_backend_name(&self) -> Result<String, Self::Err> {
-        let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"Get".into(), move |msg| {
-            let mut i = arg::IterAppend::new(msg);
-            i.append("org.freedesktop.PolicyKit1.Authority");
-            i.append("BackendName");
-        }));
-        let v: arg::Variant<_> = try!(try!(m.as_result()).read1());
-        Ok(v.0)
+        <Self as dbus::stdintf::OrgFreedesktopDBusProperties>::get(&self, "org.freedesktop.PolicyKit1.Authority", "BackendName").map(|v| v.0)
     }
 
     fn get_backend_version(&self) -> Result<String, Self::Err> {
-        let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"Get".into(), move |msg| {
-            let mut i = arg::IterAppend::new(msg);
-            i.append("org.freedesktop.PolicyKit1.Authority");
-            i.append("BackendVersion");
-        }));
-        let v: arg::Variant<_> = try!(try!(m.as_result()).read1());
-        Ok(v.0)
+        <Self as dbus::stdintf::OrgFreedesktopDBusProperties>::get(&self, "org.freedesktop.PolicyKit1.Authority", "BackendVersion").map(|v| v.0)
     }
 
     fn get_backend_features(&self) -> Result<u32, Self::Err> {
-        let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"Get".into(), move |msg| {
-            let mut i = arg::IterAppend::new(msg);
-            i.append("org.freedesktop.PolicyKit1.Authority");
-            i.append("BackendFeatures");
-        }));
-        let v: arg::Variant<_> = try!(try!(m.as_result()).read1());
-        Ok(v.0)
+        <Self as dbus::stdintf::OrgFreedesktopDBusProperties>::get(&self, "org.freedesktop.PolicyKit1.Authority", "BackendFeatures").map(|v| v.0)
     }
 }
 

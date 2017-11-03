@@ -291,13 +291,8 @@ fn write_intf_client(s: &mut String, i: &Intf, genvar: bool) -> Result<(), Box<e
         *s += "\n";
         try!(write_prop_decl(s, &p, false));
         *s += " {\n";
-        *s += "        let mut m = try!(self.method_call_with_args(&\"org.freedesktop.DBus.Properties\".into(), &\"Get\".into(), move |msg| {\n";
-        *s += "            let mut i = arg::IterAppend::new(msg);\n";
-        *s += &format!("            i.append(\"{}\");\n", i.origname);
-        *s += &format!("            i.append(\"{}\");\n", p.name);
-        *s += "        }));\n";
-        *s += "        let v: arg::Variant<_> = try!(try!(m.as_result()).read1());\n";
-        *s += "        Ok(v.0)\n";
+        *s += &format!("        <Self as dbus::stdintf::OrgFreedesktopDBusProperties>::get(&self, \"{}\", \"{}\").map(|v| v.0)\n",
+            i.origname, p.name);
         *s += "    }\n";
     }
 
@@ -305,13 +300,8 @@ fn write_intf_client(s: &mut String, i: &Intf, genvar: bool) -> Result<(), Box<e
         *s += "\n";
         try!(write_prop_decl(s, &p, true));
         *s += " {\n";
-        *s += "        let mut m = try!(self.method_call_with_args(&\"org.freedesktop.DBus.Properties\".into(), &\"Set\".into(), move |msg| {\n";
-        *s += "            let mut i = arg::IterAppend::new(msg);\n";
-        *s += &format!("            i.append(\"{}\");\n", i.origname);
-        *s += &format!("            i.append(\"{}\");\n", p.name);
-        *s += "            i.append(arg::Variant(value));\n";
-        *s += "        }));\n";
-        *s += "        m.as_result().map(|_| ())\n";
+        *s += &format!("        <Self as dbus::stdintf::OrgFreedesktopDBusProperties>::set(&self, \"{}\", \"{}\", arg::Variant(value))\n",
+            i.origname, p.name);
         *s += "    }\n";
     }
 
