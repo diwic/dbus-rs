@@ -914,7 +914,7 @@ pub fn message_set_serial(m: &mut Message, s: u32) {
 mod test {
     extern crate tempdir;
 
-    use super::super::{Connection, ConnectionItem, Message, BusType, MessageItem, OwnedFd, libc, Path};
+    use super::super::{Connection, Message, MessageType, BusType, MessageItem, OwnedFd, libc, Path};
 
     #[test]
     fn unix_fd() {
@@ -938,21 +938,16 @@ mod test {
         println!("Sending {:?}", m.get_items());
         c.send(m).unwrap();
 
-        for n in c.iter(1000) {
-            match n {
-                ConnectionItem::MethodCall(m) => {
-                    if let Some(&MessageItem::UnixFd(ref z)) = m.get_items().get(0) {
-                        println!("Got {:?}", m.get_items());
-                        let mut q: libc::c_char = 100;
-                        assert_eq!(1, unsafe { libc::read(z.as_raw_fd(), &mut q as *mut _ as *mut libc::c_void, 1) });
-                        assert_eq!(q, 'z' as libc::c_char);
-                        break;
-                    }
-                    else {
-                        panic!("Expected UnixFd, got {:?}", m.get_items());
-                    }
-                }
-                _ => println!("Got {:?}", n),
+        for n in c.incoming(1000).cycle() {
+            if n.msg_type() == MessageType::MethodCall {
+                let z: OwnedFd = n.read1().unwrap();
+                println!("Got {:?}", z);
+                let mut q: libc::c_char = 100;
+                assert_eq!(1, unsafe { libc::read(z.as_raw_fd(), &mut q as *mut _ as *mut libc::c_void, 1) });
+                assert_eq!(q, 'z' as libc::c_char);
+                break;
+            } else {
+                println!("Got {:?}", n);
             }
         }
     }
@@ -978,15 +973,14 @@ mod test {
         println!("Sending {}", sending);
         c.send(m).unwrap();
 
-        for n in c.iter(1000) {
-            match n {
-                ConnectionItem::MethodCall(m) => {
-                    let receiving = format!("{:?}", m.get_items());
-                    println!("Receiving {}", receiving);
-                    assert_eq!(sending, receiving);
-                    break;
-                }
-                _ => println!("Got {:?}", n),
+        for n in c.incoming(1000).cycle() {
+            if n.msg_type() == MessageType::MethodCall {
+                let receiving = format!("{:?}", n.get_items());
+                println!("Receiving {}", receiving);
+                assert_eq!(sending, receiving);
+                break;
+            } else {
+                println!("Got {:?}", n);
             }
         }
     }
@@ -1033,15 +1027,14 @@ mod test {
         println!("Sending {}", sending);
         c.send(msg).unwrap();
 
-        for n in c.iter(1000) {
-            match n {
-                ConnectionItem::MethodCall(m) => {
-                    let receiving = format!("{:?}", m.get_items());
-                    println!("Receiving {}", receiving);
-                    assert_eq!(sending, receiving);
-                    break;
-                }
-                _ => println!("Got {:?}", n),
+        for n in c.incoming(1000).cycle() {
+            if n.msg_type() == MessageType::MethodCall {
+                let receiving = format!("{:?}", n.get_items());
+                println!("Receiving {}", receiving);
+                assert_eq!(sending, receiving);
+                break;
+            } else {
+                println!("Got {:?}", n);
             }
         }
     }

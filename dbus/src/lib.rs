@@ -24,7 +24,7 @@ pub use ffi::DBusReleaseNameReply as ReleaseNameReply;
 pub use ffi::DBusMessageType as MessageType;
 
 pub use message::{Message, MessageItem, FromMessageItem, OwnedFd, ArrayError, ConnPath};
-pub use connection::{Connection, ConnectionItems, ConnectionItem, MsgHandler, MsgHandlerResult, MessageCallback};
+pub use connection::{Connection, ConnectionItems, ConnectionItem, ConnMsgs, MsgHandler, MsgHandlerResult, MessageCallback};
 pub use prop::PropHandler;
 pub use prop::Props;
 pub use watch::{Watch, WatchEvent};

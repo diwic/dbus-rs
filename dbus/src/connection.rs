@@ -93,11 +93,6 @@ impl<'a> ConnectionItems<'a> {
     /// Note: Likely to changed/refactored/removed in next release
     pub fn msg_handlers(&mut self) -> &mut Vec<Box<MsgHandler>> { &mut self.handlers }
 
-    fn check_panic(&self) {
-        let p = mem::replace(&mut *self.c.i.filter_cb_panic.borrow_mut(), Ok(()));
-        if let Err(perr) = p { panic::resume_unwind(perr); }
-    }
-
     /// Creates a new ConnectionItems iterator
     ///
     /// For io_timeout, setting None means the fds will not be read/written. I e, only pending 
@@ -128,17 +123,56 @@ impl<'a> Iterator for ConnectionItems<'a> {
 
             if let Some(t) = self.timeout_ms {
 		let r = unsafe { ffi::dbus_connection_read_write_dispatch(self.c.conn(), t as c_int) };
-		self.check_panic();
+		self.c.check_panic();
 		if !self.c.i.pending_items.borrow().is_empty() { continue };
 		if r == 0 { return None; }
             }
 
             let r = unsafe { ffi::dbus_connection_dispatch(self.c.conn()) };
-            self.check_panic();
+            self.c.check_panic();
 
             if !self.c.i.pending_items.borrow().is_empty() { continue };
             if r == ffi::DBusDispatchStatus::DataRemains { continue };
             if r == ffi::DBusDispatchStatus::Complete { return if self.end_on_timeout { None } else { Some(ConnectionItem::Nothing) } };
+            panic!("dbus_connection_dispatch failed");
+        }
+    }
+}
+
+/// Iterator over incoming messages on a connection.
+#[derive(Debug, Clone)]
+pub struct ConnMsgs<C> {
+    /// The connection or some reference to it.
+    pub conn: C,
+    /// How many ms dbus should block, waiting for incoming messages until timing out.
+    ///
+    /// If set to None, the dbus library will not read/write from file descriptors at all.
+    /// Instead the iterator will end when there's nothing currently in the queue.
+    pub timeout_ms: Option<u32>,
+}
+
+impl<C: ops::Deref<Target = Connection>> Iterator for ConnMsgs<C> {
+    type Item = Message;
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let iconn = &self.conn.i;
+            if iconn.filter_cb.borrow().is_none() { panic!("ConnMsgs::next called recursively or with a MessageCallback set to None"); }
+            let i = iconn.pending_items.borrow_mut().pop_front();
+            if let Some(ci) = i { return Some(ci); }
+
+            if let Some(t) = self.timeout_ms {
+		let r = unsafe { ffi::dbus_connection_read_write_dispatch(self.conn.conn(), t as c_int) };
+		self.conn.check_panic();
+		if !iconn.pending_items.borrow().is_empty() { continue };
+		if r == 0 { return None; }
+            }
+
+            let r = unsafe { ffi::dbus_connection_dispatch(self.conn.conn()) };
+            self.conn.check_panic();
+
+            if !iconn.pending_items.borrow().is_empty() { continue };
+            if r == ffi::DBusDispatchStatus::DataRemains { continue };
+            if r == ffi::DBusDispatchStatus::Complete { return None }
             panic!("dbus_connection_dispatch failed");
         }
     }
@@ -285,6 +319,13 @@ impl Connection {
     /// See ConnectionItems::new if you want to customize this behaviour.
     pub fn iter(&self, timeout_ms: i32) -> ConnectionItems {
         ConnectionItems::new(self, Some(timeout_ms), false)
+    }
+
+    /// Check if there are new incoming events
+    ///
+    /// Supersedes "iter".
+    pub fn incoming(&self, timeout_ms: u32) -> ConnMsgs<&Self> {
+        ConnMsgs { conn: &self, timeout_ms: Some(timeout_ms) }
     }
 
     /// Register an object path.
@@ -478,6 +519,12 @@ impl Connection {
     /// (Previously, this was instead put in a ConnectionItem queue, but this was not working correctly.
     /// see https://github.com/diwic/dbus-rs/issues/99 for additional info.)
     pub fn set_watch_callback(&self, f: Box<Fn(Watch) + Send>) { self.i.watches.as_ref().unwrap().set_on_update(f); }
+
+    fn check_panic(&self) {
+        let p = mem::replace(&mut *self.i.filter_cb_panic.borrow_mut(), Ok(()));
+        if let Err(perr) = p { panic::resume_unwind(perr); }
+    }
+
 }
 
 impl Drop for Connection {
