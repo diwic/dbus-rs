@@ -53,15 +53,6 @@ pub mod arg;
 
 pub mod stdintf;
 
-/// Contains functionality for the "server" of a D-Bus object. A remote application can
-/// introspect this object and call methods on it.
-/// Deprecated - use the `tree` module instead.
-pub mod obj {
-    pub use objpath::{ObjectPath, Interface, Property, Signal, Argument};
-    pub use objpath::{Method, MethodHandler, MethodResult};
-    pub use objpath::{PropertyROHandler, PropertyRWHandler, PropertyWOHandler, PropertyGetResult, PropertySetResult};
-}
-
 pub mod tree;
 
 static INITDBUS: std::sync::Once = std::sync::ONCE_INIT;
