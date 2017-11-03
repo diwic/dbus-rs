@@ -41,7 +41,6 @@ use std::os::raw::c_char;
 extern crate libdbus_sys as ffi;
 mod message;
 mod prop;
-mod objpath;
 mod watch;
 mod connection;
 mod signalargs;
