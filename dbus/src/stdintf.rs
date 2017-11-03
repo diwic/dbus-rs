@@ -67,15 +67,15 @@ impl<'a, C: ::std::ops::Deref<Target=super::Connection>> OrgFreedesktopDBusIntro
 /// Methods of the [org.freedesktop.DBus.Properties](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-properties) interface.
 pub trait OrgFreedesktopDBusProperties {
     type Err;
-    fn get(&self, interface_name: &str, property_name: &str) -> Result<arg::Variant<Box<arg::RefArg>>, Self::Err>;
+    fn get<R0: for<'b> arg::Get<'b>>(&self, interface_name: &str, property_name: &str) -> Result<arg::Variant<R0>, Self::Err>;
     fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>, Self::Err>;
-    fn set(&self, interface_name: &str, property_name: &str, value: arg::Variant<Box<arg::RefArg>>) -> Result<(), Self::Err>;
+    fn set<I2: arg::Arg + arg::Append>(&self, interface_name: &str, property_name: &str, value: arg::Variant<I2>) -> Result<(), Self::Err>;
 }
 
 impl<'a, C: ::std::ops::Deref<Target=super::Connection>> OrgFreedesktopDBusProperties for super::ConnPath<'a, C> {
     type Err = super::Error;
 
-    fn get(&self, interface_name: &str, property_name: &str) -> Result<arg::Variant<Box<arg::RefArg>>, Self::Err> {
+    fn get<R0: for<'b> arg::Get<'b>>(&self, interface_name: &str, property_name: &str) -> Result<arg::Variant<R0>, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"Get".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
             i.append(interface_name);
@@ -83,7 +83,7 @@ impl<'a, C: ::std::ops::Deref<Target=super::Connection>> OrgFreedesktopDBusPrope
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let value: arg::Variant<Box<arg::RefArg>> = try!(i.read());
+        let value: arg::Variant<R0> = try!(i.read());
         Ok(value)
     }
 
@@ -98,7 +98,7 @@ impl<'a, C: ::std::ops::Deref<Target=super::Connection>> OrgFreedesktopDBusPrope
         Ok(properties)
     }
 
-    fn set(&self, interface_name: &str, property_name: &str, value: arg::Variant<Box<arg::RefArg>>) -> Result<(), Self::Err> {
+    fn set<I2: arg::Arg + arg::Append>(&self, interface_name: &str, property_name: &str, value: arg::Variant<I2>) -> Result<(), Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"Set".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
             i.append(interface_name);
