@@ -43,11 +43,6 @@ pub enum ConnectionItem {
     Signal(Message),
     /// Incoming method return, including method return errors (mostly used for Async I/O)
     MethodReturn(Message),
-    /// Indicates whether a file descriptor should be monitored or not.
-    ///
-    /// Unless you're doing Async I/O, you can simply ignore this variant.
-    /// Note: This variant will likely be removed in future releases, see issue #99
-    WatchFd(Watch),
 }
 
 /// ConnectionItem iterator
@@ -240,12 +235,7 @@ impl Connection {
             ffi::dbus_connection_add_filter(c.conn(), Some(filter_message_cb), mem::transmute(&*c.i), None)
         } != 0);
 
-        let iconn: *const IConnection = &*c.i;
-        c.i.watches = Some(WatchList::new(&c, Box::new(move |w| {
-            let i: &IConnection = unsafe { mem::transmute(iconn) };
-            i.pending_items.borrow_mut().push_back(ConnectionItem::WatchFd(w));
-        })));
-
+        c.i.watches = Some(WatchList::new(&c, Box::new(|_| {})));
         Ok(c)
     }
 
@@ -436,7 +426,7 @@ impl Connection {
     /// })));
     ///
     /// for _ in c.iter(1000) {
-    ///    // Only `ConnectionItem::Nothing` and `ConnectionItem::WatchFd` would be ever yielded here.
+    ///    // Only `ConnectionItem::Nothing` would be ever yielded here.
     /// }
     /// ```
     ///
@@ -469,6 +459,20 @@ impl Connection {
     pub fn replace_message_callback(&self, f: Option<MessageCallback>) -> Option<MessageCallback> {
         mem::replace(&mut *self.i.filter_cb.borrow_mut(), f)
     }
+
+    /// Sets a callback to be called if a file descriptor status changes.
+    ///
+    /// For async I/O. In rare cases, the number of fds to poll for read/write can change.
+    /// If this ever happens, you'll get a callback. The watch changed is provided as a parameter.
+    ///
+    /// In rare cases this might not even happen in the thread calling anything on the connection,
+    /// so the callback needs to be `Send`. 
+    /// A mutex is held during the callback. If you try to call set_watch_callback from a callback,
+    /// you will deadlock.
+    ///
+    /// (Previously, this was instead put in a ConnectionItem queue, but this was not working correctly.
+    /// see https://github.com/diwic/dbus-rs/issues/99 for additional info.)
+    pub fn set_watch_callback(&self, f: Box<Fn(Watch) + Send>) { self.i.watches.as_ref().unwrap().set_on_update(f); }
 }
 
 impl Drop for Connection {
@@ -496,7 +500,6 @@ pub trait MsgHandler {
             ConnectionItem::MethodReturn(ref msg) => self.handle_msg(msg),
             ConnectionItem::Signal(ref msg) => self.handle_msg(msg),
             ConnectionItem::MethodCall(ref msg) => self.handle_msg(msg),
-            ConnectionItem::WatchFd(_) => None,
             ConnectionItem::Nothing => None,
         }
     }

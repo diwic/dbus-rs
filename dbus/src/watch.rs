@@ -3,7 +3,7 @@ use libc;
 use super::Connection;
 
 use std::mem;
-use std::cell::RefCell;
+use std::sync::{Mutex, RwLock};
 use std::os::unix::io::{RawFd, AsRawFd};
 use std::os::raw::{c_void, c_uint};
 
@@ -91,14 +91,14 @@ impl AsRawFd for Watch {
 
 /// Note - internal struct, not to be used outside API. Moving it outside its box will break things.
 pub struct WatchList {
-    watches: RefCell<Vec<*mut ffi::DBusWatch>>,
-    enabled_fds: RefCell<Vec<Watch>>,
-    on_update: Box<Fn(Watch)>
+    watches: RwLock<Vec<*mut ffi::DBusWatch>>,
+    enabled_fds: Mutex<Vec<Watch>>,
+    on_update: Mutex<Box<Fn(Watch) + Send>>,
 }
 
 impl WatchList {
-    pub fn new(c: &Connection, on_update: Box<Fn(Watch)>) -> Box<WatchList> {
-        let w = Box::new(WatchList { on_update: on_update, watches: RefCell::new(vec!()), enabled_fds: RefCell::new(vec!()) });
+    pub fn new(c: &Connection, on_update: Box<Fn(Watch) + Send>) -> Box<WatchList> {
+        let w = Box::new(WatchList { on_update: Mutex::new(on_update), watches: RwLock::new(vec!()), enabled_fds: Mutex::new(vec!()) });
         if unsafe { ffi::dbus_connection_set_watch_functions(super::connection::conn_handle(c),
             Some(add_watch_cb), Some(remove_watch_cb), Some(toggled_watch_cb), &*w as *const _ as *mut _, None) } == 0 {
             panic!("dbus_connection_set_watch_functions failed");
@@ -106,10 +106,11 @@ impl WatchList {
         w
     }
 
+    pub fn set_on_update(&self, on_update: Box<Fn(Watch) + Send>) { *self.on_update.lock().unwrap() = on_update; }
 
     pub fn watch_handle(&self, fd: RawFd, flags: c_uint) {
         // println!("watch_handle {} flags {}", fd, flags);
-        for &q in self.watches.borrow().iter() {
+        for &q in self.watches.read().unwrap().iter() {
             let w = self.get_watch(q);
             if w.fd != fd { continue };
             if unsafe { ffi::dbus_watch_handle(q, flags) } == 0 {
@@ -120,12 +121,12 @@ impl WatchList {
     }
 
     pub fn get_enabled_fds(&self) -> Vec<Watch> {
-        self.enabled_fds.borrow().clone()
+        self.enabled_fds.lock().unwrap().clone()
     }
 
     fn get_watch(&self, watch: *mut ffi::DBusWatch) -> Watch {
         let mut w = Watch { fd: unsafe { ffi::dbus_watch_get_unix_fd(watch) }, read: false, write: false};
-        let enabled = self.watches.borrow().contains(&watch) && unsafe { ffi::dbus_watch_get_enabled(watch) != 0 };
+        let enabled = self.watches.read().unwrap().contains(&watch) && unsafe { ffi::dbus_watch_get_enabled(watch) != 0 };
         let flags = unsafe { ffi::dbus_watch_get_flags(watch) };
         if enabled {
             w.read = (flags & WatchEvent::Readable as c_uint) != 0;
@@ -138,7 +139,7 @@ impl WatchList {
     fn update(&self, watch: *mut ffi::DBusWatch) {
         let mut w = self.get_watch(watch);
 
-        for &q in self.watches.borrow().iter() {
+        for &q in self.watches.read().unwrap().iter() {
             if q == watch { continue };
             let ww = self.get_watch(q);
             if ww.fd != w.fd { continue };
@@ -148,7 +149,7 @@ impl WatchList {
         // println!("Updated sum: {:?}", w);
 
         {
-            let mut fdarr = self.enabled_fds.borrow_mut();
+            let mut fdarr = self.enabled_fds.lock().unwrap();
 
             if w.write || w.read {
                 if fdarr.contains(&w) { return; } // Nothing changed
@@ -158,14 +159,15 @@ impl WatchList {
             fdarr.retain(|f| f.fd != w.fd);
             if w.write || w.read { fdarr.push(w) };
         }
-        (*self.on_update)(w);
+        let func = self.on_update.lock().unwrap();
+        (*func)(w);
     }
 }
 
 extern "C" fn add_watch_cb(watch: *mut ffi::DBusWatch, data: *mut c_void) -> u32 {
     let wlist: &WatchList = unsafe { mem::transmute(data) };
     // println!("Add watch {:?}", watch);
-    wlist.watches.borrow_mut().push(watch);
+    wlist.watches.write().unwrap().push(watch);
     wlist.update(watch);
     1
 }
@@ -173,7 +175,7 @@ extern "C" fn add_watch_cb(watch: *mut ffi::DBusWatch, data: *mut c_void) -> u32
 extern "C" fn remove_watch_cb(watch: *mut ffi::DBusWatch, data: *mut c_void) {
     let wlist: &WatchList = unsafe { mem::transmute(data) };
     // println!("Removed watch {:?}", watch);
-    wlist.watches.borrow_mut().retain(|w| *w != watch);
+    wlist.watches.write().unwrap().retain(|w| *w != watch);
     wlist.update(watch);
 }
 
@@ -215,7 +217,6 @@ mod test {
                 for e in c.watch_handle(f.fd, m) {
                     println!("Async: got {:?}", e);
                     match e {
-                        ConnectionItem::WatchFd(_) => new_fds = Some(c.watch_fds().iter().map(|w| w.to_pollfd()).collect()),
                         ConnectionItem::MethodCall(m) => {
                             assert_eq!(m.headers(), (MessageType::MethodCall, Some("/test".to_string()),
                                 Some("com.example.asynctest".into()), Some("AsyncTest".to_string())));

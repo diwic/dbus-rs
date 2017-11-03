@@ -273,22 +273,12 @@ mod test {
         c.remove_match(&mstr).unwrap();
     }
 
+
     #[test]
     fn watch() {
         let c = Connection::get_private(BusType::Session).unwrap();
-        let mut d = c.watch_fds();
+        let d = c.watch_fds();
         assert!(d.len() > 0);
         println!("Fds to watch: {:?}", d);
-        for n in c.iter(1000) {
-            match n {
-                ConnectionItem::WatchFd(w) => {
-                    assert!(w.readable() || w.writable());
-                    assert!(d.contains(&w));
-                    d.retain(|x| *x != w);
-                    if d.len() == 0 { break };
-                }
-                _ => {},
-            }
-        }
     }
 }
