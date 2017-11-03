@@ -54,13 +54,13 @@ impl<'a> Get<'a> for Variant<Iter<'a>> {
         i.recurse(ArgType::Variant).map(|v| Variant(v))
     }
 }
-
+/*
 impl<'a> Get<'a> for Variant<Box<RefArg>> {
     fn get(i: &mut Iter<'a>) -> Option<Variant<Box<RefArg>>> {
         i.recurse(ArgType::Variant).and_then(|mut si| si.get_refarg().map(|v| Variant(v)))
     }
 }
-
+*/
 impl<T: RefArg> RefArg for Variant<T> {
     fn arg_type(&self) -> ArgType { ArgType::Variant } 
     fn signature(&self) -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"v\0") } }

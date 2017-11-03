@@ -64,6 +64,10 @@ pub trait RefArg: fmt::Debug {
     fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> { None }
 }
 
+impl<'a> Get<'a> for Box<RefArg> {
+    fn get(i: &mut Iter<'a>) -> Option<Self> { i.get_refarg() }
+}
+
 /// Cast a RefArg as a specific type (shortcut for any + downcast)
 #[inline]
 pub fn cast<'a, T: 'static>(a: &'a (RefArg + 'static)) -> Option<&'a T> { a.as_any().downcast_ref() }
