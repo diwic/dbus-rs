@@ -1,8 +1,8 @@
 use super::{Error, ffi, to_c_str, c_str_to_slice, Watch, Message, MessageType, BusName, Path, ConnPath};
 use super::{RequestNameReply, ReleaseNameReply, BusType};
 use super::watch::WatchList;
-use std::{fmt, mem, ptr, thread, panic};
-use std::collections::LinkedList;
+use std::{fmt, mem, ptr, thread, panic, ops};
+use std::collections::VecDeque;
 use std::cell::{Cell, RefCell};
 use std::os::unix::io::RawFd;
 use std::os::raw::{c_void, c_char, c_int, c_uint};
@@ -43,6 +43,19 @@ pub enum ConnectionItem {
     Signal(Message),
     /// Incoming method return, including method return errors (mostly used for Async I/O)
     MethodReturn(Message),
+}
+
+impl From<Message> for ConnectionItem {
+    fn from(m: Message) -> Self {
+        let mtype = m.msg_type();
+        match mtype {
+            MessageType::Signal => ConnectionItem::Signal(m),
+            MessageType::MethodReturn => ConnectionItem::MethodReturn(m),
+            MessageType::Error => ConnectionItem::MethodReturn(m),
+            MessageType::MethodCall => ConnectionItem::MethodCall(m),
+            _ => panic!("unknown message type {:?} received from D-Bus", mtype),
+        }
+    }
 }
 
 /// ConnectionItem iterator
@@ -108,7 +121,7 @@ impl<'a> Iterator for ConnectionItems<'a> {
     fn next(&mut self) -> Option<ConnectionItem> {
         loop {
             if self.c.i.filter_cb.borrow().is_none() { panic!("ConnectionItems::next called recursively or with a MessageCallback set to None"); }
-            let i = self.c.i.pending_items.borrow_mut().pop_front();
+            let i: Option<ConnectionItem> = self.c.i.pending_items.borrow_mut().pop_front().map(|x| x.into());
             if let Some(ci) = i {
                 if !self.process_handlers(&ci) { return Some(ci); }
             }
@@ -136,7 +149,7 @@ impl<'a> Iterator for ConnectionItems<'a> {
    Hence this extra indirection. */
 struct IConnection {
     conn: Cell<*mut ffi::DBusConnection>,
-    pending_items: RefCell<LinkedList<ConnectionItem>>,
+    pending_items: RefCell<VecDeque<Message>>,
     watches: Option<Box<WatchList>>,
 
     filter_cb: RefCell<Option<MessageCallback>>,
@@ -188,17 +201,9 @@ extern "C" fn filter_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::D
 }
 
 fn default_filter_callback(c: &Connection, m: Message) -> bool {
-    let mtype = m.msg_type();
-    let r = match mtype {
-        MessageType::Signal => ConnectionItem::Signal(m),
-        MessageType::MethodReturn => ConnectionItem::MethodReturn(m),
-        MessageType::Error => ConnectionItem::MethodReturn(m),
-        MessageType::MethodCall => ConnectionItem::MethodCall(m),
-        _ => return false,
-    };
-
-    c.i.pending_items.borrow_mut().push_back(r);
-    mtype == MessageType::Signal
+    let b = m.msg_type() == MessageType::Signal;
+    c.i.pending_items.borrow_mut().push_back(m);
+    b
 }
 
 extern "C" fn object_path_message_cb(_conn: *mut ffi::DBusConnection, _msg: *mut ffi::DBusMessage,
@@ -223,7 +228,7 @@ impl Connection {
         }
         let mut c = Connection { i: Box::new(IConnection {
             conn: Cell::new(conn),
-            pending_items: RefCell::new(LinkedList::new()),
+            pending_items: RefCell::new(VecDeque::new()),
             watches: None,
             filter_cb: RefCell::new(Some(Box::new(default_filter_callback))),
             filter_cb_panic: RefCell::new(Ok(())),
