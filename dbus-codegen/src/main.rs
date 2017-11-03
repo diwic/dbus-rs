@@ -34,6 +34,8 @@ fn main() {
              .help("The path to ask for introspection data. Defaults to '/'. (Ignored if destination is not specified.)"))
         .arg(clap::Arg::with_name("systembus").short("s").long("system-bus")
              .help("Connects to system bus, if not specified, the session bus will be used. (Ignored if destination is not specified.)"))
+        .arg(clap::Arg::with_name("genericvariant").short("g").long("generic-variant")
+             .help("If present, will try to make variant arguments generic instead of Variant<Box<RefArg>>"))
         .arg(clap::Arg::with_name("methodtype").short("m").long("methodtype").takes_value(true).value_name("Fn")
              .help("Type of server method; valid values are: 'Fn', 'FnMut', 'Sync', 'Generic', and 'None'. Defaults to 'Fn'."))
         .arg(clap::Arg::with_name("methodaccess").short("a").long("methodaccess").takes_value(true).value_name("RefClosure")
@@ -79,7 +81,8 @@ Defaults to 'RefClosure'."))
     };
 
     let opts = generate::GenOpts { methodtype: mtype.map(|x| x.into()), dbuscrate: dbuscrate.into(),
-        skipprefix: matches.value_of("skipprefix").map(|x| x.into()), serveraccess: maccess };
+        skipprefix: matches.value_of("skipprefix").map(|x| x.into()), serveraccess: maccess,
+        genericvariant: matches.is_present("genericvariant") };
 
     let mut stdout = std::io::stdout();
     let h: &mut std::io::Write = &mut stdout;

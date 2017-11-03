@@ -60,10 +60,15 @@ pub struct GenOpts {
     pub skipprefix: Option<String>,
     // Type of server access
     pub serveraccess: ServerAccess,
+    // Tries to make variants generic instead of Variant<Box<Refarg>>
+    pub genericvariant: bool,
 }
 
 impl ::std::default::Default for GenOpts {
-    fn default() -> Self { GenOpts { dbuscrate: "dbus".into(), methodtype: Some("MTFn".into()), skipprefix: None, serveraccess: ServerAccess::RefClosure }}
+    fn default() -> Self { GenOpts { 
+        dbuscrate: "dbus".into(), methodtype: Some("MTFn".into()), skipprefix: None,
+        serveraccess: ServerAccess::RefClosure, genericvariant: false,
+    }}
 }
 
 fn make_camel(s: &str) -> String {
@@ -102,7 +107,13 @@ fn make_snake(s: &str) -> String {
     r
 }
 
-fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool) -> Result<String, Box<error::Error>> {
+struct GenVars {
+    prefix: String,
+    gen: Vec<String>,
+}
+
+fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<error::Error>> {
+
     let c = try!(i.next().ok_or_else(|| "unexpected end of signature"));
     let atype = ArgType::from_i32(c as i32);
     Ok(match atype {
@@ -118,42 +129,37 @@ fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool
         Ok(ArgType::String) => if out { "String".into() } else { "&str".into() },
         Ok(ArgType::ObjectPath) => if out { "dbus::Path<'static>" } else { "dbus::Path" }.into(),
         Ok(ArgType::Signature) => if out { "dbus::Signature<'static>" } else { "dbus::Signature" }.into(),
-        Ok(ArgType::Variant) => "arg::Variant<Box<arg::RefArg>>".into(),
+        Ok(ArgType::Variant) => if let &mut Some(ref mut g) = genvars {
+            let t = format!("arg::Variant<{}>", g.prefix);
+            g.gen.push(g.prefix.clone());
+            g.prefix = format!("{}X", g.prefix);
+            t
+        } else { "arg::Variant<Box<arg::RefArg>>".into() },
         Ok(ArgType::Array) => if i.peek() == Some(&'{') {
             i.next();
-            let n1 = try!(xml_to_rust_type(i, out));
-            let n2 = try!(xml_to_rust_type(i, out));
+            let n1 = try!(xml_to_rust_type(i, out, &mut None));
+            let n2 = try!(xml_to_rust_type(i, out, &mut None));
             if i.next() != Some('}') { return Err("No end of dict".into()); }
             format!("::std::collections::HashMap<{}, {}>", n1, n2)
         } else {
-            format!("Vec<{}>", try!(xml_to_rust_type(i, out)))
+            format!("Vec<{}>", try!(xml_to_rust_type(i, out, &mut None)))
         },
-/*
- if out { format!("Vec<{}>", try!(xml_to_rust_type(i, out, false))) }
-            else { format!("&[{}]", try!(xml_to_rust_type(i, out, false))) },
-        Err(_) if c == '{' => {
-            let n1 = try!(xml_to_rust_type(i, out, false));
-            let n2 = try!(xml_to_rust_type(i, out, false));
-            if i.next() != Some('}') { return Err("No end of dict".into()); }
-            format!("({}, {})", n1, n2)
-            },*/
         Err(_) if c == '(' => {
             let mut s: Vec<String> = vec!();
             while i.peek() != Some(&')') {
-                let n = try!(xml_to_rust_type(i, out));
+                let n = try!(xml_to_rust_type(i, out, genvars));
                 s.push(n);
             };
             i.next().unwrap();
             format!("({})", s.join(", "))
         }
-        // Err(_) if c == ')' && instruct => "".into(),
         a @ _ => return Err(format!("Unknown character in signature {:?}", a).into()),
     })
 }
 
-fn make_type(s: &str, out: bool) -> Result<String, Box<error::Error>> {
+fn make_type(s: &str, out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<error::Error>> {
     let mut i = s.chars().peekable();
-    let r = try!(xml_to_rust_type(&mut i, out));
+    let r = try!(xml_to_rust_type(&mut i, out, genvars));
     if i.next().is_some() { Err("Expected type to end".into()) }
     else { Ok(r) }
 }
@@ -164,8 +170,15 @@ impl Arg {
            make_snake(&self.name)
         } else { format!("arg{}", self.idx) }
     }
-    fn typename(&self) -> Result<String, Box<error::Error>> {
-        make_type(&self.typ, self.is_out)
+    fn typename(&self, genvar: bool) -> Result<(String, Vec<String>), Box<error::Error>> {
+        let mut g = if genvar { Some(GenVars {
+            prefix: format!("{}{}", if self.is_out { 'R' } else { 'I' }, self.idx),
+            gen: vec!(),
+        }) } else { None };
+        let r = try!(make_type(&self.typ, self.is_out, &mut g));
+        Ok((r, g.map(|g| g.gen.iter().map(|s|
+            if self.is_out { format!("{}: arg::Arg + for<'b> arg::Get<'b>", s) } else { format!("{}: arg::Append", s) } 
+        ).collect()).unwrap_or(vec!())))
     }
 }
 
@@ -174,18 +187,31 @@ impl Prop {
     fn can_set(&self) -> bool { self.access == "write" || self.access == "readwrite" }
 }
 
-fn write_method_decl(s: &mut String, m: &Method) -> Result<(), Box<error::Error>> {
-    *s += &format!("    fn {}(&self", make_snake(&m.name));
+fn write_method_decl(s: &mut String, m: &Method, genvar: bool) -> Result<(), Box<error::Error>> {
+
+    let g: Vec<String> = if genvar {
+        let mut g = vec!();
+        for z in m.iargs.iter().chain(m.oargs.iter()) {
+            let (_, mut z) = z.typename(genvar)?;
+            g.append(&mut z);
+        }
+        g
+    } else { vec!() };
+
+    *s += &format!("    fn {}{}(&self", make_snake(&m.name), 
+        if g.len() > 0 { format!("<{}>", g.join(",")) } else { "".into() }
+    );
+
     for a in m.iargs.iter() {
-        let t = try!(a.typename());
+        let t = try!(a.typename(genvar)).0;
         *s += &format!(", {}: {}", a.varname(), t);
     }
     match m.oargs.len() {
         0 => { *s += ") -> Result<(), Self::Err>"; }
-        1 => { *s += &format!(") -> Result<{}, Self::Err>", try!(m.oargs[0].typename())); }
+        1 => { *s += &format!(") -> Result<{}, Self::Err>", try!(m.oargs[0].typename(genvar)).0); }
         _ => {
-            *s += &format!(") -> Result<({}", try!(m.oargs[0].typename()));
-            for z in m.oargs.iter().skip(1) { *s += &format!(", {}", try!(z.typename())); }
+            *s += &format!(") -> Result<({}", try!(m.oargs[0].typename(genvar)).0);
+            for z in m.oargs.iter().skip(1) { *s += &format!(", {}", try!(z.typename(genvar)).0); }
             *s += "), Self::Err>";
         }
     }
@@ -195,21 +221,21 @@ fn write_method_decl(s: &mut String, m: &Method) -> Result<(), Box<error::Error>
 fn write_prop_decl(s: &mut String, p: &Prop, set: bool) -> Result<(), Box<error::Error>> {
     if set {
         *s += &format!("    fn set_{}(&self, value: {}) -> Result<(), Self::Err>",
-            make_snake(&p.name), try!(make_type(&p.typ, true)));
+            make_snake(&p.name), try!(make_type(&p.typ, true, &mut None)));
     } else {
         *s += &format!("    fn get_{}(&self) -> Result<{}, Self::Err>",
-            make_snake(&p.name), try!(make_type(&p.typ, true)));
+            make_snake(&p.name), try!(make_type(&p.typ, true, &mut None)));
     };
     Ok(())
 }
 
-fn write_intf(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
+fn write_intf(s: &mut String, i: &Intf, genvar: bool) -> Result<(), Box<error::Error>> {
     
     let iname = make_camel(&i.shortname);  
     *s += &format!("\npub trait {} {{\n", iname);
     *s += "    type Err;\n";
     for m in &i.methods {
-        try!(write_method_decl(s, &m));
+        try!(write_method_decl(s, &m, genvar));
         *s += ";\n";
     }
     for p in &i.props {
@@ -226,13 +252,13 @@ fn write_intf(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
     Ok(())
 }
 
-fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
+fn write_intf_client(s: &mut String, i: &Intf, genvar: bool) -> Result<(), Box<error::Error>> {
     *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> {} for dbus::ConnPath<'a, C> {{\n",
         make_camel(&i.shortname));
     *s += "    type Err = dbus::Error;\n";
     for m in &i.methods {
         *s += "\n";
-        try!(write_method_decl(s, &m));
+        try!(write_method_decl(s, &m, genvar));
         *s += " {\n";
         *s += &format!("        let mut m = try!(self.method_call_with_args(&\"{}\".into(), &\"{}\".into(), |{}| {{\n",
             i.origname, m.name, if m.iargs.len() > 0 { "msg" } else { "_" } );
@@ -249,7 +275,7 @@ fn write_intf_client(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> 
         } else {
             *s += "        let mut i = m.iter_init();\n";
             for a in m.oargs.iter() {
-                *s += &format!("        let {}: {} = try!(i.read());\n", a.varname(), try!(a.typename()));   
+                *s += &format!("        let {}: {} = try!(i.read());\n", a.varname(), try!(a.typename(genvar)).0);   
             }
             if m.oargs.len() == 1 {
                 *s += &format!("        Ok({})\n", m.oargs[0].varname());
@@ -299,7 +325,7 @@ fn write_signal(s: &mut String, i: &Intf, ss: &Signal) -> Result<(), Box<error::
     *s += "\n#[derive(Debug, Default)]\n";
     *s += &format!("pub struct {} {{\n", structname);
     for a in ss.args.iter() {
-        *s += &format!("    pub {}: {},\n", a.varname(), a.typename()?);
+        *s += &format!("    pub {}: {},\n", a.varname(), a.typename(false)?.0);
     }
     *s += "}\n\n";
 
@@ -344,7 +370,7 @@ fn write_server_access(s: &mut String, i: &Intf, saccess: ServerAccess, minfo_is
 // 3) A user supplied struct?
 // 4) Something reachable from minfo - ServerAccess::RefClosure
 
-fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess) -> Result<(), Box<error::Error>> {
+fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess, genvar: bool) -> Result<(), Box<error::Error>> {
     let hasf = saccess != ServerAccess::MethodInfo;
     let hasm = mtype == "MethodType";
 
@@ -388,7 +414,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess)
             *s += "        let mut i = minfo.msg.iter_init();\n";
         }
         for a in &m.iargs {
-            *s += &format!("        let {}: {} = try!(i.read());\n", a.varname(), try!(a.typename()));
+            *s += &format!("        let {}: {} = try!(i.read());\n", a.varname(), try!(a.typename(genvar)).0);
         }
         write_server_access(s, i, saccess, true);
         let argsvar = m.iargs.iter().map(|q| q.varname()).collect::<Vec<String>>().join(", ");
@@ -415,7 +441,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess)
         *s +=          "    let i = i.add_m(m);\n";
     }
     for p in &i.props {
-        *s += &format!("\n    let p = factory.property::<{}, _>(\"{}\", Default::default());\n", try!(make_type(&p.typ, false)), p.name);
+        *s += &format!("\n    let p = factory.property::<{}, _>(\"{}\", Default::default());\n", try!(make_type(&p.typ, false, &mut None)), p.name);
         *s += &format!("    let p = p.access(tree::Access::{});\n", match &*p.access {
             "read" => "Read",
             "readwrite" => "ReadWrite",
@@ -487,10 +513,10 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<error::Erro
                 if curm.is_some() { try!(Err("End of Interface inside method")) };
                 if curintf.is_none() { try!(Err("End of Interface outside interface")) };
                 let intf = curintf.take().unwrap();
-                try!(write_intf(&mut s, &intf));
-                try!(write_intf_client(&mut s, &intf));
+                try!(write_intf(&mut s, &intf, opts.genericvariant));
+                try!(write_intf_client(&mut s, &intf, opts.genericvariant));
                 if let Some(ref mt) = opts.methodtype {
-                    try!(write_intf_tree(&mut s, &intf, &mt, opts.serveraccess));
+                    try!(write_intf_tree(&mut s, &intf, &mt, opts.serveraccess, opts.genericvariant));
                 }
                 try!(write_signals(&mut s, &intf));
             }
