@@ -1,6 +1,5 @@
 use super::*;
 use {message, Signature};
-use std::ffi::{CString};
 use std::any;
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -31,7 +30,8 @@ impl<T: Arg + Append> Append for Variant<T> {
 impl Append for Variant<message::MessageItem> {
     fn append(self, i: &mut IterAppend) {
         let z = self.0;
-        let sig = CString::new(z.type_sig().into_owned()).unwrap();
+        let asig = z.signature();
+        let sig = asig.as_cstr();
         i.append_container(ArgType::Variant, Some(&sig), |s| z.append(s));
     }
 }
@@ -192,7 +192,7 @@ impl<'a> Get<'a> for message::MessageItem {
 
 impl RefArg for message::MessageItem {
     fn arg_type(&self) -> ArgType { ArgType::from_i32(self.array_type()).unwrap() }
-    fn signature(&self) -> Signature<'static> { Signature::from(self.type_sig()).into_static() }
+    fn signature(&self) -> Signature<'static> { message::MessageItem::signature(&self) }
     fn append(&self, i: &mut IterAppend) { message::append_messageitem(&mut i.0, self) }
     #[inline]
     fn as_any(&self) -> &any::Any where Self: 'static { self }

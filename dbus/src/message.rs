@@ -1,6 +1,6 @@
 use std::borrow::Cow;
-use std::{fmt, mem, ptr};
-use super::{ffi, Error, MessageType, TypeSig, libc, to_c_str, c_str_to_slice, init_dbus};
+use std::{fmt, mem, ptr, ops};
+use super::{ffi, Error, MessageType, Signature, libc, to_c_str, c_str_to_slice, init_dbus};
 use super::{BusName, Path, Interface, Member, ErrorName, Connection, SignalArgs};
 use std::os::unix::io::{RawFd, AsRawFd};
 use std::ffi::CStr;
@@ -15,6 +15,8 @@ pub enum ArrayError {
     EmptyArray,
     /// The array is composed of different element types.
     DifferentElementTypes,
+    /// The supplied signature is not a valid array signature
+    InvalidSignature,
 }
 
 fn new_dbus_message_iter() -> ffi::DBusMessageIter { unsafe { mem::zeroed() }}
@@ -59,6 +61,62 @@ impl AsRawFd for OwnedFd {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+/// An array of MessageItem where every MessageItem is of the same type.
+pub struct MessageItemArray {
+    v: Vec<MessageItem>,
+    // signature includes the "a"!
+    sig: Signature<'static>,
+}
+
+impl MessageItemArray {
+    /// Creates a new array where every element has the supplied signature.
+    ///
+    /// Signature is the full array signature, not the signature of the element.
+    pub fn new(v: Vec<MessageItem>, sig: Signature<'static>) -> Result<MessageItemArray, ArrayError> {
+        let a = MessageItemArray {v: v, sig: sig };
+        if a.sig.as_bytes()[0] != ffi::DBUS_TYPE_ARRAY as u8 { return Err(ArrayError::InvalidSignature) }
+        {
+            let esig = a.element_signature();
+            for i in &a.v {
+                let b = if let MessageItem::DictEntry(ref k, ref v) = *i {
+                     let s = format!("{{{}{}}}", k.signature(), v.signature());
+                     s.as_bytes() == esig.to_bytes()
+                } else {
+                     i.signature().as_cstr() == esig
+                };
+                if !b { return Err(ArrayError::DifferentElementTypes) }
+            }
+        }
+        Ok(a)
+    }
+
+    fn element_signature(&self) -> &CStr {
+        let z = &self.sig.as_cstr().to_bytes_with_nul()[1..];
+        unsafe { CStr::from_bytes_with_nul_unchecked(z) }
+    }
+
+    fn make_sig(m: &MessageItem) -> Signature<'static> {
+        if let MessageItem::DictEntry(ref k, ref v) = *m {
+            Signature::new(format!("a{{{}{}}}", k.signature(), v.signature())).unwrap()
+        } else {
+            Signature::new(format!("a{}", m.signature())).unwrap()
+        }
+    }
+
+    /// Signature of array (full array signature)
+    pub fn signature(&self) -> &Signature<'static> { self.sig }
+
+    /// Consumes the MessageItemArray in order to allow you to modify the individual items of the array.
+    pub fn into_vec(self) -> Vec<MessageItem> { self.v }
+}
+
+impl ops::Deref for MessageItemArray {
+    type Target = [MessageItem];
+    fn deref(&self) -> &Self::Target { &self.v }
+}
+
+
 /// MessageItem - used as parameters and return values from
 /// method calls, or as data added to a signal (old, enum version).
 ///
@@ -68,14 +126,14 @@ impl AsRawFd for OwnedFd {
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum MessageItem {
     /// A D-Bus array requires all elements to be of the same type.
-    /// All elements must match the TypeSig.
-    Array(Vec<MessageItem>, TypeSig<'static>),
+    /// All elements must match the Signature.
+    Array(MessageItemArray),
     /// A D-Bus struct allows for values of different types.
     Struct(Vec<MessageItem>),
     /// A D-Bus variant is a wrapper around another `MessageItem`, which
     /// can be of any type.
     Variant(Box<MessageItem>),
-    /// A D-Bus dictionary is an Array of DictEntry items.
+    /// A D-Bus dictionary entry. These are only allowed inside an array.
     DictEntry(Box<MessageItem>, Box<MessageItem>),
     /// A D-Bus objectpath requires its content to be a valid objectpath,
     /// so this cannot be any string.
@@ -131,11 +189,10 @@ fn iter_append_f64(i: &mut ffi::DBusMessageIter, v: f64) {
     }
 }
 
-fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &[MessageItem], t: TypeSig<'static>) {
+fn iter_append_array(i: &mut ffi::DBusMessageIter, a: &[MessageItem], t: &CStr) {
     let mut subiter = new_dbus_message_iter();
-    let atype = to_c_str(&t);
 
-    assert!(unsafe { ffi::dbus_message_iter_open_container(i, ffi::DBUS_TYPE_ARRAY, atype.as_ptr(), &mut subiter) } != 0);
+    assert!(unsafe { ffi::dbus_message_iter_open_container(i, ffi::DBUS_TYPE_ARRAY, t.as_ptr(), &mut subiter) } != 0);
     for item in a.iter() {
 //        assert!(item.type_sig() == t);
         item.iter_append(&mut subiter);
@@ -156,7 +213,8 @@ fn iter_append_struct(i: &mut ffi::DBusMessageIter, a: &[MessageItem]) {
 
 fn iter_append_variant(i: &mut ffi::DBusMessageIter, a: &MessageItem) {
     let mut subiter = new_dbus_message_iter();
-    let atype = to_c_str(&a.type_sig());
+    let asig = a.signature();
+    let atype = asig.as_cstr();
     assert!(unsafe { ffi::dbus_message_iter_open_container(i, ffi::DBUS_TYPE_VARIANT, atype.as_ptr(), &mut subiter) } != 0);
     a.iter_append(&mut subiter);
     assert!(unsafe { ffi::dbus_message_iter_close_container(i, &mut subiter) } != 0);
@@ -171,27 +229,36 @@ fn iter_append_dict(i: &mut ffi::DBusMessageIter, k: &MessageItem, v: &MessageIt
 }
 
 impl MessageItem {
-    /// Get the D-Bus ASCII type-code for this MessageItem.
-    pub fn type_sig(&self) -> TypeSig<'static> {
-        match self {
-            // TODO: Can we make use of the ffi constants here instead of duplicating them?
-            &MessageItem::Str(_) => Cow::Borrowed("s"),
-            &MessageItem::Bool(_) => Cow::Borrowed("b"),
-            &MessageItem::Byte(_) => Cow::Borrowed("y"),
-            &MessageItem::Int16(_) => Cow::Borrowed("n"),
-            &MessageItem::Int32(_) => Cow::Borrowed("i"),
-            &MessageItem::Int64(_) => Cow::Borrowed("x"),
-            &MessageItem::UInt16(_) => Cow::Borrowed("q"),
-            &MessageItem::UInt32(_) => Cow::Borrowed("u"),
-            &MessageItem::UInt64(_) => Cow::Borrowed("t"),
-            &MessageItem::Double(_) => Cow::Borrowed("d"),
-            &MessageItem::Array(_, ref s) => Cow::Owned(format!("a{}", s)),
-            &MessageItem::Struct(ref s) => Cow::Owned(format!("({})", s.iter().fold(String::new(), |s, i| s + &*i.type_sig()))),
-            &MessageItem::Variant(_) => Cow::Borrowed("v"),
-            &MessageItem::DictEntry(ref k, ref v) => Cow::Owned(format!("{{{}{}}}", k.type_sig(), v.type_sig())),
-            &MessageItem::ObjectPath(_) => Cow::Borrowed("o"),
-            &MessageItem::UnixFd(_) => Cow::Borrowed("h"),
+    /// Get the D-Bus Signature for this MessageItem.
+    ///
+    /// Note: Since dictionary entries have no valid signature, calling this function for a dict entry will cause a panic.
+    pub fn signature(&self) -> Signature<'static> {
+        use arg::Variant;
+        match *self {
+            MessageItem::Str(_) => <String as Arg>::signature(),
+            MessageItem::Bool(_) => <bool as Arg>::signature(),
+            MessageItem::Byte(_) => <u8 as Arg>::signature(),
+            MessageItem::Int16(_) => <i16 as Arg>::signature(),
+            MessageItem::Int32(_) => <i32 as Arg>::signature(),
+            MessageItem::Int64(_) => <i64 as Arg>::signature(),
+            MessageItem::UInt16(_) => <u16 as Arg>::signature(),
+            MessageItem::UInt32(_) => <u32 as Arg>::signature(),
+            MessageItem::UInt64(_) => <u64 as Arg>::signature(),
+            MessageItem::Double(_) => <f64 as Arg>::signature(),
+            MessageItem::Array(ref a) => a.sig.clone(),
+            MessageItem::Struct(ref s) => Signature::new(format!("({})", s.iter().fold(String::new(), |s, i| s + &*i.signature()))).unwrap(),
+            MessageItem::Variant(_) => <Variant<u8> as Arg>::signature(),
+            MessageItem::DictEntry(_, _) => { panic!("Dict entries are only valid inside arrays, and therefore has no signature on their own") },
+            MessageItem::ObjectPath(_) => <Path as Arg>::signature(),
+            MessageItem::UnixFd(_) => <OwnedFd as Arg>::signature(),
         }
+    }
+
+    /// Get the D-Bus ASCII type-code for this MessageItem.
+    #[deprecated(note="superseded by signature")]
+    #[allow(deprecated)]
+    pub fn type_sig(&self) -> super::TypeSig<'static> {
+        Cow::Owned(format!("{}", self.signature()))
     }
 
     /// Get the integer value for this MessageItem's type-code.
@@ -207,7 +274,7 @@ impl MessageItem {
             &MessageItem::UInt32(_) => ffi::DBUS_TYPE_UINT32,
             &MessageItem::UInt64(_) => ffi::DBUS_TYPE_UINT64,
             &MessageItem::Double(_) => ffi::DBUS_TYPE_DOUBLE,
-            &MessageItem::Array(_,_) => ffi::DBUS_TYPE_ARRAY,
+            &MessageItem::Array(_) => ffi::DBUS_TYPE_ARRAY,
             &MessageItem::Struct(_) => ffi::DBUS_TYPE_STRUCT,
             &MessageItem::Variant(_) => ffi::DBUS_TYPE_VARIANT,
             &MessageItem::DictEntry(_,_) => ffi::DBUS_TYPE_DICT_ENTRY,
@@ -218,13 +285,13 @@ impl MessageItem {
     }
 
     /// Creates a (String, Variant) dictionary from an iterator with Result passthrough (an Err will abort and return that Err)
-    pub fn from_dict<E, I: Iterator<Item=Result<(String, MessageItem),E>>>(i: I) -> Result<MessageItem,E> {
+    pub fn from_dict<E, I: Iterator<Item=Result<(String, MessageItem),E>>>(i: I) -> Result<MessageItem, E> {
         let mut v = Vec::new();
         for r in i {
             let (s, vv) = try!(r);
             v.push((s.into(), Box::new(vv).into()).into());
         }
-        Ok(MessageItem::Array(v, Cow::Borrowed("{sv}")))
+        Ok(MessageItem::Array(MessageItemArray::new(v, Signature::new("a{sv}").unwrap()).unwrap()))
     }
 
     /// Creates an MessageItem::Array from a list of MessageItems.
@@ -235,23 +302,20 @@ impl MessageItem {
         if v.len() == 0 {
             return Err(ArrayError::EmptyArray);
         }
-
-        let t = v[0].type_sig();
-        for i in &v {
-            if i.type_sig() != t {
-                return Err(ArrayError::DifferentElementTypes);
-            }
-        }
-
-        Ok(MessageItem::Array(v, t))
+        let s = MessageItemArray::make_sig(&v[0]);
+        Ok(MessageItem::Array(MessageItemArray::new(v, s)?))
     }
 
 
     fn new_array2<D, I>(i: I) -> MessageItem
     where D: Into<MessageItem>, D: Default, I: Iterator<Item=D> {
         let v: Vec<MessageItem> = i.map(|ii| ii.into()).collect();
-        let t = if v.len() == 0 { D::default().into().type_sig() } else { v[0].type_sig() };
-        MessageItem::Array(v, t)
+        let s = {
+            let d;
+            let t = if v.len() == 0 { d = D::default().into(); &d } else { &v[0] };
+            MessageItemArray::make_sig(t)
+        };
+        MessageItem::Array(MessageItemArray::new(v, s).unwrap())
     }
 
     fn new_array3<'b, D: 'b, I>(i: I) -> MessageItem
@@ -283,14 +347,13 @@ impl MessageItem {
             ffi::DBUS_TYPE_ARRAY => {
                 let mut subiter = new_dbus_message_iter();
                 unsafe { ffi::dbus_message_iter_recurse(i, &mut subiter) };
+                let c = unsafe { ffi::dbus_message_iter_get_signature(&mut subiter) };
+                let s = format!("a{}", c_str_to_slice(&(c as *const c_char)).unwrap());
+                unsafe { ffi::dbus_free(c as *mut c_void) };
+                let t = Signature::new(s).unwrap();
+
                 let a = MessageItem::from_iter(&mut subiter);
-                let t = if a.len() > 0 { a[0].type_sig() } else {
-                    let c = unsafe { ffi::dbus_message_iter_get_signature(&mut subiter) };
-                    let s = c_str_to_slice(&(c as *const c_char)).unwrap().to_string();
-                    unsafe { ffi::dbus_free(c as *mut c_void) };
-                    Cow::Owned(s)
-                };
-                Some(MessageItem::Array(a, t))
+                Some(MessageItem::Array(MessageItemArray { v: a, sig: t }))
             },
             ffi::DBUS_TYPE_STRUCT => {
                 let mut subiter = new_dbus_message_iter();
@@ -362,7 +425,7 @@ impl MessageItem {
             &MessageItem::UInt64(b) => self.iter_append_basic(i, b as i64),
             &MessageItem::UnixFd(ref b) => self.iter_append_basic(i, b.as_raw_fd() as i64),
             &MessageItem::Double(b) => iter_append_f64(i, b),
-            &MessageItem::Array(ref b, ref t) => iter_append_array(i, &**b, t.clone()),
+            &MessageItem::Array(ref a) => iter_append_array(i, &a.v, a.element_signature()),
             &MessageItem::Struct(ref v) => iter_append_struct(i, &**v),
             &MessageItem::Variant(ref b) => iter_append_variant(i, &**b),
             &MessageItem::DictEntry(ref k, ref v) => iter_append_dict(i, &**k, &**v),
@@ -488,7 +551,7 @@ impl<'a> FromMessageItem<'a> for &'a MessageItem {
 impl<'a> FromMessageItem<'a> for &'a Vec<MessageItem> {
     fn from(i: &'a MessageItem) -> Result<&'a Vec<MessageItem>,()> {
         match i {
-            &MessageItem::Array(ref b, _) => Ok(&b),
+            &MessageItem::Array(ref b) => Ok(&b.v),
             &MessageItem::Struct(ref b) => Ok(&b),
             _ => Err(()),
         }
@@ -1017,7 +1080,7 @@ mod test {
             ).into()
         ).collect()).unwrap();
         println!("As MessageItem: {:?}", m);
-        assert_eq!(m.type_sig(), "a{oa{sa{sv}}}");
+        assert_eq!(&*m.signature(), "a{oa{sa{sv}}}");
 
         let c = Connection::get_private(BusType::Session).unwrap();
         c.register_object_path("/hello").unwrap();

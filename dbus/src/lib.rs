@@ -23,7 +23,7 @@ pub use ffi::DBusRequestNameReply as RequestNameReply;
 pub use ffi::DBusReleaseNameReply as ReleaseNameReply;
 pub use ffi::DBusMessageType as MessageType;
 
-pub use message::{Message, MessageItem, FromMessageItem, OwnedFd, ArrayError, ConnPath};
+pub use message::{Message, MessageItem, MessageItemArray, FromMessageItem, OwnedFd, ArrayError, ConnPath};
 pub use connection::{Connection, ConnectionItems, ConnectionItem, ConnMsgs, MsgHandler, MsgHandlerResult, MessageCallback};
 pub use prop::PropHandler;
 pub use prop::Props;
@@ -31,6 +31,7 @@ pub use watch::{Watch, WatchEvent};
 pub use signalargs::SignalArgs;
 
 /// A TypeSig describes the type of a MessageItem.
+#[deprecated(note="Use Signature instead")]
 pub type TypeSig<'a> = std::borrow::Cow<'a, str>;
 
 use std::ffi::{CString, CStr};
