@@ -105,7 +105,7 @@ impl MessageItemArray {
     }
 
     /// Signature of array (full array signature)
-    pub fn signature(&self) -> &Signature<'static> { self.sig }
+    pub fn signature(&self) -> &Signature<'static> { &self.sig }
 
     /// Consumes the MessageItemArray in order to allow you to modify the individual items of the array.
     pub fn into_vec(self) -> Vec<MessageItem> { self.v }
