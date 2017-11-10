@@ -406,6 +406,13 @@ impl<M: MethodType<D>, D: DataType> MsgHandler for Tree<M, D> {
     fn handler_type(&self) -> MsgHandlerType { MsgHandlerType::MsgType(MessageType::MethodCall) }
 }
 
+impl<M: MethodType<D>, D: DataType> MsgHandler for Arc<Tree<M, D>> {
+    fn handle_msg(&mut self, msg: &Message) -> Option<MsgHandlerResult> {
+        self.handle(msg).map(|v| MsgHandlerResult { handled: true, done: false, reply: v })
+    }
+    fn handler_type(&self) -> MsgHandlerType { MsgHandlerType::MsgType(MessageType::MethodCall) }
+}
+
 /// An iterator adapter that handles incoming method calls.
 ///
 /// Method calls that match an object path in the tree are handled and consumed by this

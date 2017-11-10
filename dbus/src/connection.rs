@@ -58,12 +58,13 @@ impl From<Message> for ConnectionItem {
     }
 }
 
+
 /// ConnectionItem iterator
 pub struct ConnectionItems<'a> {
     c: &'a Connection,
     timeout_ms: Option<i32>,
     end_on_timeout: bool,
-    handlers: Vec<Box<MsgHandler>>,
+    handlers: MsgHandlerList,
 }
 
 impl<'a> ConnectionItems<'a> {
@@ -83,19 +84,7 @@ impl<'a> ConnectionItems<'a> {
             ConnectionItem::Nothing => return false,
         };
 
-        let mut ii: isize = -1;
-        loop {
-            ii += 1; 
-            let i = ii as usize;
-            if i >= self.handlers.len() { return false };
-
-            if !self.handlers[i].handler_type().matches_msg(m) { continue; }
-            if let Some(r) = self.handlers[i].handle_msg(m) {
-                for msg in r.reply.into_iter() { self.c.send(msg).unwrap(); }
-                if r.done { self.handlers.remove(i); ii -= 1; }
-                if r.handled { return true; }
-            }
-        }
+        msghandler_process(&mut self.handlers, m, &self.c)
     }
 
     /// Access and modify message handlers 
@@ -126,7 +115,7 @@ impl<'a> Iterator for ConnectionItems<'a> {
     fn next(&mut self) -> Option<ConnectionItem> {
         loop {
             if self.c.i.filter_cb.borrow().is_none() { panic!("ConnectionItems::next called recursively or with a MessageCallback set to None"); }
-            let i: Option<ConnectionItem> = self.c.i.pending_items.borrow_mut().pop_front().map(|x| x.into());
+            let i: Option<ConnectionItem> = self.c.next_msg().map(|x| x.into());
             if let Some(ci) = i {
                 if !self.process_handlers(&ci) { return Some(ci); }
             }
@@ -167,7 +156,7 @@ impl<C: ops::Deref<Target = Connection>> Iterator for ConnMsgs<C> {
         loop {
             let iconn = &self.conn.i;
             if iconn.filter_cb.borrow().is_none() { panic!("ConnMsgs::next called recursively or with a MessageCallback set to None"); }
-            let i = iconn.pending_items.borrow_mut().pop_front();
+            let i = self.conn.next_msg();
             if let Some(ci) = i { return Some(ci); }
 
             if let Some(t) = self.timeout_ms {
@@ -195,6 +184,7 @@ struct IConnection {
     conn: Cell<*mut ffi::DBusConnection>,
     pending_items: RefCell<VecDeque<Message>>,
     watches: Option<Box<WatchList>>,
+    handlers: RefCell<MsgHandlerList>,
 
     filter_cb: RefCell<Option<MessageCallback>>,
     filter_cb_panic: RefCell<thread::Result<()>>,
@@ -274,6 +264,7 @@ impl Connection {
             conn: Cell::new(conn),
             pending_items: RefCell::new(VecDeque::new()),
             watches: None,
+            handlers: RefCell::new(vec!()),
             filter_cb: RefCell::new(Some(Box::new(default_filter_callback))),
             filter_cb_panic: RefCell::new(Ok(())),
         })};
@@ -311,10 +302,48 @@ impl Connection {
         Ok(serial)
     }
 
-    /// Sends a message over the D-Bus. The resulting handler can be added to a connectionitem handler.
+    /// Sends a message over the D-Bus.
+    ///
+    /// Call add_handler on the result to start waiting for reply. This should be done before next call to `incoming` or `iter`.
     pub fn send_with_reply<'a, F: FnOnce(&Message) + 'a>(&self, msg: Message, f: F) -> MessageReply<F> {
         let serial = self.send(msg).unwrap();
         MessageReply(Some(f), serial)
+    }
+
+    /// Adds a message handler to the connection.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::{cell, rc};
+    /// use dbus::{Connection, Message, BusType};
+    ///
+    /// let c = Connection::get_private(BusType::Session).unwrap();
+    /// let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
+    ///
+    /// let done: rc::Rc<cell::Cell<bool>> = Default::default();
+    /// let done2 = done.clone();
+    /// c.add_handler(c.send_with_reply(m, move |reply| {
+    ///     let v: Vec<&str> = reply.read1().unwrap(); 
+    ///     println!("The names on the D-Bus are: {:?}", v);
+    ///     done2.set(true);
+    /// }));
+    /// for _ in c.incoming(1000) { if done.get() { return; } }
+    /// ```
+    pub fn add_handler<H: MsgHandler + 'static>(&self, h: H) {
+        let h = Box::new(h);
+        self.i.handlers.borrow_mut().push(h);
+    }
+
+    /// Removes a MsgHandler from the connection.
+    ///
+    /// If there are many MsgHandlers, it is not specified which one will be returned.
+    ///
+    /// There might be more methods added later on, which give better ways to deal
+    /// with the list of MsgHandler currently on the connection. If this would help you,
+    /// please [file an issue](https://github.com/diwic/dbus-rs/issues). 
+    pub fn extract_handler(&self) -> Option<Box<MsgHandler>> {
+        self.i.handlers.borrow_mut().pop()
     }
 
     /// Get the connection's unique name.
@@ -535,6 +564,18 @@ impl Connection {
         if let Err(perr) = p { panic::resume_unwind(perr); }
     }
 
+    fn next_msg(&self) -> Option<Message> {
+        while let Some(msg) = self.i.pending_items.borrow_mut().pop_front() {
+            let mut v: MsgHandlerList = mem::replace(&mut *self.i.handlers.borrow_mut(), vec!());
+            let b = msghandler_process(&mut v, &msg, self);
+            let mut v2 = self.i.handlers.borrow_mut();
+            v.append(&mut *v2);
+            *v2 = v;
+            if !b { return Some(msg) };
+        };
+        None
+    }
+
 }
 
 impl Drop for Connection {
@@ -590,8 +631,6 @@ pub trait MsgHandler {
     fn handle_msg(&mut self, _msg: &Message) -> Option<MsgHandlerResult> { None }
 }
 
-
-
 /// The result from MsgHandler::handle.
 #[derive(Debug, Default)]
 pub struct MsgHandlerResult {
@@ -601,6 +640,24 @@ pub struct MsgHandlerResult {
     pub done: bool,
     /// Messages to send (e g, a reply to a method call)
     pub reply: Vec<Message>,
+}
+
+type MsgHandlerList = Vec<Box<MsgHandler>>;
+
+fn msghandler_process(v: &mut MsgHandlerList, m: &Message, c: &Connection) -> bool {
+    let mut ii: isize = -1;
+    loop {
+        ii += 1; 
+        let i = ii as usize;
+        if i >= v.len() { return false };
+
+        if !v[i].handler_type().matches_msg(m) { continue; }
+        if let Some(r) = v[i].handle_msg(m) {
+            for msg in r.reply.into_iter() { c.send(msg).unwrap(); }
+            if r.done { v.remove(i); ii -= 1; }
+            if r.handled { return true; }
+        }
+    }
 }
 
 /// The struct returned from `Connection::send_and_reply`.
