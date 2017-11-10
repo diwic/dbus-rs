@@ -76,16 +76,26 @@ impl<'a> ConnectionItems<'a> {
 
     // Returns true if processed, false if not
     fn process_handlers(&mut self, ci: &ConnectionItem) -> bool {
-        let mut i = 0;
-        while i < self.handlers.len() {
-            if let Some(r) = self.handlers[i].handle_ci(ci) {
+        let m = match *ci {
+            ConnectionItem::MethodReturn(ref msg) => msg,
+            ConnectionItem::Signal(ref msg) => msg,
+            ConnectionItem::MethodCall(ref msg) => msg,
+            ConnectionItem::Nothing => return false,
+        };
+
+        let mut ii: isize = -1;
+        loop {
+            ii += 1; 
+            let i = ii as usize;
+            if i >= self.handlers.len() { return false };
+
+            if !self.handlers[i].handler_type().matches_msg(m) { continue; }
+            if let Some(r) = self.handlers[i].handle_msg(m) {
                 for msg in r.reply.into_iter() { self.c.send(msg).unwrap(); }
-                if r.done { self.handlers.remove(i); } else { i += 1; }
+                if r.done { self.handlers.remove(i); ii -= 1; }
                 if r.handled { return true; }
             }
-            else { i += 1; }
         }
-        false
     }
 
     /// Access and modify message handlers 
@@ -542,48 +552,66 @@ impl fmt::Debug for Connection {
     }
 }
 
-/// A trait for handling incoming messages. To use in combination with `ConnectionItems`.
+#[derive(Clone, Debug)]
+/// Type of messages to be handled by a MsgHandler.
 ///
-/// Note: Likely to changed/refactored/removed in next release
-pub trait MsgHandler {
-    /// The default handle_ci function calls handle_msg, so implement the one that fits you better.
-    fn handle_ci(&mut self, ci: &ConnectionItem) -> Option<MsgHandlerResult> {
-        match *ci {
-            ConnectionItem::MethodReturn(ref msg) => self.handle_msg(msg),
-            ConnectionItem::Signal(ref msg) => self.handle_msg(msg),
-            ConnectionItem::MethodCall(ref msg) => self.handle_msg(msg),
-            ConnectionItem::Nothing => None,
+/// Note: More variants can be added in the future; but unless you're writing your own D-Bus engine
+/// you should not have to match on these anyway.
+pub enum MsgHandlerType {
+    /// Handle all messages
+    All,
+    /// Handle only messages of a specific type
+    MsgType(MessageType),
+    /// Handle only method replies with this serial number
+    Reply(u32),
+}
+
+impl MsgHandlerType {
+    fn matches_msg(&self, m: &Message) -> bool {
+        match *self {
+            MsgHandlerType::All => true,
+            MsgHandlerType::MsgType(t) => m.msg_type() == t,
+            MsgHandlerType::Reply(serial) => {
+                let t = m.msg_type();
+                ((t == MessageType::MethodReturn) || (t == MessageType::Error)) && (m.get_reply_serial() == Some(serial))
+            }
         }
     }
+}
 
-    /// Called for all incoming method calls, method returns, and signals.
+/// A trait for handling incoming messages.
+pub trait MsgHandler {
+    /// Type of messages for which the handler will be called
+    ///
+    /// Note: The return value of this function might be cached, so it must return the same value all the time.
+    fn handler_type(&self) -> MsgHandlerType;
+
+    /// Function to be called if the message matches the MsgHandlerType
     fn handle_msg(&mut self, _msg: &Message) -> Option<MsgHandlerResult> { None }
 }
 
+
+
 /// The result from MsgHandler::handle.
-///
-/// WIP: field names are still unstable
 #[derive(Debug, Default)]
 pub struct MsgHandlerResult {
     /// Indicates that the message has been dealt with and should not be processed further.
     pub handled: bool,
-    /// Indicates that this MsgHandler no longer wants to receive messages and can be removed.
+    /// Indicates that this MsgHandler no longer wants to receive messages and should be removed.
     pub done: bool,
     /// Messages to send (e g, a reply to a method call)
     pub reply: Vec<Message>,
 }
 
+/// The struct returned from `Connection::send_and_reply`.
 pub struct MessageReply<F>(Option<F>, u32);
 
 impl<'a, F: FnOnce(&Message) + 'a> MsgHandler for MessageReply<F> {
-    fn handle_ci(&mut self, ci: &ConnectionItem) -> Option<MsgHandlerResult> {
-        if let ConnectionItem::MethodReturn(ref msg) = *ci {
-            if msg.get_reply_serial() == Some(self.1) {
-                self.0.take().unwrap()(msg);
-                return Some(MsgHandlerResult { handled: true, done: true, reply: Vec::new() })
-            }
-        }
-        None
+    fn handler_type(&self) -> MsgHandlerType { MsgHandlerType::Reply(self.1) }
+    fn handle_msg(&mut self, msg: &Message) -> Option<MsgHandlerResult> {
+        debug_assert_eq!(msg.get_reply_serial(), Some(self.1));
+        self.0.take().unwrap()(msg);
+        return Some(MsgHandlerResult { handled: true, done: true, reply: Vec::new() })
     }
 }
 

@@ -1,7 +1,7 @@
 use super::utils::{ArcMap, Annotations, Introspect};
 use super::{Factory, MethodType, MethodInfo, MethodResult, MethodErr, DataType, Property, Method, Signal, methodtype};
 use std::sync::{Arc, Mutex};
-use {Member, Message, Path, Signature, MessageType, Connection, ConnectionItem, Error, arg, MsgHandler, MsgHandlerResult};
+use {Member, Message, Path, Signature, MessageType, Connection, ConnectionItem, Error, arg, MsgHandler, MsgHandlerType, MsgHandlerResult};
 use Interface as IfaceName;
 use std::fmt;
 use std::ffi::{CStr, CString};
@@ -403,6 +403,7 @@ impl<M: MethodType<D>, D: DataType> MsgHandler for Tree<M, D> {
     fn handle_msg(&mut self, msg: &Message) -> Option<MsgHandlerResult> {
         self.handle(msg).map(|v| MsgHandlerResult { handled: true, done: false, reply: v })
     }
+    fn handler_type(&self) -> MsgHandlerType { MsgHandlerType::MsgType(MessageType::MethodCall) }
 }
 
 /// An iterator adapter that handles incoming method calls.
