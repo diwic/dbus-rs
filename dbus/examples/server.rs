@@ -63,6 +63,10 @@ fn main() {
     // We register all object paths in the tree.
     tree.set_registered(&c, true).unwrap();
 
-    // ...and serve other peers forever.
-    c.iter(1000).with(tree).count();
+    // We add the tree to the connection so that incoming method calls will be handled
+    // automatically during calls to "incoming".
+    c.add_handler(tree);
+
+    // Serve other peers forever.
+    loop { c.incoming(1000).count(); }
 }

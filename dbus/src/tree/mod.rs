@@ -1,5 +1,4 @@
 //! Contains functionality for dispatching methods on a D-Bus "server".
-//! Supersedes the `obj` module.
 //!
 //! # Example
 //! ```rust,no_run

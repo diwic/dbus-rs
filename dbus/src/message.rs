@@ -1005,18 +1005,18 @@ mod test {
         println!("Sending {:?}", m.get_items());
         c.send(m).unwrap();
 
-        for n in c.incoming(1000).cycle() {
+        loop { for n in c.incoming(1000) {
             if n.msg_type() == MessageType::MethodCall {
                 let z: OwnedFd = n.read1().unwrap();
                 println!("Got {:?}", z);
                 let mut q: libc::c_char = 100;
                 assert_eq!(1, unsafe { libc::read(z.as_raw_fd(), &mut q as *mut _ as *mut libc::c_void, 1) });
                 assert_eq!(q, 'z' as libc::c_char);
-                break;
+                return;
             } else {
                 println!("Got {:?}", n);
             }
-        }
+        }}
     }
 
     #[test]
@@ -1040,16 +1040,16 @@ mod test {
         println!("Sending {}", sending);
         c.send(m).unwrap();
 
-        for n in c.incoming(1000).cycle() {
+        loop { for n in c.incoming(1000) {
             if n.msg_type() == MessageType::MethodCall {
                 let receiving = format!("{:?}", n.get_items());
                 println!("Receiving {}", receiving);
                 assert_eq!(sending, receiving);
-                break;
+                return;
             } else {
                 println!("Got {:?}", n);
             }
-        }
+        }}
     }
 
     #[test]
@@ -1094,16 +1094,16 @@ mod test {
         println!("Sending {}", sending);
         c.send(msg).unwrap();
 
-        for n in c.incoming(1000).cycle() {
+        loop { for n in c.incoming(1000) {
             if n.msg_type() == MessageType::MethodCall {
                 let receiving = format!("{:?}", n.get_items());
                 println!("Receiving {}", receiving);
                 assert_eq!(sending, receiving);
-                break;
+                return;
             } else {
                 println!("Got {:?}", n);
             }
-        }
+        } }
     }
 
     #[test]
