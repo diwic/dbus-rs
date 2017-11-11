@@ -177,7 +177,7 @@ impl Arg {
         }) } else { None };
         let r = try!(make_type(&self.typ, self.is_out, &mut g));
         Ok((r, g.map(|g| g.gen.iter().map(|s|
-            if self.is_out { format!("{}: arg::Arg + for<'b> arg::Get<'b>", s) } else { format!("{}: arg::Append", s) } 
+            if self.is_out { format!("{}: for<'b> arg::Get<'b>", s) } else { format!("{}: arg::Arg + arg::Append", s) } 
         ).collect()).unwrap_or(vec!())))
     }
 }
@@ -291,7 +291,7 @@ fn write_intf_client(s: &mut String, i: &Intf, genvar: bool) -> Result<(), Box<e
         *s += "\n";
         try!(write_prop_decl(s, &p, false));
         *s += " {\n";
-        *s += &format!("        <Self as dbus::stdintf::OrgFreedesktopDBusProperties>::get(&self, \"{}\", \"{}\").map(|v| v.0)\n",
+        *s += &format!("        <Self as dbus::stdintf::org_freedesktop_dbus::Properties>::get(&self, \"{}\", \"{}\")\n",
             i.origname, p.name);
         *s += "    }\n";
     }
@@ -300,7 +300,7 @@ fn write_intf_client(s: &mut String, i: &Intf, genvar: bool) -> Result<(), Box<e
         *s += "\n";
         try!(write_prop_decl(s, &p, true));
         *s += " {\n";
-        *s += &format!("        <Self as dbus::stdintf::OrgFreedesktopDBusProperties>::set(&self, \"{}\", \"{}\", arg::Variant(value))\n",
+        *s += &format!("        <Self as dbus::stdintf::org_freedesktop_dbus::Properties>::set(&self, \"{}\", \"{}\", value)\n",
             i.origname, p.name);
         *s += "    }\n";
     }

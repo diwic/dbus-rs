@@ -153,6 +153,7 @@ pub struct ConnMsgs<C> {
 impl<C: ops::Deref<Target = Connection>> Iterator for ConnMsgs<C> {
     type Item = Message;
     fn next(&mut self) -> Option<Self::Item> {
+        
         loop {
             let iconn = &self.conn.i;
             if iconn.filter_cb.borrow().is_none() { panic!("ConnMsgs::next called recursively or with a MessageCallback set to None"); }

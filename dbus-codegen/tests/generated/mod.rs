@@ -373,15 +373,15 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopPolicyKit1
     }
 
     fn get_backend_name(&self) -> Result<String, Self::Err> {
-        <Self as dbus::stdintf::OrgFreedesktopDBusProperties>::get(&self, "org.freedesktop.PolicyKit1.Authority", "BackendName").map(|v| v.0)
+        <Self as dbus::stdintf::org_freedesktop_dbus::Properties>::get(&self, "org.freedesktop.PolicyKit1.Authority", "BackendName")
     }
 
     fn get_backend_version(&self) -> Result<String, Self::Err> {
-        <Self as dbus::stdintf::OrgFreedesktopDBusProperties>::get(&self, "org.freedesktop.PolicyKit1.Authority", "BackendVersion").map(|v| v.0)
+        <Self as dbus::stdintf::org_freedesktop_dbus::Properties>::get(&self, "org.freedesktop.PolicyKit1.Authority", "BackendVersion")
     }
 
     fn get_backend_features(&self) -> Result<u32, Self::Err> {
-        <Self as dbus::stdintf::OrgFreedesktopDBusProperties>::get(&self, "org.freedesktop.PolicyKit1.Authority", "BackendFeatures").map(|v| v.0)
+        <Self as dbus::stdintf::org_freedesktop_dbus::Properties>::get(&self, "org.freedesktop.PolicyKit1.Authority", "BackendFeatures")
     }
 }
 

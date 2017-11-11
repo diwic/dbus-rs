@@ -6,7 +6,7 @@ use Interface as IfaceName;
 use arg;
 use std::fmt;
 use std::cell::RefCell;
-use stdintf::OrgFreedesktopDBusPropertiesPropertiesChanged as PropertiesChanged;
+use stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged;
 
 
 // Workaround for https://github.com/rust-lang/rust/issues/31518
@@ -319,7 +319,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
     /// "v" is updated with the signal for this property. "new_value" is only called if self.emits is "true",
     /// it should return the value of the property.
     /// If no PropertiesChanged signal should be emitted for this property, "v" is left unchanged.
-    pub fn add_propertieschanged<F: FnOnce() -> Box<arg::RefArg>>(&self, v: &mut Vec<PropertiesChanged>, iface: &IfaceName, new_value: F) {
+    pub fn add_propertieschanged<F: FnOnce() -> Box<arg::RefArg>>(&self, v: &mut Vec<PropertiesPropertiesChanged>, iface: &IfaceName, new_value: F) {
 
         // Impl note: It is a bit silly that this function cannot be used from e g get_emits_changed_signal below,
         // but it is due to the fact that we cannot create a RefArg out of an IterAppend; which is what the 'on_get'
@@ -328,7 +328,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
         if self.emits == EmitsChangedSignal::Const || self.emits == EmitsChangedSignal::False { return; }
         let vpos = v.iter().position(|vv| &*vv.interface_name == &**iface);
         let vpos = vpos.unwrap_or_else(|| {
-            let mut z: PropertiesChanged = Default::default();
+            let mut z: PropertiesPropertiesChanged = Default::default();
             z.interface_name = (&**iface).into();
             v.push(z);
             v.len()-1

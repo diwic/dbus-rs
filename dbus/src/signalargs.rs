@@ -9,7 +9,7 @@ use {Message, MessageType, BusName, Path, Interface, Member};
 ///
 /// ```rust,no_run
 /// use dbus::{Connection, ConnectionItem, BusType, SignalArgs};
-/// use dbus::stdintf::OrgFreedesktopDBusObjectManagerInterfacesRemoved as IR;
+/// use dbus::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
 ///
 /// let c = Connection::get_private(BusType::Session).unwrap();
 /// // Add a match for this signal
@@ -76,7 +76,7 @@ pub trait SignalArgs: Default {
 #[test]
 fn intf_removed() {
     use {Connection, ConnectionItem, BusType};
-    use stdintf::OrgFreedesktopDBusObjectManagerInterfacesRemoved as IR;
+    use stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
     let c = Connection::get_private(BusType::Session).unwrap();
     let mstr = IR::match_str(Some(&c.unique_name().into()), Some(&"/hello".into()));
     println!("Match str: {}", mstr);
