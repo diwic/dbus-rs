@@ -1,7 +1,7 @@
 [package]
 
 name = "dbus"
-version = "0.5.4"
+version = "0.6.0"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 
 description = "Bindings to D-Bus, which is a bus commonly used on Linux for inter-process communication."
@@ -13,7 +13,7 @@ categories = ["os::unix-apis", "api-bindings"]
 
 [dependencies]
 libc = "0.2.7"
-libdbus-sys = { path = "../libdbus-sys", version = "0.1.0" }
+libdbus-sys = { path = "../libdbus-sys", version = "0.1" }
 
 [dev-dependencies]
 tempdir = "0.3"

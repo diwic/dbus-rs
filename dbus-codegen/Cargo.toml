@@ -15,7 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 xml-rs = "0.3"
-dbus = { path = "../dbus", version = "0.5.4" }
+dbus = { path = "../dbus", version = "0.6" }
 clap = "2.20"
 
 [badges]
