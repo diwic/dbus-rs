@@ -898,9 +898,13 @@ impl Message {
     /// transform such an error to a D-Bus Error or otherwise return
     /// the original message.
     pub fn as_result(&mut self) -> Result<&mut Message, Error> {
+        self.set_error_from_msg().map(|_| self)
+    }
+
+    pub (super) fn set_error_from_msg(&self) -> Result<(), Error> {
         let mut e = Error::empty();
         if unsafe { ffi::dbus_set_error_from_message(e.get_mut(), self.msg) } != 0 { Err(e) }
-        else { Ok(self) }
+        else { Ok(()) }
     }
 }
 

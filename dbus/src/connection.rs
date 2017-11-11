@@ -302,12 +302,12 @@ impl Connection {
         Ok(serial)
     }
 
-    /// Sends a message over the D-Bus.
+    /// Sends a message over the D-Bus, returning a MessageReply.
     ///
     /// Call add_handler on the result to start waiting for reply. This should be done before next call to `incoming` or `iter`.
-    pub fn send_with_reply<'a, F: FnOnce(&Message) + 'a>(&self, msg: Message, f: F) -> MessageReply<F> {
-        let serial = self.send(msg).unwrap();
-        MessageReply(Some(f), serial)
+    pub fn send_with_reply<'a, F: FnOnce(Result<&Message, Error>) + 'a>(&self, msg: Message, f: F) -> Result<MessageReply<F>, ()> {
+        let serial = self.send(msg)?;
+        Ok(MessageReply(Some(f), serial))
     }
 
     /// Adds a message handler to the connection.
@@ -324,11 +324,11 @@ impl Connection {
     /// let done: rc::Rc<cell::Cell<bool>> = Default::default();
     /// let done2 = done.clone();
     /// c.add_handler(c.send_with_reply(m, move |reply| {
-    ///     let v: Vec<&str> = reply.read1().unwrap(); 
+    ///     let v: Vec<&str> = reply.unwrap().read1().unwrap(); 
     ///     println!("The names on the D-Bus are: {:?}", v);
     ///     done2.set(true);
-    /// }));
-    /// for _ in c.incoming(1000) { if done.get() { return; } }
+    /// }).unwrap());
+    /// while !done.get() { c.incoming(100).count(); }
     /// ```
     pub fn add_handler<H: MsgHandler + 'static>(&self, h: H) {
         let h = Box::new(h);
@@ -661,13 +661,20 @@ fn msghandler_process(v: &mut MsgHandlerList, m: &Message, c: &Connection) -> bo
 }
 
 /// The struct returned from `Connection::send_and_reply`.
+///
+/// It implements the `MsgHandler` trait so you can use `Connection::add_handler`.
 pub struct MessageReply<F>(Option<F>, u32);
 
-impl<'a, F: FnOnce(&Message) + 'a> MsgHandler for MessageReply<F> {
+impl<'a, F: FnOnce(Result<&Message, Error>) + 'a> MsgHandler for MessageReply<F> {
     fn handler_type(&self) -> MsgHandlerType { MsgHandlerType::Reply(self.1) }
     fn handle_msg(&mut self, msg: &Message) -> Option<MsgHandlerResult> {
+        let e = match msg.msg_type() {
+            MessageType::MethodReturn => Ok(msg),
+            MessageType::Error => Err(msg.set_error_from_msg().unwrap_err()),
+            _ => unreachable!(),
+        };
         debug_assert_eq!(msg.get_reply_serial(), Some(self.1));
-        self.0.take().unwrap()(msg);
+        self.0.take().unwrap()(e);
         return Some(MsgHandlerResult { handled: true, done: true, reply: Vec::new() })
     }
 }
@@ -681,10 +688,10 @@ fn message_reply() {
     let quit = rc::Rc::new(cell::Cell::new(false));
     let quit2 = quit.clone();
     let reply = c.send_with_reply(m, move |result| {
-        let r = result;
+        let r = result.unwrap();
         let _: ::arg::Array<&str, _>  = r.get1().unwrap();
         quit2.set(true);
-    });
+    }).unwrap();
     for _ in c.iter(1000).with(reply) { if quit.get() { return; } }
     assert!(false);
 }
