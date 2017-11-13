@@ -52,6 +52,7 @@ impl AConnection {
             callmap: map,
             msgstream: istream,
         };
+        i.conn.set_watch_callback(Box::new(|_| unimplemented!("Watch handling is very rare and not implemented yet")));
         for w in i.conn.watch_fds() { d.modify_watch(w, false)?; }
         h.spawn(d);
         Ok(i)
@@ -84,6 +85,7 @@ impl Drop for AConnection {
     fn drop(&mut self) {
         debug!("Dropping AConnection");
         let _ = self.quit.take().unwrap().send(());
+        self.conn.set_watch_callback(Box::new(|_| {}));
     }
 }
 
@@ -132,7 +134,7 @@ impl ADriver {
         for i in items {
             debug!("handle_items: {:?}", i);
             match i {
-                ConnectionItem::WatchFd(w) => { self.modify_watch(w, true).unwrap(); },
+//                ConnectionItem::WatchFd(w) => { self.modify_watch(w, true).unwrap(); },
                 ConnectionItem::MethodReturn(m) => {
                     let mut map = self.callmap.borrow_mut();
                     let serial = m.get_reply_serial().unwrap();
