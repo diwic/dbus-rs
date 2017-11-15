@@ -329,7 +329,7 @@ impl Connection {
     ///     println!("The names on the D-Bus are: {:?}", v);
     ///     done2.set(true);
     /// }).unwrap());
-    /// while !done.get() { c.incoming(100).count(); }
+    /// while !done.get() { c.incoming(100).next(); }
     /// ```
     pub fn add_handler<H: MsgHandler + 'static>(&self, h: H) {
         let h = Box::new(h);

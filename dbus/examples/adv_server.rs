@@ -152,17 +152,19 @@ fn run() -> Result<(), Box<std::error::Error>> {
     try!(tree.set_registered(&c, true));
 
     // ...and serve incoming requests.
-    for _ in tree.run(&c, c.iter(1000)) {
+    c.add_handler(tree);
+    loop {
+        // Wait for incoming messages. This will block up to one second.
+        // Discard the result - relevant messages have already been handled.
+        c.incoming(1000).next();
 
-        // This will be run every second, because we block (waiting for DBus requests)
-        // one second at a time.
+        // Do all other things we need to do in our main loop.
         if let Ok(idx) = check_complete_r.try_recv() {
             let dev = &devices[idx as usize];
             dev.checking.set(false);
             try!(c.send(sig.msg(&dev.path, &"com.example.dbus.rs.device".into())).map_err(|_| "Sending DBus signal failed"));
         }
     }
-    Ok(())
 }
 
 fn main() {

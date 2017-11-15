@@ -68,5 +68,5 @@ fn main() {
     c.add_handler(tree);
 
     // Serve other peers forever.
-    loop { c.incoming(1000).count(); }
+    loop { c.incoming(1000).next(); }
 }

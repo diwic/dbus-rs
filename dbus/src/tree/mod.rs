@@ -15,8 +15,9 @@
 //!
 //! let c = Connection::get_private(BusType::Session).unwrap();
 //! t.set_registered(&c, true).unwrap();
+//! c.add_handler(t);
 //! /* Run forever */
-//! for _ in t.run(&c, c.iter(1000)) {}
+//! loop { c.incoming(1000).next(); }
 //! ```
 //!
 //! See `examples/server.rs` and `examples/adv_server.rs` for more thorough examples.
