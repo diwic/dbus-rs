@@ -1,10 +1,36 @@
 // Small structs that don't have their own unit.
 
-use Signature;
-use std::collections::BTreeMap;
+use {Signature, Member, Path, Interface as IfaceName};
+use std::collections::{BTreeMap, btree_map};
 use std::sync::Arc;
 
 pub type ArcMap<K, V> = BTreeMap<K, Arc<V>>;
+
+#[derive(Clone, Debug)]
+pub enum IterE<'a, V: 'a> {
+    Path(btree_map::Values<'a, Arc<Path<'static>>, Arc<V>>),
+    Iface(btree_map::Values<'a, Arc<IfaceName<'static>>, Arc<V>>),
+    Member(btree_map::Values<'a, Member<'static>, Arc<V>>),
+    String(btree_map::Values<'a, String, Arc<V>>),
+}
+
+#[derive(Clone, Debug)]
+/// Iterator struct, returned from iterator methods on Tree, Objectpath and Interface.
+pub struct Iter<'a, V: 'a>(IterE<'a, V>);
+
+impl<'a, V: 'a> From<IterE<'a, V>> for Iter<'a, V> { fn from(x: IterE<'a, V>) -> Iter<'a, V> { Iter(x) }}
+
+impl<'a, V: 'a> Iterator for Iter<'a, V> {
+    type Item = &'a Arc<V>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0 {
+            IterE::Path(ref mut x) => x.next(),
+            IterE::Iface(ref mut x) => x.next(),
+            IterE::Member(ref mut x) => x.next(),
+            IterE::String(ref mut x) => x.next(),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 /// A D-Bus Argument.

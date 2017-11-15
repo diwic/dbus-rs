@@ -1,4 +1,4 @@
-use super::utils::{ArcMap, Annotations, Introspect};
+use super::utils::{ArcMap, Iter, IterE, Annotations, Introspect};
 use super::{Factory, MethodType, MethodInfo, MethodResult, MethodErr, DataType, Property, Method, Signal, methodtype};
 use std::sync::{Arc, Mutex};
 use {Member, Message, Path, Signature, MessageType, Connection, ConnectionItem, Error, arg, MsgHandler, MsgHandlerType, MsgHandlerResult};
@@ -68,6 +68,14 @@ impl<M: MethodType<D>, D: DataType> Interface<M, D> {
     /// Get associated data
     pub fn get_data(&self) -> &D::Interface { &self.data }
 
+    /// Iterates over methods implemented by this interface.
+    pub fn iter_m<'a>(&'a self) -> Iter<'a, Method<M, D>> { IterE::Member(self.methods.values()).into() }
+
+    /// Iterates over signals implemented by this interface.
+    pub fn iter_s<'a>(&'a self) -> Iter<'a, Signal<D>> { IterE::Member(self.signals.values()).into() }
+
+    /// Iterates over properties implemented by this interface.
+    pub fn iter_p<'a>(&'a self) -> Iter<'a, Property<M, D>> { IterE::String(self.properties.values()).into() }
 }
 
 impl<M: MethodType<D>, D: DataType> Introspect for Interface<M, D> {
@@ -168,6 +176,8 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
         self
     }
 
+    /// Iterates over interfaces implemented by this object path.
+    pub fn iter<'a>(&'a self) -> Iter<'a, Interface<M, D>> { IterE::Iface(self.ifaces.values()).into() }
 
     pub(super) fn introspect(&self, tree: &Tree<M, D>) -> String {
         let ifacestr = introspect_map(&self.ifaces, "  ");
@@ -320,6 +330,9 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
         self.paths.get(p)
     }
 
+    /// Iterates over object paths in this tree.
+    pub fn iter<'a>(&'a self) -> Iter<'a, ObjectPath<M, D>> { IterE::Path(self.paths.values()).into() }
+
     /// Non-builder function that adds an object path to this tree.
     ///
     /// Note: This does not register a path with the connection, so if the tree is currently registered,
@@ -443,6 +456,21 @@ impl<'a, I: Iterator<Item=ConnectionItem>, M: 'a + MethodType<D>, D: DataType + 
 }
 
 
+#[test]
+fn test_iter() {
+    let f = super::Factory::new_fn::<()>();
+    let t = f.tree(())
+    .add(f.object_path("/echo", ()).introspectable()
+        .add(f.interface("com.example.echo", ())
+            .add_m(f.method("Echo", (), |_| unimplemented!()).in_arg(("request", "s")).out_arg(("reply", "s")))
+            .add_p(f.property::<i32,_>("EchoCount", ()))
+            .add_s(f.signal("Echoed", ()).arg(("data", "s")).deprecated()
+        )
+    )).add(f.object_path("/echo/subpath", ()));
+
+    let paths: Vec<_> = t.iter().collect();
+    assert_eq!(paths.len(), 2);
+}
 
 
 #[test]

@@ -27,7 +27,7 @@ mod leaves;
 mod objectpath;
 mod factory;
 
-pub use self::utils::Argument;
+pub use self::utils::{Argument, Iter};
 pub use self::methodtype::{MethodErr, MethodInfo, PropInfo, MethodResult, MethodType, DataType, MTFn, MTFnMut, MTSync};
 pub use self::leaves::{Method, Signal, Property, Access, EmitsChangedSignal};
 pub use self::objectpath::{Interface, ObjectPath, Tree, TreeServer};
