@@ -1,7 +1,7 @@
 [package]
 
 name = "libdbus-sys"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 
 description = "FFI bindings to libdbus."
@@ -13,7 +13,4 @@ categories = ["os::unix-apis", "external-ffi-bindings"]
 build = "build.rs"
 
 [build-dependencies]
-metadeps = "1"
-
-[package.metadata.pkg-config]
-dbus-1 = "1.6"
+pkg-config = "0.3"

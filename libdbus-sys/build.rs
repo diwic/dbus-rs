@@ -1,5 +1,5 @@
-extern crate metadeps;
+extern crate pkg_config;
 
 fn main() {
-    metadeps::probe().unwrap();
+    pkg_config::Config::new().atleast_version("1.6").probe("dbus-1").unwrap();
 }
