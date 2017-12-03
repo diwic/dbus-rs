@@ -254,13 +254,7 @@ impl Connection {
         self.i.conn.get()
     }
 
-    /// Creates a new D-Bus connection.
-    pub fn get_private(bus: BusType) -> Result<Connection, Error> {
-        let mut e = Error::empty();
-        let conn = unsafe { ffi::dbus_bus_get_private(bus, e.get_mut()) };
-        if conn == ptr::null_mut() {
-            return Err(e)
-        }
+    fn conn_from_ptr(conn: *mut ffi::DBusConnection) -> Result<Connection, Error> {
         let mut c = Connection { i: Box::new(IConnection {
             conn: Cell::new(conn),
             pending_items: RefCell::new(VecDeque::new()),
@@ -279,6 +273,29 @@ impl Connection {
         c.i.watches = Some(WatchList::new(&c, Box::new(|_| {})));
         Ok(c)
     }
+
+    /// Creates a new D-Bus connection.
+    pub fn get_private(bus: BusType) -> Result<Connection, Error> {
+        let mut e = Error::empty();
+        let conn = unsafe { ffi::dbus_bus_get_private(bus, e.get_mut()) };
+        if conn == ptr::null_mut() {
+            return Err(e)
+        }
+        Self::conn_from_ptr(conn)
+    }
+
+    /// Creates a new D-Bus connection to a remote address.
+    ///
+    /// Note: for all common cases (System / Session bus) you probably want "get_private" instead.
+    pub fn open_private(address: &str) -> Result<Connection, Error> {
+        let mut e = Error::empty();
+        let conn = unsafe { ffi::dbus_connection_open_private(to_c_str(address).as_ptr(), e.get_mut()) };
+        if conn == ptr::null_mut() {
+            return Err(e)
+        }
+        Self::conn_from_ptr(conn)
+    }
+
 
     /// Sends a message over the D-Bus and waits for a reply.
     /// This is usually used for method calls.
