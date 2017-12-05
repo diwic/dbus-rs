@@ -296,6 +296,10 @@ impl Connection {
         Self::conn_from_ptr(conn)
     }
 
+    /// Gets whether the connection is currently open.
+    pub fn is_connected(&self) -> bool {
+        unsafe { ffi::dbus_connection_get_is_connected(self.conn()) }
+    }
 
     /// Sends a message over the D-Bus and waits for a reply.
     /// This is usually used for method calls.
@@ -702,6 +706,7 @@ impl<'a, F: FnOnce(Result<&Message, Error>) + 'a> MsgHandler for MessageReply<F>
 fn message_reply() {
     use std::{cell, rc};
     let c = Connection::get_private(BusType::Session).unwrap();
+    assert!(c.is_connected());
     let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
     let quit = rc::Rc::new(cell::Cell::new(false));
     let quit2 = quit.clone();
