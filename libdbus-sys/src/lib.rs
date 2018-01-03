@@ -159,6 +159,7 @@ extern "C" {
         error: *mut DBusError);
     pub fn dbus_bus_remove_match(conn: *mut DBusConnection, rule: *const c_char,
         error: *mut DBusError);
+    pub fn dbus_bus_register(conn: *mut DBusConnection, error: *mut DBusError) -> bool;
 
     pub fn dbus_connection_close(conn: *mut DBusConnection);
     pub fn dbus_connection_dispatch(conn: *mut DBusConnection) -> DBusDispatchStatus;
