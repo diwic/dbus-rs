@@ -296,6 +296,18 @@ impl Connection {
         Self::conn_from_ptr(conn)
     }
 
+    /// Registers a new D-Bus connection with the bus.
+    ///
+    /// Note: `get_private` does this automatically, useful with `open_private`
+    pub fn register(&self) -> Result<(), Error> {
+        let mut e = Error::empty();
+        if !unsafe { ffi::dbus_bus_register(self.conn(), e.get_mut()) } {
+            Err(e)
+        } else {
+            Ok(())
+        }
+    }
+
     /// Gets whether the connection is currently open.
     pub fn is_connected(&self) -> bool {
         unsafe { ffi::dbus_connection_get_is_connected(self.conn()) }
