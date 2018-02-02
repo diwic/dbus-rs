@@ -126,6 +126,7 @@ fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool
         Ok(ArgType::Int64) => "i64".into(),
         Ok(ArgType::UInt64) => "u64".into(),
         Ok(ArgType::Double) => "f64".into(),
+        Ok(ArgType::UnixFd) => "dbus::OwnedFd".into(),
         Ok(ArgType::String) => if out { "String".into() } else { "&str".into() },
         Ok(ArgType::ObjectPath) => if out { "dbus::Path<'static>" } else { "dbus::Path" }.into(),
         Ok(ArgType::Signature) => if out { "dbus::Signature<'static>" } else { "dbus::Signature" }.into(),
