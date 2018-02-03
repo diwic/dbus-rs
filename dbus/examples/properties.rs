@@ -16,19 +16,18 @@ fn main() {
     // in this case we'll use OrgFreedesktopDBusProperties, which allows us to call "get".
     let c = Connection::get_private(BusType::Session).unwrap();
     let p = c.with_path("org.mpris.MediaPlayer2.rhythmbox", "/org/mpris/MediaPlayer2", 5000);
-    use stdintf::OrgFreedesktopDBusProperties;
+    use stdintf::org_freedesktop_dbus::Properties;
 
     // The Metadata property is a Dict<String, Variant>. 
 
     // Option 1: we can get the dict straight into a hashmap, like this:
 
-    let metadata: arg::Variant<HashMap<String, arg::Variant<Box<arg::RefArg>>>> = p.get("org.mpris.MediaPlayer2.Player", "Metadata").unwrap();
+    let metadata: HashMap<String, arg::Variant<Box<arg::RefArg>>> = p.get("org.mpris.MediaPlayer2.Player", "Metadata").unwrap();
 
     println!("Option 1:");
 
     // We now iterate over the hashmap.
-    // The ".0" is needed to traverse into the variant.   
-    for (key, value) in metadata.0.iter() {
+    for (key, value) in metadata.iter() {
         print!("  {}: ", key);
         print_refarg(&value);
     }
@@ -36,11 +35,10 @@ fn main() {
 
     // Option 2: we can get the entire dict as a RefArg and get the values out by iterating over it.
 
-    let metadata: arg::Variant<Box<arg::RefArg>> = p.get("org.mpris.MediaPlayer2.Player", "Metadata").unwrap();
+    let metadata: Box<arg::RefArg> = p.get("org.mpris.MediaPlayer2.Player", "Metadata").unwrap();
 
     // When using "as_iter()" for a dict, we'll get one key, it's value, next key, it's value, etc.
-    // Like in option 1, the ".0" is needed to traverse into the variant.   
-    let mut iter = metadata.0.as_iter().unwrap();
+    let mut iter = metadata.as_iter().unwrap();
 
     println!("Option 2:");
     while let Some(key) = iter.next() {
