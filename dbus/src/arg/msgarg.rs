@@ -35,9 +35,6 @@ pub trait Get<'a>: Sized {
 }
 
 /// Object safe version of Arg + Append + Get.
-///
-/// This trait is somewhat under development, which means that not all types are supported
-/// and that the API might change. Only use in case Arg is not dynamic enough for your needs. 
 pub trait RefArg: fmt::Debug {
     /// The corresponding D-Bus argument type code.
     fn arg_type(&self) -> ArgType;
@@ -56,6 +53,9 @@ pub trait RefArg: fmt::Debug {
     /// Try to read the argument as an i64.
     #[inline]
     fn as_i64(&self) -> Option<i64> { None }
+    /// Try to read the argument as an f64.
+    #[inline]
+    fn as_f64(&self) -> Option<f64> { self.as_i64().map(|x| x as f64) }
     /// Try to read the argument as a str.
     #[inline]
     fn as_str(&self) -> Option<&str> { None }
@@ -115,6 +115,8 @@ impl<'a, T: RefArg + ?Sized> RefArg for &'a T {
     #[inline]
     fn as_i64(&self) -> Option<i64> { (&**self).as_i64() }
     #[inline]
+    fn as_f64(&self) -> Option<f64> { (&**self).as_f64() }
+    #[inline]
     fn as_str(&self) -> Option<&str> { (&**self).as_str() }
     #[inline]
     fn as_iter<'b>(&'b self) -> Option<Box<Iterator<Item=&'b RefArg> + 'b>> { (&**self).as_iter() }
@@ -138,6 +140,8 @@ impl<T: RefArg + ?Sized> RefArg for $t<T> {
     fn as_any_mut<'a>(&'a mut $ss) -> &'a mut any::Any where T: 'static { $make_mut.as_any_mut() }
     #[inline]
     fn as_i64(&self) -> Option<i64> { (&**self).as_i64() }
+    #[inline]
+    fn as_f64(&self) -> Option<f64> { (&**self).as_f64() }
     #[inline]
     fn as_str(&self) -> Option<&str> { (&**self).as_str() }
     #[inline]
@@ -195,7 +199,7 @@ mod test {
         let mut map = HashMap::new();
         map.insert(true, String::from("Yes"));
         map.insert(false, String::from("No"));
-        let m = m.append_ref(&[&map]);
+        let m = m.append_ref(&[&map as &RefArg, &1.5f64 as &RefArg]);
 
         c.send(m).unwrap();
 
@@ -217,6 +221,8 @@ mod test {
                 assert!(iter.next().unwrap().as_str().is_none());
                 assert!(iter.next().unwrap().as_i64().is_none());
                 assert!(iter.next().is_none());
+                assert!(rv[7].as_f64().unwrap() > 1.0);
+                assert!(rv[7].as_f64().unwrap() < 2.0);
                 break;
             }
         }

@@ -19,8 +19,12 @@ You would then use this code like:
 
 ```rust
 // main.rs
+mod networkmanager;
 
-let c = Connection::get_private(BusType::Session)?;
+/* ... */
+
+// Start a connection to the system bus.
+let c = Connection::get_private(BusType::System)?;
 
 // Make a "ConnPath" struct that just contains a Connection, a destination and a path.
 let p = c.with_path("org.freedesktop.NetworkManager", "/org/freedesktop/NetworkManager", 5000);

@@ -105,7 +105,7 @@ integer_impl!(u64, UInt64, b"t\0", _i, None);
 
 
 macro_rules! refarg_impl {
-    ($t: ty, $i: ident, $ii: expr, $ss: expr) => {
+    ($t: ty, $i: ident, $ii: expr, $ss: expr, $ff: expr) => {
 
 impl RefArg for $t {
     #[inline]
@@ -120,6 +120,8 @@ impl RefArg for $t {
     fn as_any_mut(&mut self) -> &mut any::Any { self }
     #[inline]
     fn as_i64(&self) -> Option<i64> { let $i = self; $ii }
+    #[inline]
+    fn as_f64(&self) -> Option<f64> { let $i = self; $ff }
     #[inline]
     fn as_str(&self) -> Option<&str> { let $i = self; $ss }
 }
@@ -140,7 +142,7 @@ impl<'a> Get<'a> for bool {
     fn get(i: &mut Iter) -> Option<Self> { arg_get_basic(&mut i.0, ArgType::Boolean).map(|q| q != 0) }
 }
 
-refarg_impl!(bool, _i, Some(if *_i { 1 } else { 0 }), None);
+refarg_impl!(bool, _i, Some(if *_i { 1 } else { 0 }), None, Some(if *_i { 1 as f64 } else { 0 as f64 }));
 
 impl Arg for f64 {
     const ARG_TYPE: ArgType = ArgType::Double;
@@ -155,7 +157,7 @@ impl<'a> Get<'a> for f64 {
 }
 unsafe impl FixedArray for f64 {}
 
-refarg_impl!(f64, _i, None, None);
+refarg_impl!(f64, _i, None, None, Some(*_i));
 
 /// Represents a D-Bus string.
 impl<'a> Arg for &'a str {
@@ -199,7 +201,7 @@ impl<'a> Get<'a> for String {
     fn get(i: &mut Iter<'a>) -> Option<String> { <&str>::get(i).map(|s| String::from(s)) }
 }
 
-refarg_impl!(String, _i, None, Some(&_i));
+refarg_impl!(String, _i, None, Some(&_i), None);
 
 /// Represents a D-Bus string.
 impl<'a> Arg for &'a CStr {
@@ -239,7 +241,7 @@ impl<'a> Get<'a> for OwnedFd {
     }
 }
 
-refarg_impl!(OwnedFd, _i, { use std::os::unix::io::AsRawFd; Some(_i.as_raw_fd() as i64) }, None);
+refarg_impl!(OwnedFd, _i, { use std::os::unix::io::AsRawFd; Some(_i.as_raw_fd() as i64) }, None, None);
 
 macro_rules! string_impl {
     ($t: ident, $s: ident, $f: expr) => {

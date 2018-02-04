@@ -8,7 +8,6 @@ fn print_refarg(value: &arg::RefArg) {
     // debug printing if the value is more complex than that.
     if let Some(s) = value.as_str() { println!("{}", s); }
     else if let Some(i) = value.as_i64() { println!("{}", i); }
-    else if let Some(f) = arg::cast::<f64>(value) { println!("{}", f); }
     else { println!("{:?}", value); }
 }
 
