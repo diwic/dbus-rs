@@ -140,6 +140,13 @@ impl<$($t: RefArg),*> RefArg for ($($t,)*) {
     }
     fn as_any(&self) -> &any::Any where Self: 'static { self }
     fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
+    fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> {
+        let &( $(ref $n,)*) = self;
+        let v = vec!(
+        $( $n as &RefArg, )*
+        );
+        Some(Box::new(v.into_iter()))
+    }
 }
 
 
