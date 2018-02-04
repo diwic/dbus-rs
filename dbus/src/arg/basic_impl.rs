@@ -59,7 +59,7 @@ unsafe fn arg_get_str<'a>(i: *mut ffi::DBusMessageIter, arg_type: ArgType) -> Op
 // Implementation for basic types.
 
 macro_rules! integer_impl {
-    ($t: ident, $s: ident, $f: expr, $i: ident, $ii: expr) => {
+    ($t: ident, $s: ident, $f: expr, $i: ident, $ii: expr, $u: ident, $uu: expr, $fff: ident, $ff: expr) => {
 
 impl Arg for $t {
     const ARG_TYPE: ArgType = ArgType::$s;
@@ -88,6 +88,10 @@ impl RefArg for $t {
     fn as_any_mut(&mut self) -> &mut any::Any { self }
     #[inline]
     fn as_i64(&self) -> Option<i64> { let $i = *self; $ii }
+    #[inline]
+    fn as_u64(&self) -> Option<u64> { let $u = *self; $uu }
+    #[inline]
+    fn as_f64(&self) -> Option<f64> { let $fff = *self; $ff }
 }
 
 impl DictKey for $t {}
@@ -95,17 +99,17 @@ unsafe impl FixedArray for $t {}
 
 }} // End of macro_rules
 
-integer_impl!(u8, Byte, b"y\0", i, Some(i as i64));
-integer_impl!(i16, Int16, b"n\0", i, Some(i as i64));
-integer_impl!(u16, UInt16, b"q\0", i, Some(i as i64));
-integer_impl!(i32, Int32, b"i\0", i, Some(i as i64));
-integer_impl!(u32, UInt32, b"u\0", i, Some(i as i64));
-integer_impl!(i64, Int64, b"x\0", i, Some(i));
-integer_impl!(u64, UInt64, b"t\0", _i, None);
+integer_impl!(u8, Byte, b"y\0", i, Some(i as i64),    u, Some(u as u64), f, Some(f as f64));
+integer_impl!(i16, Int16, b"n\0", i, Some(i as i64),  _u, None,          f, Some(f as f64));
+integer_impl!(u16, UInt16, b"q\0", i, Some(i as i64), u, Some(u as u64), f, Some(f as f64));
+integer_impl!(i32, Int32, b"i\0", i, Some(i as i64),  _u, None,          f, Some(f as f64));
+integer_impl!(u32, UInt32, b"u\0", i, Some(i as i64), u, Some(u as u64), f, Some(f as f64));
+integer_impl!(i64, Int64, b"x\0", i, Some(i),         _u, None,          _f, None);
+integer_impl!(u64, UInt64, b"t\0", _i, None,          u, Some(u as u64), _f, None);
 
 
 macro_rules! refarg_impl {
-    ($t: ty, $i: ident, $ii: expr, $ss: expr, $ff: expr) => {
+    ($t: ty, $i: ident, $ii: expr, $ss: expr, $uu: expr, $ff: expr) => {
 
 impl RefArg for $t {
     #[inline]
@@ -120,6 +124,8 @@ impl RefArg for $t {
     fn as_any_mut(&mut self) -> &mut any::Any { self }
     #[inline]
     fn as_i64(&self) -> Option<i64> { let $i = self; $ii }
+    #[inline]
+    fn as_u64(&self) -> Option<u64> { let $i = self; $uu }
     #[inline]
     fn as_f64(&self) -> Option<f64> { let $i = self; $ff }
     #[inline]
@@ -142,7 +148,7 @@ impl<'a> Get<'a> for bool {
     fn get(i: &mut Iter) -> Option<Self> { arg_get_basic(&mut i.0, ArgType::Boolean).map(|q| q != 0) }
 }
 
-refarg_impl!(bool, _i, Some(if *_i { 1 } else { 0 }), None, Some(if *_i { 1 as f64 } else { 0 as f64 }));
+refarg_impl!(bool, _i, Some(if *_i { 1 } else { 0 }), None, Some(if *_i { 1 as u64 } else { 0 as u64 }), Some(if *_i { 1 as f64 } else { 0 as f64 }));
 
 impl Arg for f64 {
     const ARG_TYPE: ArgType = ArgType::Double;
@@ -157,7 +163,7 @@ impl<'a> Get<'a> for f64 {
 }
 unsafe impl FixedArray for f64 {}
 
-refarg_impl!(f64, _i, None, None, Some(*_i));
+refarg_impl!(f64, _i, None, None, None, Some(*_i));
 
 /// Represents a D-Bus string.
 impl<'a> Arg for &'a str {
@@ -201,7 +207,7 @@ impl<'a> Get<'a> for String {
     fn get(i: &mut Iter<'a>) -> Option<String> { <&str>::get(i).map(|s| String::from(s)) }
 }
 
-refarg_impl!(String, _i, None, Some(&_i), None);
+refarg_impl!(String, _i, None, Some(&_i), None, None);
 
 /// Represents a D-Bus string.
 impl<'a> Arg for &'a CStr {
@@ -241,7 +247,7 @@ impl<'a> Get<'a> for OwnedFd {
     }
 }
 
-refarg_impl!(OwnedFd, _i, { use std::os::unix::io::AsRawFd; Some(_i.as_raw_fd() as i64) }, None, None);
+refarg_impl!(OwnedFd, _i, { use std::os::unix::io::AsRawFd; Some(_i.as_raw_fd() as i64) }, None, None, None);
 
 macro_rules! string_impl {
     ($t: ident, $s: ident, $f: expr) => {

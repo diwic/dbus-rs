@@ -51,15 +51,28 @@ pub trait RefArg: fmt::Debug {
     /// inside a Rc with a reference count > 1.
     fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static;
     /// Try to read the argument as an i64.
+    ///
+    /// Works for: Boolean, Byte, Int16, UInt16, Int32, UInt32, Int64, UnixFd.
     #[inline]
     fn as_i64(&self) -> Option<i64> { None }
-    /// Try to read the argument as an f64.
+    /// Try to read the argument as an u64.
+    ///
+    /// Works for: Boolean, Byte, Int16, UInt16, Int32, UInt32, UInt64.
     #[inline]
-    fn as_f64(&self) -> Option<f64> { self.as_i64().map(|x| x as f64) }
+    fn as_u64(&self) -> Option<u64> { None }
+    /// Try to read the argument as an f64.
+    ///
+    /// Works for: Boolean, Byte, Int16, UInt16, Int32, UInt32, Double.
+    #[inline]
+    fn as_f64(&self) -> Option<f64> { None }
     /// Try to read the argument as a str.
+    ///
+    /// Works for: String, ObjectPath, Signature.
     #[inline]
     fn as_str(&self) -> Option<&str> { None }
     /// Try to read the argument as an iterator.
+    ///
+    /// Works for: Array/Dict, Struct, Variant.
     #[inline]
     fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> { None }
 }
@@ -115,6 +128,8 @@ impl<'a, T: RefArg + ?Sized> RefArg for &'a T {
     #[inline]
     fn as_i64(&self) -> Option<i64> { (&**self).as_i64() }
     #[inline]
+    fn as_u64(&self) -> Option<u64> { (&**self).as_u64() }
+    #[inline]
     fn as_f64(&self) -> Option<f64> { (&**self).as_f64() }
     #[inline]
     fn as_str(&self) -> Option<&str> { (&**self).as_str() }
@@ -140,6 +155,8 @@ impl<T: RefArg + ?Sized> RefArg for $t<T> {
     fn as_any_mut<'a>(&'a mut $ss) -> &'a mut any::Any where T: 'static { $make_mut.as_any_mut() }
     #[inline]
     fn as_i64(&self) -> Option<i64> { (&**self).as_i64() }
+    #[inline]
+    fn as_u64(&self) -> Option<u64> { (&**self).as_u64() }
     #[inline]
     fn as_f64(&self) -> Option<f64> { (&**self).as_f64() }
     #[inline]

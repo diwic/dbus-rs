@@ -75,6 +75,10 @@ impl<T: RefArg> RefArg for Variant<T> {
     #[inline]
     fn as_i64(&self) -> Option<i64> { self.0.as_i64() }
     #[inline]
+    fn as_u64(&self) -> Option<u64> { self.0.as_u64() }
+    #[inline]
+    fn as_f64(&self) -> Option<f64> { self.0.as_f64() }
+    #[inline]
     fn as_str(&self) -> Option<&str> { self.0.as_str() }
     #[inline]
     fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> {
