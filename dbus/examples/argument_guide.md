@@ -73,7 +73,9 @@ let z: Variant<i32> = try!(r.read1());
 println!("Method returned {}", z.0);
 ```
 
-But sometimes you don't know the type beforehand. We can solve this in two ways (choose whichever is more appropriate for your use case), either through the trait object `Box<RefArg>` or through `Iter` / `IterAppend` (see later sections).
+The `Variant` struct is just a wrapper with a public interior, so you can easily both read from it and write to it with the `.0` accessor.
+
+Sometimes you don't know the type beforehand. We can solve this in two ways (choose whichever is more appropriate for your use case), either through the trait object `Box<RefArg>` or through `Iter` / `IterAppend` (see later sections).
 
 Through trait objects:
 
@@ -84,7 +86,20 @@ let r = try!(c.send_with_reply_and_block(m, 2000));
 let z: Variant<Box<RefArg>> = try!(r.read1());
 ```
 
-Ok, so we retrieved our `Box<RefArg>`. We now need to use the `RefArg` methods to probe it, to see what's inside. Easiest is to use `as_i64` or `as_str` if you want to test for integer or string types. Use `arg::cast` for floating point values, and `as_iter` if the variant contains a complex type you need to iterate through. Or match over `arg_type` if you need to know the exact type.
+Ok, so we retrieved our `Box<RefArg>`. We now need to use the `RefArg` methods to probe it, to see what's inside. Easiest is to use `as_i64` or `as_str` if you want to test for integer or string types. Use `as_iter` if the variant contains a complex type you need to iterate over.
+For floating point values, use `arg::cast` (this requires that the RefArg is `static` though, due to Rust type system limitations).
+Match over `arg_type` if you need to know the exact type. 
+
+
+```rust
+let z: Variant<Box<RefArg + 'static>> = try!(r.read1());
+let value = &z.0;
+
+if let Some(s) = value.as_str() { println!("It's a string: {}", s); }
+else if let Some(i) = value.as_i64() { println!("It's an integer: {}", i); }
+else if let Some(f) = arg::cast::<f64>(value) { println!("It's a float: {}", f); }
+else { println!("Don't know how to handle a {:?}", value.arg_type()) }
+```
 
 Dicts and variants are sometimes combined, e g, you might need to read a D-Bus dictionary of String to Variants. You can then read these as `HashMap<String, Variant<Box<RefArg>>>`.
 
