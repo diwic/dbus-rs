@@ -1,3 +1,6 @@
+Preamble
+--------
+
 The different ways you can append and get message arguments can be a bit bewildering. I've iterated a few times on the design and didn't want to lose backwards compatibility.
 
 This guide is to help you on your way. In addition, many of the examples in the examples directory append and read arguments.
@@ -5,7 +8,31 @@ This guide is to help you on your way. In addition, many of the examples in the 
 Code generation
 ---------------
 
-Preamble - what's emerging is code generation. It's far from done, but if you have D-Bus introspection data, run it through the dbus-codegen tool (look in the codegen directory) and get Rust code out. There is pre-generated code for standard D-Bus interfaces in the `stdintf` module. Here's an example:
+First - if you can get D-Bus introspection data, you can use the the `dbus-codegen` tool to generate some boilerplate code for you. E g, if you want to talk to NetworkManager:
+
+```rust
+cargo install dbus-codegen
+dbus-codegen-rust -s -g -m None -d org.freedesktop.NetworkManager -p /org/freedesktop/NetworkManager > networkmanager.rs
+```
+
+You would then use this code like:
+
+```rust
+// main.rs
+
+let c = Connection::get_private(BusType::Session)?;
+
+// Make a "ConnPath" struct that just contains a Connection, a destination and a path.
+let p = c.with_path("org.freedesktop.NetworkManager", "/org/freedesktop/NetworkManager", 5000);
+
+// Bring our generated code into scope.
+use networkmanager::OrgFreedesktopNetworkManager;
+
+// Now we can call methods on our connpath from the "org.freedesktop.NetworkManager" interface.
+let devices = c.get_all_devices()?;
+```
+
+There is also pre-generated code for standard D-Bus interfaces in the `stdintf` module. A similar example:
 
 ```rust
 let c = Connection::get_private(BusType::Session)?;
@@ -14,15 +41,15 @@ let c = Connection::get_private(BusType::Session)?;
 let p = c.with_path("org.mpris.MediaPlayer2.rhythmbox", "/org/mpris/MediaPlayer2", 5000);
 
 // The ConnPath struct implements many traits, e g `org.freedesktop.DBus.Properties`. Bring the trait into scope.
-use stdintf::OrgFreedesktopDBusProperties;
+use stdintf::org_freedesktop_dbus::Properties;
 
 // Now we can call org.freedesktop.DBus.Properties.Get just like an ordinary method and get the result back.
 let metadata = p.get("org.mpris.MediaPlayer2.Player", "Metadata")?;
 ```
 
-For server side there is no pre-generated code yet and its implementation is slightly more complex.
+For more details, see `dbus-codegen-rust --help` and the `README.md` in the dbus-codegen directory.
 
-Codegen isn't really there yet for many use cases though, so let's move on:
+Now, if you want to make a service yourself, the generated code is more complex. And for some use cases, codegen isn't really an option, so let's move on:
 
 Append / get basic types
 ------------------------
