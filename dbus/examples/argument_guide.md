@@ -8,7 +8,7 @@ Code generation
 Preamble - what's emerging is code generation. It's far from done, but if you have D-Bus introspection data, run it through the dbus-codegen tool (look in the codegen directory) and get Rust code out. There is pre-generated code for standard D-Bus interfaces in the `stdintf` module. Here's an example:
 
 ```rust
-let c = try!(Connection::get_private(BusType::Session));
+let c = Connection::get_private(BusType::Session)?;
 
 // Make a "ConnPath" struct that just contains a Connection, a destination and a path.
 let p = c.with_path("org.mpris.MediaPlayer2.rhythmbox", "/org/mpris/MediaPlayer2", 5000);
@@ -17,7 +17,7 @@ let p = c.with_path("org.mpris.MediaPlayer2.rhythmbox", "/org/mpris/MediaPlayer2
 use stdintf::OrgFreedesktopDBusProperties;
 
 // Now we can call org.freedesktop.DBus.Properties.Get just like an ordinary method and get the result back.
-let metadata = try!(p.get("org.mpris.MediaPlayer2.Player", "Metadata"));
+let metadata = p.get("org.mpris.MediaPlayer2.Player", "Metadata")?;
 ```
 
 For server side there is no pre-generated code yet and its implementation is slightly more complex.
@@ -31,9 +31,9 @@ If you just want to get/append simple types, just use `append1` / `append2` / `a
 `read1` / `read2` / `read3`. The imaginary method below takes one byte parameter and one string parameter, and returns one string parameter and one int parameter.
 
 ```rust
-let m = try!(Message::new_method_call(dest, path, intf, member)).append2(5u8, "Foo");
-let r = try!(c.send_with_reply_and_block(m, 2000));
-let (data1, data2): (&str, i32) = try!(c.read2());
+let m = Message::new_method_call(dest, path, intf, member)?.append2(5u8, "Foo");
+let r = c.send_with_reply_and_block(m, 2000)?;
+let (data1, data2): (&str, i32) = c.read2()?;
 ```
 
 Arrays and dictionaries
@@ -47,9 +47,9 @@ let mut map = HashMap::new();
 map.insert("Funghi", 5u16);
 map.insert("Mold", 8u16);
 
-let m = try!(Message::new_method_call(dest, path, intf, member)).append2(v, map);
-let r = try!(c.send_with_reply_and_block(m, 2000));
-let (data1, data2): (Vec<i32>, HashMap<&str, u16>) = try!(r.read2());
+let m = Message::new_method_call(dest, path, intf, member)?.append2(v, map);
+let r = c.send_with_reply_and_block(m, 2000)?;
+let (data1, data2): (Vec<i32>, HashMap<&str, u16>) = r.read2()?;
 ```
 
 Or combine them as you wish, e g, use a `Vec<Vec<u8>>`, a `HashMap<u64, Vec<String>>` or `HashMap<String, HashMap<String, i32>>` to construct more difficult types.
@@ -67,9 +67,9 @@ If you know the type beforehand, it's still easy:
 
 ```rust
 let v = Variant("This is a variant containing a &str");
-let m = try!(Message::new_method_call(dest, path, intf, member)).append1(v);
-let r = try!(c.send_with_reply_and_block(m, 2000));
-let z: Variant<i32> = try!(r.read1());
+let m = Message::new_method_call(dest, path, intf, member)?.append1(v);
+let r = c.send_with_reply_and_block(m, 2000)?;
+let z: Variant<i32> = r.read1()?;
 println!("Method returned {}", z.0);
 ```
 
@@ -81,9 +81,9 @@ Through trait objects:
 
 ```rust
 let x = Box::new(5000i32) as Box<RefArg>;
-let m = try!(Message::new_method_call(dest, path, intf, member)).append1(Variant(x));
-let r = try!(c.send_with_reply_and_block(m, 2000));
-let z: Variant<Box<RefArg>> = try!(r.read1());
+let m = Message::new_method_call(dest, path, intf, member)?.append1(Variant(x));
+let r = c.send_with_reply_and_block(m, 2000)?;
+let z: Variant<Box<RefArg>> = r.read1()?;
 ```
 
 Ok, so we retrieved our `Box<RefArg>`. We now need to use the `RefArg` methods to probe it, to see what's inside. Easiest is to use `as_i64` or `as_str` if you want to test for integer or string types. Use `as_iter` if the variant contains a complex type you need to iterate over.
@@ -92,7 +92,7 @@ Match over `arg_type` if you need to know the exact type.
 
 
 ```rust
-let z: Variant<Box<RefArg + 'static>> = try!(r.read1());
+let z: Variant<Box<RefArg + 'static>> = r.read1()?;
 let value = &z.0;
 
 if let Some(s) = value.as_str() { println!("It's a string: {}", s); }
@@ -130,7 +130,7 @@ Iter / IterAppend
 Iter and IterAppend are more low-level, direct methods to get and append arguments. They can, e g, come handy if you have more than five arguments to read.
 
 E g, for appending a variant with IterAppend you can use `IterAppend::new(&msg).append_variant(|i| i.append(5000i32))` to append what you need to your variant inside the closure.
-To read a variant you can use `let i = try!(msg.read1::<Variant<Iter>>::())` and then examine the methods on `i.0` to probe the variant.
+To read a variant you can use `let i = msg.read1::<Variant<Iter>>::()?` and then examine the methods on `i.0` to probe the variant.
 
 Array and Dict types
 --------------------
@@ -139,9 +139,9 @@ These provide slightly better flexibility than using `Vec` and `HashMap` by inst
 
 ```rust
 let x = &[("Hello", true), ("World", false)];
-let m = try!(Message::new_method_call(dest, path, intf, member)).append1(Dict::new(x));
-let r = try!(c.send_with_reply_and_block(m, 2000));
-let z: Dict<i32, &str, _> = try!(r.read1());
+let m = Message::new_method_call(dest, path, intf, member)?.append1(Dict::new(x));
+let r = c.send_with_reply_and_block(m, 2000)?;
+let z: Dict<i32, &str, _> = r.read1()?;
 for (key, value) in z { /* do something */ }
 ```
 
