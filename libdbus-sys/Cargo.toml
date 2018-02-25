@@ -11,6 +11,7 @@ keywords = ["D-Bus", "DBus", "libdbus"]
 license = "Apache-2.0/MIT"
 categories = ["os::unix-apis", "external-ffi-bindings"]
 build = "build.rs"
+links = "dbus"
 
 [build-dependencies]
 metadeps = "1"
