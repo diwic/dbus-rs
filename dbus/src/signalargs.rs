@@ -8,7 +8,7 @@ use {Message, MessageType, BusName, Path, Interface, Member};
 /// Listen to InterfacesRemoved signal from org.bluez.obex.
 ///
 /// ```rust,no_run
-/// use dbus::{Connection, ConnectionItem, BusType, SignalArgs};
+/// use dbus::{Connection, BusType, SignalArgs};
 /// use dbus::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
 ///
 /// let c = Connection::get_private(BusType::Session).unwrap();
@@ -17,14 +17,13 @@ use {Message, MessageType, BusName, Path, Interface, Member};
 /// c.add_match(&mstr).unwrap();
 ///
 /// // Wait for the signal to arrive.
-/// for n in c.iter(1000) {
-///     if let ConnectionItem::Signal(msg) = n {
-///         if let Some(ir) = IR::from_message(&msg) {
-///             println!("Interfaces {:?} have been removed from bluez on path {}.", ir.interfaces, ir.object);
-///         }
+/// for msg in c.incoming(1000) {
+///     if let Some(ir) = IR::from_message(&msg) {
+///         println!("Interfaces {:?} have been removed from bluez on path {}.", ir.interfaces, ir.object);
 ///     }
 /// }
-///
+/// ```
+
 pub trait SignalArgs: Default {
     /// D-Bus name of signal
     const NAME: &'static str;
@@ -75,7 +74,7 @@ pub trait SignalArgs: Default {
 
 #[test]
 fn intf_removed() {
-    use {Connection, ConnectionItem, BusType};
+    use {Connection, BusType};
     use stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
     let c = Connection::get_private(BusType::Session).unwrap();
     let mstr = IR::match_str(Some(&c.unique_name().into()), Some(&"/hello".into()));
@@ -86,13 +85,12 @@ fn intf_removed() {
     let cp = c.with_path("dbus.dummy", "/hello", 2000);
     cp.emit(&ir).unwrap();
 
-    for n in c.iter(1000) {
-        if let ConnectionItem::Signal(msg) = n {
-            if let Some(ir2) = IR::from_message(&msg) {
-                assert_eq!(ir2.object, ir.object);
-                assert_eq!(ir2.interfaces, ir.interfaces);
-                break;
-            }
+    for msg in c.incoming(1000) {
+        if &*msg.sender().unwrap() != &*c.unique_name() { continue; }
+        if let Some(ir2) = IR::from_message(&msg) {
+            assert_eq!(ir2.object, ir.object);
+            assert_eq!(ir2.interfaces, ir.interfaces);
+            break;
         }
     }
 }
