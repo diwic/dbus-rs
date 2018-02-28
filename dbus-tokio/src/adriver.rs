@@ -1,9 +1,7 @@
-// Third attempt.
-
 use mio::{self, unix, Ready};
 use mio::unix::UnixReady;
 use std::io;
-use dbus::{Connection, ConnectionItems, ConnectionItem, Watch, WatchEvent, Message, Error as DBusError};
+use dbus::{Connection, ConnMsgs, Watch, WatchEvent, Message, MessageType, Error as DBusError};
 use futures::{Async, Future, Stream, Poll};
 use futures::sync::{oneshot, mpsc};
 use tokio_core::reactor::{PollEvented, Handle as CoreHandle};
@@ -132,24 +130,18 @@ impl ADriver {
         self.msgstream.borrow().as_ref().map(|z| { z.unbounded_send(m).unwrap() });
     }
 
-    fn handle_items(&mut self, items: ConnectionItems) {
-        // TODO: What about all unwrapping in this function
-        for i in items {
-            debug!("handle_items: {:?}", i);
-            match i {
-//                ConnectionItem::WatchFd(w) => { self.modify_watch(w, true).unwrap(); },
-                ConnectionItem::MethodReturn(m) => {
-                    let mut map = self.callmap.borrow_mut();
-                    let serial = m.get_reply_serial().unwrap();
-                    let r = map.remove(&serial);
-                    debug!("Serial {:?}, found: {:?}", serial, r.is_some());
-                    if let Some(r) = r { r.send(m).unwrap(); }
-                    else { self.send_stream(m) }
-                }
-                ConnectionItem::Nothing => unreachable!(),
-                ConnectionItem::Signal(m) => self.send_stream(m),
-                ConnectionItem::MethodCall(m) => self.send_stream(m),
-            }
+    fn handle_msgs(&mut self) {
+        let msgs = ConnMsgs { conn: &*self.conn, timeout_ms: None };
+        for m in msgs {
+            debug!("handle_msgs: {:?}", m);
+            if m.msg_type() == MessageType::MethodReturn {
+                let mut map = self.callmap.borrow_mut();
+                let serial = m.get_reply_serial().unwrap();
+                let r = map.remove(&serial);
+                debug!("Serial {:?}, found: {:?}", serial, r.is_some());
+                if let Some(r) = r { r.send(m).unwrap(); }
+                else { self.send_stream(m) }
+            } else { self.send_stream(m) }
         }
     }
 }
@@ -162,7 +154,6 @@ impl Future for ADriver {
         let q = self.quit.poll();
         if q != Ok(Async::NotReady) { return Ok(Async::Ready(())); }
 
-        let cc = self.conn.clone(); // Borrow checker made me do this
         for w in self.fds.values() {
             let mut mask = UnixReady::hup() | UnixReady::error();
             if w.get_ref().0.readable() { mask = mask | Ready::readable().into(); }
@@ -176,11 +167,11 @@ impl Future for ADriver {
                 if ur.is_hup() { WatchEvent::Hangup as c_uint } else { 0 } +
                 if ur.is_error() { WatchEvent::Error as c_uint } else { 0 };
             debug!("D-Bus i/o unix ready: {:?} is {:?}", w.get_ref().0.fd(), ur);
-            cc.watch_handle(w.get_ref().0.fd(), flags);
+            self.conn.watch_handle(w.get_ref().0.fd(), flags);
             if ur.is_readable() { w.need_read() };
             if ur.is_writable() { w.need_write() };
         };
-        self.handle_items(ConnectionItems::new(&cc, None, true));
+        self.handle_msgs();
         Ok(Async::NotReady)
     }
 }
