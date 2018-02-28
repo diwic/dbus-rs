@@ -24,7 +24,7 @@ type MStream = Rc<RefCell<Option<mpsc::UnboundedSender<Message>>>>;
 /// Creating more than one AConnection for the same Connection is not recommended.
 pub struct AConnection {
     conn: Rc<Connection>,
-    quit: Option<oneshot::Sender<()>>,
+    quit: Option<Rc<oneshot::Sender<()>>>,
     callmap: MCallMap,
     msgstream: MStream,
 }
@@ -48,7 +48,7 @@ impl AConnection {
         };
         let i = AConnection {
             conn: c,
-            quit: Some(tx),
+            quit: Some(Rc::new(tx)),
             callmap: map,
             msgstream: istream,
         };
@@ -77,14 +77,17 @@ impl AConnection {
         if i.is_some() { return Err("Another instance of AMessageStream already exists"); }
         let (tx, rx) = mpsc::unbounded();
         *i = Some(tx);
-        Ok(AMessageStream { inner: rx, stream: self.msgstream.clone() })
+        Ok(AMessageStream { inner: rx, stream: self.msgstream.clone(), quit: self.quit.as_ref().map(|q| q.clone()) })
     }
 }
 
 impl Drop for AConnection {
     fn drop(&mut self) {
         debug!("Dropping AConnection");
-        let _ = self.quit.take().unwrap().send(());
+        if let Ok(x) = Rc::try_unwrap(self.quit.take().unwrap()) {
+            debug!("AConnection telling ADriver to quit");
+            let _ = x.send(());
+        }
         self.conn.set_watch_callback(Box::new(|_| {}));
     }
 }
@@ -248,10 +251,11 @@ impl Drop for AMethodCall {
 #[derive(Debug)]
 /// A Stream of incoming messages.
 ///
-/// Messages already processed (method returns for AMethodCall, fd changes)
+/// Messages already processed (method returns for AMethodCall)
 /// are already consumed and will not be present in the stream.
 pub struct AMessageStream {
     inner: mpsc::UnboundedReceiver<Message>,
+    quit: Option<Rc<oneshot::Sender<()>>>,
     stream: MStream,
 }
 
@@ -269,6 +273,11 @@ impl Stream for AMessageStream {
 impl Drop for AMessageStream {
     fn drop(&mut self) {
         *self.stream.borrow_mut() = None;
+        debug!("Dropping AMessageStream");
+        if let Ok(x) = Rc::try_unwrap(self.quit.take().unwrap()) { 
+            debug!("AMessageStream telling ADriver to quit");
+            let _ = x.send(());
+        }
     }
 }
 
