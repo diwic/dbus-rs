@@ -13,7 +13,7 @@ categories = ["os::unix-apis", "external-ffi-bindings"]
 build = "build.rs"
 
 [build-dependencies]
-metadeps = "1"
+pkg-config = "0.3"
 
 [package.metadata.pkg-config]
 dbus-1 = "1.6"
