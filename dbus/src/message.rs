@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::{fmt, mem, ptr, ops};
 use super::{ffi, Error, MessageType, Signature, libc, to_c_str, c_str_to_slice, init_dbus};
 use super::{BusName, Path, Interface, Member, ErrorName, Connection, SignalArgs};
+use super::tree::MethodErr;
 use std::os::unix::io::{RawFd, AsRawFd};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_char, c_int};
@@ -658,6 +659,12 @@ impl Message {
         Message { msg: ptr}
     }
 
+    /// Create `MethodErr` reply
+    #[inline]
+    pub fn method_error(&self, error: &MethodErr) -> Message {
+        self.error(error.errorname(), &to_c_str(error.description()))
+    }
+
     /// Get the MessageItems that make up the message.
     ///
     /// Note: use `iter_init` or `get1`/`get2`/etc instead for faster access to the arguments.
@@ -743,7 +750,7 @@ impl Message {
             }
         }
         self
-    } 
+    }
 
     /// Gets the first argument from the message, if that argument is of type G1.
     /// Returns None if there are not enough arguments, or if types don't match.
@@ -820,7 +827,7 @@ impl Message {
     /// Gets the first three arguments from the message, if those arguments are of type G1, G2 and G3.
     ///
     /// Returns a TypeMismatchError if there are not enough arguments, or if types don't match.
-    pub fn read3<'a, G1: Arg + Get<'a>, G2: Arg + Get<'a>, G3: Arg + Get<'a>>(&'a self) -> 
+    pub fn read3<'a, G1: Arg + Get<'a>, G2: Arg + Get<'a>, G3: Arg + Get<'a>>(&'a self) ->
         Result<(G1, G2, G3), TypeMismatchError> {
         let mut i = Iter::new(&self);
         Ok((try!(i.read()), try!(i.read()), try!(i.read())))
