@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use {Member, Message, Path, Signature, MessageType, Connection, ConnectionItem, Error, arg, MsgHandler, MsgHandlerType, MsgHandlerResult};
 use Interface as IfaceName;
 use std::fmt;
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use super::leaves::prop_append_dict;
 
 fn introspect_map<I: fmt::Display, T: Introspect>
@@ -387,7 +387,7 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
     pub fn handle(&self, m: &Message) -> Option<Vec<Message>> {
         if m.msg_type() != MessageType::MethodCall { None }
         else { m.path().and_then(|p| self.paths.get(&p).map(|s| s.handle(m, &self)
-            .unwrap_or_else(|e| vec!(m.error(&e.errorname(), &CString::new(e.description()).unwrap()))))) }
+            .unwrap_or_else(|e| vec!(e.to_message(m))))) }
     }
 
 

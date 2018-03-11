@@ -6,6 +6,7 @@ use arg::{Iter, IterAppend, TypeMismatchError};
 use std::marker::PhantomData;
 use super::{Method, Interface, Property, ObjectPath, Tree};
 use std::cell::RefCell;
+use std::ffi::CString;
 use super::super::Error as dbusError;
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
@@ -46,6 +47,14 @@ impl MethodErr {
     pub fn errorname(&self) -> &ErrorName<'static> { &self.0 }
     /// Description accessor
     pub fn description(&self) -> &str { &self.1 }
+
+    /// Creates an error reply from a method call message.
+    ///
+    /// Note: You normally don't need to use this function, 
+    /// as it is called internally from Tree::handle.
+    pub fn to_message(&self, msg: &Message) -> Message {
+        msg.error(&self.0, &CString::new(&*self.1).unwrap())
+    }
 }
 
 impl From<TypeMismatchError> for MethodErr {
