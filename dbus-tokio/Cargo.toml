@@ -12,13 +12,12 @@ categories = ["os::unix-apis", "api-bindings", "asynchronous"]
 
 [dependencies]
 dbus = { path = "../dbus", version = "0.6" }
-futures = "0.1.12"
+tokio-reactor = { version = "0.1.1", features = ["futures2"]}
+futures = "0.2.0-beta"
+futures-channel = "0.2.0-beta"
+futures-executor = "0.2.0-beta"
 mio = "0.6.9"
-tokio-core = "0.1.8"
 log = "0.3"
-
-[dev-dependencies]
-tokio-timer = "0.1.0"
 
 [badges]
 is-it-maintained-open-issues = { repository = "diwic/dbus-rs" }

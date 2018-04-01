@@ -6,6 +6,7 @@ use dbus::{Member, Message, Connection};
 use std::marker::PhantomData;
 use std::cell::RefCell;
 use futures::{IntoFuture, Future, Poll, Stream, Async};
+use futures::task::Context;
 use std::ffi::CString;
 
 pub trait ADataType: fmt::Debug + Sized + Default {
@@ -92,8 +93,8 @@ impl AMethodResult {
 impl Future for AMethodResult {
     type Item = Vec<Message>;
     type Error = MethodErr;
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.0.poll()
+    fn poll(&mut self, c: &mut Context) -> Poll<Self::Item, Self::Error> {
+        self.0.poll(c)
     }
 }
 
@@ -130,13 +131,13 @@ where C: ops::Deref<Target=Connection>,
         }
     }
 
-    fn check_pending_results(&mut self) {
+    fn check_pending_results(&mut self, c: &mut Context) {
         let v = mem::replace(&mut self.pendingresults, vec!());
         self.pendingresults = v.into_iter().filter_map(|mut mr| {
-            let z = mr.poll();
+            let z = mr.poll(c);
             // println!("Polling {:?} returned {:?}", mr, z);
             match z {
-                Ok(Async::NotReady) => Some(mr),
+                Ok(Async::Pending) => Some(mr),
                 Ok(Async::Ready(t)) => { for msg in t { self.conn.send(msg).expect("D-Bus send error"); }; None },
                 Err(e) => {
                     let m = mr.1.take().unwrap(); 
@@ -156,10 +157,10 @@ where C: ops::Deref<Target=Connection>,
       D: ADataType {
     type Item = Message;
     type Error = ();
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    fn poll_next(&mut self, c: &mut Context) -> Poll<Option<Self::Item>, Self::Error> {
         loop {
-            self.check_pending_results();
-            let z = self.stream.poll();
+            self.check_pending_results(c);
+            let z = self.stream.poll_next(c);
             if let Ok(Async::Ready(Some(m))) = z {
                 // println!("treeserver {:?}", m);
                 let hh = self.tree.handle(&m);

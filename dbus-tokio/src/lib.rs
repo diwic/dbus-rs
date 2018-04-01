@@ -1,4 +1,4 @@
-//! Tokio integration for dbus
+//! Futures integration for dbus
 //!
 //! What's currently working is:
 //!
@@ -12,7 +12,9 @@
 
 extern crate dbus;
 extern crate futures;
-extern crate tokio_core;
+extern crate futures_channel;
+extern crate futures_executor;
+extern crate tokio_reactor;
 extern crate mio;
 
 #[macro_use]

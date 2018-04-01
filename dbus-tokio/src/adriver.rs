@@ -2,9 +2,11 @@ use mio::{self, unix, Ready};
 use mio::unix::UnixReady;
 use std::io;
 use dbus::{Connection, ConnMsgs, Watch, WatchEvent, Message, MessageType, Error as DBusError};
-use futures::{Async, Future, Stream, Poll};
-use futures::sync::{oneshot, mpsc};
-use tokio_core::reactor::{PollEvented, Handle as CoreHandle};
+use futures::{self, Async, Future, Stream, Poll};
+use futures::task::Context;
+use futures::executor::LocalExecutor;
+use futures_channel::{oneshot, mpsc};
+use tokio_reactor::{Handle, PollEvented};
 use std::rc::Rc;
 use std::os::raw::c_uint;
 use std::cell::RefCell;
@@ -28,18 +30,17 @@ pub struct AConnection {
 }
 
 impl AConnection {
-    /// Create an AConnection, which spawns a task on the core.
+    /// Create an AConnection, which spawns a task on the Executor.
     ///
     /// The task handles incoming messages, and continues to do so until the
     /// AConnection is dropped.
-    pub fn new(c: Rc<Connection>, h: CoreHandle) -> io::Result<AConnection> {
+    pub fn new(c: Rc<Connection>, h: LocalExecutor) -> io::Result<AConnection> {
         let (tx, rx) = oneshot::channel();
         let map: MCallMap = Default::default();
         let istream: MStream = Default::default();
         let mut d = ADriver {
             conn: c.clone(),
             fds: HashMap::new(),
-            core: h.clone(),
             quit: rx,
             callmap: map.clone(),
             msgstream: istream.clone(),
@@ -52,7 +53,7 @@ impl AConnection {
         };
         i.conn.set_watch_callback(Box::new(|_| unimplemented!("Watch handling is very rare and not implemented yet")));
         for w in i.conn.watch_fds() { d.modify_watch(w, false)?; }
-        h.spawn(d);
+        h.spawn_local(Box::new(d));
         Ok(i)
     }
 
@@ -95,7 +96,6 @@ impl Drop for AConnection {
 struct ADriver {
     conn: Rc<Connection>,
     fds: HashMap<RawFd, PollEvented<AWatch>>,
-    core: CoreHandle,
     quit: oneshot::Receiver<()>,
     callmap: MCallMap,
     msgstream: MStream,
@@ -116,7 +116,7 @@ impl ADriver {
             }
             self.fds.remove(&w.fd());
 
-            let z = PollEvented::new(AWatch(w), &self.core)?;
+            let z = PollEvented::new(AWatch(w));
 
             if poll_now && z.get_ref().0.readable() { z.need_read() };
             if poll_now && z.get_ref().0.writable() { z.need_write() };
@@ -148,11 +148,11 @@ impl ADriver {
 
 impl Future for ADriver {
     type Item = ();
-    type Error = ();
+    type Error = futures::Never;
 
-    fn poll(&mut self) -> Result<Async<()>, ()> {
-        let q = self.quit.poll();
-        if q != Ok(Async::NotReady) { return Ok(Async::Ready(())); }
+    fn poll(&mut self, c: &mut Context) -> Result<Async<()>, futures::Never> {
+        let q = self.quit.poll(c);
+        if q != Ok(Async::Pending) { return Ok(Async::Ready(())); }
 
         for w in self.fds.values() {
             let mut mask = UnixReady::hup() | UnixReady::error();
@@ -172,7 +172,7 @@ impl Future for ADriver {
             if ur.is_writable() { w.need_write() };
         };
         self.handle_msgs();
-        Ok(Async::NotReady)
+        Ok(Async::Pending)
     }
 }
 
@@ -223,12 +223,12 @@ impl Future for AMethodCall {
     type Item = Message;
     type Error = DBusError;
 
-    fn poll(&mut self) -> Result<Async<Self::Item>, Self::Error> {
-        let x = self.inner.poll().map_err(|_| DBusError::new_custom("org.freedesktop.DBus.Failed", "Tokio cancelled future"))?;
+    fn poll(&mut self, c: &mut Context) -> Result<Async<Self::Item>, Self::Error> {
+        let x = self.inner.poll(c).map_err(|_| DBusError::new_custom("org.freedesktop.DBus.Failed", "Tokio cancelled future"))?;
         if let Async::Ready(mut m) = x {
             m.as_result()?;
             Ok(Async::Ready(m))
-        } else { Ok(Async::NotReady) }
+        } else { Ok(Async::Pending) }
     }
 }
 
@@ -252,10 +252,10 @@ pub struct AMessageStream {
 
 impl Stream for AMessageStream {
     type Item = Message;
-    type Error = ();
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+    type Error = futures::Never;
+    fn poll_next(&mut self, c: &mut Context) -> Poll<Option<Self::Item>, Self::Error> {
         debug!("Polling message stream");
-        let r = self.inner.poll();
+        let r = self.inner.poll_next(c);
         debug!("msgstream found {:?}", r);
         r
     }
