@@ -71,20 +71,78 @@ impl ::std::default::Default for GenOpts {
     }}
 }
 
+const RUST_KEYWORDS: [&str; 52] = [
+    "as",
+    "break",
+    "const",
+    "continue",
+    "crate",
+    "else",
+    "enum",
+    "extern",
+    "false",
+    "fn",
+    "for",
+    "if",
+    "impl",
+    "in",
+    "let",
+    "loop",
+    "match",
+    "mod",
+    "move",
+    "mut",
+    "pub",
+    "ref",
+    "return",
+    "Self",
+    "self",
+    "static",
+    "struct",
+    "super",
+    "trait",
+    "true",
+    "type",
+    "unsafe",
+    "use",
+    "where",
+    "while",
+    "abstract",
+    "alignof",
+    "become",
+    "box",
+    "do",
+    "final",
+    "macro",
+    "offsetof",
+    "override",
+    "priv",
+    "proc",
+    "pure",
+    "sizeof",
+    "typeof",
+    "unsized",
+    "virtual",
+    "yield"
+];
+
+
 fn make_camel(s: &str) -> String {
     let mut ucase = true;
-    s.chars().filter_map(|c| match c {
+    let mut r: String = s.chars().filter_map(|c| match c {
         'a'...'z' | 'A'...'Z' | '0'...'9' => {
             let cc = if ucase { c.to_uppercase().next() } else { Some(c) };
             ucase = false;
             cc
         }
         _ => { ucase = true; None }
-    }).collect()
+    }).collect();
+    if RUST_KEYWORDS.iter().any(|i| i == &r) { r.push('_') };
+    r
 }
 
 
-fn make_snake(s: &str) -> String {
+fn make_snake(s: &str, keyword_check: bool) -> String {
     let mut lcase = false;
     let mut r = String::new();
     for c in s.chars() {
@@ -104,6 +162,8 @@ fn make_snake(s: &str) -> String {
              }
         }
     }
+    if r.len() < 2 { r.push('_'); } // Don't interfere with variable names like 'm' and 'i'
+    if keyword_check && RUST_KEYWORDS.iter().any(|i| i == &r) { r.push('_') };
     r
 }
 
@@ -177,7 +237,7 @@ fn make_type(s: &str, out: bool, genvars: &mut Option<GenVars>) -> Result<String
 impl Arg {
     fn varname(&self) -> String {
         if self.name != "" {
-           make_snake(&self.name)
+           make_snake(&self.name, true)
         } else { format!("arg{}", self.idx) }
     }
     fn typename(&self, genvar: bool) -> Result<(String, Vec<String>), Box<error::Error>> {
@@ -208,7 +268,7 @@ fn write_method_decl(s: &mut String, m: &Method, genvar: bool) -> Result<(), Box
         g
     } else { vec!() };
 
-    *s += &format!("    fn {}{}(&self", make_snake(&m.name), 
+    *s += &format!("    fn {}{}(&self", make_snake(&m.name, true), 
         if g.len() > 0 { format!("<{}>", g.join(",")) } else { "".into() }
     );
 
@@ -231,10 +291,10 @@ fn write_method_decl(s: &mut String, m: &Method, genvar: bool) -> Result<(), Box
 fn write_prop_decl(s: &mut String, p: &Prop, set: bool) -> Result<(), Box<error::Error>> {
     if set {
         *s += &format!("    fn set_{}(&self, value: {}) -> Result<(), Self::Err>",
-            make_snake(&p.name), try!(make_type(&p.typ, true, &mut None)));
+            make_snake(&p.name, false), try!(make_type(&p.typ, true, &mut None)));
     } else {
         *s += &format!("    fn get_{}(&self) -> Result<{}, Self::Err>",
-            make_snake(&p.name), try!(make_type(&p.typ, true, &mut None)));
+            make_snake(&p.name, false), try!(make_type(&p.typ, true, &mut None)));
     };
     Ok(())
 }
@@ -377,7 +437,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
     let treem: String = if hasm { "M".into() } else { format!("tree::{}<D>", mtype) };
 
     *s += &format!("\npub fn {}_server<{}{}D>(factory: &tree::Factory<{}, D>, data: D::Interface{}) -> tree::Interface<{}, D>\n",
-        make_snake(&i.shortname), if hasf {"F, T, "} else {""}, if hasm {"M, "} else {""}, treem, if hasf {", f: F"} else {""}, treem);
+        make_snake(&i.shortname, false), if hasf {"F, T, "} else {""}, if hasm {"M, "} else {""}, treem, if hasf {", f: F"} else {""}, treem);
 
     let mut wheres: Vec<String> = vec!["D: tree::DataType".into(), "D::Method: Default".into()];
     if i.props.len() > 0 {
@@ -424,7 +484,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
             _ => format!("let ({}) = ", m.oargs.iter().map(|q| q.varname()).collect::<Vec<String>>().join(", ")),
         };
         *s += &format!("        {}try!(d.{}({}));\n",
-            retargs, make_snake(&m.name), argsvar);
+            retargs, make_snake(&m.name, true), argsvar);
         *s += "        let rm = minfo.msg.method_return();\n";
         for r in &m.oargs {
             *s += &format!("        let rm = rm.append1({});\n", r.varname());
@@ -455,7 +515,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
             *s += "    let p = p.on_get(move |a, pinfo| {\n";
             *s += "        let minfo = pinfo.to_method_info();\n";
             write_server_access(s, i, saccess, false);
-            *s += &format!("        a.append(try!(d.get_{}()));\n", make_snake(&p.name));
+            *s += &format!("        a.append(try!(d.get_{}()));\n", make_snake(&p.name, false));
             *s += "        Ok(())\n";
             *s += "    });\n";
         }
@@ -466,7 +526,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
             *s += "    let p = p.on_set(move |iter, pinfo| {\n";
             *s += "        let minfo = pinfo.to_method_info();\n";
             write_server_access(s, i, saccess, false);
-            *s += &format!("        try!(d.set_{}(try!(iter.read())));\n", make_snake(&p.name));
+            *s += &format!("        try!(d.set_{}(try!(iter.read())));\n", make_snake(&p.name, false));
             *s += "        Ok(())\n";
             *s += "    });\n";
         }
