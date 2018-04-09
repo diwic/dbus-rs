@@ -11,6 +11,9 @@ use super::super::Error as dbusError;
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 /// A D-Bus Method Error, containing an error name and a description.
+///
+/// This is a Rust struct which implicitly implements Send and Sync, which might
+/// make it more useful for usage with crates like `failure`.
 pub struct MethodErr(ErrorName<'static>, String);
 
 impl MethodErr {

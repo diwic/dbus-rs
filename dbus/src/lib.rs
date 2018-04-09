@@ -65,7 +65,11 @@ fn init_dbus() {
     });
 }
 
-/// D-Bus Error wrapper
+/// D-Bus Error wrapper.
+///
+/// This is a wrapper around of libdbus's error struct, which means it cannot
+/// implement `Sync`. Have a look at `tree::MethodErr` if you need a error struct
+/// implementing `Sync`.
 pub struct Error {
     e: ffi::DBusError,
 }
