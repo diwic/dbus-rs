@@ -218,6 +218,7 @@ pub struct Property<M: MethodType<D>, D: DataType> {
     data: D::Property,
     sig: Signature<'static>,
     emits: EmitsChangedSignal,
+    auto_emit: bool,
     rw: Access,
     get_cb: Option<DebugGetProp<M, D>>,
     set_cb: Option<DebugSetProp<M, D>>,
@@ -233,6 +234,19 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
     pub fn emits_changed(mut self, e: EmitsChangedSignal) -> Self {
         self.emits = e;
         if self.emits == EmitsChangedSignal::Const { self.rw = Access::Read };
+        self
+    }
+
+    /// Builder method that determines whether or not setting this property
+    /// will result in an PropertiesChanged signal. Defaults to true.
+    ///
+    /// When set to true (the default), the behaviour is determined by "emits_changed".
+    /// When set to false, no PropertiesChanged signal will be emitted (but the signal
+    /// still shows up in introspection data).
+    /// You can still emit the signal manually by, e g, calling `add_propertieschanged`
+    /// and send the resulting message(s).
+    pub fn auto_emit_on_set(mut self, b: bool) -> Self {
+        self.auto_emit = b;
         self
     }
 
@@ -343,6 +357,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
     }
 
     fn get_emits_changed_signal(&self, m: &PropInfo<M, D>) -> Result<Option<Message>, MethodErr> {
+        if !self.auto_emit { return Ok(None) }
         match self.emits {
             EmitsChangedSignal::False => Ok(None),
             EmitsChangedSignal::Const => Err(MethodErr::ro_property(&self.name)),
@@ -463,7 +478,7 @@ impl<M: MethodType<D>, D: DataType> Introspect for Property<M, D> {
 pub fn new_property<M: MethodType<D>, D: DataType>
     (n: String, sig: Signature<'static>, data: D::Property) -> Property<M, D> {
     Property {
-        name: n, emits: EmitsChangedSignal::True, rw: Access::Read,
+        name: n, emits: EmitsChangedSignal::True, auto_emit: true, rw: Access::Read,
         sig: sig, anns: Annotations::new(), set_cb: None, get_cb: None, data: data
     }
 }
