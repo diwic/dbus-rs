@@ -66,15 +66,17 @@ fn init_dbus() {
 }
 
 /// D-Bus Error wrapper.
-///
-/// This is a wrapper around of libdbus's error struct, which means it cannot
-/// implement `Sync`. Have a look at `tree::MethodErr` if you need a error struct
-/// implementing `Sync`.
 pub struct Error {
     e: ffi::DBusError,
 }
 
 unsafe impl Send for Error {}
+
+// Note! For this Sync impl to be safe, it requires that no functions that take &self,
+// actually calls into FFI. All functions that call into FFI with a ffi::DBusError
+// must take &mut self.
+
+unsafe impl Sync for Error {}
 
 fn c_str_to_slice(c: & *const c_char) -> Option<&str> {
     if *c == ptr::null() { None }
