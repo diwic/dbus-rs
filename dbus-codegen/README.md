@@ -58,12 +58,11 @@ let myString = try!(myConnPath.foo(myInteger));
 ```rust
 use SignalArgs;
 myConnection.add_match(OrgExampleTestLaundry::match_str(None, None));
-for n in myConnection.iter(1000) {
-    if let ConnectionItem::Signal(msg) = n {
-        if let Some(laundrySignal) = OrgExampleTestLaundry::from_message(&msg) {
-            println!("Laundry was eaten: {:?}", laundrySignal.eaten);
-        }
+for msg in c.incoming(1000) {
+    if let Some(laundrySignal) = OrgExampleTestLaundry::from_message(&msg) {
+        println!("Laundry was eaten: {:?}", laundrySignal.eaten);
     }
+}
 ```
 
 ## Server side
