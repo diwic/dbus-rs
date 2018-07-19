@@ -881,6 +881,20 @@ impl Message {
             .map(|s| unsafe { Path::from_slice_unchecked(s) })
     }
 
+    /// Gets the destination this Message is being sent to.
+    pub fn destination<'a>(&'a self) -> Option<BusName<'a>> {
+        self.msg_internal_str(unsafe { ffi::dbus_message_get_destination(self.msg) })
+            .map(|s| unsafe { BusName::from_slice_unchecked(s) })
+    }
+
+    /// Sets the destination of this Message
+    ///
+    /// If dest is none, that means broadcast to all relevant destinations.
+    pub fn set_destination(&mut self, dest: Option<BusName>) {
+        let c_dest = dest.map(|d| d.as_cstr().as_ptr()).unwrap_or(ptr::null());
+        assert!(unsafe { ffi::dbus_message_set_destination(self.msg, c_dest) } != 0);
+    }
+
     /// Gets the interface this Message is being sent to.
     pub fn interface<'a>(&'a self) -> Option<Interface<'a>> {
         self.msg_internal_str(unsafe { ffi::dbus_message_get_interface(self.msg) })
