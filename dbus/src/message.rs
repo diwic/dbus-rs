@@ -891,7 +891,7 @@ impl Message {
     ///
     /// If dest is none, that means broadcast to all relevant destinations.
     pub fn set_destination(&mut self, dest: Option<BusName>) {
-        let c_dest = dest.map(|d| d.as_cstr().as_ptr()).unwrap_or(ptr::null());
+        let c_dest = dest.as_ref().map(|d| d.as_cstr().as_ptr()).unwrap_or(ptr::null());
         assert!(unsafe { ffi::dbus_message_set_destination(self.msg, c_dest) } != 0);
     }
 
@@ -995,7 +995,7 @@ pub fn message_set_serial(m: &mut Message, s: u32) {
 mod test {
     extern crate tempdir;
 
-    use super::super::{Connection, Message, MessageType, BusType, MessageItem, OwnedFd, libc, Path};
+    use super::super::{Connection, Message, MessageType, BusType, MessageItem, OwnedFd, libc, Path, BusName};
 
     #[test]
     fn unix_fd() {
@@ -1135,5 +1135,12 @@ mod test {
 
         m.append_items(&args);
         c.send(m).unwrap();
+    }
+
+    #[test]
+    fn set_valid_destination() {
+        let mut m = Message::new_method_call("org.test.rust", "/", "org.test.rust", "Test").unwrap();
+        let d = Some(BusName::new(":1.14").unwrap());
+        m.set_destination(d);
     }
 }
