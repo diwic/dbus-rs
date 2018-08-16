@@ -12,7 +12,7 @@ extern crate dbus;
 extern crate futures;
 extern crate tokio_timer;
 extern crate dbus_tokio;
-extern crate tokio_core;
+extern crate tokio;
 
 use std::time::Duration;
 use std::sync::Arc;
@@ -21,8 +21,8 @@ use dbus::{Connection, BusType, NameFlag};
 use dbus::tree::MethodErr;
 use dbus_tokio::tree::{AFactory, ATree, ATreeServer};
 use dbus_tokio::AConnection;
-use tokio_timer::*;
-use tokio_core::reactor::Core;
+use tokio::reactor::Handle;
+use tokio::runtime::current_thread::Runtime;
 
 use futures::{Future, Stream};
 
@@ -52,13 +52,12 @@ fn main() {
                 // This is the callback that will be called when another peer on the bus calls our method.
                 // the callback receives "MethodInfo" struct and can return either an error, or a list of
                 // messages to send back.
-                let timer = Timer::default();
 
                 // FIXME: This error should be properly handled instead of being unwrapped!
                 let t = m.msg.get1().unwrap();
-                let sleep_future = timer.sleep(Duration::from_millis(t));
+                let sleep_future = tokio_timer::sleep(Duration::from_millis(t));
 
-                // These are the variables we need after the timeout period. We need to 
+                // These are the variables we need after the timeout period. We need to
                 // clone all strings now, because the tree might get destroyed during the sleep.
                 let sender = m.msg.sender().unwrap().into_static();
                 let (pname, iname) = (m.path.get_name().clone(), m.iface.get_name().clone());
@@ -87,11 +86,12 @@ fn main() {
     tree.set_registered(&c, true).unwrap();
 
     // Setup Tokio
-    let mut core = Core::new().unwrap();
-    let aconn = AConnection::new(c.clone(), core.handle()).unwrap();
+    let mut rt = Runtime::new().unwrap();
+    let aconn = AConnection::new(c.clone(), Handle::current(), &mut rt).unwrap();
     let server = ATreeServer::new(c.clone(), &tree, aconn.messages().unwrap());
-    
+
     // Make the server run forever
     let server = server.for_each(|m| { println!("Unhandled message: {:?}", m); Ok(()) });
-    core.run(server).unwrap(); 
+    rt.block_on(server).unwrap();
+    rt.run().unwrap();
 }

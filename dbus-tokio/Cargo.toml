@@ -14,11 +14,11 @@ categories = ["os::unix-apis", "api-bindings", "asynchronous"]
 dbus = { path = "../dbus", version = "0.6" }
 futures = "0.1.12"
 mio = "0.6.9"
-tokio-core = "0.1.8"
+tokio = "0.1.7"
 log = "0.3"
 
 [dev-dependencies]
-tokio-timer = "0.1.0"
+tokio-timer = "0.2.4"
 
 [badges]
 is-it-maintained-open-issues = { repository = "diwic/dbus-rs" }
