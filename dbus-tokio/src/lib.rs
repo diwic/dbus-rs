@@ -7,12 +7,12 @@
 //!  * Server: Make a tree handle that stream of incoming messages - see `tree::ATreeServer`
 //!  * Server: Add asynchronous methods to the tree - in case you cannot reply right away,
 //!    you can return a future that will reply when that future resolves - see `tree::AFactory::amethod`
-//! 
+//!
 //! For examples to get you started, see the examples directory and the Readme.
 
 extern crate dbus;
 extern crate futures;
-extern crate tokio_core;
+extern crate tokio;
 extern crate mio;
 
 #[macro_use]

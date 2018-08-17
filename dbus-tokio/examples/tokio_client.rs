@@ -7,15 +7,16 @@
 
 extern crate dbus;
 extern crate dbus_tokio;
-extern crate tokio_core;
+extern crate tokio;
 extern crate tokio_timer;
 extern crate futures;
 
 use dbus::*;
 
 use std::rc::Rc;
-use tokio_core::reactor::Core;
-use tokio_timer::Timer;
+use tokio::reactor::Handle;
+use tokio::runtime::current_thread::Runtime;
+use tokio_timer::{clock, Interval};
 use std::time::Duration;
 use futures::{Stream, Future};
 use dbus_tokio::AConnection;
@@ -30,12 +31,11 @@ fn main() {
     c.add_match("type=signal,sender=com.example.dbustest,member=HelloHappened").unwrap();
 
     // Create Tokio event loop along with asynchronous connection object
-    let mut core = Core::new().unwrap();
-    let aconn = AConnection::new(c.clone(), core.handle()).unwrap();
+    let mut rt = Runtime::new().unwrap();
+    let aconn = AConnection::new(c.clone(), Handle::current(), &mut rt).unwrap();
 
     // Create interval - a Stream that will fire an event periodically
-    let timer = Timer::default();
-    let interval = timer.interval(Duration::from_secs(2));
+    let interval = Interval::new(clock::now(), Duration::from_secs(2));
 
     // Handle timer errors. Additionally this erases error type from Stream signature.
     let interval = interval.map_err(|e| panic!("TimerError: {}", e) );
@@ -69,6 +69,6 @@ fn main() {
     });
 
     // Simultaneously run signal handling and method calling
-    core.run(signals.join(calls)).unwrap();
+    rt.block_on(signals.join(calls)).unwrap();
 }
 

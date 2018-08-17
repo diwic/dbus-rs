@@ -4,7 +4,9 @@ use std::io;
 use dbus::{Connection, ConnMsgs, Watch, WatchEvent, Message, MessageType, Error as DBusError};
 use futures::{Async, Future, Stream, Poll};
 use futures::sync::{oneshot, mpsc};
-use tokio_core::reactor::{PollEvented, Handle as CoreHandle};
+use tokio::reactor::Handle as CoreHandle;
+use tokio::reactor::PollEvented2;
+use tokio::runtime::current_thread::Runtime;
 use std::rc::Rc;
 use std::os::raw::c_uint;
 use std::cell::RefCell;
@@ -32,7 +34,7 @@ impl AConnection {
     ///
     /// The task handles incoming messages, and continues to do so until the
     /// AConnection is dropped.
-    pub fn new(c: Rc<Connection>, h: CoreHandle) -> io::Result<AConnection> {
+    pub fn new(c: Rc<Connection>, h: CoreHandle, e: &mut Runtime) -> io::Result<AConnection> {
         let (tx, rx) = oneshot::channel();
         let map: MCallMap = Default::default();
         let istream: MStream = Default::default();
@@ -52,7 +54,7 @@ impl AConnection {
         };
         i.conn.set_watch_callback(Box::new(|_| unimplemented!("Watch handling is very rare and not implemented yet")));
         for w in i.conn.watch_fds() { d.modify_watch(w, false)?; }
-        h.spawn(d);
+        e.spawn(Box::new(d));
         Ok(i)
     }
 
@@ -61,7 +63,7 @@ impl AConnection {
         let r = self.conn.send(m).map_err(|_| "D-Bus send error")?;
         let (tx, rx) = oneshot::channel();
         let mut map = self.callmap.borrow_mut();
-        map.insert(r, tx); // TODO: error check for duplicate entries. Should not happen, but if it does... 
+        map.insert(r, tx); // TODO: error check for duplicate entries. Should not happen, but if it does...
         let mc = AMethodCall { serial: r, callmap: self.callmap.clone(), inner: rx };
         Ok(mc)
     }
@@ -94,7 +96,7 @@ impl Drop for AConnection {
 // Internal struct; this is the future spawned on the core.
 struct ADriver {
     conn: Rc<Connection>,
-    fds: HashMap<RawFd, PollEvented<AWatch>>,
+    fds: HashMap<RawFd, PollEvented2<AWatch>>,
     core: CoreHandle,
     quit: oneshot::Receiver<()>,
     callmap: MCallMap,
@@ -116,10 +118,10 @@ impl ADriver {
             }
             self.fds.remove(&w.fd());
 
-            let z = PollEvented::new(AWatch(w), &self.core)?;
+            let z = PollEvented2::new_with_handle(AWatch(w), &self.core)?;
 
-            if poll_now && z.get_ref().0.readable() { z.need_read() };
-            if poll_now && z.get_ref().0.writable() { z.need_write() };
+            if poll_now && z.get_ref().0.readable() { z.clear_read_ready(Ready::readable())?; };
+            if poll_now && z.get_ref().0.writable() { z.clear_write_ready()?; };
 
             self.fds.insert(w.fd(), z);
         }
@@ -157,10 +159,24 @@ impl Future for ADriver {
         for w in self.fds.values() {
             let mut mask = UnixReady::hup() | UnixReady::error();
             if w.get_ref().0.readable() { mask = mask | Ready::readable().into(); }
-            if w.get_ref().0.writable() { mask = mask | Ready::writable().into(); }
-            let pr = w.poll_ready(*mask);
-            debug!("D-Bus i/o poll ready: {:?} is {:?}", w.get_ref().0.fd(), pr);
-            let ur = if let Async::Ready(t) = pr { UnixReady::from(t) } else { continue };
+            //if w.get_ref().0.writable() { mask = mask | Ready::writable().into(); }
+            let prr = w.poll_read_ready(*mask).map_err(|_| ())?;
+            debug!("D-Bus i/o poll read ready: {:?} is {:?}", w.get_ref().0.fd(), prr);
+            let pwr = w.poll_write_ready().map_err(|_| ())?;
+            debug!("D-Bus i/o poll write ready: {:?} is {:?}", w.get_ref().0.fd(), pwr);
+            let ur = if let Async::Ready(t) = prr {
+                UnixReady::from(t) | if let Async::Ready(wt) = pwr {
+                    UnixReady::from(wt)
+                } else {
+                    Ready::empty().into()
+                }
+            } else {
+                if let Async::Ready(wt) = pwr {
+                    UnixReady::from(wt)
+                } else {
+                    continue;
+                }
+            };
             let flags =
                 if ur.is_readable() { WatchEvent::Readable as c_uint } else { 0 } +
                 if ur.is_writable() { WatchEvent::Writable as c_uint } else { 0 } +
@@ -168,8 +184,8 @@ impl Future for ADriver {
                 if ur.is_error() { WatchEvent::Error as c_uint } else { 0 };
             debug!("D-Bus i/o unix ready: {:?} is {:?}", w.get_ref().0.fd(), ur);
             self.conn.watch_handle(w.get_ref().0.fd(), flags);
-            if ur.is_readable() { w.need_read() };
-            if ur.is_writable() { w.need_write() };
+            if ur.is_readable() { w.clear_read_ready(Ready::readable()).map_err(|_| ())?; };
+            if ur.is_writable() { w.clear_write_ready().map_err(|_| ())?; };
         };
         self.handle_msgs();
         Ok(Async::NotReady)
@@ -265,7 +281,7 @@ impl Drop for AMessageStream {
     fn drop(&mut self) {
         *self.stream.borrow_mut() = None;
         debug!("Dropping AMessageStream");
-        if let Ok(x) = Rc::try_unwrap(self.quit.take().unwrap()) { 
+        if let Ok(x) = Rc::try_unwrap(self.quit.take().unwrap()) {
             debug!("AMessageStream telling ADriver to quit");
             let _ = x.send(());
         }
@@ -275,11 +291,11 @@ impl Drop for AMessageStream {
 #[test]
 fn aconnection_test() {
     let conn = Rc::new(Connection::get_private(::dbus::BusType::Session).unwrap());
-    let mut core = ::tokio_core::reactor::Core::new().unwrap();
-    let aconn = AConnection::new(conn.clone(), core.handle()).unwrap();
+    let mut rt = Runtime::new().unwrap();
+    let aconn = AConnection::new(conn.clone(), CoreHandle::current(), &mut rt).unwrap();
 
     let m = ::dbus::Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
-    let reply = core.run(aconn.method_call(m).unwrap()).unwrap();
+    let reply = rt.block_on(aconn.method_call(m).unwrap()).unwrap();
     let z: Vec<&str> = reply.get1().unwrap();
     println!("got reply: {:?}", z);
     assert!(z.iter().any(|v| *v == "org.freedesktop.DBus"));
@@ -288,12 +304,12 @@ fn aconnection_test() {
 #[test]
 fn astream_test() {
     let conn = Rc::new(Connection::get_private(::dbus::BusType::Session).unwrap());
-    let mut core = ::tokio_core::reactor::Core::new().unwrap();
-    let aconn = AConnection::new(conn.clone(), core.handle()).unwrap();
+    let mut rt = Runtime::new().unwrap();
+    let aconn = AConnection::new(conn.clone(), CoreHandle::current(), &mut rt).unwrap();
 
     let items: AMessageStream = aconn.messages().unwrap();
     let signals = items.filter_map(|m| if m.msg_type() == ::dbus::MessageType::Signal { Some(m) } else { None });
-    let firstsig = core.run(signals.into_future()).map(|(x, _)| x).map_err(|(x, _)| x).unwrap();
+    let firstsig = rt.block_on(signals.into_future()).map(|(x, _)| x).map_err(|(x, _)| x).unwrap();
     println!("first signal was: {:?}", firstsig);
     assert_eq!(firstsig.unwrap().msg_type(), ::dbus::MessageType::Signal);
 }
