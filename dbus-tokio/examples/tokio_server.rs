@@ -54,8 +54,8 @@ fn main() {
                 // messages to send back.
 
                 // FIXME: This error should be properly handled instead of being unwrapped!
-                let t = m.msg.get1().unwrap();
-                let sleep_future = tokio_timer::sleep(Duration::from_millis(t));
+                let t: u32 = m.msg.read1().unwrap();
+                let sleep_future = tokio_timer::sleep(Duration::from_millis(t as u64));
 
                 // These are the variables we need after the timeout period. We need to
                 // clone all strings now, because the tree might get destroyed during the sleep.
