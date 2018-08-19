@@ -209,7 +209,8 @@ fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool
                 g.gen.push(g.prefix.clone());
                 g.prefix = format!("{}X", g.prefix);
                 t
-            } else { "arg::Variant<Box<arg::RefArg>>".into() },
+            } else if out { "arg::Variant<Box<arg::RefArg + 'static>>".into() }
+            else { "arg::Variant<Box<arg::RefArg>>".into() }
             (ArgType::Array, _) => if i.peek() == Some(&'{') {
                 i.next();
                 let n1 = try!(xml_to_rust_type(i, out, &mut None));

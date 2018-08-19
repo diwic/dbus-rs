@@ -7,15 +7,15 @@ use dbus::tree;
 
 pub trait OrgFreedesktopDBusProperties {
     type Err;
-    fn get(&self, interface_name: &str, property_name: &str) -> Result<arg::Variant<Box<arg::RefArg>>, Self::Err>;
-    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>, Self::Err>;
+    fn get(&self, interface_name: &str, property_name: &str) -> Result<arg::Variant<Box<arg::RefArg + 'static>>, Self::Err>;
+    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>, Self::Err>;
     fn set(&self, interface_name: &str, property_name: &str, value: arg::Variant<Box<arg::RefArg>>) -> Result<(), Self::Err>;
 }
 
 impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopDBusProperties for dbus::ConnPath<'a, C> {
     type Err = dbus::Error;
 
-    fn get(&self, interface_name: &str, property_name: &str) -> Result<arg::Variant<Box<arg::RefArg>>, Self::Err> {
+    fn get(&self, interface_name: &str, property_name: &str) -> Result<arg::Variant<Box<arg::RefArg + 'static>>, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"Get".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
             i.append(interface_name);
@@ -23,18 +23,18 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopDBusProper
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let value: arg::Variant<Box<arg::RefArg>> = try!(i.read());
+        let value: arg::Variant<Box<arg::RefArg + 'static>> = try!(i.read());
         Ok(value)
     }
 
-    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>, Self::Err> {
+    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"GetAll".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
             i.append(interface_name);
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let properties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>> = try!(i.read());
+        let properties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>> = try!(i.read());
         Ok(properties)
     }
 
@@ -116,7 +116,7 @@ where
 #[derive(Debug, Default)]
 pub struct OrgFreedesktopDBusPropertiesPropertiesChanged {
     pub interface_name: String,
-    pub changed_properties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>,
+    pub changed_properties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>,
     pub invalidated_properties: Vec<String>,
 }
 
@@ -249,7 +249,7 @@ pub trait OrgFreedesktopPolicyKit1Authority {
     fn unregister_authentication_agent(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>), object_path: &str) -> Result<(), Self::Err>;
     fn authentication_agent_response(&self, cookie: &str, identity: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>)) -> Result<(), Self::Err>;
     fn authentication_agent_response2(&self, uid: u32, cookie: &str, identity: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>)) -> Result<(), Self::Err>;
-    fn enumerate_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>)) -> Result<Vec<(String, String, (String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>), u64, u64)>, Self::Err>;
+    fn enumerate_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>)) -> Result<Vec<(String, String, (String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>), u64, u64)>, Self::Err>;
     fn revoke_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>)) -> Result<(), Self::Err>;
     fn revoke_temporary_authorization_by_id(&self, id: &str) -> Result<(), Self::Err>;
     fn get_backend_name(&self) -> Result<String, Self::Err>;
@@ -349,14 +349,14 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> OrgFreedesktopPolicyKit1
         Ok(())
     }
 
-    fn enumerate_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>)) -> Result<Vec<(String, String, (String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>), u64, u64)>, Self::Err> {
+    fn enumerate_temporary_authorizations(&self, subject: (&str, ::std::collections::HashMap<&str, arg::Variant<Box<arg::RefArg>>>)) -> Result<Vec<(String, String, (String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>), u64, u64)>, Self::Err> {
         let mut m = try!(self.method_call_with_args(&"org.freedesktop.PolicyKit1.Authority".into(), &"EnumerateTemporaryAuthorizations".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
             i.append(subject);
         }));
         try!(m.as_result());
         let mut i = m.iter_init();
-        let temporary_authorizations: Vec<(String, String, (String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>), u64, u64)> = try!(i.read());
+        let temporary_authorizations: Vec<(String, String, (String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>), u64, u64)> = try!(i.read());
         Ok(temporary_authorizations)
     }
 
