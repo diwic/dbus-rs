@@ -444,6 +444,9 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
     if i.props.len() > 0 {
         wheres.push("D::Property: Default".into());
     };
+    if i.signals.len() > 0 {
+        wheres.push("D::Signal: Default".into());
+    };
     if hasm {
         wheres.push("M: MethodType<D>".into());
     };
@@ -532,6 +535,13 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
             *s += "    });\n";
         }
         *s +=          "    let i = i.add_p(p);\n";
+    }
+    for ss in &i.signals {
+        *s += &format!("    let s = factory.signal(\"{}\", Default::default());\n", ss.name);
+        for a in &ss.args {
+            *s += &format!("    let s = s.arg((\"{}\", \"{}\"));\n", a.name, a.typ);
+        }
+        *s += "    let i = i.add_s(s);\n";
     }
     *s +=          "    i\n";
     *s +=          "}\n";
