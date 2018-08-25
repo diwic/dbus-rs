@@ -2,6 +2,9 @@
 
 // This is supposed to look like a D-Bus service that allows the user to manipulate storage devices.
 
+// Note: in the dbus-codegen/example directory, there is a version of this example where dbus-codegen
+// was used to create some boilerplate code - feel free to compare the two examples.
+
 extern crate dbus;
 
 use std::sync::Arc;
