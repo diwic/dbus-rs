@@ -2,7 +2,7 @@
 
 use std::{str, fmt, ops, default, hash};
 use std::ffi::{CStr, CString};
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::os::raw::c_char;
 
 #[cfg(not(feature = "no-string-validation"))]
@@ -93,6 +93,12 @@ impl<'m> From<Cow<'m, str>> for $t<'m> {
             Cow::Borrowed(z) => z.into(),
             Cow::Owned(z) => z.into(),
         }
+    }
+}
+
+impl<'inner, 'm: 'inner> From<&'m $t<'inner>> for $t<'m> {
+    fn from(borrow: &'m $t<'inner>) -> $t<'m> {
+        $t(Cow::Borrowed(borrow.0.borrow()))
     }
 }
 
