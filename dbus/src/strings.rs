@@ -191,6 +191,20 @@ fn some_path() {
 }
 
 #[test]
+fn reborrow_path() {
+    let p1 = Path::from("/valid");
+    let p2 = p1.clone();
+    {
+        let p2_borrow: &Path = &p2;
+        let p3 = Path::from(p2_borrow);
+        // Check path created from borrow
+        assert_eq!(p2, p3);
+    }
+    // Check path that was previously borrowed
+    assert_eq!(p1, p2);
+}
+
+#[test]
 fn make_sig() {
     assert_eq!(&*Signature::make::<(&str, u8)>(), "(sy)");
 }
