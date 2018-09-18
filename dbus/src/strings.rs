@@ -2,7 +2,7 @@
 
 use std::{str, fmt, ops, default, hash};
 use std::ffi::{CStr, CString};
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::os::raw::c_char;
 
 #[cfg(not(feature = "no-string-validation"))]
@@ -96,6 +96,12 @@ impl<'m> From<Cow<'m, str>> for $t<'m> {
     }
 }
 
+impl<'inner, 'm: 'inner> From<&'m $t<'inner>> for $t<'m> {
+    fn from(borrow: &'m $t<'inner>) -> $t<'m> {
+        $t(Cow::Borrowed(borrow.0.borrow()))
+    }
+}
+
 impl<'m> ops::Deref for $t<'m> {
     type Target = str;
     fn deref(&self) -> &str { str::from_utf8(self.0.to_bytes()).unwrap() }
@@ -182,6 +188,20 @@ fn some_path() {
     assert_eq!(p2, Err("Object path was not valid: '##invalid##'".into()));
     #[cfg(feature = "no-string-validation")]
     assert_eq!(p2, Ok(Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"##invalid##\0".as_ptr() as *const c_char) }))));
+}
+
+#[test]
+fn reborrow_path() {
+    let p1 = Path::from("/valid");
+    let p2 = p1.clone();
+    {
+        let p2_borrow: &Path = &p2;
+        let p3 = Path::from(p2_borrow);
+        // Check path created from borrow
+        assert_eq!(p2, p3);
+    }
+    // Check path that was previously borrowed
+    assert_eq!(p1, p2);
 }
 
 #[test]
