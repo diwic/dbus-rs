@@ -1,6 +1,6 @@
 [package]
 name = "dbus-codegen"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 description = "Binary crate to generate Rust code from XML introspection data"
 license = "Apache-2.0/MIT"
