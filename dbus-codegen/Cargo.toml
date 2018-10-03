@@ -9,6 +9,9 @@ repository = "https://github.com/diwic/dbus-rs"
 keywords = ["D-Bus", "DBus"]
 readme = "README.md"
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "dbus-codegen-rust"
 path = "src/main.rs"

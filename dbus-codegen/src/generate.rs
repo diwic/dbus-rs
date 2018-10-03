@@ -39,28 +39,29 @@ struct Intf {
     signals: Vec<Signal>,
 }
 
+/// Server access code generation option
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub enum ServerAccess {
-    // Supply a closure from ref to ref
+    /// Supply a closure from ref to ref
     RefClosure,
-    // Supply a closure from ref to owned object which asrefs 
+    /// Supply a closure from ref to owned object which asrefs 
     AsRefClosure,
-    // The interface is implemented for MethodInfo
+    /// The interface is implemented for MethodInfo
     MethodInfo
 }
 
-// Code generation options
+/// Code generation options
 #[derive(Clone, Debug)]
 pub struct GenOpts {
-    // Name of dbus crate (used for import)
+    /// Name of dbus crate (used for import)
     pub dbuscrate: String,
-    // MethodType for server impl, set to none for client impl only
+    /// MethodType for server impl, set to none for client impl only
     pub methodtype: Option<String>,
-    // Removes a prefix from interface names
+    /// Removes a prefix from interface names
     pub skipprefix: Option<String>,
-    // Type of server access
+    /// Type of server access
     pub serveraccess: ServerAccess,
-    // Tries to make variants generic instead of Variant<Box<Refarg>>
+    /// Tries to make variants generic instead of Variant<Box<Refarg>>
     pub genericvariant: bool,
 }
 
@@ -556,6 +557,7 @@ fn write_module_header(s: &mut String, opts: &GenOpts) {
     if opts.methodtype.is_some() { *s += &format!("use {}::tree;\n", opts.dbuscrate) }
 }
 
+/// Generates Rust structs and traits from D-Bus XML introspection data.
 pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<error::Error>> {
     use xml::EventReader;
     use xml::reader::XmlEvent;
