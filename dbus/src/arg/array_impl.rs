@@ -302,10 +302,45 @@ fn get_dict_refarg<'a, K, F: FnMut(&mut Iter<'a>) -> Option<K>>(i: &mut Iter<'a>
     Box::new(r)
 }
 
+// Fallback for Arrays of Arrays and Arrays of Structs.
+// We store the signature manually here and promise that it is correct for all elements
+// has that signature.
+#[derive(Debug)]
+struct InternalArray {
+   data: Vec<Box<RefArg>>,
+   inner_sig: Signature<'static>,
+}
+
+fn get_internal_array<'a>(i: &mut Iter<'a>) -> Box<RefArg> {
+    let mut si = i.recurse(ArgType::Array).unwrap();
+    let inner_sig = si.signature();
+    let data = si.collect::<Vec<_>>();
+    Box::new(InternalArray { data, inner_sig })
+}
+
+impl RefArg for InternalArray {
+    fn arg_type(&self) -> ArgType { ArgType::Array }
+    fn signature(&self) -> Signature<'static> { Signature::from(format!("a{}", self.inner_sig)) }
+    fn append(&self, i: &mut IterAppend) {
+        i.append_container(ArgType::Array, Some(self.inner_sig.as_cstr()), |s|
+            for arg in &self.data { (arg as &RefArg).append(s) }
+        );
+    }
+    #[inline]
+    fn as_any(&self) -> &any::Any where Self: 'static { self }
+    #[inline]
+    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
+    fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> {
+        Some(Box::new(self.data.iter().map(|b| b as &RefArg)))
+    }
+}
+
+
 pub fn get_array_refarg<'a>(i: &mut Iter<'a>) -> Box<RefArg> {
     debug_assert!(i.arg_type() == ArgType::Array);
     let etype = ArgType::from_i32(unsafe { ffi::dbus_message_iter_get_element_type(&mut i.0) } as i32).unwrap();
-    match etype {
+
+    let x = match etype {
         ArgType::Byte => get_fixed_array_refarg::<u8>(i),
         ArgType::Int16 => get_fixed_array_refarg::<i16>(i),
         ArgType::UInt16 => get_fixed_array_refarg::<u16>(i),
@@ -320,9 +355,7 @@ pub fn get_array_refarg<'a>(i: &mut Iter<'a>) -> Box<RefArg> {
 	ArgType::Variant => get_var_array_refarg::<Variant<Box<RefArg>>, _>(i, |si| Variant::new_refarg(si)),
 	ArgType::Boolean => get_var_array_refarg::<bool, _>(i, |si| si.get()),
 	ArgType::Invalid => panic!("Array with Invalid ArgType"),
-        // Unfortunately, we need to get an Array of Arrays as if it were an Array of structs.
-        // Otherwise, we'll get type explosion. :-( 
-        ArgType::Array => Box::new(i.recurse(ArgType::Array).unwrap().collect::<Vec<_>>()),
+        ArgType::Array => get_internal_array(i),
         ArgType::DictEntry => {
             let key = ArgType::from_i32(i.signature().as_bytes()[2] as i32).unwrap(); // The third character, after "a{", is our key.
             match key {
@@ -343,8 +376,11 @@ pub fn get_array_refarg<'a>(i: &mut Iter<'a>) -> Box<RefArg> {
             }
         }
         ArgType::UnixFd => get_var_array_refarg::<OwnedFd, _>(i, |si| si.get()),
-        ArgType::Struct => Box::new(i.recurse(ArgType::Array).unwrap().collect::<Vec<_>>()),
-    }
+        ArgType::Struct => get_internal_array(i),
+    };
+
+    // debug_assert_eq!(i.signature(), x.signature());
+    x
 }
 
 
