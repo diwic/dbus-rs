@@ -288,19 +288,51 @@ fn get_var_array_refarg<'a, T: 'static + RefArg + Arg, F: FnMut(&mut Iter<'a>) -
     Box::new(v)
 }
 
+
+#[derive(Debug)]
+struct InternalDict<K> {
+   data: Vec<(K, Box<RefArg>)>,
+   outer_sig: Signature<'static>,
+}
+
 fn get_dict_refarg<'a, K, F: FnMut(&mut Iter<'a>) -> Option<K>>(i: &mut Iter<'a>, mut f: F) -> Box<RefArg>
-    where K: DictKey + 'static + RefArg + Hash + Eq
+    where K: DictKey + 'static + RefArg
  {
-    let mut r: HashMap<K, Variant<Box<RefArg>>> = HashMap::new();
+    let mut data = vec!();
+    let outer_sig = i.signature();
     let mut si = i.recurse(ArgType::Array).unwrap();
     while let Some(mut d) = si.recurse(ArgType::DictEntry) {
         let k = f(&mut d).unwrap();
         d.next();
-        r.insert(k, Variant(d.get_refarg().unwrap()));
+        data.push((k, d.get_refarg().unwrap()));
         si.next();
     }
-    Box::new(r)
+    Box::new(InternalDict { data, outer_sig })
 }
+
+impl<K: DictKey + RefArg> RefArg for InternalDict<K> {
+    fn arg_type(&self) -> ArgType { ArgType::Array }
+    fn signature(&self) -> Signature<'static> { self.outer_sig.clone() }
+    fn append(&self, i: &mut IterAppend) {
+        let inner_sig = &self.outer_sig.as_cstr().to_bytes_with_nul()[1..];
+        let inner_sig = CStr::from_bytes_with_nul(inner_sig).unwrap();
+        i.append_container(ArgType::Array, Some(inner_sig), |s| for (k, v) in &self.data {
+            s.append_container(ArgType::DictEntry, None, |ss| {
+                k.append(ss);
+                v.append(ss);
+            })
+        });
+    }
+    #[inline]
+    fn as_any(&self) -> &any::Any where Self: 'static { self }
+    #[inline]
+    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
+    fn as_iter<'b>(&'b self) -> Option<Box<Iterator<Item=&'b RefArg> + 'b>> {
+        Some(Box::new(self.data.iter().flat_map(|(k, v)| vec![k as &RefArg, v as &RefArg].into_iter())))
+    }
+
+} 
+
 
 // Fallback for Arrays of Arrays and Arrays of Structs.
 // We store the signature manually here and promise that it is correct for all elements
@@ -335,7 +367,6 @@ impl RefArg for InternalArray {
     }
 }
 
-
 pub fn get_array_refarg<'a>(i: &mut Iter<'a>) -> Box<RefArg> {
     debug_assert!(i.arg_type() == ArgType::Array);
     let etype = ArgType::from_i32(unsafe { ffi::dbus_message_iter_get_element_type(&mut i.0) } as i32).unwrap();
@@ -366,12 +397,12 @@ pub fn get_array_refarg<'a>(i: &mut Iter<'a>) -> Box<RefArg> {
                 ArgType::UInt32 => get_dict_refarg::<u32, _>(i, |si| si.get()),
                 ArgType::Int64 => get_dict_refarg::<i64, _>(i, |si| si.get()),
                 ArgType::UInt64 => get_dict_refarg::<u64, _>(i, |si| si.get()),
+                ArgType::Double => get_dict_refarg::<f64, _>(i, |si| si.get()),
                 ArgType::Boolean => get_dict_refarg::<bool, _>(i, |si| si.get()),
                 // ArgType::UnixFd => get_dict_refarg::<OwnedFd, _>(i, |si| si.get()),
                 ArgType::String => get_dict_refarg::<String, _>(i, |si| si.get()),
                 ArgType::ObjectPath => get_dict_refarg::<Path<'static>, _>(i, |si| si.get::<Path>().map(|s| s.into_static())),
                 ArgType::Signature => get_dict_refarg::<Signature<'static>, _>(i, |si| si.get::<Signature>().map(|s| s.into_static())),
-                // Unfortunately, D-Bus allows Doubles as dict keys too, but Rust Hashmaps do not. :-(
                 _ => panic!("Array with invalid dictkey ({:?})", key),
             }
         }
@@ -379,7 +410,7 @@ pub fn get_array_refarg<'a>(i: &mut Iter<'a>) -> Box<RefArg> {
         ArgType::Struct => get_internal_array(i),
     };
 
-    // debug_assert_eq!(i.signature(), x.signature());
+    debug_assert_eq!(i.signature(), x.signature());
     x
 }
 

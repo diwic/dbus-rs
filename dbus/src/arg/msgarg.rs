@@ -230,8 +230,15 @@ mod test {
                 assert_eq!(Some(&false), rv[2].as_any().downcast_ref::<bool>());
                 assert_eq!(Some(&vi32), rv[4].as_any().downcast_ref::<Vec<i32>>());
                 assert_eq!(Some(&vstr), rv[5].as_any().downcast_ref::<Vec<String>>());
-                let mmap: &HashMap<bool, Variant<Box<RefArg>>> = cast(&rv[6]).unwrap();
-                assert_eq!(mmap[&true].as_str(), Some("Yes"));
+                /* let mut diter = rv[6].as_iter().unwrap();
+                {
+                    let mut mmap: HashMap<bool, String> = HashMap::new();
+                    while let Some(k) = diter.next() {
+                        let x: String = diter.next().unwrap().as_str().unwrap().into();
+                        mmap.insert(*cast::<bool>(k).unwrap(), x);
+                    }
+                    assert_eq!(mmap[&true], "Yes");
+                }*/
                 let mut iter = rv[6].as_iter().unwrap();
                 assert!(iter.next().unwrap().as_i64().is_some());
                 assert!(iter.next().unwrap().as_str().is_some());
