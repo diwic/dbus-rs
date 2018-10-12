@@ -99,6 +99,8 @@ impl<T: RefArg> RefArg for Variant<T> {
         let z: &RefArg = &self.0;
         Some(Box::new(iter::once(z)))
     }
+    #[inline]
+    fn box_clone(&self) -> Box<RefArg + 'static> { Box::new(Variant(self.0.box_clone())) }
 }
 
 macro_rules! struct_impl {
@@ -160,6 +162,13 @@ impl<$($t: RefArg),*> RefArg for ($($t,)*) {
         );
         Some(Box::new(v.into_iter()))
     }
+    #[inline]
+    fn box_clone(&self) -> Box<RefArg + 'static> {
+        let &( $(ref $n,)*) = self;
+        let mut z = vec!();
+        $( z.push($n.box_clone()); )*
+        Box::new(z)
+    }
 }
 
 
@@ -200,6 +209,11 @@ impl RefArg for Vec<Box<RefArg>> {
     fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> {
         Some(Box::new(self.iter().map(|b| &**b)))
     }
+    #[inline]
+    fn box_clone(&self) -> Box<RefArg + 'static> {
+        let t: Vec<Box<RefArg + 'static>> = self.iter().map(|x| x.box_clone()).collect();
+        Box::new(t)
+    }
 }
 
 impl Append for message::MessageItem {
@@ -222,5 +236,7 @@ impl RefArg for message::MessageItem {
     fn as_any(&self) -> &any::Any where Self: 'static { self }
     #[inline]
     fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
+    #[inline]
+    fn box_clone(&self) -> Box<RefArg + 'static> { Box::new(self.clone()) }
 }
 

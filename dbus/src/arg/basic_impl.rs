@@ -92,6 +92,8 @@ impl RefArg for $t {
     fn as_u64(&self) -> Option<u64> { let $u = *self; $uu }
     #[inline]
     fn as_f64(&self) -> Option<f64> { let $fff = *self; $ff }
+    #[inline]
+    fn box_clone(&self) -> Box<RefArg + 'static> { Box::new(self.clone()) }
 }
 
 impl DictKey for $t {}
@@ -130,6 +132,8 @@ impl RefArg for $t {
     fn as_f64(&self) -> Option<f64> { let $i = self; $ff }
     #[inline]
     fn as_str(&self) -> Option<&str> { let $i = self; $ss }
+    #[inline]
+    fn box_clone(&self) -> Box<RefArg + 'static> { Box::new(self.clone()) }
 }
 
     }
@@ -267,6 +271,8 @@ impl RefArg for $t<'static> {
     fn as_any_mut(&mut self) -> &mut any::Any { self }
     #[inline]
     fn as_str(&self) -> Option<&str> { Some(self) }
+    #[inline]
+    fn box_clone(&self) -> Box<RefArg + 'static> { Box::new(self.clone().into_static()) }
 }
 
 impl<'a> DictKey for $t<'a> {}

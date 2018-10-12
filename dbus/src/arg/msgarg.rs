@@ -43,8 +43,14 @@ pub trait RefArg: fmt::Debug {
     /// Performs the append operation.
     fn append(&self, &mut IterAppend);
     /// Transforms this argument to Any (which can be downcasted to read the current value).
+    ///
+    /// Note: The internal representation of complex types (Array, Dict, Struct) is unstable
+    /// and as_any should not be relied upon for these types. Use as_iter instead.
     fn as_any(&self) -> &any::Any where Self: 'static;
     /// Transforms this argument to Any (which can be downcasted to read the current value).
+    ///
+    /// Note: The internal representation of complex types (Array, Dict, Struct) is unstable
+    /// and as_any should not be relied upon for these types. Use as_iter instead.
     ///
     /// # Panic
     /// Will panic if the interior cannot be made mutable, e g, if encapsulated
@@ -75,6 +81,13 @@ pub trait RefArg: fmt::Debug {
     /// Works for: Array/Dict, Struct, Variant.
     #[inline]
     fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> { None }
+    /// Deep clone of the RefArg, causing the result to be 'static.
+    ///
+    /// Usable as an escape hatch in case of lifetime problems with RefArg.
+    ///
+    /// In case of complex types (Array, Dict, Struct), the clone is not guaranteed
+    /// to have the same internal representation as the original.
+    fn box_clone(&self) -> Box<RefArg + 'static> { unimplemented!() /* Needed for backwards comp */ }
 }
 
 impl<'a> Get<'a> for Box<RefArg> {
@@ -135,6 +148,8 @@ impl<'a, T: RefArg + ?Sized> RefArg for &'a T {
     fn as_str(&self) -> Option<&str> { (&**self).as_str() }
     #[inline]
     fn as_iter<'b>(&'b self) -> Option<Box<Iterator<Item=&'b RefArg> + 'b>> { (&**self).as_iter() }
+    #[inline]
+    fn box_clone(&self) -> Box<RefArg + 'static> { (&**self).box_clone() }
 }
 
 
@@ -163,6 +178,8 @@ impl<T: RefArg + ?Sized> RefArg for $t<T> {
     fn as_str(&self) -> Option<&str> { (&**self).as_str() }
     #[inline]
     fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> { (&**self).as_iter() }
+    #[inline]
+    fn box_clone(&self) -> Box<RefArg + 'static> { (&**self).box_clone() }
 }
 impl<T: DictKey> DictKey for $t<T> {}
 
@@ -230,15 +247,15 @@ mod test {
                 assert_eq!(Some(&false), rv[2].as_any().downcast_ref::<bool>());
                 assert_eq!(Some(&vi32), rv[4].as_any().downcast_ref::<Vec<i32>>());
                 assert_eq!(Some(&vstr), rv[5].as_any().downcast_ref::<Vec<String>>());
-                /* let mut diter = rv[6].as_iter().unwrap();
+                let mut diter = rv[6].as_iter().unwrap();
                 {
                     let mut mmap: HashMap<bool, String> = HashMap::new();
                     while let Some(k) = diter.next() {
                         let x: String = diter.next().unwrap().as_str().unwrap().into();
-                        mmap.insert(*cast::<bool>(k).unwrap(), x);
+                        mmap.insert(*cast::<bool>(&k.box_clone()).unwrap(), x);
                     }
                     assert_eq!(mmap[&true], "Yes");
-                }*/
+                }
                 let mut iter = rv[6].as_iter().unwrap();
                 assert!(iter.next().unwrap().as_i64().is_some());
                 assert!(iter.next().unwrap().as_str().is_some());
