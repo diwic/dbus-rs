@@ -54,6 +54,7 @@ pub fn org_freedesktop_dbus_properties_server<F, T, D>(factory: &tree::Factory<t
 where
     D: tree::DataType,
     D::Method: Default,
+    D::Signal: Default,
     T: OrgFreedesktopDBusProperties<Err=tree::MethodErr>,
     F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::MTFn<D>, D>) -> & 'z T,
 {
@@ -107,6 +108,11 @@ where
     let m = m.in_arg(("property_name", "s"));
     let m = m.in_arg(("value", "v"));
     let i = i.add_m(m);
+    let s = factory.signal("PropertiesChanged", Default::default());
+    let s = s.arg(("interface_name", "s"));
+    let s = s.arg(("changed_properties", "a{sv}"));
+    let s = s.arg(("invalidated_properties", "as"));
+    let i = i.add_s(s);
     i
 }
 
@@ -121,9 +127,9 @@ impl dbus::SignalArgs for OrgFreedesktopDBusPropertiesPropertiesChanged {
     const NAME: &'static str = "PropertiesChanged";
     const INTERFACE: &'static str = "org.freedesktop.DBus.Properties";
     fn append(&self, i: &mut arg::IterAppend) {
-        (&self.interface_name as &arg::RefArg).append(i);
-        (&self.changed_properties as &arg::RefArg).append(i);
-        (&self.invalidated_properties as &arg::RefArg).append(i);
+        arg::RefArg::append(&self.interface_name, i);
+        arg::RefArg::append(&self.changed_properties, i);
+        arg::RefArg::append(&self.invalidated_properties, i);
     }
     fn get(&mut self, i: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {
         self.interface_name = try!(i.read());
@@ -390,6 +396,7 @@ where
     D: tree::DataType,
     D::Method: Default,
     D::Property: Default,
+    D::Signal: Default,
     T: OrgFreedesktopPolicyKit1Authority<Err=tree::MethodErr>,
     F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::MTFn<D>, D>) -> & 'z T,
 {
@@ -602,6 +609,8 @@ where
         Ok(())
     });
     let i = i.add_p(p);
+    let s = factory.signal("Changed", Default::default());
+    let i = i.add_s(s);
     i
 }
 

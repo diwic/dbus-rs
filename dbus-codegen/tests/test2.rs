@@ -3,6 +3,7 @@ extern crate dbus;
 use std::sync::atomic::*;
 
 #[allow(dead_code)]
+#[deny(trivial_casts)]
 mod generated;
 
 impl generated::OrgFreedesktopDBusProperties for () {

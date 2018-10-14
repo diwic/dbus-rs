@@ -396,7 +396,7 @@ fn write_signal(s: &mut String, i: &Intf, ss: &Signal) -> Result<(), Box<error::
     *s += &format!("    const INTERFACE: &'static str = \"{}\";\n", i.origname);
     *s += &format!("    fn append(&self, {}: &mut arg::IterAppend) {{\n", if ss.args.len() > 0 {"i"} else {"_"});
     for a in ss.args.iter() {
-        *s += &format!("        (&self.{} as &arg::RefArg).append(i);\n", a.varname());
+        *s += &format!("        arg::RefArg::append(&self.{}, i);\n", a.varname());
     }
     *s += "    }\n";
     *s += &format!("    fn get(&mut self, {}: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {{\n", if ss.args.len() > 0 {"i"} else {"_"});
