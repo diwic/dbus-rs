@@ -102,7 +102,8 @@ pub fn new_interface<M: MethodType<D>, D: DataType>(t: IfaceName<'static>, d: D:
 /// Cache of built-in interfaces, in order to save memory when many object paths implement the same interface(s).
 pub struct IfaceCache<M: MethodType<D>, D: DataType>(Mutex<ArcMap<IfaceName<'static>, Interface<M, D>>>);
 
-impl<M: MethodType<D>, D: DataType> IfaceCache<M, D> {
+impl<M: MethodType<D>, D: DataType> IfaceCache<M, D>
+where D::Interface: Default {
     pub fn get<S: Into<IfaceName<'static>> + Clone, F>(&self, s: S, f: F) -> Arc<Interface<M, D>>
         where F: FnOnce(Interface<M, D>) -> Interface<M, D> {
         let s2 = s.clone().into();
@@ -112,7 +113,9 @@ impl<M: MethodType<D>, D: DataType> IfaceCache<M, D> {
             Arc::new(f(i))
         }).clone()
     }
+}
 
+impl<M: MethodType<D>, D: DataType> IfaceCache<M, D> {
     pub fn get_factory<S: Into<IfaceName<'static>> + Clone, F>(&self, s: S, f: F) -> Arc<Interface<M, D>>
         where F: FnOnce() -> Interface<M, D> {
         let s2 = s.clone().into();
@@ -136,45 +139,12 @@ pub struct ObjectPath<M: MethodType<D>, D: DataType> {
 }
 
 impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
-    /// Builder function that adds a interface to the object path.
-    pub fn add<I: Into<Arc<Interface<M, D>>>>(mut self, s: I) -> Self {
-        let m = s.into();
-        if !m.properties.is_empty() { self.add_property_handler(); }
-        self.ifaces.insert(m.name.clone(), m);
-        self
-    }
 
     /// Get property name
     pub fn get_name(&self) -> &Path<'static> { &self.name }
 
     /// Get associated data
     pub fn get_data(&self) -> &D::ObjectPath { &self.data }
-
-    /// Adds introspection support for this object path.
-    pub fn introspectable(self) -> Self {
-        let z = self.ifacecache.get_factory("org.freedesktop.DBus.Introspectable", || {
-            let f = Factory::from(self.ifacecache.clone());
-            methodtype::org_freedesktop_dbus_introspectable_server(&f, Default::default())
-        });
-        self.add(z)
-    }
-
-    /// Adds ObjectManager support for this object path.
-    ///
-    /// It is not possible to add/remove interfaces while the object path belongs to a tree,
-    /// hence no InterfacesAdded / InterfacesRemoved signals are sent.
-    pub fn object_manager(mut self) -> Self {
-        use arg::{Variant, Dict};
-        let ifname = IfaceName::from("org.freedesktop.DBus.ObjectManager");
-        if self.ifaces.contains_key(&ifname) { return self };
-        let z = self.ifacecache.get(ifname, |i| {
-            i.add_m(super::leaves::new_method("GetManagedObjects".into(), Default::default(),
-                M::make_method(|m| m.path.get_managed_objects(m)))
-                .outarg::<Dict<Path,Dict<&str,Dict<&str,Variant<()>,()>,()>,()>,_>("objpath_interfaces_and_properties"))
-        });
-        self.ifaces.insert(z.name.clone(), z);
-        self
-    }
 
     /// Iterates over interfaces implemented by this object path.
     pub fn iter<'a>(&'a self) -> Iter<'a, Interface<M, D>> { IterE::Iface(self.ifaces.values()).into() }
@@ -190,29 +160,6 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
 <node name="{}">
 {}{}</node>"##, self.name, ifacestr, childstr);
         nodestr
-    }
-
-    fn add_property_handler(&mut self) {
-        use arg::{Variant, Dict};
-        let ifname = IfaceName::from("org.freedesktop.DBus.Properties");
-        if self.ifaces.contains_key(&ifname) { return };
-        let z = self.ifacecache.get(ifname, |i| {
-            i.add_m(super::leaves::new_method("Get".into(), Default::default(),
-                M::make_method(|m| m.path.prop_get(m)))
-                .inarg::<&str,_>("interface_name")
-                .inarg::<&str,_>("property_name")
-                .outarg::<Variant<()>,_>("value"))
-            .add_m(super::leaves::new_method("GetAll".into(), Default::default(),
-                M::make_method(|m| m.path.prop_get_all(m)))
-                .inarg::<&str,_>("interface_name")
-                .outarg::<Dict<&str, Variant<()>, ()>,_>("props"))
-            .add_m(super::leaves::new_method("Set".into(), Default::default(),
-                M::make_method(|m| m.path.prop_set(m)))
-                .inarg::<&str,_>("interface_name")
-                .inarg::<&str,_>("property_name")
-                .inarg::<Variant<bool>,_>("value"))
-        });
-        self.ifaces.insert(z.name.clone(), z);
     }
 
     fn get_iface<'a>(&'a self, iface_name: &'a CStr) -> Result<&Arc<Interface<M, D>>, MethodErr> {
@@ -300,6 +247,67 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
         me.call(&minfo)
     }
 
+}
+
+impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> 
+where <D as DataType>::Interface: Default, <D as DataType>::Method: Default
+{
+    /// Adds introspection support for this object path.
+    pub fn introspectable(self) -> Self {
+        let z = self.ifacecache.get_factory("org.freedesktop.DBus.Introspectable", || {
+            let f = Factory::from(self.ifacecache.clone());
+            methodtype::org_freedesktop_dbus_introspectable_server(&f, Default::default())
+        });
+        self.add(z)
+    }
+
+    /// Builder function that adds a interface to the object path.
+    pub fn add<I: Into<Arc<Interface<M, D>>>>(mut self, s: I) -> Self {
+        let m = s.into();
+        if !m.properties.is_empty() { self.add_property_handler(); }
+        self.ifaces.insert(m.name.clone(), m);
+        self
+    }
+
+    /// Adds ObjectManager support for this object path.
+    ///
+    /// It is not possible to add/remove interfaces while the object path belongs to a tree,
+    /// hence no InterfacesAdded / InterfacesRemoved signals are sent.
+    pub fn object_manager(mut self) -> Self {
+        use arg::{Variant, Dict};
+        let ifname = IfaceName::from("org.freedesktop.DBus.ObjectManager");
+        if self.ifaces.contains_key(&ifname) { return self };
+        let z = self.ifacecache.get(ifname, |i| {
+            i.add_m(super::leaves::new_method("GetManagedObjects".into(), Default::default(),
+                M::make_method(|m| m.path.get_managed_objects(m)))
+                .outarg::<Dict<Path,Dict<&str,Dict<&str,Variant<()>,()>,()>,()>,_>("objpath_interfaces_and_properties"))
+        });
+        self.ifaces.insert(z.name.clone(), z);
+        self
+    }
+
+    fn add_property_handler(&mut self) {
+        use arg::{Variant, Dict};
+        let ifname = IfaceName::from("org.freedesktop.DBus.Properties");
+        if self.ifaces.contains_key(&ifname) { return };
+        let z = self.ifacecache.get(ifname, |i| {
+            i.add_m(super::leaves::new_method("Get".into(), Default::default(),
+                M::make_method(|m| m.path.prop_get(m)))
+                .inarg::<&str,_>("interface_name")
+                .inarg::<&str,_>("property_name")
+                .outarg::<Variant<()>,_>("value"))
+            .add_m(super::leaves::new_method("GetAll".into(), Default::default(),
+                M::make_method(|m| m.path.prop_get_all(m)))
+                .inarg::<&str,_>("interface_name")
+                .outarg::<Dict<&str, Variant<()>, ()>,_>("props"))
+            .add_m(super::leaves::new_method("Set".into(), Default::default(),
+                M::make_method(|m| m.path.prop_set(m)))
+                .inarg::<&str,_>("interface_name")
+                .inarg::<&str,_>("property_name")
+                .inarg::<Variant<bool>,_>("value"))
+        });
+        self.ifaces.insert(z.name.clone(), z);
+    }
 }
 
 pub fn new_objectpath<M: MethodType<D>, D: DataType>(n: Path<'static>, d: D::ObjectPath, cache: Arc<IfaceCache<M, D>>)

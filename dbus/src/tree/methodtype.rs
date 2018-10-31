@@ -88,9 +88,9 @@ pub trait DataType: Sized + Default {
     /// Type of associated data on every Property.
     type Property: fmt::Debug;
     /// Type of associated data on every Interface.
-    type Interface: fmt::Debug + Default;
+    type Interface: fmt::Debug;
     /// Type of associated data on every Method.
-    type Method: fmt::Debug + Default;
+    type Method: fmt::Debug;
     /// Type of associated data on every Signal.
     type Signal: fmt::Debug;
 }
