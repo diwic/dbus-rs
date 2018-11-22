@@ -681,6 +681,26 @@ impl Message {
         if s == 0 { None } else { Some(s) }
     }
 
+    /// Returns true if the message does not expect a reply.
+    pub fn get_no_reply(&self) -> bool { unsafe { ffi::dbus_message_get_no_reply(self.msg) != 0 } }
+
+    /// Set whether or not the message expects a reply.
+    ///
+    /// Set to true if you send a method call and do not want a reply.
+    pub fn set_no_reply(&self, v: bool) {
+        unsafe { ffi::dbus_message_set_no_reply(self.msg, if v { 1 } else { 0 }) }
+    }
+
+    /// Returns true if the message can cause a service to be auto-started.
+    pub fn get_auto_start(&self) -> bool { unsafe { ffi::dbus_message_get_auto_start(self.msg) != 0 } }
+
+    /// Sets whether or not the message can cause a service to be auto-started.
+    ///
+    /// Defaults to true.
+    pub fn set_auto_start(&self, v: bool) {
+        unsafe { ffi::dbus_message_set_auto_start(self.msg, if v { 1 } else { 0 }) }
+    }
+
     /// Add one or more MessageItems to this Message.
     ///
     /// Note: using `append1`, `append2` or `append3` might be faster, especially for large arrays.
@@ -1142,5 +1162,9 @@ mod test {
         let mut m = Message::new_method_call("org.test.rust", "/", "org.test.rust", "Test").unwrap();
         let d = Some(BusName::new(":1.14").unwrap());
         m.set_destination(d);
+
+        assert!(!m.get_no_reply());
+        m.set_no_reply(true);
+        assert!(m.get_no_reply());
     }
 }
