@@ -35,7 +35,7 @@ fn test2() {
     let quit = std::sync::Arc::new(AtomicBool::new(false));
     let quit2 = quit.clone();
     let _ = std::thread::spawn(move || {
-        use generated::OrgFreedesktopDBusProperties;
+        use self::generated::OrgFreedesktopDBusProperties;
         use dbus::arg::RefArg;
 
         let c2 = dbus::Connection::get_private(dbus::BusType::Session).unwrap();

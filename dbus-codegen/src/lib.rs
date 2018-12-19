@@ -3,5 +3,5 @@ extern crate xml;
 
 mod generate;
 
-pub use generate::{generate, GenOpts, ServerAccess};
+pub use crate::generate::{generate, GenOpts, ServerAccess};
 

@@ -29,9 +29,9 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> Device for dbus::ConnPat
     type Err = dbus::Error;
 
     fn check(&self) -> Result<(), Self::Err> {
-        let mut m = try!(self.method_call_with_args(&"com.example.dbus.rs.device".into(), &"check".into(), |_| {
-        }));
-        try!(m.as_result());
+        let mut m = self.method_call_with_args(&"com.example.dbus.rs.device".into(), &"check".into(), |_| {
+        })?;
+        m.as_result()?;
         Ok(())
     }
 
@@ -66,7 +66,7 @@ where
     let fclone = f.clone();
     let h = move |minfo: &tree::MethodInfo<tree::MTFn<D>, D>| {
         let d = fclone(minfo);
-        try!(d.check());
+        d.check()?;
         let rm = minfo.msg.method_return();
         Ok(vec!(rm))
     };
@@ -79,7 +79,7 @@ where
     let p = p.on_get(move |a, pinfo| {
         let minfo = pinfo.to_method_info();
         let d = fclone(&minfo);
-        a.append(try!(d.get_checking()));
+        a.append(d.get_checking()?);
         Ok(())
     });
     let i = i.add_p(p);
@@ -90,7 +90,7 @@ where
     let p = p.on_get(move |a, pinfo| {
         let minfo = pinfo.to_method_info();
         let d = fclone(&minfo);
-        a.append(try!(d.get_description()));
+        a.append(d.get_description()?);
         Ok(())
     });
     let i = i.add_p(p);
@@ -101,14 +101,14 @@ where
     let p = p.on_get(move |a, pinfo| {
         let minfo = pinfo.to_method_info();
         let d = fclone(&minfo);
-        a.append(try!(d.get_online()));
+        a.append(d.get_online()?);
         Ok(())
     });
     let fclone = f.clone();
     let p = p.on_set(move |iter, pinfo| {
         let minfo = pinfo.to_method_info();
         let d = fclone(&minfo);
-        try!(d.set_online(try!(iter.read())));
+        d.set_online(iter.read()?)?;
         Ok(())
     });
     let i = i.add_p(p);
@@ -267,8 +267,8 @@ fn run() -> Result<(), Box<std::error::Error>> {
 
     // Setup DBus connection
     let c = Connection::get_private(BusType::Session)?;
-    try!(c.register_name("com.example.dbus.rs.advancedserverexample", 0));
-    try!(tree.set_registered(&c, true));
+    c.register_name("com.example.dbus.rs.advancedserverexample", 0)?;
+    tree.set_registered(&c, true)?;
 
     // ...and serve incoming requests.
     c.add_handler(tree);

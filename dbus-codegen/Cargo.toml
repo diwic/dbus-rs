@@ -8,6 +8,7 @@ categories = ["os::unix-apis", "api-bindings"]
 repository = "https://github.com/diwic/dbus-rs"
 keywords = ["D-Bus", "DBus"]
 readme = "README.md"
+edition = "2018"
 
 [lib]
 path = "src/lib.rs"

@@ -175,13 +175,13 @@ struct GenVars {
 
 fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<error::Error>> {
 
-    let c = try!(i.next().ok_or_else(|| "unexpected end of signature"));
+    let c = i.next().ok_or_else(|| "unexpected end of signature")?;
     let atype = ArgType::from_i32(c as i32);
     let result = match (atype, c) {
         (Err(_), '(') => {
             let mut s: Vec<String> = vec!();
             while i.peek() != Some(&')') {
-                let n = try!(xml_to_rust_type(i, out, genvars));
+                let n = xml_to_rust_type(i, out, genvars)?;
                 s.push(n);
             };
             i.next().unwrap();
@@ -214,12 +214,12 @@ fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool
             else { "arg::Variant<Box<arg::RefArg>>".into() }
             (ArgType::Array, _) => if i.peek() == Some(&'{') {
                 i.next();
-                let n1 = try!(xml_to_rust_type(i, out, &mut None));
-                let n2 = try!(xml_to_rust_type(i, out, &mut None));
+                let n1 = xml_to_rust_type(i, out, &mut None)?;
+                let n2 = xml_to_rust_type(i, out, &mut None)?;
                 if i.next() != Some('}') { return Err("No end of dict".into()); }
                 format!("::std::collections::HashMap<{}, {}>", n1, n2)
             } else {
-                format!("Vec<{}>", try!(xml_to_rust_type(i, out, &mut None)))
+                format!("Vec<{}>", xml_to_rust_type(i, out, &mut None)?)
             },
             (ArgType::Invalid, _) |
             (ArgType::Struct, _) |
@@ -231,7 +231,7 @@ fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool
 
 fn make_type(s: &str, out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<error::Error>> {
     let mut i = s.chars().peekable();
-    let r = try!(xml_to_rust_type(&mut i, out, genvars));
+    let r = xml_to_rust_type(&mut i, out, genvars)?;
     if i.next().is_some() { Err("Expected type to end".into()) }
     else { Ok(r) }
 }
@@ -247,7 +247,7 @@ impl Arg {
             prefix: format!("{}{}", if self.is_out { 'R' } else { 'I' }, self.idx),
             gen: vec!(),
         }) } else { None };
-        let r = try!(make_type(&self.typ, self.is_out, &mut g));
+        let r = make_type(&self.typ, self.is_out, &mut g)?;
         Ok((r, g.map(|g| g.gen.iter().map(|s|
             if self.is_out { format!("{}: for<'b> arg::Get<'b>", s) } else { format!("{}: arg::Arg + arg::Append", s) } 
         ).collect()).unwrap_or(vec!())))
@@ -275,15 +275,15 @@ fn write_method_decl(s: &mut String, m: &Method, genvar: bool) -> Result<(), Box
     );
 
     for a in m.iargs.iter() {
-        let t = try!(a.typename(genvar)).0;
+        let t = a.typename(genvar)?.0;
         *s += &format!(", {}: {}", a.varname(), t);
     }
     match m.oargs.len() {
         0 => { *s += ") -> Result<(), Self::Err>"; }
-        1 => { *s += &format!(") -> Result<{}, Self::Err>", try!(m.oargs[0].typename(genvar)).0); }
+        1 => { *s += &format!(") -> Result<{}, Self::Err>", m.oargs[0].typename(genvar)?.0); }
         _ => {
-            *s += &format!(") -> Result<({}", try!(m.oargs[0].typename(genvar)).0);
-            for z in m.oargs.iter().skip(1) { *s += &format!(", {}", try!(z.typename(genvar)).0); }
+            *s += &format!(") -> Result<({}", m.oargs[0].typename(genvar)?.0);
+            for z in m.oargs.iter().skip(1) { *s += &format!(", {}", z.typename(genvar)?.0); }
             *s += "), Self::Err>";
         }
     }
@@ -293,10 +293,10 @@ fn write_method_decl(s: &mut String, m: &Method, genvar: bool) -> Result<(), Box
 fn write_prop_decl(s: &mut String, p: &Prop, set: bool) -> Result<(), Box<error::Error>> {
     if set {
         *s += &format!("    fn set_{}(&self, value: {}) -> Result<(), Self::Err>",
-            make_snake(&p.name, false), try!(make_type(&p.typ, true, &mut None)));
+            make_snake(&p.name, false), make_type(&p.typ, true, &mut None)?);
     } else {
         *s += &format!("    fn get_{}(&self) -> Result<{}, Self::Err>",
-            make_snake(&p.name, false), try!(make_type(&p.typ, true, &mut None)));
+            make_snake(&p.name, false), make_type(&p.typ, true, &mut None)?);
     };
     Ok(())
 }
@@ -307,16 +307,16 @@ fn write_intf(s: &mut String, i: &Intf, genvar: bool) -> Result<(), Box<error::E
     *s += &format!("\npub trait {} {{\n", iname);
     *s += "    type Err;\n";
     for m in &i.methods {
-        try!(write_method_decl(s, &m, genvar));
+        write_method_decl(s, &m, genvar)?;
         *s += ";\n";
     }
     for p in &i.props {
         if p.can_get() {
-            try!(write_prop_decl(s, &p, false));
+            write_prop_decl(s, &p, false)?;
             *s += ";\n";
         }
         if p.can_set() {
-            try!(write_prop_decl(s, &p, true));
+            write_prop_decl(s, &p, true)?;
             *s += ";\n";
         }
     }
@@ -330,9 +330,9 @@ fn write_intf_client(s: &mut String, i: &Intf, genvar: bool) -> Result<(), Box<e
     *s += "    type Err = dbus::Error;\n";
     for m in &i.methods {
         *s += "\n";
-        try!(write_method_decl(s, &m, genvar));
+        write_method_decl(s, &m, genvar)?;
         *s += " {\n";
-        *s += &format!("        let mut m = try!(self.method_call_with_args(&\"{}\".into(), &\"{}\".into(), |{}| {{\n",
+        *s += &format!("        let mut m = self.method_call_with_args(&\"{}\".into(), &\"{}\".into(), |{}| {{\n",
             i.origname, m.name, if m.iargs.len() > 0 { "msg" } else { "_" } );
         if m.iargs.len() > 0 {
                 *s += "            let mut i = arg::IterAppend::new(msg);\n";
@@ -340,14 +340,14 @@ fn write_intf_client(s: &mut String, i: &Intf, genvar: bool) -> Result<(), Box<e
         for a in m.iargs.iter() {
                 *s += &format!("            i.append({});\n", a.varname());
         }
-        *s += "        }));\n";
-        *s += "        try!(m.as_result());\n";
+        *s += "        })?;\n";
+        *s += "        m.as_result()?;\n";
         if m.oargs.len() == 0 {
             *s += "        Ok(())\n";
         } else {
             *s += "        let mut i = m.iter_init();\n";
             for a in m.oargs.iter() {
-                *s += &format!("        let {}: {} = try!(i.read());\n", a.varname(), try!(a.typename(genvar)).0);   
+                *s += &format!("        let {}: {} = i.read()?;\n", a.varname(), a.typename(genvar)?.0);   
             }
             if m.oargs.len() == 1 {
                 *s += &format!("        Ok({})\n", m.oargs[0].varname());
@@ -361,7 +361,7 @@ fn write_intf_client(s: &mut String, i: &Intf, genvar: bool) -> Result<(), Box<e
 
     for p in i.props.iter().filter(|p| p.can_get()) {
         *s += "\n";
-        try!(write_prop_decl(s, &p, false));
+        write_prop_decl(s, &p, false)?;
         *s += " {\n";
         *s += &format!("        <Self as dbus::stdintf::org_freedesktop_dbus::Properties>::get(&self, \"{}\", \"{}\")\n",
             i.origname, p.name);
@@ -370,7 +370,7 @@ fn write_intf_client(s: &mut String, i: &Intf, genvar: bool) -> Result<(), Box<e
 
     for p in i.props.iter().filter(|p| p.can_set()) {
         *s += "\n";
-        try!(write_prop_decl(s, &p, true));
+        write_prop_decl(s, &p, true)?;
         *s += " {\n";
         *s += &format!("        <Self as dbus::stdintf::org_freedesktop_dbus::Properties>::set(&self, \"{}\", \"{}\", value)\n",
             i.origname, p.name);
@@ -401,7 +401,7 @@ fn write_signal(s: &mut String, i: &Intf, ss: &Signal) -> Result<(), Box<error::
     *s += "    }\n";
     *s += &format!("    fn get(&mut self, {}: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {{\n", if ss.args.len() > 0 {"i"} else {"_"});
     for a in ss.args.iter() {
-        *s += &format!("        self.{} = try!(i.read());\n", a.varname());
+        *s += &format!("        self.{} = i.read()?;\n", a.varname());
     }
     *s += "        Ok(())\n";
     *s += "    }\n";
@@ -479,7 +479,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
             *s += "        let mut i = minfo.msg.iter_init();\n";
         }
         for a in &m.iargs {
-            *s += &format!("        let {}: {} = try!(i.read());\n", a.varname(), try!(a.typename(genvar)).0);
+            *s += &format!("        let {}: {} = i.read()?;\n", a.varname(), a.typename(genvar)?.0);
         }
         write_server_access(s, i, saccess, true);
         let argsvar = m.iargs.iter().map(|q| q.varname()).collect::<Vec<String>>().join(", ");
@@ -488,7 +488,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
             1 => format!("let {} = ", m.oargs[0].varname()),
             _ => format!("let ({}) = ", m.oargs.iter().map(|q| q.varname()).collect::<Vec<String>>().join(", ")),
         };
-        *s += &format!("        {}try!(d.{}({}));\n",
+        *s += &format!("        {}d.{}({})?;\n",
             retargs, make_snake(&m.name, true), argsvar);
         *s += "        let rm = minfo.msg.method_return();\n";
         for r in &m.oargs {
@@ -506,7 +506,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
         *s +=          "    let i = i.add_m(m);\n";
     }
     for p in &i.props {
-        *s += &format!("\n    let p = factory.property::<{}, _>(\"{}\", Default::default());\n", try!(make_type(&p.typ, false, &mut None)), p.name);
+        *s += &format!("\n    let p = factory.property::<{}, _>(\"{}\", Default::default());\n", make_type(&p.typ, false, &mut None)?, p.name);
         *s += &format!("    let p = p.access(tree::Access::{});\n", match &*p.access {
             "read" => "Read",
             "readwrite" => "ReadWrite",
@@ -520,7 +520,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
             *s += "    let p = p.on_get(move |a, pinfo| {\n";
             *s += "        let minfo = pinfo.to_method_info();\n";
             write_server_access(s, i, saccess, false);
-            *s += &format!("        a.append(try!(d.get_{}()));\n", make_snake(&p.name, false));
+            *s += &format!("        a.append(d.get_{}()?);\n", make_snake(&p.name, false));
             *s += "        Ok(())\n";
             *s += "    });\n";
         }
@@ -531,7 +531,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
             *s += "    let p = p.on_set(move |iter, pinfo| {\n";
             *s += "        let minfo = pinfo.to_method_info();\n";
             write_server_access(s, i, saccess, false);
-            *s += &format!("        try!(d.set_{}(try!(iter.read())));\n", make_snake(&p.name, false));
+            *s += &format!("        d.set_{}(iter.read()?)?;\n", make_snake(&p.name, false));
             *s += "        Ok(())\n";
             *s += "    });\n";
         }
@@ -570,11 +570,11 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<error::Erro
     let mut curprop = None;
     let parser = EventReader::new(io::Cursor::new(xmldata));
     for e in parser {
-        match try!(e) {
+        match e? {
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "interface" => {
-                if curm.is_some() { try!(Err("Start of Interface inside method")) };
-                if curintf.is_some() { try!(Err("Start of Interface inside interface")) };
-                let n = try!(find_attr(attributes, "name"));
+                if curm.is_some() { Err("Start of Interface inside method")? };
+                if curintf.is_some() { Err("Start of Interface inside interface")? };
+                let n = find_attr(attributes, "name")?;
                 let mut n2 = n;
                 if let &Some(ref p) = &opts.skipprefix {
                     if n.len() > p.len() && n.starts_with(p) { n2 = &n[p.len()..]; }
@@ -583,65 +583,65 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<error::Erro
                     methods: Vec::new(), signals: Vec::new(), props: Vec::new() });
             }
             XmlEvent::EndElement { ref name } if &name.local_name == "interface" => {
-                if curm.is_some() { try!(Err("End of Interface inside method")) };
-                if curintf.is_none() { try!(Err("End of Interface outside interface")) };
+                if curm.is_some() { Err("End of Interface inside method")? };
+                if curintf.is_none() { Err("End of Interface outside interface")? };
                 let intf = curintf.take().unwrap();
-                try!(write_intf(&mut s, &intf, opts.genericvariant));
-                try!(write_intf_client(&mut s, &intf, opts.genericvariant));
+                write_intf(&mut s, &intf, opts.genericvariant)?;
+                write_intf_client(&mut s, &intf, opts.genericvariant)?;
                 if let Some(ref mt) = opts.methodtype {
-                    try!(write_intf_tree(&mut s, &intf, &mt, opts.serveraccess, opts.genericvariant));
+                    write_intf_tree(&mut s, &intf, &mt, opts.serveraccess, opts.genericvariant)?;
                 }
-                try!(write_signals(&mut s, &intf));
+                write_signals(&mut s, &intf)?;
             }
 
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "method" => {
-                if curm.is_some() { try!(Err("Start of method inside method")) };
-                if curintf.is_none() { try!(Err("Start of method outside interface")) };
-                curm = Some(Method { name: try!(find_attr(attributes, "name")).into(),
+                if curm.is_some() { Err("Start of method inside method")? };
+                if curintf.is_none() { Err("Start of method outside interface")? };
+                curm = Some(Method { name: find_attr(attributes, "name")?.into(),
                     iargs: Vec::new(), oargs: Vec::new() });
             }
             XmlEvent::EndElement { ref name } if &name.local_name == "method" => {
-                if curm.is_none() { try!(Err("End of method outside method")) };
-                if curintf.is_none() { try!(Err("End of method outside interface")) };
+                if curm.is_none() { Err("End of method outside method")? };
+                if curintf.is_none() { Err("End of method outside interface")? };
                 curintf.as_mut().unwrap().methods.push(curm.take().unwrap());
             }
 
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "signal" => {
-                if cursig.is_some() { try!(Err("Start of signal inside signal")) };
-                if curintf.is_none() { try!(Err("Start of signal outside interface")) };
-                cursig = Some(Signal { name: try!(find_attr(attributes, "name")).into(), args: Vec::new() });
+                if cursig.is_some() { Err("Start of signal inside signal")? };
+                if curintf.is_none() { Err("Start of signal outside interface")? };
+                cursig = Some(Signal { name: find_attr(attributes, "name")?.into(), args: Vec::new() });
             }
             XmlEvent::EndElement { ref name } if &name.local_name == "signal" => {
-                if cursig.is_none() { try!(Err("End of signal outside signal")) };
-                if curintf.is_none() { try!(Err("End of signal outside interface")) };
+                if cursig.is_none() { Err("End of signal outside signal")? };
+                if curintf.is_none() { Err("End of signal outside interface")? };
                 curintf.as_mut().unwrap().signals.push(cursig.take().unwrap());
             }
 
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "property" => {
-                if curprop.is_some() { try!(Err("Start of property inside property")) };
-                if curintf.is_none() { try!(Err("Start of property outside interface")) };
+                if curprop.is_some() { Err("Start of property inside property")? };
+                if curintf.is_none() { Err("Start of property outside interface")? };
                 curprop = Some(Prop {
-                    name: try!(find_attr(attributes, "name")).into(), 
-                    typ: try!(find_attr(attributes, "type")).into(), 
-                    access: try!(find_attr(attributes, "access")).into(), 
+                    name: find_attr(attributes, "name")?.into(), 
+                    typ: find_attr(attributes, "type")?.into(), 
+                    access: find_attr(attributes, "access")?.into(), 
                 });
             }
             XmlEvent::EndElement { ref name } if &name.local_name == "property" => {
-                if curprop.is_none() { try!(Err("End of property outside property")) };
-                if curintf.is_none() { try!(Err("End of property outside interface")) };
+                if curprop.is_none() { Err("End of property outside property")? };
+                if curintf.is_none() { Err("End of property outside interface")? };
                 curintf.as_mut().unwrap().props.push(curprop.take().unwrap());
             }
 
 
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "arg" => {
-                if curm.is_none() && cursig.is_none() { try!(Err("Start of arg outside method and signal")) };
-                if curintf.is_none() { try!(Err("Start of arg outside interface")) };
-                let typ = try!(find_attr(attributes, "type")).into();
+                if curm.is_none() && cursig.is_none() { Err("Start of arg outside method and signal")? };
+                if curintf.is_none() { Err("Start of arg outside interface")? };
+                let typ = find_attr(attributes, "type")?.into();
                 let is_out = if cursig.is_some() { true } else { match find_attr(attributes, "direction") {
                     Err(_) => false,
                     Ok("in") => false,
                     Ok("out") => true,
-                    _ => { try!(Err("Invalid direction")); unreachable!() }
+                    _ => { Err("Invalid direction")?; unreachable!() }
                 }};
                 let arr = if let Some(ref mut sig) = cursig { &mut sig.args }
                     else if is_out { &mut curm.as_mut().unwrap().oargs } else { &mut curm.as_mut().unwrap().iargs }; 
@@ -652,7 +652,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<error::Erro
             _ => (),
         }
     }
-    if curintf.is_some() { try!(Err("Unterminated interface")) }
+    if curintf.is_some() { Err("Unterminated interface")? }
     Ok(s)
 }
 

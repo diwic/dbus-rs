@@ -30,7 +30,7 @@ fn test_main() {
 
         // New way
         let p = c2.with_path(cname, "/test", 1000);
-        use generated::OrgFreedesktopDBusIntrospectable;
+        use crate::generated::OrgFreedesktopDBusIntrospectable;
         assert_eq!(p.introspect().unwrap(), "I feel so introspected right now");
 
         quit2.store(true, Ordering::SeqCst);

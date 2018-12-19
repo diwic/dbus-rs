@@ -4,7 +4,7 @@ extern crate clap;
 
 mod generate;
 
-use generate::ServerAccess;
+use crate::generate::ServerAccess;
 
 // Copy-pasted from the output of this program :-)
 pub trait OrgFreedesktopDBusIntrospectable {
@@ -14,11 +14,11 @@ pub trait OrgFreedesktopDBusIntrospectable {
 impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopDBusIntrospectable for ::dbus::ConnPath<'a, C> {
 
     fn introspect(&self) -> Result<String, ::dbus::Error> {
-        let mut m = try!(self.method_call_with_args(&"org.freedesktop.DBus.Introspectable".into(), &"Introspect".into(), |_| {
-        }));
-        try!(m.as_result());
+        let mut m = self.method_call_with_args(&"org.freedesktop.DBus.Introspectable".into(), &"Introspect".into(), |_| {
+        })?;
+        m.as_result()?;
         let mut i = m.iter_init();
-        let a0: String = try!(i.read());
+        let a0: String = i.read()?;
         Ok(a0)
     }
 }
