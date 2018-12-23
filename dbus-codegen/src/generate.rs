@@ -72,12 +72,13 @@ impl ::std::default::Default for GenOpts {
     }}
 }
 
-const RUST_KEYWORDS: [&str; 52] = [
+const RUST_KEYWORDS: [&str; 57] = [
     "as",
     "break",
     "const",
     "continue",
     "crate",
+    "dyn",
     "else",
     "enum",
     "extern",
@@ -104,12 +105,16 @@ const RUST_KEYWORDS: [&str; 52] = [
     "trait",
     "true",
     "type",
+    "union",
     "unsafe",
     "use",
     "where",
     "while",
+
     "abstract",
     "alignof",
+    "async",
+    "await",
     "become",
     "box",
     "do",
@@ -121,10 +126,11 @@ const RUST_KEYWORDS: [&str; 52] = [
     "proc",
     "pure",
     "sizeof",
+    "try",
     "typeof",
     "unsized",
     "virtual",
-    "yield"
+    "yield",
 ];
 
 
