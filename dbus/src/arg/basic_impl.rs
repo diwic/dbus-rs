@@ -2,7 +2,7 @@ use ffi;
 use super::*;
 use super::check;
 use {Signature, Path, OwnedFd};
-use std::{ptr, any};
+use std::{ptr, any, mem};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_char, c_int};
 
@@ -13,13 +13,13 @@ fn arg_append_basic(i: *mut ffi::DBusMessageIter, arg_type: ArgType, v: i64) {
     };
 }
 
-fn arg_get_basic(i: *mut ffi::DBusMessageIter, arg_type: ArgType) -> Option<i64> {
-    let mut c = 0i64;
+fn arg_get_basic<T>(i: *mut ffi::DBusMessageIter, arg_type: ArgType) -> Option<T> {
     unsafe {
+        let mut c: T = mem::zeroed();
         if ffi::dbus_message_iter_get_arg_type(i) != arg_type as c_int { return None };
         ffi::dbus_message_iter_get_basic(i, &mut c as *mut _ as *mut c_void);
+        Some(c)
     }
-    Some(c)
 }
 
 fn arg_append_f64(i: *mut ffi::DBusMessageIter, arg_type: ArgType, v: f64) {
@@ -72,7 +72,7 @@ impl Append for $t {
 }
 
 impl<'a> Get<'a> for $t {
-    fn get(i: &mut Iter) -> Option<Self> { arg_get_basic(&mut i.0, ArgType::$s).map(|q| q as $t) }
+    fn get(i: &mut Iter) -> Option<Self> { arg_get_basic(&mut i.0, ArgType::$s) }
 }
 
 impl RefArg for $t {
@@ -149,7 +149,7 @@ impl Append for bool {
 }
 impl DictKey for bool {}
 impl<'a> Get<'a> for bool {
-    fn get(i: &mut Iter) -> Option<Self> { arg_get_basic(&mut i.0, ArgType::Boolean).map(|q| q != 0) }
+    fn get(i: &mut Iter) -> Option<Self> { arg_get_basic::<u32>(&mut i.0, ArgType::Boolean).map(|q| q != 0) }
 }
 
 refarg_impl!(bool, _i, Some(if *_i { 1 } else { 0 }), None, Some(if *_i { 1 as u64 } else { 0 as u64 }), Some(if *_i { 1 as f64 } else { 0 as f64 }));
@@ -246,8 +246,7 @@ impl Append for OwnedFd {
 impl DictKey for OwnedFd {}
 impl<'a> Get<'a> for OwnedFd {
     fn get(i: &mut Iter) -> Option<Self> {
-        use std::os::unix::io::RawFd;
-        arg_get_basic(&mut i.0, ArgType::UnixFd).map(|q| OwnedFd::new(q as RawFd)) 
+        arg_get_basic(&mut i.0, ArgType::UnixFd).map(|q| OwnedFd::new(q)) 
     }
 }
 
