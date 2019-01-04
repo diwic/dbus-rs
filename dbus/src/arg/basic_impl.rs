@@ -16,10 +16,54 @@ fn arg_append_basic<T>(i: *mut ffi::DBusMessageIter, arg_type: ArgType, v: T) {
 
 fn arg_get_basic(i: *mut ffi::DBusMessageIter, arg_type: ArgType) -> Option<i64> {
     let mut c = 0i64;
+
     unsafe {
         if ffi::dbus_message_iter_get_arg_type(i) != arg_type as c_int { return None };
-        ffi::dbus_message_iter_get_basic(i, &mut c as *mut _ as *mut c_void);
     }
+
+    match arg_type {
+        ArgType::Byte => {
+        let mut t = 0u8;
+            unsafe {
+                ffi::dbus_message_iter_get_basic(i, &mut t as *mut _ as *mut c_void);
+            }
+            c = t as i64;
+        },
+        ArgType::Int16 => {
+            let mut t = 0i16;
+            unsafe {
+                ffi::dbus_message_iter_get_basic(i, &mut t as *mut _ as *mut c_void);
+            }
+            c = t as i64;
+        },
+        ArgType::UInt16 => {
+            let mut t = 0u16;
+            unsafe {
+                ffi::dbus_message_iter_get_basic(i, &mut t as *mut _ as *mut c_void);
+            }
+            c = t as i64;
+        },
+        ArgType::Int32 => {
+            let mut t = 0i32;
+            unsafe {
+                ffi::dbus_message_iter_get_basic(i, &mut t as *mut _ as *mut c_void);
+            }
+            c = t as i64;
+        },
+        ArgType::UInt32 => {
+            let mut t = 0u32;
+            unsafe {
+                ffi::dbus_message_iter_get_basic(i, &mut t as *mut _ as *mut c_void);
+            }
+            c = t as i64;
+        },
+        _ => {
+            unsafe {
+                ffi::dbus_message_iter_get_basic(i, &mut c as *mut _ as *mut c_void);
+            }
+        }
+    }
+
     Some(c)
 }
 
