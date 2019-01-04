@@ -6,7 +6,8 @@ use std::{ptr, any};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_char, c_int};
 
-fn arg_append_basic(i: *mut ffi::DBusMessageIter, arg_type: ArgType, v: i64) {
+
+fn arg_append_basic<T>(i: *mut ffi::DBusMessageIter, arg_type: ArgType, v: T) {
     let p = &v as *const _ as *const c_void;
     unsafe {
         check("dbus_message_iter_append_basic", ffi::dbus_message_iter_append_basic(i, arg_type as c_int, p));
@@ -68,7 +69,7 @@ impl Arg for $t {
 }
 
 impl Append for $t {
-    fn append(self, i: &mut IterAppend) { arg_append_basic(&mut i.0, ArgType::$s, self as i64) }
+    fn append(self, i: &mut IterAppend) { arg_append_basic(&mut i.0, ArgType::$s, self) }
 }
 
 impl<'a> Get<'a> for $t {
@@ -81,7 +82,7 @@ impl RefArg for $t {
     #[inline]
     fn signature(&self) -> Signature<'static> { unsafe { Signature::from_slice_unchecked($f) } }
     #[inline]
-    fn append(&self, i: &mut IterAppend) { arg_append_basic(&mut i.0, ArgType::$s, *self as i64) }
+    fn append(&self, i: &mut IterAppend) { arg_append_basic(&mut i.0, ArgType::$s, *self) }
     #[inline]
     fn as_any(&self) -> &any::Any { self }
     #[inline]
@@ -240,7 +241,7 @@ impl Arg for OwnedFd {
 impl Append for OwnedFd {
     fn append(self, i: &mut IterAppend) {
         use std::os::unix::io::AsRawFd;
-        arg_append_basic(&mut i.0, ArgType::UnixFd, self.as_raw_fd() as i64)
+        arg_append_basic(&mut i.0, ArgType::UnixFd, self.as_raw_fd())
     }
 }
 impl DictKey for OwnedFd {}
