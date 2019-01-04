@@ -400,10 +400,10 @@ impl MessageItem {
         v
     }
 
-    fn iter_append_basic(&self, i: &mut ffi::DBusMessageIter, v: i64) {
+    fn iter_append_basic<T>(&self, i: &mut ffi::DBusMessageIter, v: T) {
         let t = self.array_type();
+        let p = &v as *const _ as *const c_void;
         unsafe {
-            let p: *const c_void = mem::transmute(&v);
             ffi::dbus_message_iter_append_basic(i, t as c_int, p);
         }
     }
@@ -415,15 +415,15 @@ impl MessageItem {
                 let p = mem::transmute(&c);
                 ffi::dbus_message_iter_append_basic(i, ffi::DBUS_TYPE_STRING, p);
             },
-            &MessageItem::Bool(b) => self.iter_append_basic(i, b as i64),
-            &MessageItem::Byte(b) => self.iter_append_basic(i, b as i64),
-            &MessageItem::Int16(b) => self.iter_append_basic(i, b as i64),
-            &MessageItem::Int32(b) => self.iter_append_basic(i, b as i64),
-            &MessageItem::Int64(b) => self.iter_append_basic(i, b as i64),
-            &MessageItem::UInt16(b) => self.iter_append_basic(i, b as i64),
-            &MessageItem::UInt32(b) => self.iter_append_basic(i, b as i64),
-            &MessageItem::UInt64(b) => self.iter_append_basic(i, b as i64),
-            &MessageItem::UnixFd(ref b) => self.iter_append_basic(i, b.as_raw_fd() as i64),
+            &MessageItem::Bool(b) => self.iter_append_basic(i, b),
+            &MessageItem::Byte(b) => self.iter_append_basic(i, b),
+            &MessageItem::Int16(b) => self.iter_append_basic(i, b),
+            &MessageItem::Int32(b) => self.iter_append_basic(i, b),
+            &MessageItem::Int64(b) => self.iter_append_basic(i, b),
+            &MessageItem::UInt16(b) => self.iter_append_basic(i, b),
+            &MessageItem::UInt32(b) => self.iter_append_basic(i, b),
+            &MessageItem::UInt64(b) => self.iter_append_basic(i, b),
+            &MessageItem::UnixFd(ref b) => self.iter_append_basic(i, b.as_raw_fd()),
             &MessageItem::Double(b) => iter_append_f64(i, b),
             &MessageItem::Array(ref a) => iter_append_array(i, &a.v, a.element_signature()),
             &MessageItem::Struct(ref v) => iter_append_struct(i, &**v),
