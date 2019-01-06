@@ -58,7 +58,7 @@ let myString = try!(myConnPath.foo(myInteger));
 ```rust
 use SignalArgs;
 myConnection.add_match(OrgExampleTestLaundry::match_str(None, None));
-for msg in c.incoming(1000) {
+for msg in myConnection.incoming(1000) {
     if let Some(laundrySignal) = OrgExampleTestLaundry::from_message(&msg) {
         println!("Laundry was eaten: {:?}", laundrySignal.eaten);
     }
