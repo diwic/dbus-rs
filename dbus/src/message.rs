@@ -164,28 +164,12 @@ pub enum MessageItem {
     UnixFd(OwnedFd),
 }
 
-fn iter_get_basic(i: &mut ffi::DBusMessageIter) -> i64 {
-    let mut c: i64 = 0;
+fn iter_get_basic<T>(i: &mut ffi::DBusMessageIter) -> T {
     unsafe {
-        let p: *mut c_void = mem::transmute(&mut c);
+        let mut c: T = mem::zeroed();
+        let p = &mut c as *mut _ as *mut c_void;
         ffi::dbus_message_iter_get_basic(i, p);
-    }
-    c
-}
-
-fn iter_get_f64(i: &mut ffi::DBusMessageIter) -> f64 {
-    let mut c: f64 = 0.0;
-    unsafe {
-        let p: *mut c_void = mem::transmute(&mut c);
-        ffi::dbus_message_iter_get_basic(i, p);
-    }
-    c
-}
-
-fn iter_append_f64(i: &mut ffi::DBusMessageIter, v: f64) {
-    unsafe {
-        let p: *const c_void = mem::transmute(&v);
-        ffi::dbus_message_iter_append_basic(i, ffi::DBUS_TYPE_DOUBLE, p);
+        c
     }
 }
 
@@ -377,16 +361,16 @@ impl MessageItem {
                 let o = Path::new(c_str_to_slice(&c).expect("D-Bus object path error")).ok().expect("D-Bus object path error");
                 Some(MessageItem::ObjectPath(o))
             },
-            ffi::DBUS_TYPE_UNIX_FD => Some(MessageItem::UnixFd(OwnedFd::new(iter_get_basic(i) as libc::c_int))),
-            ffi::DBUS_TYPE_BOOLEAN => Some(MessageItem::Bool((iter_get_basic(i) as u32) != 0)),
-            ffi::DBUS_TYPE_BYTE => Some(MessageItem::Byte(iter_get_basic(i) as u8)),
-            ffi::DBUS_TYPE_INT16 => Some(MessageItem::Int16(iter_get_basic(i) as i16)),
-            ffi::DBUS_TYPE_INT32 => Some(MessageItem::Int32(iter_get_basic(i) as i32)),
-            ffi::DBUS_TYPE_INT64 => Some(MessageItem::Int64(iter_get_basic(i) as i64)),
-            ffi::DBUS_TYPE_UINT16 => Some(MessageItem::UInt16(iter_get_basic(i) as u16)),
-            ffi::DBUS_TYPE_UINT32 => Some(MessageItem::UInt32(iter_get_basic(i) as u32)),
-            ffi::DBUS_TYPE_UINT64 => Some(MessageItem::UInt64(iter_get_basic(i) as u64)),
-            ffi::DBUS_TYPE_DOUBLE => Some(MessageItem::Double(iter_get_f64(i))),
+            ffi::DBUS_TYPE_UNIX_FD => Some(MessageItem::UnixFd(OwnedFd::new(iter_get_basic(i)))),
+            ffi::DBUS_TYPE_BOOLEAN => Some(MessageItem::Bool(iter_get_basic::<u32>(i) != 0)),
+            ffi::DBUS_TYPE_BYTE => Some(MessageItem::Byte(iter_get_basic(i))),
+            ffi::DBUS_TYPE_INT16 => Some(MessageItem::Int16(iter_get_basic(i))),
+            ffi::DBUS_TYPE_INT32 => Some(MessageItem::Int32(iter_get_basic(i))),
+            ffi::DBUS_TYPE_INT64 => Some(MessageItem::Int64(iter_get_basic(i))),
+            ffi::DBUS_TYPE_UINT16 => Some(MessageItem::UInt16(iter_get_basic(i))),
+            ffi::DBUS_TYPE_UINT32 => Some(MessageItem::UInt32(iter_get_basic(i))),
+            ffi::DBUS_TYPE_UINT64 => Some(MessageItem::UInt64(iter_get_basic(i))),
+            ffi::DBUS_TYPE_DOUBLE => Some(MessageItem::Double(iter_get_basic(i))),
             _ => { None /* Only the new msgarg module supports signatures */ }
         }
     }
@@ -401,10 +385,10 @@ impl MessageItem {
     }
 
     fn iter_append_basic<T>(&self, i: &mut ffi::DBusMessageIter, v: T) {
-        let t = self.array_type();
+        let t = self.array_type() as c_int;
         let p = &v as *const _ as *const c_void;
         unsafe {
-            ffi::dbus_message_iter_append_basic(i, t as c_int, p);
+            ffi::dbus_message_iter_append_basic(i, t, p);
         }
     }
 
@@ -415,7 +399,7 @@ impl MessageItem {
                 let p = mem::transmute(&c);
                 ffi::dbus_message_iter_append_basic(i, ffi::DBUS_TYPE_STRING, p);
             },
-            &MessageItem::Bool(b) => self.iter_append_basic(i, b),
+            &MessageItem::Bool(b) => self.iter_append_basic(i, if b { 1u32 } else { 0u32 }),
             &MessageItem::Byte(b) => self.iter_append_basic(i, b),
             &MessageItem::Int16(b) => self.iter_append_basic(i, b),
             &MessageItem::Int32(b) => self.iter_append_basic(i, b),
@@ -424,7 +408,7 @@ impl MessageItem {
             &MessageItem::UInt32(b) => self.iter_append_basic(i, b),
             &MessageItem::UInt64(b) => self.iter_append_basic(i, b),
             &MessageItem::UnixFd(ref b) => self.iter_append_basic(i, b.as_raw_fd()),
-            &MessageItem::Double(b) => iter_append_f64(i, b),
+            &MessageItem::Double(b) => self.iter_append_basic(i, b),
             &MessageItem::Array(ref a) => iter_append_array(i, &a.v, a.element_signature()),
             &MessageItem::Struct(ref v) => iter_append_struct(i, &**v),
             &MessageItem::Variant(ref b) => iter_append_variant(i, &**b),
