@@ -1,11 +1,11 @@
 extern crate dbus;
 
+#[allow(dead_code)]
+mod policykit;
+
 use std::sync::atomic::*;
 
-#[allow(dead_code)]
-mod generated;
-
-impl generated::OrgFreedesktopDBusIntrospectable for () {
+impl policykit::OrgFreedesktopDBusIntrospectable for () {
    type Err = dbus::tree::MethodErr;
    fn introspect(&self) -> Result<String, Self::Err> { Ok("I feel so introspected right now".into()) }
 }
@@ -13,7 +13,7 @@ impl generated::OrgFreedesktopDBusIntrospectable for () {
 #[test]
 fn test_main() {
     let f = dbus::tree::Factory::new_fn::<()>();
-    let i1 = generated::org_freedesktop_dbus_introspectable_server(&f, (), |minfo| minfo.path.get_data());
+    let i1 = policykit::org_freedesktop_dbus_introspectable_server(&f, (), |minfo| minfo.path.get_data());
     let t = f.tree(()).add(f.object_path("/test", ()).add(i1));
     let c = dbus::Connection::get_private(dbus::BusType::Session).unwrap();
     t.set_registered(&c, true).unwrap();
@@ -30,7 +30,7 @@ fn test_main() {
 
         // New way
         let p = c2.with_path(cname, "/test", 1000);
-        use crate::generated::OrgFreedesktopDBusIntrospectable;
+        use policykit::OrgFreedesktopDBusIntrospectable;
         assert_eq!(p.introspect().unwrap(), "I feel so introspected right now");
 
         quit2.store(true, Ordering::SeqCst);
