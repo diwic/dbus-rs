@@ -148,7 +148,7 @@ fn main() {
     generate_code(POLICYKIT_XML, &Default::default(), "policykit.rs");
 
     let g = GenOpts {
-        methodtype: Some("Generic".into()),
+        methodtype: Some("MTFnMut".into()),
         serveraccess: ServerAccess::AsRefClosure,
         ..Default::default()
     };
