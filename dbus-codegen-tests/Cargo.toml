@@ -1,0 +1,18 @@
+# Dummy crate to genenerate code from latest codegen binary and run tests against that code.
+
+[package]
+name = "codegen-tests"
+version = "0.1.0"
+authors = ["Zeeshan Ali <zeeshanak@gnome.org>",
+           "David Henningsson <diwic@ubuntu.com>"]
+license = "Apache-2.0/MIT"
+build = "build.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+dbus = { path = "../dbus", version = "0.6" }
+
+[build-dependencies]
+dbus-codegen = { path = "../dbus-codegen" }

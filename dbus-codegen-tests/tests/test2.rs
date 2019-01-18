@@ -4,9 +4,9 @@ use std::sync::atomic::*;
 
 #[allow(dead_code)]
 #[deny(trivial_casts)]
-mod generated;
+mod policykit;
 
-impl generated::OrgFreedesktopDBusProperties for () {
+impl policykit::OrgFreedesktopDBusProperties for () {
     type Err = ::dbus::tree::MethodErr;
 
     fn get(&self, interfacename: &str, propertyname: &str) -> Result<::dbus::arg::Variant<Box<::dbus::arg::RefArg>>, Self::Err> {
@@ -27,7 +27,7 @@ impl generated::OrgFreedesktopDBusProperties for () {
 #[test]
 fn test2() {
     let f = dbus::tree::Factory::new_fn::<()>();
-    let i1 = generated::org_freedesktop_dbus_properties_server(&f, (), |minfo| minfo.path.get_data());
+    let i1 = policykit::org_freedesktop_dbus_properties_server(&f, (), |minfo| minfo.path.get_data());
     let t = f.tree(()).add(f.object_path("/test", ()).add(i1));
     let c = dbus::Connection::get_private(dbus::BusType::Session).unwrap();
     t.set_registered(&c, true).unwrap();
@@ -35,7 +35,7 @@ fn test2() {
     let quit = std::sync::Arc::new(AtomicBool::new(false));
     let quit2 = quit.clone();
     let _ = std::thread::spawn(move || {
-        use self::generated::OrgFreedesktopDBusProperties;
+        use policykit::OrgFreedesktopDBusProperties;
         use dbus::arg::RefArg;
 
         let c2 = dbus::Connection::get_private(dbus::BusType::Session).unwrap();
