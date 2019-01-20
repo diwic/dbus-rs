@@ -300,4 +300,6 @@ extern "C" {
     pub fn dbus_connection_get_outgoing_size(conn: *mut DBusConnection) -> c_long;
     pub fn dbus_connection_get_outgoing_unix_fds(conn: *mut DBusConnection) -> c_long;
     pub fn dbus_connection_has_messages_to_send(conn: *mut DBusConnection) -> u32;
+
+    pub fn dbus_try_get_local_machine_id (error: *mut DBusError) -> *mut c_char;
 }
