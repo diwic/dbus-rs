@@ -301,7 +301,7 @@ impl Connection {
     /// Note: `get_private` does this automatically, useful with `open_private`
     pub fn register(&self) -> Result<(), Error> {
         let mut e = Error::empty();
-        if !unsafe { ffi::dbus_bus_register(self.conn(), e.get_mut()) } {
+        if unsafe { ffi::dbus_bus_register(self.conn(), e.get_mut()) == 0 } {
             Err(e)
         } else {
             Ok(())
@@ -310,7 +310,7 @@ impl Connection {
 
     /// Gets whether the connection is currently open.
     pub fn is_connected(&self) -> bool {
-        unsafe { ffi::dbus_connection_get_is_connected(self.conn()) }
+        unsafe { ffi::dbus_connection_get_is_connected(self.conn()) != 0 }
     }
 
     /// Sends a message over the D-Bus and waits for a reply.

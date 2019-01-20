@@ -14,7 +14,7 @@ readme = "../README.md"
 
 [dependencies]
 libc = "0.2.7"
-libdbus-sys = { path = "../libdbus-sys", version = "0.1.5" }
+libdbus-sys = { path = "../libdbus-sys", version = "0.2" }
 
 [dev-dependencies]
 tempdir = "0.3"
