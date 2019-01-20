@@ -46,6 +46,10 @@ mod watch;
 mod connection;
 mod signalargs;
 
+mod connection2;
+
+pub use connection2::Connection as Connection2;
+
 mod strings;
 pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
 
