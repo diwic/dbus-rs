@@ -178,6 +178,9 @@ fn conn2_simple_test() {
                     println!("{}", n);
                     if n == my_name { return; } // Hooray, we found ourselves!
                 }
+                assert!(false);
+            } else if let Some(r) = crate::MessageDispatcher::default_dispatch(&msg) {
+                c.send(r).unwrap();
             }
         }
         c.read_write(Some(100)).unwrap();

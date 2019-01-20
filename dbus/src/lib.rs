@@ -47,8 +47,9 @@ mod connection;
 mod signalargs;
 
 mod connection2;
-
+mod dispatcher;
 pub use connection2::Connection as Connection2;
+pub use dispatcher::MessageDispatcher;
 
 mod strings;
 pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
