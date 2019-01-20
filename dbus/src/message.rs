@@ -924,6 +924,16 @@ impl Message {
         if unsafe { ffi::dbus_set_error_from_message(e.get_mut(), self.msg) } != 0 { Err(e) }
         else { Ok(()) }
     }
+
+    pub (crate) fn ptr(&self) -> *mut ffi::DBusMessage { self.msg }
+
+    pub (crate) fn from_ptr(ptr: *mut ffi::DBusMessage, add_ref: bool) -> Message {
+        if add_ref {
+            unsafe { ffi::dbus_message_ref(ptr) };
+        }
+        Message { msg: ptr }
+    }
+
 }
 
 impl Drop for Message {
@@ -939,18 +949,6 @@ impl fmt::Debug for Message {
         write!(f, "{:?}", self.headers())
     }
 }
-
-pub fn message_from_ptr(ptr: *mut ffi::DBusMessage, add_ref: bool) -> Message {
-    if add_ref {
-        unsafe { ffi::dbus_message_ref(ptr) };
-    }
-    Message { msg: ptr }
-}
-
-pub fn get_message_ptr<'a>(m: &Message) -> *mut ffi::DBusMessage {
-    m.msg
-}
-
 
 /// A convenience struct that wraps connection, destination and path.
 ///

@@ -68,7 +68,7 @@ pub use self::array_impl::{Array, Dict};
 pub use self::variantstruct_impl::Variant;
 
 use std::{fmt, mem, ptr, error};
-use {ffi, Message, message, Signature, Path, OwnedFd};
+use {ffi, Message, Signature, Path, OwnedFd};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_void, c_int};
 
@@ -85,7 +85,7 @@ impl<'a> IterAppend<'a> {
     /// Creates a new IterAppend struct.
     pub fn new(m: &'a mut Message) -> IterAppend<'a> { 
         let mut i = ffi_iter();
-        unsafe { ffi::dbus_message_iter_init_append(message::get_message_ptr(m), &mut i) };
+        unsafe { ffi::dbus_message_iter_init_append(m.ptr(), &mut i) };
         IterAppend(i, m)
     }
 
@@ -168,7 +168,7 @@ impl<'a> Iter<'a> {
     /// Creates a new struct for iterating over the arguments of a message, starting with the first argument. 
     pub fn new(m: &'a Message) -> Iter<'a> { 
         let mut i = ffi_iter();
-        unsafe { ffi::dbus_message_iter_init(message::get_message_ptr(m), &mut i) };
+        unsafe { ffi::dbus_message_iter_init(m.ptr(), &mut i) };
         Iter(i, m, 0)
     }
 
