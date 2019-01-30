@@ -3,6 +3,7 @@ use mio::unix::UnixReady;
 use std::io;
 use dbus::{Connection, ConnMsgs, Watch, WatchEvent, Message, MessageType, Error as DBusError};
 use futures::{Async, Future, Stream, Poll};
+use futures::future;
 use futures::sync::{oneshot, mpsc};
 use tokio::reactor::Handle as CoreHandle;
 use tokio::reactor::PollEvented2;
@@ -59,13 +60,25 @@ impl AConnection {
     }
 
     /// Sends a method call message, and returns a Future for the method return.
-    pub fn method_call(&self, m: Message) -> Result<AMethodCall, &'static str> {
-        let r = self.conn.send(m).map_err(|_| "D-Bus send error")?;
-        let (tx, rx) = oneshot::channel();
+    pub fn method_call(&self, m: Message) -> impl Future<Item = Message, Error = DBusError> {
+        let serial = match self.conn.send(m) {
+            Ok(r) => r,
+            _ => {
+                let e = DBusError::new_custom("org.freedesktop.DBus.Failed", "Send error");
+                return future::err(e).flatten();
+            }
+        };
+
         let mut map = self.callmap.borrow_mut();
-        map.insert(r, tx); // TODO: error check for duplicate entries. Should not happen, but if it does...
-        let mc = AMethodCall { serial: r, callmap: self.callmap.clone(), inner: rx };
-        Ok(mc)
+        if map.contains_key(&serial) {
+            let e = DBusError::new_custom("org.freedesktop.DBus.Failed", "Duplicate serial on send");
+            return future::err(e).flatten();
+        }
+
+        let (tx, rx) = oneshot::channel();
+        map.insert(serial, tx);
+        let mc = AMethodCall { serial, callmap: self.callmap.clone(), inner: rx };
+        future::ok(mc).flatten()
     }
 
     /// Returns a stream of incoming messages.
@@ -227,9 +240,9 @@ impl mio::Evented for AWatch {
     }
 }
 
-#[derive(Debug)]
 /// A Future that resolves when a method call is replied to.
-pub struct AMethodCall {
+#[derive(Debug)]
+pub (crate) struct AMethodCall {
     serial: u32,
     callmap: MCallMap,
     inner: oneshot::Receiver<Message>,
@@ -295,7 +308,7 @@ fn aconnection_test() {
     let aconn = AConnection::new(conn.clone(), CoreHandle::current(), &mut rt).unwrap();
 
     let m = ::dbus::Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
-    let reply = rt.block_on(aconn.method_call(m).unwrap()).unwrap();
+    let reply = rt.block_on(aconn.method_call(m)).unwrap();
     let z: Vec<&str> = reply.get1().unwrap();
     println!("got reply: {:?}", z);
     assert!(z.iter().any(|v| *v == "org.freedesktop.DBus"));

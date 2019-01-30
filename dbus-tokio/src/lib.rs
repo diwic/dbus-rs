@@ -22,4 +22,4 @@ pub mod tree;
 
 mod adriver;
 
-pub use adriver::{AConnection, AMessageStream, AMethodCall};
+pub use adriver::{AConnection, AMessageStream};
