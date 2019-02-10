@@ -1,0 +1,18 @@
+[package]
+name = "dbus-futures"
+version = "0.1.0"
+authors = ["David Henningsson <diwic@ubuntu.com>"]
+edition = "2018"
+
+[dependencies]
+futures-preview = "0.3.0-alpha.12"
+dbus = { path = "../dbus" }
+
+[dependencies.thin_main_loop]
+# git = "https://github.com/diwic/thin_main_loop.git"
+path = "../../thin_main_loop"
+features = ["futures","glib"]
+optional = true
+
+[features]
+tml = ["thin_main_loop"]

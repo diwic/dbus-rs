@@ -1,6 +1,7 @@
-use crate::{BusType, Error, Message, to_c_str};
+use crate::{BusType, Error, Message, to_c_str, Watch};
 use std::{ptr, str};
 use std::ffi::CStr;
+use std::os::raw::{c_void};
 
 #[derive(Debug)]
 pub struct ConnHandle(*mut ffi::DBusConnection);
@@ -30,23 +31,23 @@ impl Drop for ConnHandle {
 /// callbacks from that function. Instead the same functionality needs to be
 /// implemented by these bindings somehow - this is not done yet.
 #[derive(Debug)]
-pub struct Connection {
+pub struct TxRx {
     handle: ConnHandle,
 }
 
-impl Connection {
+impl TxRx {
     #[inline(always)]
     pub (crate) fn conn(&self) -> *mut ffi::DBusConnection {
         self.handle.0
     }
 
-    fn conn_from_ptr(ptr: *mut ffi::DBusConnection) -> Result<Connection, Error> {
+    fn conn_from_ptr(ptr: *mut ffi::DBusConnection) -> Result<TxRx, Error> {
         let handle = ConnHandle(ptr);
 
         /* No, we don't want our app to suddenly quit if dbus goes down */
         unsafe { ffi::dbus_connection_set_exit_on_disconnect(ptr, 0) };
 
-        let c = Connection { handle };
+        let c = TxRx { handle };
 
         Ok(c)
     }
@@ -55,7 +56,7 @@ impl Connection {
     /// Creates a new D-Bus connection.
     ///
     /// Blocking: until the connection is up and running. 
-    pub fn get_private(bus: BusType) -> Result<Connection, Error> {
+    pub fn get_private(bus: BusType) -> Result<TxRx, Error> {
         let mut e = Error::empty();
         let conn = unsafe { ffi::dbus_bus_get_private(bus, e.get_mut()) };
         if conn == ptr::null_mut() {
@@ -69,7 +70,7 @@ impl Connection {
     /// Note: for all common cases (System / Session bus) you probably want "get_private" instead.
     ///
     /// Blocking: until the connection is established.
-    pub fn open_private(address: &str) -> Result<Connection, Error> {
+    pub fn open_private(address: &str) -> Result<TxRx, Error> {
         let mut e = Error::empty();
         let conn = unsafe { ffi::dbus_connection_open_private(to_c_str(address).as_ptr(), e.get_mut()) };
         if conn == ptr::null_mut() {
@@ -142,6 +143,8 @@ impl Connection {
     /// Removes a message from the incoming queue, or returns None if the queue is empty.
     ///
     /// Use "read_write" first, so that messages are put into the incoming queue.
+    /// For unhandled messages, please call MessageDispatcher::default_dispatch to return
+    /// default replies for method calls.
     pub fn pop_message(&self) -> Option<Message> {
         let mptr = unsafe { ffi::dbus_connection_pop_message(self.conn()) };
         if mptr == ptr::null_mut() {
@@ -150,21 +153,43 @@ impl Connection {
             Some(Message::from_ptr(mptr, false))
         }
     }
+
+    /// Get an up-to-date list of file descriptors to watch.
+    ///
+    /// Might be changed into something that allows for callbacks when the watch list is changed.
+    pub fn watch_fds(&mut self) -> Result<Vec<Watch>, ()> {
+        extern "C" fn add_watch_cb(watch: *mut ffi::DBusWatch, data: *mut c_void) -> u32 {
+            unsafe {
+                let wlist: &mut Vec<Watch> = &mut *(data as *mut _);
+                wlist.push(Watch::from_raw(watch));
+            }
+            1
+        }
+        let mut r = vec!();
+        if unsafe { ffi::dbus_connection_set_watch_functions(self.conn(),
+            Some(add_watch_cb), None, None, &mut r as *mut _ as *mut _, None) } == 0 { return Err(()) }
+        assert!(unsafe { ffi::dbus_connection_set_watch_functions(self.conn(),
+            None, None, None, ptr::null_mut(), None) } != 0);
+        Ok(r)
+    }
 }
 
 #[test]
-fn test_conn_send_sync() {
+fn test_txrx_send_sync() {
     fn is_send<T: Send>(_: &T) {}
     fn is_sync<T: Sync>(_: &T) {}
-    let c = Connection::get_private(BusType::Session).unwrap();
+    let c = TxRx::get_private(BusType::Session).unwrap();
     is_send(&c);
     is_sync(&c);
 }
 
 #[test]
-fn conn2_simple_test() {
-    let c = Connection::get_private(BusType::Session).unwrap();
+fn txrx_simple_test() {
+    let mut c = TxRx::get_private(BusType::Session).unwrap();
     assert!(c.is_connected());
+    let fds = c.watch_fds().unwrap();
+    println!("{:?}", fds);
+    assert!(fds.len() > 0);
     let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
     let reply = c.send(m).unwrap();
     let my_name = c.unique_name().unwrap();

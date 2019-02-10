@@ -1,2 +1,2 @@
 [workspace]
-members = ["libdbus-sys", "dbus", "dbus-tokio", "dbus-codegen", "dbus-codegen-tests"]
+members = ["libdbus-sys", "dbus", "dbus-tokio", "dbus-codegen", "dbus-codegen-tests", "dbus-futures"]

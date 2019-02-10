@@ -1,10 +1,32 @@
 use crate::{Message, MessageType, Error, to_c_str, c_str_to_slice};
 use std::ptr;
 
-/// [Unstable and Experimental] Meant for usage with Connection2.
-pub struct MessageDispatcher;
+use std::collections::HashMap;
 
-impl MessageDispatcher {
+/// [Unstable and Experimental]
+pub trait MessageDispatcherConfig {
+    type Reply;
+    fn call_reply(_: Self::Reply, _: Message);
+}
+
+/// [Unstable and Experimental] Meant for usage with RxTx.
+pub struct MessageDispatcher<C: MessageDispatcherConfig> {
+    waiting_replies: HashMap<u32, C::Reply>
+}
+
+impl<C: MessageDispatcherConfig> MessageDispatcher<C> {
+
+    /// Adds a waiting reply to a method call. func will be called when a method reply is dispatched.
+    pub fn add_reply(&mut self, serial: u32, func: C::Reply) {
+        if let Some(_) = self.waiting_replies.insert(serial, func) {
+            // panic because we're overwriting something else, or just ignore?
+        }
+    }
+
+    /// Cancels a waiting reply.
+    pub fn cancel_reply(&mut self, serial: u32) -> Option<C::Reply> {
+        self.waiting_replies.remove(&serial)
+    }
 
     /// Handles what we need to be a good D-Bus citizen.
     ///

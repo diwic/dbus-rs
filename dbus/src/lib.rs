@@ -48,7 +48,7 @@ mod signalargs;
 
 mod connection2;
 mod dispatcher;
-pub use connection2::Connection as Connection2;
+pub use connection2::TxRx;
 pub use dispatcher::MessageDispatcher;
 
 mod strings;
