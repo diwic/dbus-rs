@@ -12,7 +12,6 @@ pub type Error = dbus::tree::MethodErr;
 
 pub mod stdintf;
 
-
 // To be sent to the backend
 #[derive(Debug)]
 enum Command {
@@ -21,29 +20,32 @@ enum Command {
 }
 
 #[derive(Debug)]
-pub struct ReplyMessage {
-    recv: oneshot::Receiver<dbus::Message>,
-//    _dummy: PhantomData<Box<*const T>>
-}
+pub struct ReplyMessage(Result<oneshot::Receiver<dbus::Message>, Option<Error>>);
 
 impl futures::TryFuture for ReplyMessage {
     type Ok = dbus::Message;
     type Error = Error;
     fn try_poll(mut self: Pin<&mut Self>, lw: &task::LocalWaker) -> task::Poll<Result<Self::Ok, Self::Error>> {
-        use futures::Future;
-        let p: Pin<&mut oneshot::Receiver<dbus::Message>> = Pin::new(&mut self.recv);
-        let mut r: dbus::Message = futures::try_ready!(p.poll(lw).map_err(|e| {
-            Error::from((dbus::ErrorName::from("org.freedesktop.DBus.Error.Failed"), e.to_string()))
-        }));
-        task::Poll::Ready((|| { r.as_result()?; Ok(r) })())
+        match &mut self.0 {
+            Err(e) => task::Poll::Ready(Err(e.take().unwrap())),
+            Ok(ref mut recv) => {
+                use futures::Future;
+                let p: Pin<&mut oneshot::Receiver<dbus::Message>> = Pin::new(recv);
+                let mut r: dbus::Message = futures::try_ready!(p.poll(lw).map_err(|e| { Error::failed(&e) }));
+                task::Poll::Ready((|| { r.as_result()?; Ok(r) })())
+            }
+        }
     }
 }
 
 impl ReplyMessage {
     pub fn new(serial: u32, handle: &ConnHandle) -> Self {
         let (s, r) = oneshot::channel();
-        handle.1.unbounded_send(Command::AddReply(serial, s)).unwrap(); // TODO
-        ReplyMessage { recv: r }
+        ReplyMessage(
+            handle.1.unbounded_send(Command::AddReply(serial, s))
+                .map_err(|e| { Some(Error::failed(&e)) })
+                .map(|_| r)
+        )
     }
 }
 
@@ -85,8 +87,10 @@ impl<'a> ConnPath<'a> {
     {
         let mut msg = dbus::Message::method_call(&self.dest, &self.path, i, m);
         f(&mut msg);
-        let serial = self.conn.send(msg).unwrap(); // TODO
-        ReplyMessage::new(serial, &self.conn)
+        match self.conn.send(msg) {
+            Ok(serial) => ReplyMessage::new(serial, &self.conn),
+            Err(e) => ReplyMessage(Err(Some(e))),
+        }
     }
 
     /// Emit a D-Bus signal, where you can append arguments inside the closure.
@@ -126,8 +130,8 @@ impl ConnHandle {
     }
 
     /// Tells the TxRx part to quit from the event loop.
-    pub fn quit(&self) {
-         self.1.unbounded_send(Command::Quit).unwrap(); // TODO
+    pub fn quit(&self) -> Result<(), ()> {
+         self.1.unbounded_send(Command::Quit).map_err(|_| ())
     }
 }
 
