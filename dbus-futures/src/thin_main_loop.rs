@@ -150,7 +150,7 @@ mod tests {
         let r = remote_path.get_interfaces().into_future().then(|reply| {
             let reply = reply.unwrap();
             assert!(reply.len() > 0);
-            println!("{:?}", reply);
+            println!("Supported interfaces: {:?}", reply);
             tml::terminate();
             futures::future::ready(())
         });
