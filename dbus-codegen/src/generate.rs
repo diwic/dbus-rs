@@ -63,12 +63,14 @@ pub struct GenOpts {
     pub serveraccess: ServerAccess,
     /// Tries to make variants generic instead of Variant<Box<Refarg>>
     pub genericvariant: bool,
+    /// Generates code to work with async / futures 0.3
+    pub futures: bool,
 }
 
 impl ::std::default::Default for GenOpts {
     fn default() -> Self { GenOpts { 
         dbuscrate: "dbus".into(), methodtype: Some("MTFn".into()), skipprefix: None,
-        serveraccess: ServerAccess::RefClosure, genericvariant: false,
+        serveraccess: ServerAccess::RefClosure, genericvariant: false, futures: false,
     }}
 }
 
@@ -265,8 +267,8 @@ impl Prop {
     fn can_set(&self) -> bool { self.access == "write" || self.access == "readwrite" }
 }
 
-fn write_method_decl(s: &mut String, m: &Method, genvar: bool) -> Result<(), Box<error::Error>> {
-
+fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), Box<error::Error>> {
+    let genvar = opts.genericvariant;
     let g: Vec<String> = if genvar {
         let mut g = vec!();
         for z in m.iargs.iter().chain(m.oargs.iter()) {
@@ -284,45 +286,57 @@ fn write_method_decl(s: &mut String, m: &Method, genvar: bool) -> Result<(), Box
         let t = a.typename(genvar)?.0;
         *s += &format!(", {}: {}", a.varname(), t);
     }
-    match m.oargs.len() {
-        0 => { *s += ") -> Result<(), Self::Err>"; }
-        1 => { *s += &format!(") -> Result<{}, Self::Err>", m.oargs[0].typename(genvar)?.0); }
+
+    let r = match m.oargs.len() {
+        0 => "()".to_string(),
+        1 => m.oargs[0].typename(genvar)?.0,
         _ => {
-            *s += &format!(") -> Result<({}", m.oargs[0].typename(genvar)?.0);
-            for z in m.oargs.iter().skip(1) { *s += &format!(", {}", z.typename(genvar)?.0); }
-            *s += "), Self::Err>";
+            let v: Vec<String> = m.oargs.iter().map(|z| z.varname()).collect();
+            format!("({})", v.join(", "))
         }
-    }
+    };
+    *s += &format!(") -> {}", make_result(&r, opts));
+
     Ok(())
 }
 
-fn write_prop_decl(s: &mut String, p: &Prop, set: bool) -> Result<(), Box<error::Error>> {
-    if set {
-        *s += &format!("    fn set_{}(&self, value: {}) -> Result<(), Self::Err>",
-            make_snake(&p.name, false), make_type(&p.typ, true, &mut None)?);
+fn make_result(success: &str, opts: &GenOpts) -> String {
+    if opts.futures {
+        format!("dbusf::MethodReply<{}>", success)
     } else {
-        *s += &format!("    fn get_{}(&self) -> Result<{}, Self::Err>",
-            make_snake(&p.name, false), make_type(&p.typ, true, &mut None)?);
+        format!("Result<{}, Self::Err>", success)
+    }
+}
+
+fn write_prop_decl(s: &mut String, p: &Prop, opts: &GenOpts, set: bool) -> Result<(), Box<error::Error>> {
+    if set {
+        *s += &format!("    fn set_{}(&self, value: {}) -> {}",
+            make_snake(&p.name, false), make_type(&p.typ, true, &mut None)?, make_result("()", opts));
+    } else {
+        *s += &format!("    fn get_{}(&self) -> {}",
+            make_snake(&p.name, false), make_result(&make_type(&p.typ, true, &mut None)?, opts));
     };
     Ok(())
 }
 
-fn write_intf(s: &mut String, i: &Intf, genvar: bool) -> Result<(), Box<error::Error>> {
+fn write_intf(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<error::Error>> {
     
     let iname = make_camel(&i.shortname);  
     *s += &format!("\npub trait {} {{\n", iname);
-    *s += "    type Err;\n";
+    if !opts.futures {
+        *s += "    type Err;\n";
+    }
     for m in &i.methods {
-        write_method_decl(s, &m, genvar)?;
+        write_method_decl(s, &m, opts)?;
         *s += ";\n";
     }
     for p in &i.props {
         if p.can_get() {
-            write_prop_decl(s, &p, false)?;
+            write_prop_decl(s, &p, opts, false)?;
             *s += ";\n";
         }
         if p.can_set() {
-            write_prop_decl(s, &p, true)?;
+            write_prop_decl(s, &p, opts, true)?;
             *s += ";\n";
         }
     }
@@ -330,56 +344,74 @@ fn write_intf(s: &mut String, i: &Intf, genvar: bool) -> Result<(), Box<error::E
     Ok(())
 }
 
-fn write_intf_client(s: &mut String, i: &Intf, genvar: bool) -> Result<(), Box<error::Error>> {
-    *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> {} for dbus::ConnPath<'a, C> {{\n",
-        make_camel(&i.shortname));
-    *s += "    type Err = dbus::Error;\n";
+fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<error::Error>> {
+    if opts.futures {
+        *s += &format!("\nimpl<'a> {} for dbusf::ConnPath<'a> {{\n",
+            make_camel(&i.shortname));
+    } else {
+        *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> {} for dbus::ConnPath<'a, C> {{\n",
+            make_camel(&i.shortname));
+        *s += "    type Err = dbus::Error;\n";
+    }
     for m in &i.methods {
         *s += "\n";
-        write_method_decl(s, &m, genvar)?;
+        write_method_decl(s, &m, opts)?;
         *s += " {\n";
-        *s += &format!("        let mut m = self.method_call_with_args(&\"{}\".into(), &\"{}\".into(), |{}| {{\n",
-            i.origname, m.name, if m.iargs.len() > 0 { "msg" } else { "_" } );
+        *s += &format!("        let {}m = self.method_call_with_args(&\"{}\".into(), &\"{}\".into(), |{}| {{\n",
+            if opts.futures { "" } else { "mut " }, i.origname, m.name, if m.iargs.len() > 0 { "msg" } else { "_" } );
         if m.iargs.len() > 0 {
                 *s += "            let mut i = arg::IterAppend::new(msg);\n";
         }
         for a in m.iargs.iter() {
                 *s += &format!("            i.append({});\n", a.varname());
         }
-        *s += "        })?;\n";
-        *s += "        m.as_result()?;\n";
-        if m.oargs.len() == 0 {
-            *s += "        Ok(())\n";
+        let indent;
+        if opts.futures {
+             *s += "        });\n";
+             *s += &format!("        dbusf::MethodReply::from_msg(m, |{}| {{\n", if m.oargs.len() == 0 { "_" } else { "m" });
+             indent = "            ";
         } else {
-            *s += "        let mut i = m.iter_init();\n";
+             *s += "        })?;\n";
+             *s += "        m.as_result()?;\n";
+             indent = "        ";
+        }
+        if m.oargs.len() == 0 {
+            *s += indent;
+            *s += "Ok(())\n";
+        } else {
+            *s += indent;
+            *s += "let mut i = m.iter_init();\n";
             for a in m.oargs.iter() {
-                *s += &format!("        let {}: {} = i.read()?;\n", a.varname(), a.typename(genvar)?.0);   
+                *s += &format!("{}let {}: {} = i.read()?;\n", indent, a.varname(), a.typename(opts.genericvariant)?.0);   
             }
             if m.oargs.len() == 1 {
-                *s += &format!("        Ok({})\n", m.oargs[0].varname());
+                *s += &format!("{}Ok({})\n", indent, m.oargs[0].varname());
             } else {
                 let v: Vec<String> = m.oargs.iter().map(|z| z.varname()).collect();
-                *s += &format!("        Ok(({}))\n", v.join(", "));
+                *s += &format!("{}Ok(({}))\n", indent, v.join(", "));
             }
+        }
+        if opts.futures {
+            *s += "        })\n";
         }
         *s += "    }\n";
     }
 
+    let propintf = if opts.futures { "dbusf::stdintf::org_freedesktop::DBusProperties" } else { "dbus::stdintf::org_freedesktop_dbus::Properties" };
+
     for p in i.props.iter().filter(|p| p.can_get()) {
         *s += "\n";
-        write_prop_decl(s, &p, false)?;
+        write_prop_decl(s, &p, opts, false)?;
         *s += " {\n";
-        *s += &format!("        <Self as dbus::stdintf::org_freedesktop_dbus::Properties>::get(&self, \"{}\", \"{}\")\n",
-            i.origname, p.name);
+        *s += &format!("        <Self as {}>::get(&self, \"{}\", \"{}\")\n", propintf, i.origname, p.name);
         *s += "    }\n";
     }
 
     for p in i.props.iter().filter(|p| p.can_set()) {
         *s += "\n";
-        write_prop_decl(s, &p, true)?;
+        write_prop_decl(s, &p, opts, true)?;
         *s += " {\n";
-        *s += &format!("        <Self as dbus::stdintf::org_freedesktop_dbus::Properties>::set(&self, \"{}\", \"{}\", value)\n",
-            i.origname, p.name);
+        *s += &format!("        <Self as {}>::set(&self, \"{}\", \"{}\", value)\n", propintf, i.origname, p.name);
         *s += "    }\n";
     }
 
@@ -558,7 +590,10 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
 fn write_module_header(s: &mut String, opts: &GenOpts) {
     *s += "// This code was autogenerated with dbus-codegen-rust, see https://github.com/diwic/dbus-rs\n\n";
     *s += &format!("use {} as dbus;\n", opts.dbuscrate);
-    *s += &format!("use {}::arg;\n", opts.dbuscrate); 
+    *s += &format!("use {}::arg;\n", opts.dbuscrate);
+    if opts.futures {
+        *s += "use dbus_futures as dbusf;\n";
+    }
     if opts.methodtype.is_some() { *s += &format!("use {}::tree;\n", opts.dbuscrate) }
 }
 
@@ -591,8 +626,8 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<error::Erro
                 if curm.is_some() { Err("End of Interface inside method")? };
                 if curintf.is_none() { Err("End of Interface outside interface")? };
                 let intf = curintf.take().unwrap();
-                write_intf(&mut s, &intf, opts.genericvariant)?;
-                write_intf_client(&mut s, &intf, opts.genericvariant)?;
+                write_intf(&mut s, &intf, opts)?;
+                write_intf_client(&mut s, &intf, opts)?;
                 if let Some(ref mt) = opts.methodtype {
                     write_intf_tree(&mut s, &intf, &mt, opts.serveraccess, opts.genericvariant)?;
                 }
