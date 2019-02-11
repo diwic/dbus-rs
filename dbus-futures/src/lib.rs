@@ -6,8 +6,11 @@ use std::pin::Pin;
 use futures::channel::{oneshot, mpsc};
 
 use futures::task;
+use futures::future::ready;
 
 pub type Error = dbus::tree::MethodErr;
+
+pub mod stdintf;
 
 
 // To be sent to the backend
@@ -18,12 +21,12 @@ enum Command {
 }
 
 #[derive(Debug)]
-pub struct MethodReply {
+pub struct ReplyMessage {
     recv: oneshot::Receiver<dbus::Message>,
 //    _dummy: PhantomData<Box<*const T>>
 }
 
-impl futures::TryFuture for MethodReply {
+impl futures::TryFuture for ReplyMessage {
     type Ok = dbus::Message;
     type Error = Error;
     fn try_poll(mut self: Pin<&mut Self>, lw: &task::LocalWaker) -> task::Poll<Result<Self::Ok, Self::Error>> {
@@ -36,13 +39,34 @@ impl futures::TryFuture for MethodReply {
     }
 }
 
-impl MethodReply {
+impl ReplyMessage {
     pub fn new(serial: u32, handle: &ConnHandle) -> Self {
         let (s, r) = oneshot::channel();
         handle.1.unbounded_send(Command::AddReply(serial, s)).unwrap(); // TODO
-        MethodReply { recv: r }
+        ReplyMessage { recv: r }
     }
 }
+
+pub struct MethodReply<T> {
+    f: Pin<Box<futures::Future<Output=Result<T, Error>>>>,
+}
+
+impl<T> futures::TryFuture for MethodReply<T> {
+    type Ok = T;
+    type Error = Error;
+    fn try_poll(mut self: Pin<&mut Self>, lw: &task::LocalWaker) -> task::Poll<Result<Self::Ok, Self::Error>> {
+        let p = Pin::new(&mut self.f);
+        p.try_poll(lw)
+    }
+}
+
+impl<T: 'static> MethodReply<T> {
+    pub fn from_msg<F: FnOnce(dbus::Message) -> Result<T, Error> + 'static>(msg: ReplyMessage, parse_fn: F) -> Self {
+        use futures::TryFutureExt;
+        MethodReply { f: Box::pin(msg.and_then(|m| ready(parse_fn(m))).into_future()) }
+    }
+}
+
 
 #[derive(Clone, Debug)]
 pub struct ConnPath<'a> {
@@ -56,14 +80,13 @@ pub struct ConnPath<'a> {
 
 impl<'a> ConnPath<'a> {
     /// Make a D-Bus method call, where you can append arguments inside the closure.
-    pub fn method_call_with_args<F>(&self, i: &dbus::Interface, m: &dbus::Member, f: F) -> MethodReply 
+    pub fn method_call_with_args<F>(&self, i: &dbus::Interface, m: &dbus::Member, f: F) -> ReplyMessage 
     where F: FnOnce(&mut dbus::Message)
     {
         let mut msg = dbus::Message::method_call(&self.dest, &self.path, i, m);
         f(&mut msg);
         let serial = self.conn.send(msg).unwrap(); // TODO
-        MethodReply::new(serial, &self.conn)
-        // self.conn.send_with_reply_and_block(msg, self.timeout)
+        ReplyMessage::new(serial, &self.conn)
     }
 
     /// Emit a D-Bus signal, where you can append arguments inside the closure.
