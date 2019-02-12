@@ -60,7 +60,7 @@ fn make_realtime(prio: u32) -> Result<u32, Box<std::error::Error>> {
     let prio = cmp::min(prio, max_prio);
 
     // Enforce RLIMIT_RTPRIO, also a must before asking rtkit for rtprio
-    let max_rttime = try!(item_as_i64(try!(p.get("RTTimeNSecMax")))) as u64;
+    let max_rttime = try!(item_as_i64(try!(p.get("RTTimeUSecMax")))) as u64;
     let new_limit = rlimit { rlim_cur: max_rttime, rlim_max: max_rttime };
     let mut old_limit = new_limit;
     if unsafe { getrlimit(RLIMIT_RTTIME, &mut old_limit) } < 0 {
