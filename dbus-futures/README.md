@@ -7,7 +7,7 @@ Experimental / WIP / alpha.
 
 Current event loops supported:
 
- * thin_main_loop (compile with features = "tml")
+ * thin_main_loop (compile with features = "tml_io")
 
 Example
 -------

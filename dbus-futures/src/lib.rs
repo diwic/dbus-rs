@@ -135,8 +135,14 @@ impl ConnHandle {
     }
 }
 
-#[cfg(feature = "tml")]
+#[cfg(feature = "tml_io")]
 pub mod thin_main_loop;
 
+#[cfg(feature = "tokio_io")]
+pub mod tokio;
 
+
+mod connection;
+
+pub use connection::Connection;
 

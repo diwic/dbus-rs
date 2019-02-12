@@ -5,7 +5,7 @@ authors = ["David Henningsson <diwic@ubuntu.com>"]
 edition = "2018"
 
 [dependencies]
-futures-preview = "0.3.0-alpha.12"
+futures-preview = { version = "0.3.0-alpha.12" }
 dbus = { path = "../dbus" }
 
 [dependencies.thin_main_loop]
@@ -14,5 +14,17 @@ path = "../../thin_main_loop"
 features = ["futures","glib"]
 optional = true
 
+[dependencies.mio]
+version = "0.6.15"
+optional = true
+
+[dependencies.tokio-reactor]
+version = "0.1.8"
+optional = true
+
+[dev-dependencies.tokio]
+version = "0.1.15"
+
 [features]
-tml = ["thin_main_loop"]
+tml_io = ["thin_main_loop"]
+tokio_io = ["mio", "tokio-reactor"]
