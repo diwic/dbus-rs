@@ -5,7 +5,9 @@ use std::collections::HashMap;
 
 /// [Unstable and Experimental]
 pub trait MessageDispatcherConfig {
+    /// The type of method reply stored in the hashmap
     type Reply;
+    /// Call the reply
     fn call_reply(_: Self::Reply, _: Message);
 }
 
@@ -15,6 +17,8 @@ pub struct MessageDispatcher<C: MessageDispatcherConfig> {
 }
 
 impl<C: MessageDispatcherConfig> MessageDispatcher<C> {
+
+    pub fn new() -> Self { MessageDispatcher { waiting_replies: HashMap::new() } }
 
     /// Adds a waiting reply to a method call. func will be called when a method reply is dispatched.
     pub fn add_reply(&mut self, serial: u32, func: C::Reply) {
@@ -26,6 +30,17 @@ impl<C: MessageDispatcherConfig> MessageDispatcher<C> {
     /// Cancels a waiting reply.
     pub fn cancel_reply(&mut self, serial: u32) -> Option<C::Reply> {
         self.waiting_replies.remove(&serial)
+    }
+
+    /// Dispatch an incoming message.
+    pub fn dispatch(&mut self, msg: Message) {
+        if let Some(serial) = msg.get_reply_serial() {
+            if let Some(sender) = self.waiting_replies.remove(&serial) {
+                C::call_reply(sender, msg);
+                return;
+            }
+        }
+        Self::default_dispatch(&msg);
     }
 
     /// Handles what we need to be a good D-Bus citizen.

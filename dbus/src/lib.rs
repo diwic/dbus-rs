@@ -49,7 +49,7 @@ mod signalargs;
 mod connection2;
 mod dispatcher;
 pub use connection2::TxRx;
-pub use dispatcher::MessageDispatcher;
+pub use dispatcher::{MessageDispatcher, MessageDispatcherConfig};
 
 mod strings;
 pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};

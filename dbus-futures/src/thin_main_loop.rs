@@ -9,8 +9,6 @@ use crate::{Error, ConnHandle, Command};
 use futures::task;
 use futures::channel::{mpsc, oneshot};
 
-use std::collections::HashMap;
-
 
 /// This is the reactor specific part of the Connection.
 ///
@@ -21,7 +19,7 @@ pub struct ConnTxRx {
     all_io: Vec<tmlf::Io>,
     command_sender: mpsc::UnboundedSender<Command>,
     command_receiver: mpsc::UnboundedReceiver<Command>,
-    replies: HashMap<u32, oneshot::Sender<dbus::Message>>,
+    dispatcher: dbus::MessageDispatcher<Self>,
     quit: bool,
 }
 
@@ -41,11 +39,10 @@ impl ConnTxRx {
             }
         }).collect();
         let (s, r) = mpsc::unbounded();
-        Ok(ConnTxRx { txrx: Arc::new(x), all_io: all_io, command_sender: s, command_receiver: r, replies: Default::default(), quit: false })
+        Ok(ConnTxRx { txrx: Arc::new(x), all_io: all_io, command_sender: s, command_receiver: r, dispatcher: dbus::MessageDispatcher::new(), quit: false })
     }
 
     pub fn handle(&self) -> ConnHandle { ConnHandle(self.txrx.clone(), self.command_sender.clone()) }
-
 
     fn check_cmd(&mut self, lw: &task::LocalWaker) -> bool {
         use futures::Stream;
@@ -56,7 +53,7 @@ impl ConnTxRx {
         if let task::Poll::Ready(cmd) = cmd {
             match cmd {
                 None | Some(Command::Quit) =>  { self.quit = true; },
-                Some(Command::AddReply(serial, sender)) => { self.replies.insert(serial, sender); },
+                Some(Command::AddReply(serial, sender)) => { self.dispatcher.add_reply(serial, sender); },
             };
             true
         } else { false }
@@ -64,11 +61,7 @@ impl ConnTxRx {
 
     fn check_msg(&mut self) -> bool {
         if let Some(msg) = self.txrx.pop_message() {
-            if let Some(serial) = msg.get_reply_serial() {
-                if let Some(sender) = self.replies.remove(&serial) {
-                    let _ = sender.send(msg); // If the sender was removed, just ignore that.
-                }
-            }
+            self.dispatcher.dispatch(msg);
             true
         } else { false }
     }
@@ -78,6 +71,13 @@ impl ConnTxRx {
             let p = Pin::new(io);
             let _ = futures::Stream::poll_next(p, lw);
         }
+    }
+}
+
+impl dbus::MessageDispatcherConfig for ConnTxRx {
+    type Reply = oneshot::Sender<dbus::Message>;
+    fn call_reply(r: Self::Reply, msg: dbus::Message) {
+        let _ = r.send(msg); // If the receiver has been canceled, the best thing is probably to ignore.
     }
 }
 
