@@ -60,11 +60,14 @@ impl AConnection {
 
     /// Sends a method call message, and returns a Future for the method return.
     pub fn method_call(&self, m: Message) -> Result<AMethodCall, &'static str> {
-        let r = self.conn.send(m).map_err(|_| "D-Bus send error")?;
+        let serial = self.conn.send(m).map_err(|_| "D-Bus send error")?;
         let (tx, rx) = oneshot::channel();
         let mut map = self.callmap.borrow_mut();
-        map.insert(r, tx); // TODO: error check for duplicate entries. Should not happen, but if it does...
-        let mc = AMethodCall { serial: r, callmap: self.callmap.clone(), inner: rx };
+        if map.contains_key(&serial) {
+            return Err("Duplicate serial on send");
+        }
+        map.insert(serial, tx);
+        let mc = AMethodCall { serial, callmap: self.callmap.clone(), inner: rx };
         Ok(mc)
     }
 
