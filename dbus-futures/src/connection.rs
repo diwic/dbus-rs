@@ -26,7 +26,7 @@ pub struct Connection {
     io: Box<IoHandler>,
     command_sender: mpsc::UnboundedSender<Command>,
     command_receiver: mpsc::UnboundedReceiver<Command>,
-    dispatcher: dbus::MessageDispatcher<Self>,
+    dispatcher: dbus::MessageDispatcher<DispatcherCfg>,
     quit: bool,
 }
 
@@ -41,12 +41,13 @@ impl Connection {
         let watches = x.watch_fds().map_err(|_| Error::failed(&"failed to get watches"))?;
         let io = IO::new(&watches)?;
         let (s, r) = mpsc::unbounded();
+        let x = Arc::new(x);
         Ok(Connection {
-            txrx: Arc::new(x),
+            txrx: x.clone(),
             io: Box::new(io),
             command_sender: s,
             command_receiver: r,
-            dispatcher: dbus::MessageDispatcher::new(),
+            dispatcher: dbus::MessageDispatcher::new(DispatcherCfg(x)),
             quit: false
         })
     }
@@ -76,13 +77,6 @@ impl Connection {
     }
 }
 
-impl dbus::MessageDispatcherConfig for Connection {
-    type Reply = oneshot::Sender<dbus::Message>;
-    fn call_reply(r: Self::Reply, msg: dbus::Message) {
-        let _ = r.send(msg); // If the receiver has been canceled, the best thing is probably to ignore.
-    }
-}
-
 impl futures::Future for Connection {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, lw: &task::LocalWaker) -> task::Poll<()> {
@@ -104,4 +98,15 @@ impl futures::Future for Connection {
         }
     }
 }
+
+struct DispatcherCfg(Arc<dbus::TxRx>);
+
+impl dbus::MessageDispatcherConfig for DispatcherCfg {
+    type Reply = oneshot::Sender<dbus::Message>;
+    fn on_reply(r: Self::Reply, msg: dbus::Message, _: &mut dbus::MessageDispatcher<Self>) {
+        let _ = r.send(msg); // If the receiver has been canceled, the best thing is probably to ignore.
+    }
+    fn on_send(msg: dbus::Message, cfg: &mut dbus::MessageDispatcher<Self>) { cfg.inner().0.send(msg).unwrap(); }
+}
+
 

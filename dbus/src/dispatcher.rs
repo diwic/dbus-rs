@@ -4,21 +4,51 @@ use std::ptr;
 use std::collections::HashMap;
 
 /// [Unstable and Experimental]
-pub trait MessageDispatcherConfig {
-    /// The type of method reply stored in the hashmap
+pub trait MessageDispatcherConfig: Sized {
+    /// The type of method reply stored inside the dispatcher
     type Reply;
-    /// Call the reply
-    fn call_reply(_: Self::Reply, _: Message);
+
+    /// Called when a method call has received a reply.
+    fn on_reply(reply: Self::Reply, msg: Message, dispatcher: &mut MessageDispatcher<Self>);
+
+    /// Called when a signal is received.
+    ///
+    /// Defaults to doing nothing.
+    #[allow(unused_variables)]
+    fn on_signal(msg: Message, dispatcher: &mut MessageDispatcher<Self>) {}
+
+    /// Called when a method call is received.
+    ///
+    /// Defaults to calling default_dispatch.
+    fn on_method_call(msg: Message, dispatcher: &mut MessageDispatcher<Self>) {
+        if let Some(reply) = MessageDispatcher::<Self>::default_dispatch(&msg) {
+            Self::on_send(reply, dispatcher);
+        }
+    }
+
+    /// Called in the other direction, i e, when a message should be sent over the connection.
+    fn on_send(msg: Message, dispatcher: &mut MessageDispatcher<Self>);
 }
 
 /// [Unstable and Experimental] Meant for usage with RxTx.
 pub struct MessageDispatcher<C: MessageDispatcherConfig> {
-    waiting_replies: HashMap<u32, C::Reply>
+    waiting_replies: HashMap<u32, C::Reply>,
+    inner: C,
 }
 
 impl<C: MessageDispatcherConfig> MessageDispatcher<C> {
 
-    pub fn new() -> Self { MessageDispatcher { waiting_replies: HashMap::new() } }
+    /// Creates a new message dispatcher.
+    pub fn new(inner: C) -> Self { MessageDispatcher {
+        waiting_replies: HashMap::new(),
+        inner: inner,
+    } }
+
+    /// "Inner" accessor
+    pub fn inner(&self) -> &C { &self.inner }
+
+    /// "Inner" mutable accessor
+    pub fn inner_mut(&mut self) -> &mut C { &mut self.inner }
 
     /// Adds a waiting reply to a method call. func will be called when a method reply is dispatched.
     pub fn add_reply(&mut self, serial: u32, func: C::Reply) {
@@ -32,15 +62,21 @@ impl<C: MessageDispatcherConfig> MessageDispatcher<C> {
         self.waiting_replies.remove(&serial)
     }
 
+
     /// Dispatch an incoming message.
     pub fn dispatch(&mut self, msg: Message) {
         if let Some(serial) = msg.get_reply_serial() {
             if let Some(sender) = self.waiting_replies.remove(&serial) {
-                C::call_reply(sender, msg);
+                C::on_reply(sender, msg, self);
                 return;
             }
         }
-        Self::default_dispatch(&msg);
+        match msg.msg_type() {
+            MessageType::Signal => C::on_signal(msg, self),
+            MessageType::MethodCall => C::on_method_call(msg, self),
+            MessageType::Error | MessageType::MethodReturn => {},
+            MessageType::Invalid => unreachable!(),
+        }
     }
 
     /// Handles what we need to be a good D-Bus citizen.
@@ -70,7 +106,6 @@ impl<C: MessageDispatcherConfig> MessageDispatcher<C> {
                             return Some(r)
                         }
                     }
-                    
                 }
             }
             Some(m.error(&"org.freedesktop.DBus.Error.UnknownMethod".into(), &to_c_str("Method does not exist")))
@@ -84,5 +119,4 @@ impl<C: MessageDispatcherConfig> MessageDispatcher<C> {
         Some(m.error(&"org.freedesktop.DBus.Error.UnknownMethod".into(), &to_c_str("Path, Interface, or Method does not exist")))
     }
 }
-
 
