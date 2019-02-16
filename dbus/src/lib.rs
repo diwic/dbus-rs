@@ -51,6 +51,9 @@ mod dispatcher;
 pub use connection2::TxRx;
 pub use dispatcher::{MessageDispatcher, MessageDispatcherConfig};
 
+mod matchrule;
+pub use matchrule::MatchRule;
+
 mod strings;
 pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
 
