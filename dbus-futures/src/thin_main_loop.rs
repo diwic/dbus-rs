@@ -81,4 +81,29 @@ mod tests {
         exec.spawn(r);
         exec.run();
     }
+
+    #[test]
+    fn request_name() {
+        let ctr = Connection::new_session::<Io>().unwrap();
+        let c = ctr.handle();
+        let mut exec = tmlf::Executor::new().unwrap();
+        exec.spawn(ctr);
+
+        let r = c.request_name("com.example.dbus-rs.namerequest", true, true, true)
+            .and_then(|reply| {
+                assert_eq!(reply, dbus::RequestNameReply::PrimaryOwner);
+                c.release_name("com.example.dbus-rs.namerequest0")
+            .and_then(|reply| {
+                assert_eq!(reply, dbus::ReleaseNameReply::NonExistent);
+                c.release_name("com.example.dbus-rs.namerequest")
+            })
+            }).into_future().then(|reply| {
+                assert_eq!(reply.unwrap(), dbus::ReleaseNameReply::Released);
+                tml::terminate();
+                futures::future::ready(())
+            });
+
+        exec.spawn(r);
+        exec.run();
+    }
 }

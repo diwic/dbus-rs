@@ -129,6 +129,48 @@ impl ConnHandle {
         ConnPath { conn: self.clone(), dest: dest.into(), path: path.into() }
     }
 
+    /// The recommended path for talking to the D-Bus server (via stdintf::DBus).
+    pub fn with_dbus_path(&self) -> ConnPath {
+        self.with_path("org.freedesktop.DBus", "/org/freedesktop/DBus")
+    }
+
+    /// Request a name on the D-Bus.
+    ///
+    /// For a detailed information on the flags and return values, see the libdbus documentation.
+    pub fn request_name(&self, name: &str, allow_replacement: bool, replace_existing: bool, do_not_queue: bool) -> MethodReply<dbus::RequestNameReply> {
+        let flags: u32 = 
+            if allow_replacement { 1 } else { 0 } +
+            if replace_existing { 2 } else { 0 } +
+            if do_not_queue { 4 } else { 0 };
+        let m = self.with_dbus_path().method_call_with_args(&"org.freedesktop.DBus".into(), &"RequestName".into(), |msg| {
+            let mut i = dbus::arg::IterAppend::new(msg);
+            i.append(name);
+            i.append(flags);
+        });
+        MethodReply::from_msg(m, |m| {
+            let mut i = m.iter_init();
+            let arg0: u32 = i.read()?;
+            use dbus::RequestNameReply::*;
+            let all = [PrimaryOwner, InQueue, Exists, AlreadyOwner];
+            all.into_iter().find(|x| **x as u32 == arg0).map(|x| *x).ok_or_else(|| Error::failed(&"Invalid reply from DBus server"))
+        })
+    }
+
+    /// Release a previoulsy requested name on the D-Bus.
+    pub fn release_name(&self, name: &str) -> MethodReply<dbus::ReleaseNameReply> {
+        let m = self.with_dbus_path().method_call_with_args(&"org.freedesktop.DBus".into(), &"ReleaseName".into(), |msg| {
+            let mut i = dbus::arg::IterAppend::new(msg);
+            i.append(name);
+        });
+        MethodReply::from_msg(m, |m| {
+            let mut i = m.iter_init();
+            let arg0: u32 = i.read()?;
+            use dbus::ReleaseNameReply::*;
+            let all = [Released, NonExistent, NotOwner];
+            all.into_iter().find(|x| **x as u32 == arg0).map(|x| *x).ok_or_else(|| Error::failed(&"Invalid reply from DBus server"))
+        })
+    }
+
     /// Tells the TxRx part to quit from the event loop.
     pub fn quit(&self) -> Result<(), ()> {
          self.1.unbounded_send(Command::Quit).map_err(|_| ())
