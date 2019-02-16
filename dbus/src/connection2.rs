@@ -204,7 +204,7 @@ fn txrx_simple_test() {
                     if n == my_name { return; } // Hooray, we found ourselves!
                 }
                 assert!(false);
-            } else if let Some(r) = crate::MessageDispatcher::default_dispatch(&msg) {
+            } else if let Some(r) = crate::MessageDispatcher::<()>::default_dispatch(&msg) {
                 c.send(r).unwrap();
             }
         }

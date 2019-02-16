@@ -47,7 +47,7 @@ impl Connection {
             io: Box::new(io),
             command_sender: s,
             command_receiver: r,
-            dispatcher: dbus::MessageDispatcher::new(DispatcherCfg(x)),
+            dispatcher: dbus::MessageDispatcher::new(DispatcherCfg { txrx: x, streams: vec!() }),
             quit: false
         })
     }
@@ -64,6 +64,7 @@ impl Connection {
             match cmd {
                 None | Some(Command::Quit) =>  { self.quit = true; },
                 Some(Command::AddReply(serial, sender)) => { self.dispatcher.add_reply(serial, sender); },
+                Some(Command::AddStream(rule, sender)) => { self.dispatcher.inner_mut().streams.push((rule, sender)); },
             };
             true
         } else { false }
@@ -99,14 +100,25 @@ impl futures::Future for Connection {
     }
 }
 
-struct DispatcherCfg(Arc<dbus::TxRx>);
+struct DispatcherCfg {
+    txrx: Arc<dbus::TxRx>,
+    streams: Vec<(dbus::MatchRule<'static>, mpsc::UnboundedSender<dbus::Message>)>,
+}
 
 impl dbus::MessageDispatcherConfig for DispatcherCfg {
     type Reply = oneshot::Sender<dbus::Message>;
     fn on_reply(r: Self::Reply, msg: dbus::Message, _: &mut dbus::MessageDispatcher<Self>) {
         let _ = r.send(msg); // If the receiver has been canceled, the best thing is probably to ignore.
     }
-    fn on_send(msg: dbus::Message, cfg: &mut dbus::MessageDispatcher<Self>) { cfg.inner().0.send(msg).unwrap(); }
+    fn on_signal(msg: dbus::Message, cfg: &mut dbus::MessageDispatcher<Self>) {
+        for &mut (ref rule, ref mut sender) in &mut cfg.inner_mut().streams {
+            if rule.matches(&msg) {
+                let _ = sender.unbounded_send(msg); // TODO: If receiver has been dropped, the best thing is probably to remove the receiver.
+                return;
+            }
+        }
+    }
+    fn on_send(msg: dbus::Message, cfg: &mut dbus::MessageDispatcher<Self>) { cfg.inner().txrx.send(msg).unwrap(); }
 }
 
 

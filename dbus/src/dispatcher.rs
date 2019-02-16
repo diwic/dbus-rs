@@ -30,6 +30,13 @@ pub trait MessageDispatcherConfig: Sized {
     fn on_send(msg: Message, dispatcher: &mut MessageDispatcher<Self>);
 }
 
+/// Dummy implementation
+impl MessageDispatcherConfig for () {
+    type Reply = ();
+    fn on_reply(_: Self::Reply, _: Message, _: &mut MessageDispatcher<Self>) { unreachable!() }
+    fn on_send(_: Message, _: &mut MessageDispatcher<Self>) { unreachable!() }
+}
+
 /// [Unstable and Experimental] Meant for usage with RxTx.
 pub struct MessageDispatcher<C: MessageDispatcherConfig> {
     waiting_replies: HashMap<u32, C::Reply>,

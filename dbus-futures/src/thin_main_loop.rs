@@ -34,7 +34,7 @@ mod tests {
     use thin_main_loop as tml;
     use super::Io;
     use crate::{ReplyMessage, Connection};
-    use futures::{FutureExt, TryFutureExt};
+    use futures::{FutureExt, TryFutureExt, StreamExt, TryStreamExt};
 
     #[test]
     fn basic_conn() {
@@ -89,17 +89,36 @@ mod tests {
         let mut exec = tmlf::Executor::new().unwrap();
         exec.spawn(ctr);
 
+        use crate::stdintf::org_freedesktop::DBusNameOwnerChanged;
+        let mut has_name = false;
+        let our_name = c.unique_name();
+        let s = c.add_signal_stream::<DBusNameOwnerChanged>(None, None).into_stream().for_each(move |s| {
+            let s = s.unwrap();
+            println!("{:?}", s);
+            if s.name == "com.example.dbus-rs.namerequest" {
+                if has_name {
+                    assert_eq!(s.old_owner, our_name);
+                    assert_eq!(s.new_owner, "");
+                    tml::terminate(); 
+                } else {
+                    assert_eq!(s.new_owner, our_name);
+                    has_name = true;
+                }
+            }
+            futures::future::ready(())
+        });
+        exec.spawn(s);
+
         let r = c.request_name("com.example.dbus-rs.namerequest", true, true, true)
             .and_then(|reply| {
                 assert_eq!(reply, dbus::RequestNameReply::PrimaryOwner);
                 c.release_name("com.example.dbus-rs.namerequest0")
-            .and_then(|reply| {
+            }).and_then(|reply| {
                 assert_eq!(reply, dbus::ReleaseNameReply::NonExistent);
                 c.release_name("com.example.dbus-rs.namerequest")
-            })
             }).into_future().then(|reply| {
                 assert_eq!(reply.unwrap(), dbus::ReleaseNameReply::Released);
-                tml::terminate();
+               // tml::terminate();
                 futures::future::ready(())
             });
 

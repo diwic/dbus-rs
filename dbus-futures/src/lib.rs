@@ -16,6 +16,7 @@ pub mod stdintf;
 #[derive(Debug)]
 enum Command {
     AddReply(u32, oneshot::Sender<dbus::Message>),
+    AddStream(dbus::MatchRule<'static>, mpsc::UnboundedSender<dbus::Message>),
     Quit,
 }
 
@@ -69,6 +70,65 @@ impl<T: 'static> MethodReply<T> {
     }
 }
 
+#[derive(Debug)]
+pub struct MessageStream(Result<mpsc::UnboundedReceiver<dbus::Message>, Option<Error>>);
+
+impl futures::TryStream for MessageStream {
+    type Ok = dbus::Message;
+    type Error = Error;
+    fn try_poll_next(mut self: Pin<&mut Self>, lw: &task::LocalWaker) -> task::Poll<Option<Result<Self::Ok, Self::Error>>> {
+        match &mut self.0 {
+            Err(e) => { let e = e.take(); task::Poll::Ready(e.map(|e| Err(e))) },
+            Ok(ref mut recv) => {
+                use futures::Stream;
+                let p: Pin<&mut mpsc::UnboundedReceiver<dbus::Message>> = Pin::new(recv);
+                p.poll_next(lw).map(|x| x.map(|x| Ok(x)))
+            }
+        }
+    }
+}
+
+pub struct SignalStream<T> {
+    f: Box<futures::TryStream<Ok=T, Error=Error> + Unpin>,
+    handle: ConnHandle,
+    match_str: String,
+}
+
+impl<T> futures::TryStream for SignalStream<T> {
+    type Ok = T;
+    type Error = Error;
+    fn try_poll_next(mut self: Pin<&mut Self>, lw: &task::LocalWaker) -> task::Poll<Option<Result<Self::Ok, Self::Error>>> {
+        let p = Pin::new(&mut *self.f);
+        p.try_poll_next(lw)
+    }
+}
+
+impl<T: dbus::SignalArgs + 'static> SignalStream<T> {
+    fn new(mr: dbus::MatchRule<'static>, handle: ConnHandle) -> Self {
+        use crate::stdintf::org_freedesktop::DBus;
+        use futures::{TryFutureExt, TryStreamExt, FutureExt, StreamExt};
+
+        // Let's try to make a stream that first has the error - if any - from the addMatch method call,
+        // and then continues with parsed items
+        let mr_str = mr.match_str();
+        let s = handle.add_stream(mr).into_stream();
+        let mcall = handle.with_dbus_path().add_match(&mr_str);
+        let stream = mcall.into_future().into_stream();
+        let stream = stream.filter_map(|x| futures::future::ready(x.err().map(|x| Err(x))));
+        let s = stream.chain(s);
+        let s = s.then(|r| futures::future::ready(r.and_then(|msg|
+            T::from_message(&msg).ok_or_else(|| Error::failed(&"Received signal with invalid arguments"))
+        )));
+        SignalStream { f: Box::new(s), handle: handle, match_str: mr_str }
+    }
+}
+
+impl<T> Drop for SignalStream<T> {
+    fn drop(&mut self) {
+        use crate::stdintf::org_freedesktop::DBus;
+        self.handle.with_dbus_path().remove_match(&self.match_str);
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct ConnPath<'a> {
@@ -121,7 +181,7 @@ impl ConnHandle {
     /// Returns a serial number than can be used to match against a reply.
     /// This does not flush the out queue, the messages are likely to be written the next time the main loop runs.
     pub fn send(&self, msg: dbus::Message) -> Result<u32, Error> {
-        self.0.send(msg).map_err(|_| Error::from((dbus::ErrorName::from("org.freedesktop.DBus.Error.Failed"), "Sending message failed")))
+        self.0.send(msg).map_err(|_| Error::failed(&"Sending message failed"))
     }
 
     /// Create a convenience struct for easier calling of many methods on the same destination and path.
@@ -134,9 +194,24 @@ impl ConnHandle {
         self.with_path("org.freedesktop.DBus", "/org/freedesktop/DBus")
     }
 
+    /// If a message matches the rule, it is sent to the stream. Note: Currently only works for signals.
+    pub fn add_stream(&self, rule: dbus::MatchRule<'static>) -> MessageStream {
+        let (s, r) = mpsc::unbounded();
+        MessageStream(self.1.unbounded_send(Command::AddStream(rule, s)).map(|_| r).map_err(|e| Some(Error::failed(&e))))
+    }
+
+    /// Returns a stream of corresponding signals, optionally filtered on sender and path.
+    ///
+    /// Makes a call to the D-Bus server to add the match as well.
+    pub fn add_signal_stream<T: dbus::SignalArgs + 'static>(&self, sender: Option<dbus::BusName<'static>>, path: Option<dbus::Path<'static>>) -> SignalStream<T>
+    {
+        let mr = T::match_rule(sender.as_ref(), path.as_ref()).into_static();
+        SignalStream::new(mr, self.clone())
+    }
+
     /// Request a name on the D-Bus.
     ///
-    /// For a detailed information on the flags and return values, see the libdbus documentation.
+    /// For detailed information on the flags and return values, see the libdbus documentation.
     pub fn request_name(&self, name: &str, allow_replacement: bool, replace_existing: bool, do_not_queue: bool) -> MethodReply<dbus::RequestNameReply> {
         let flags: u32 = 
             if allow_replacement { 1 } else { 0 } +
