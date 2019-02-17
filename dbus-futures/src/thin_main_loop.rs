@@ -70,8 +70,7 @@ mod tests {
         exec.spawn(ctr);
 
         use crate::stdintf::org_freedesktop::DBus;
-        let remote_path = c.with_path("org.freedesktop.DBus", "/org/freedesktop/DBus");
-        let r = remote_path.get_interfaces().into_future().then(|reply| {
+        let r = c.with_dbus_path().get_interfaces().into_future().then(|reply| {
             let reply = reply.unwrap();
             assert!(reply.len() > 0);
             println!("Supported interfaces: {:?}", reply);
