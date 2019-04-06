@@ -58,8 +58,8 @@ pub enum Access {
 
 #[derive(Debug)]
 pub struct PropInfo<'a, H: Handlers> {
-    name: MemberName<'a>,
-    handlers: DebugProp<H>,
+    pub (crate) name: MemberName<'a>,
+    pub (crate) handlers: DebugProp<H>,
     anns: Annotations,
     sig: Signature<'a>,
     emits: EmitsChangedSignal,
@@ -75,29 +75,39 @@ pub struct SignalInfo<'a> {
 }
 
 impl<H: Handlers> MethodInfo<'_, H> {
-    fn new(name: MemberName<'static>, f: H::Method) -> Self {
+    pub fn new(name: MemberName<'static>, f: H::Method) -> Self {
         MethodInfo { name: name, handler: DebugMethod(f),
             i_args: Default::default(), o_args: Default::default(), anns: Default::default() }
     }
 }
 
-impl MethodInfo<'_, ()> {
-    pub fn new_sync<N, F>(name: N, f: F) -> Self where
-    F: Fn(&Crossroads<()>, &PathData<()>, &(dyn Any + Send + Sync), &Message) -> Vec<Message> + Send + Sync + 'static,
-    N: Into<MemberName<'static>>, 
-    {
-        Self::new(name.into(), Box::new(f))
+impl<H: Handlers> PropInfo<'_, H> {
+    pub fn new(name: MemberName<'static>, sig: Signature<'static>, get: Option<H::GetProp>, 
+        set: Option<H::SetProp>) -> Self {
+        let a = match (&get, &set) {
+            (Some(_), Some(_)) => Access::ReadWrite,
+            (Some(_), None) => Access::Read,
+            (None, Some(_)) => Access::Write,
+            _ => unimplemented!(),
+        };
+        PropInfo { name, handlers: DebugProp(get, set), sig, auto_emit: true, rw: a, 
+            emits: EmitsChangedSignal::True, anns: Default::default() }
     }
 }
 
-
 impl<'a, H: Handlers> IfaceInfo<'a, H> {
-    pub fn new<N, M>(name: N, methods: M) -> Self where
+    pub fn new<N, M, P, S>(name: N, methods: M, properties: P, signals: S) -> Self where
         N: Into<IfaceName<'a>>, 
-        M: IntoIterator<Item=MethodInfo<'a, H>> 
+        M: IntoIterator<Item=MethodInfo<'a, H>>, 
+        P: IntoIterator<Item=PropInfo<'a, H>>,
+        S: IntoIterator<Item=SignalInfo<'a>>
     {
-        IfaceInfo { name: name.into(), methods: methods.into_iter().collect(),
-            props: vec!(), signals: vec!() }
+        IfaceInfo {
+            name: name.into(),
+            methods: methods.into_iter().collect(),
+            props: properties.into_iter().collect(),
+            signals: signals.into_iter().collect()
+        }
     }
 }
 
