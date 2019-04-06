@@ -60,6 +60,9 @@ impl<'m> $t<'m> {
     pub fn into_static(self) -> $t<'static> {
         $t(Cow::Owned(self.0.into_owned()))
     }
+
+    /// Converts this struct to a CString.
+    pub fn into_cstring(self) -> CString { self.0.into_owned() }
 }
 
 /*

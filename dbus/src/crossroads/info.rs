@@ -1,7 +1,9 @@
-use crate::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
+use crate::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature, Message};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use super::handlers::Handlers;
+use std::any::Any;
+use super::handlers::{Handlers, DebugMethod, DebugProp};
+use super::crossroads::{Crossroads, PathData};
 
 #[derive(Default, Debug, Clone)]
 struct Annotations(Option<BTreeMap<String, String>>);
@@ -15,15 +17,15 @@ struct Argument<'a> {
 #[derive(Debug)]
 pub struct IfaceInfo<'a, H: Handlers> {
     pub (crate) name: IfaceName<'a>,
-    methods: Vec<MethodInfo<'a, H>>,
-    props: Vec<PropInfo<'a, H>>,
-    signals: Vec<SignalInfo<'a>>,
+    pub (crate) methods: Vec<MethodInfo<'a, H>>,
+    pub (crate) props: Vec<PropInfo<'a, H>>,
+    pub (crate) signals: Vec<SignalInfo<'a>>,
 }
 
 #[derive(Debug)]
 pub struct MethodInfo<'a, H: Handlers> {
-    name: MemberName<'a>,
-    handler: H::Method,
+    pub (crate) name: MemberName<'a>,
+    pub (crate) handler: DebugMethod<H>,
     i_args: Vec<Argument<'a>>,
     o_args: Vec<Argument<'a>>,
     anns: Annotations,
@@ -57,8 +59,7 @@ pub enum Access {
 #[derive(Debug)]
 pub struct PropInfo<'a, H: Handlers> {
     name: MemberName<'a>,
-    get_handler: H::GetProp,
-    set_handler: H::SetProp,
+    handlers: DebugProp<H>,
     anns: Annotations,
     sig: Signature<'a>,
     emits: EmitsChangedSignal,
@@ -74,9 +75,29 @@ pub struct SignalInfo<'a> {
 }
 
 impl<H: Handlers> MethodInfo<'_, H> {
-    pub fn new<N: Into<MemberName<'static>>, F: Into<H::Method>>(name: N, f: F) -> Self {
-        MethodInfo { name: name.into(), handler: f.into(),
+    fn new(name: MemberName<'static>, f: H::Method) -> Self {
+        MethodInfo { name: name, handler: DebugMethod(f),
             i_args: Default::default(), o_args: Default::default(), anns: Default::default() }
+    }
+}
+
+impl MethodInfo<'_, ()> {
+    pub fn new_sync<N, F>(name: N, f: F) -> Self where
+    F: Fn(&Crossroads<()>, &PathData<()>, &(dyn Any + Send + Sync), &Message) -> Vec<Message> + Send + Sync + 'static,
+    N: Into<MemberName<'static>>, 
+    {
+        Self::new(name.into(), Box::new(f))
+    }
+}
+
+
+impl<'a, H: Handlers> IfaceInfo<'a, H> {
+    pub fn new<N, M>(name: N, methods: M) -> Self where
+        N: Into<IfaceName<'a>>, 
+        M: IntoIterator<Item=MethodInfo<'a, H>> 
+    {
+        IfaceInfo { name: name.into(), methods: methods.into_iter().collect(),
+            props: vec!(), signals: vec!() }
     }
 }
 

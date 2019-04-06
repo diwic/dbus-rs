@@ -989,7 +989,7 @@ impl<'a, C: ::std::ops::Deref<Target=Connection>> ConnPath<'a, C> {
 
 // For purpose of testing the library only.
 #[cfg(test)]
-pub fn message_set_serial(m: &mut Message, s: u32) {
+pub (crate) fn message_set_serial(m: &mut Message, s: u32) {
     unsafe { ffi::dbus_message_set_serial(m.msg, s) };
 }
 
