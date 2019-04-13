@@ -87,7 +87,7 @@ fn main() {
 
     // Setup Tokio
     let mut rt = Runtime::new().unwrap();
-    let aconn = AConnection::new(c.clone(), Handle::current(), &mut rt).unwrap();
+    let aconn = AConnection::new(c.clone(), Handle::default(), &mut rt).unwrap();
     let server = ATreeServer::new(c.clone(), &tree, aconn.messages().unwrap());
 
     // Make the server run forever
