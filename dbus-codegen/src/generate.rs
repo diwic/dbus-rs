@@ -65,12 +65,15 @@ pub struct GenOpts {
     pub genericvariant: bool,
     /// Generates code to work with async / futures 0.3
     pub futures: bool,
+    /// Generates an info parameter to method calls
+    pub ctxparam: bool,
 }
 
 impl ::std::default::Default for GenOpts {
     fn default() -> Self { GenOpts { 
         dbuscrate: "dbus".into(), methodtype: Some("MTFn".into()), skipprefix: None,
         serveraccess: ServerAccess::RefClosure, genericvariant: false, futures: false,
+        ctxparam: false,
     }}
 }
 
@@ -277,6 +280,7 @@ fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), B
         }
         g
     } else { vec!() };
+ 
 
     *s += &format!("    fn {}{}(&self", make_snake(&m.name, true), 
         if g.len() > 0 { format!("<{}>", g.join(",")) } else { "".into() }
@@ -286,6 +290,7 @@ fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), B
         let t = a.typename(genvar)?.0;
         *s += &format!(", {}: {}", a.varname(), t);
     }
+    if opts.ctxparam { *s += ", info: &mut Self::Context" };
 
     let r = match m.oargs.len() {
         0 => "()".to_string(),
@@ -326,6 +331,9 @@ fn write_intf(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<error:
     if !opts.futures {
         *s += "    type Err;\n";
     }
+    if opts.ctxparam {
+        *s += "    type Context;\n";
+    }
     for m in &i.methods {
         write_method_decl(s, &m, opts)?;
         *s += ";\n";
@@ -352,6 +360,7 @@ fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box
         *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> {} for dbus::ConnPath<'a, C> {{\n",
             make_camel(&i.shortname));
         *s += "    type Err = dbus::Error;\n";
+        if opts.ctxparam { *s += "    type Context = ();\n"; }
     }
     for m in &i.methods {
         *s += "\n";
