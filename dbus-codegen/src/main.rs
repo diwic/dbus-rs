@@ -47,8 +47,6 @@ Defaults to 'RefClosure'."))
              .help("If present, skips a specific prefix for interface names, e g 'org.freedesktop.DBus.'."))
         .arg(clap::Arg::with_name("futures").short("f").long("futures")
              .help("Generates code to use with futures 0.3 (experimental)"))
-        .arg(clap::Arg::with_name("ctxparam").short("c").long("ctxparam")
-             .help("Adds an context parameter to method calls. Useful for servers, mildly annoying for clients."))
         .get_matches();
 
     let s = 
@@ -67,12 +65,13 @@ Defaults to 'RefClosure'."))
     let dbuscrate = matches.value_of("dbuscrate").unwrap_or("dbus");
 
     let mtype = matches.value_of("methodtype").map(|s| s.to_lowercase());
-    let mtype = match mtype.as_ref().map(|s| &**s) {
-        None | Some("fn") => Some("MTFn"),
-        Some("fnmut") => Some("MTFnMut"),
-        Some("sync") => Some("MTSync"),
-        Some("generic") => Some("MethodType"),
-        Some("none") => None,
+    let (mtype, crhandler) = match mtype.as_ref().map(|s| &**s) {
+        None | Some("fn") => (Some("MTFn"), None),
+        Some("fnmut") => (Some("MTFnMut"), None),
+        Some("sync") => (Some("MTSync"), None),
+        Some("generic") => (Some("MethodType"), None),
+        Some("par") => (None, Some("Par")),
+        Some("none") => (None, None),
         _ => panic!("Invalid methodtype specified"),
     };
 
@@ -88,7 +87,7 @@ Defaults to 'RefClosure'."))
         skipprefix: matches.value_of("skipprefix").map(|x| x.into()), serveraccess: maccess,
         genericvariant: matches.is_present("genericvariant"),
         futures: matches.is_present("futures"),
-        ctxparam: matches.is_present("ctxparam"),
+        crhandler: crhandler.map(|x| x.to_string()),
     };
 
     let mut stdout = std::io::stdout();
