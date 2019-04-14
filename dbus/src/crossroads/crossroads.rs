@@ -4,7 +4,7 @@ use std::ffi::{CString, CStr};
 use std::fmt;
 use crate::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature, Message, MessageType};
 use super::info::{IfaceInfo, MethodInfo, PropInfo};
-use super::handlers::{Handlers, SyncInfo};
+use super::handlers::{Handlers, Par, ParInfo};
 use super::stdimpl::DBusProperties;
 
 // The key is an IfaceName, but if we have that we bump into https://github.com/rust-lang/rust/issues/59732
@@ -15,7 +15,7 @@ struct IfaceReg<H: Handlers>(BTreeMap<CString, (TypeId, IfaceInfo<'static, H>)>)
 #[derive(Default)]
 pub struct PathData<H: Handlers>(Vec<(TypeId, H::Iface)>);
 
-impl PathData<()> {
+impl PathData<Par> {
     pub fn insert<I: Any + 'static + Send + Sync>(&mut self, i: I) {
         let id = TypeId::of::<I>();
         let t = Box::new(i);
@@ -52,6 +52,7 @@ fn msg_headers(msg: &Message) -> Option<MsgHeaders> {
     Some(MsgHeaders { m, i, p })
 }
 
+#[derive(Debug)]
 pub (super) struct MLookup<'a, H: Handlers> {
     pub (super) cr: &'a Crossroads<H>,
     pub (super) data: &'a PathData<H>,
@@ -96,17 +97,18 @@ impl<H: Handlers> Crossroads<H> {
     }
 }
 
-impl Crossroads<()> {
+impl Crossroads<Par> {
     pub fn dispatch(&self, msg: &Message) -> Option<Vec<Message>> {
         let headers = msg_headers(msg)?;
         let (lookup, minfo) = self.reg_lookup(&headers)?;
         let handler = &minfo.handler.0;
-        let mut si = SyncInfo { cr: lookup.cr, pd: lookup.data };
-        let r = (handler)(&**lookup.iface, msg, &mut si);
+        let iface = &**lookup.iface;
+        let mut info = ParInfo::new(msg, lookup);
+        let r = (handler)(iface, &mut info);
         Some(r.into_iter().collect())
     }
 
-    pub fn new_sync() -> Self { 
+    pub fn new_par() -> Self { 
         let mut cr = Crossroads {
             reg: IfaceReg(BTreeMap::new()),
             paths: IfacePaths(BTreeMap::new()),
@@ -124,7 +126,7 @@ mod test {
     fn test_send_sync() {
         fn is_send<T: Send>(_: &T) {}
         fn is_sync<T: Sync>(_: &T) {}
-        let c = Crossroads::new_sync();
+        let c = Crossroads::new_par();
         dbg!(&c);
         is_send(&c);
         is_sync(&c);
@@ -133,16 +135,16 @@ mod test {
 
     #[test]
     fn simple() {
-        let mut cr = Crossroads::new_sync();
+        let mut cr = Crossroads::new_par();
 
         struct Score(u16);
 
         let info = IfaceInfo::new("com.example.dbusrs.crossroads.score", 
-            vec!(MethodInfo::new_sync("Hello", |x: &Score, msg, _| {
+            vec!(MethodInfo::new_par("Hello", |x: &Score, info| {
                 assert_eq!(x.0, 7u16);
-                Some(msg.method_return().append1(format!("Hello, my score is {}!", x.0)))
+                Ok(Some(info.msg().method_return().append1(format!("Hello, my score is {}!", x.0))))
             })),
-            vec!(PropInfo::new_sync_ro("Score", |x: &Score, _, _| {
+            vec!(PropInfo::new_par_ro("Score", |x: &Score, _| {
                 assert_eq!(x.0, 7u16);
                 Some(x.0)
             })),
