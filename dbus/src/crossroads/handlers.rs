@@ -42,15 +42,15 @@ impl<'a> ParInfo<'a> {
 }
 
 impl Handlers for Par {
-    type Method = Box<Fn(&(dyn Any + Send + Sync), &mut ParInfo) -> Option<Message> + Send + Sync + 'static>;
-    type GetProp = Box<Fn(&(dyn Any + Send + Sync), &mut arg::IterAppend, &mut ParInfo) -> bool + Send + Sync + 'static>;
+    type Method = Box<Fn(&(dyn Any + Send + Sync), &ParInfo) -> Option<Message> + Send + Sync + 'static>;
+    type GetProp = Box<Fn(&(dyn Any + Send + Sync), &mut arg::IterAppend, &ParInfo) -> bool + Send + Sync + 'static>;
     type SetProp = ();
     type Iface = Box<dyn Any + 'static + Send + Sync>;
 }
 
 impl MethodInfo<'_, Par> {
     pub fn new_par<N, F, T>(name: N, f: F) -> Self where
-    F: Fn(&T, &mut ParInfo) -> Result<Option<Message>, MethodErr> + Send + Sync + 'static,
+    F: Fn(&T, &ParInfo) -> Result<Option<Message>, MethodErr> + Send + Sync + 'static,
     N: Into<MemberName<'static>>,
     T: Any + Send + Sync + 'static,
     {
@@ -63,7 +63,7 @@ impl MethodInfo<'_, Par> {
 
 impl PropInfo<'_, Par> {
     pub fn new_par_ro<P, N, G, T>(name: N, getf: G) -> Self where
-    G: Fn(&T, &mut ParInfo) -> Option<P> + Send + Sync + 'static,
+    G: Fn(&T, &ParInfo) -> Option<P> + Send + Sync + 'static,
     N: Into<MemberName<'static>>,
     T: Any + Send + Sync + 'static,
     P: arg::Append + arg::Arg,

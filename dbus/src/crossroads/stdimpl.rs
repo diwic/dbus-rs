@@ -8,7 +8,7 @@ pub struct DBusProperties;
 
 impl DBusProperties {
     pub fn register(cr: &mut Crossroads<Par>) {
-        cr.register::<Self>(IfaceInfo::new("org.freedesktop.DBus.Properties",
+        cr.register_custom::<Self>(IfaceInfo::new("org.freedesktop.DBus.Properties",
             vec!(MethodInfo::new_par("Get", |_: &DBusProperties, info| {
                 let (iname, propname) = info.msg().read2()?; 
                 let (lookup, pinfo) = info.crossroads().reg_prop_lookup(info.path_data(), iname, propname)
@@ -26,21 +26,28 @@ impl DBusProperties {
             })),
             vec!(), vec!()
         ));
-    }
-}
 
-trait Introspectable {
-    type Err;
-    type Context;
-    fn introspect(&self, info: &mut Self::Context) -> Result<String, Self::Err>;
+    }
 }
 
 pub struct DBusIntrospectable;
 
 use crate::crossroads as cr;
 
-/*
-pub fn introspectable_ifaceinfo_par<I>() -> cr::IfaceInfo<'static, cr::Par>
-where I: Introspectable<Err=MethodErr, Context=cr::ParInfo> + Send + Sync + 'static { unimplemented!()
+pub trait Introspectable {
+    fn introspect(&self, info: &cr::ParInfo) -> Result<String, cr::MethodErr>;
 }
-*/
+
+pub fn introspectable_ifaceinfo<I>() -> cr::IfaceInfo<'static, cr::Par>
+where I: Introspectable + Send + Sync + 'static {
+    cr::IfaceInfo::new("org.freedesktop.DBus.Introspectable", vec!(
+        MethodInfo::new_par("Introspect", |intf: &I, info| {
+            let xml_data = intf.introspect(info)?;
+            let rm = info.msg().method_return();
+            let rm = rm.append1(xml_data);
+            Ok(Some(rm))
+       }),
+    ), vec!(), vec!())
+}
+
+

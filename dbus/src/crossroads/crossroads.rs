@@ -3,7 +3,7 @@ use std::any::{TypeId, Any};
 use std::ffi::{CString, CStr};
 use std::fmt;
 use crate::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature, Message, MessageType};
-use super::info::{IfaceInfo, MethodInfo, PropInfo};
+use super::info::{IfaceInfo, MethodInfo, PropInfo, IfaceInfoBuilder};
 use super::handlers::{Handlers, Par, ParInfo};
 use super::stdimpl::DBusProperties;
 
@@ -70,7 +70,7 @@ pub struct Crossroads<H: Handlers> {
 
 impl<H: Handlers> Crossroads<H> {
 
-    pub fn register<I: 'static>(&mut self, info: IfaceInfo<'static, H>) -> Option<IfaceInfo<'static, H>> {
+    pub fn register_custom<I: 'static>(&mut self, info: IfaceInfo<'static, H>) -> Option<IfaceInfo<'static, H>> {
         self.reg.0.insert(info.name.clone().into_cstring(), (TypeId::of::<I>(), info)).map(|x| x.1)
     }
     pub fn insert<N: Into<PathName<'static>>>(&mut self, name: N, data: PathData<H>) {
@@ -78,6 +78,10 @@ impl<H: Handlers> Crossroads<H> {
     }
     pub fn get_data<N: Into<PathName<'static>>>(&self, name: N) -> Option<&PathData<H>> {
         self.paths.0.get(name.into().as_cstr())
+    }
+
+    pub fn register<'a, I: 'static, N: Into<IfaceName<'static>>>(&'a mut self, name: N) -> IfaceInfoBuilder<'a, I, H> {
+        IfaceInfoBuilder::new(Some(self), name.into())
     }
 
     fn reg_lookup(&self, headers: &MsgHeaders) -> Option<(MLookup<H>, &MethodInfo<'static, H>)> {
@@ -139,18 +143,15 @@ mod test {
 
         struct Score(u16);
 
-        let info = IfaceInfo::new("com.example.dbusrs.crossroads.score", 
-            vec!(MethodInfo::new_par("Hello", |x: &Score, info| {
-                assert_eq!(x.0, 7u16);
-                Ok(Some(info.msg().method_return().append1(format!("Hello, my score is {}!", x.0))))
-            })),
-            vec!(PropInfo::new_par_ro("Score", |x: &Score, _| {
-                assert_eq!(x.0, 7u16);
-                Some(x.0)
-            })),
-            vec!(),
-        );
-        cr.register::<Score>(info);
+        cr.register::<Score,_>("com.example.dbusrs.crossroads.score")
+            .method("Hello", (), "reply", |score, info, _: ()| {
+                assert_eq!(score.0, 7u16);
+                Ok((format!("Hello, my score is {}!", score.0),))
+            })
+            .prop_ro("Score", |score, _| {
+                assert_eq!(score.0, 7u16);
+                Some(score.0)
+            });
 
         let mut pdata = PathData::new();
         pdata.insert(Score(7u16));
@@ -159,14 +160,18 @@ mod test {
 
         let mut msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "com.example.dbusrs.crossroads.score", "Hello").unwrap();
         crate::message::message_set_serial(&mut msg, 57);
-        let r = cr.dispatch(&msg).unwrap();
+        let mut r = cr.dispatch(&msg).unwrap();
         assert_eq!(r.len(), 1);
+        r[0].as_result().unwrap();
+        let rr: String = r[0].read1().unwrap();
+        assert_eq!(&rr, "Hello, my score is 7!");
 
         let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "org.freedesktop.DBus.Properties", "Get").unwrap();
         let mut msg = msg.append2("com.example.dbusrs.crossroads.score", "Score");
         crate::message::message_set_serial(&mut msg, 57);
-        let r = cr.dispatch(&msg).unwrap();
+        let mut r = cr.dispatch(&msg).unwrap();
         assert_eq!(r.len(), 1);
+        r[0].as_result().unwrap();
         let z: u16 = r[0].read1().unwrap();
         assert_eq!(z, 7u16);
     }

@@ -2,15 +2,83 @@ use crate::{Path as PathName, Interface as IfaceName, Member as MemberName, Sign
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::any::Any;
-use super::handlers::{Handlers, DebugMethod, DebugProp};
+use std::mem;
+use crate::arg::{Arg, Append, Get, TypeMismatchError, IterAppend};
+use std::marker::PhantomData;
+use super::MethodErr;
+use super::handlers::{Handlers, DebugMethod, DebugProp, Par, ParInfo};
 use super::crossroads::{Crossroads, PathData};
+
+pub trait ArgBuilder: Sized {
+    type strs;
+    fn build(a: Self::strs) -> Vec<Argument<'static>>;
+    fn read(msg: &Message) -> Result<Self, TypeMismatchError>;
+    fn append(self, msg: &mut Message);
+}
+
+impl ArgBuilder for () {
+    type strs = ();
+    fn build(_: Self::strs) -> Vec<Argument<'static>> { vec!() }
+    fn read(_: &Message) -> Result<Self, TypeMismatchError> { Ok(()) }
+    fn append(self, _: &mut Message) {}
+}
+
+impl<A1: Arg + Append + for<'z> Get<'z>> ArgBuilder for (A1,) {
+    type strs = &'static str; 
+    fn build(a: Self::strs) -> Vec<Argument<'static>> { vec!(
+        Argument { name: a.into(), sig: A1::signature() },
+    ) }
+    fn read(msg: &Message) -> Result<Self, TypeMismatchError> {
+        let a = msg.read1()?;
+        Ok((a,))
+    }
+    fn append(self, msg: &mut Message) {
+        let mut a = IterAppend::new(msg);
+        a.append(self.0);
+    }
+}
+
+macro_rules! argbuilder_impl {
+    ($($n: ident $t: ident $s: ty,)+) => {
+
+impl<$($t: Arg + Append + for<'z> Get<'z>),*> ArgBuilder for ($($t,)*) {
+    type strs = ($($s,)*); 
+    fn build(z: Self::strs) -> Vec<Argument<'static>> { 
+        let ( $($n,)*) = z;
+        vec!(
+            $( Argument { name: $n.into(), sig: $t::signature() }, )*
+        )
+    }
+
+    fn read(msg: &Message) -> Result<Self, TypeMismatchError> {
+        let mut ii = msg.iter_init();
+        $( let $n = ii.read()?; )*
+        Ok(($( $n, )* ))
+    }
+
+    fn append(self, msg: &mut Message) {
+        let ( $($n,)*) = self;
+        let mut ia = IterAppend::new(msg);
+        $( ia.append($n); )*
+    }
+}
+
+    }
+}
+
+argbuilder_impl!(a A &'static str, b B &'static str,);
+argbuilder_impl!(a A &'static str, b B &'static str, c C &'static str,);
+argbuilder_impl!(a A &'static str, b B &'static str, c C &'static str, d D &'static str,);
+argbuilder_impl!(a A &'static str, b B &'static str, c C &'static str, d D &'static str, e E &'static str,);
+
+
 
 #[derive(Default, Debug, Clone)]
 struct Annotations(Option<BTreeMap<String, String>>);
 
 #[derive(Debug, Clone)]
-struct Argument<'a> {
-    name: Option<Cow<'a, str>>,
+pub struct Argument<'a> {
+    name: Cow<'a, str>,
     sig: Signature<'a>,
 }
 
@@ -74,6 +142,68 @@ pub struct SignalInfo<'a> {
     anns: Annotations,
 }
 
+#[derive(Debug)]
+pub struct IfaceInfoBuilder<'a, I: 'static, H: Handlers> {
+    cr: Option<&'a mut Crossroads<H>>,
+    info: IfaceInfo<'static, H>,
+    _dummy: PhantomData<*const I>,
+}
+
+impl<'a, I, H: Handlers> IfaceInfoBuilder<'a, I, H> {
+    pub fn new(cr: Option<&'a mut Crossroads<H>>, name: IfaceName<'static>) -> Self {
+        IfaceInfoBuilder { cr, _dummy: PhantomData, info: IfaceInfo::new_empty(name) }
+    }
+}
+
+impl<'a, I: 'static, H: Handlers> Drop for IfaceInfoBuilder<'a, I, H> {
+    fn drop(&mut self) {
+        if let Some(ref mut cr) = self.cr {
+            let info = IfaceInfo::new_empty(self.info.name.clone()); // workaround for not being able to consume self.info
+            cr.register_custom::<I>(mem::replace(&mut self.info, info));
+        }
+    }
+}
+
+impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Par> {
+    pub fn method<IA: ArgBuilder, OA: ArgBuilder, N, F>(mut self, name: N, in_args: IA::strs, out_args: OA::strs, f: F) -> Self
+    where N: Into<MemberName<'static>>, F: Fn(&I, &ParInfo, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
+        let f: <Par as Handlers>::Method = Box::new(move |data, info| {
+            let iface: &I = data.downcast_ref().unwrap();
+            let r = IA::read(info.msg()).map_err(From::from);
+            let r = r.and_then(|ia| f(iface, info, ia)); 
+            match r {
+                Err(e) => Some(e.to_message(info.msg())),
+                Ok(r) => {
+                    let mut m = info.msg().method_return();
+                    OA::append(r, &mut m);
+                    Some(m)
+                },
+            }
+        });
+
+        let m = MethodInfo { name: name.into(), handler: DebugMethod(f), 
+            i_args: IA::build(in_args), o_args: OA::build(out_args), anns: Default::default() };
+        self.info.methods.push(m);
+        self
+    }
+
+    pub fn prop_ro<T, N, G>(mut self, name: N, getf: G) -> Self
+    where T: Arg + Append + Send + Sync + 'static,
+    N: Into<MemberName<'static>>,
+    G: Fn(&I, &ParInfo) -> Option<T> + Send + Sync + 'static {
+        let g: <Par as Handlers>::GetProp = Box::new(move |data, ia, info| {
+            let iface: &I = data.downcast_ref().unwrap();
+            if let Some(t) = getf(iface, info) {
+                ia.append(t); true
+            } else { false }
+        });
+        let p = PropInfo::new(name.into(), T::signature(), Some(g), None);
+        self.info.props.push(p);
+        self
+    }
+
+}
+
 impl<H: Handlers> MethodInfo<'_, H> {
     pub fn new(name: MemberName<'static>, f: H::Method) -> Self {
         MethodInfo { name: name, handler: DebugMethod(f),
@@ -96,6 +226,10 @@ impl<H: Handlers> PropInfo<'_, H> {
 }
 
 impl<'a, H: Handlers> IfaceInfo<'a, H> {
+    pub fn new_empty(name: IfaceName<'static>) -> Self {
+        IfaceInfo { name, methods: vec!(), props: vec!(), signals: vec!() }
+    }
+
     pub fn new<N, M, P, S>(name: N, methods: M, properties: P, signals: S) -> Self where
         N: Into<IfaceName<'a>>, 
         M: IntoIterator<Item=MethodInfo<'a, H>>, 
