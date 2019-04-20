@@ -1,8 +1,8 @@
-use std::fmt;
+use std::{fmt, cell};
 use std::any::Any;
 use crate::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature, Message, arg};
 use super::crossroads::{Crossroads, PathData, MLookup};
-use super::info::{MethodInfo, PropInfo};
+use super::info::{MethodInfo, PropInfo, ArgBuilder};
 use super::MethodErr;
 
 pub struct DebugMethod<H: Handlers>(pub H::Method);
@@ -26,7 +26,7 @@ pub trait Handlers {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Par;
 
-impl Par { 
+impl Par {
     pub fn typed_getprop<I: 'static, T: arg::Arg + arg::Append, G>(getf: G) -> <Par as Handlers>::GetProp
     where G: Fn(&I, &ParInfo) -> Result<T, MethodErr> + Send + Sync + 'static {
         Box::new(move |data, ia, info| {
@@ -82,3 +82,56 @@ impl MethodInfo<'_, Par> {
     }
 }
 
+
+/// Mutable, non-Send tree
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Mut;
+
+#[derive(Debug)]
+pub struct MutCtx<'a> {
+    message: &'a Message,
+    send_extra: cell::RefCell<Vec<Message>>,
+}
+
+impl<'a> MutCtx<'a> {
+    pub fn msg(&self) -> &Message { self.message }
+    pub fn send(&self, msg: Message) { self.send_extra.borrow_mut().push(msg); }
+    pub (super) fn new(msg: &'a Message) -> Self { MutCtx { message: msg, send_extra: Default::default() } }
+}
+
+impl Handlers for Mut {
+    type Method = MutMethod;
+    type GetProp = Box<FnMut(&mut (dyn Any), &mut arg::IterAppend, &MutCtx) -> Result<(), MethodErr> + 'static>;
+    type SetProp = Box<FnMut(&mut (dyn Any), &mut arg::Iter, &MutCtx) -> Result<(), MethodErr> + 'static>;
+    type Iface = Box<dyn Any>;
+}
+
+
+pub struct MutMethod(pub (super) MutMethods);
+
+pub (super) enum MutMethods {
+    MutIface(Box<FnMut(&mut (dyn Any), &MutCtx) -> Option<Message> + 'static>),
+//    Info(Box<FnMut(&(dyn Any), &Message, &Path) -> Option<Message> + 'static>),
+//    MutCr(fn(&mut Crossroads<Mut>, &Message) -> Vec<Message>),
+}
+
+impl Mut {
+    pub fn typed_method_iface<IA: ArgBuilder, OA: ArgBuilder, I: 'static, F>(mut f: F) -> <Mut as Handlers>::Method
+    where F: FnMut(&mut I, &MutCtx, IA) -> Result<OA, MethodErr> + 'static {
+        MutMethod(MutMethods::MutIface(Box::new(move |data, info| {
+            let iface: &mut I = data.downcast_mut().unwrap();
+            let ia = match IA::read(info.msg()) {
+                Err(e) => return Some(MethodErr::from(e).to_message(info.msg())),
+                Ok(ia) => ia,
+            };
+            match f(iface, info, ia) {
+                Err(e) => Some(e.to_message(info.msg())),
+                Ok(r) => {
+                    let mut m = info.msg().method_return();
+                    OA::append(r, &mut m);
+                    Some(m)
+                },
+            }
+        })))
+    }
+}

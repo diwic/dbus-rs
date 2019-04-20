@@ -6,7 +6,7 @@ use std::mem;
 use crate::arg::{Arg, Append, Get, TypeMismatchError, IterAppend};
 use std::marker::PhantomData;
 use super::MethodErr;
-use super::handlers::{Handlers, DebugMethod, DebugProp, Par, ParInfo};
+use super::handlers::{Handlers, DebugMethod, DebugProp, Par, ParInfo, Mut, MutCtx};
 use super::crossroads::{Crossroads, PathData};
 
 pub trait ArgBuilder: Sized {
@@ -78,11 +78,17 @@ pub struct IfaceInfo<'a, H: Handlers> {
 
 #[derive(Debug)]
 pub struct MethodInfo<'a, H: Handlers> {
-    pub (crate) name: MemberName<'a>,
-    pub (crate) handler: DebugMethod<H>,
+    name: MemberName<'a>,
+    handler: DebugMethod<H>,
     i_args: Vec<Argument<'a>>,
     o_args: Vec<Argument<'a>>,
     anns: Annotations,
+}
+
+impl<'a, H: Handlers> MethodInfo<'a, H> {
+    pub fn name(&self) -> &MemberName<'a> { &self.name }
+    pub fn handler(&self) -> &H::Method { &self.handler.0 }
+    pub fn handler_mut(&mut self) -> &mut H::Method { &mut self.handler.0 }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Debug)]
@@ -200,6 +206,16 @@ impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Par> {
         self
     }
 
+}
+
+impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Mut> {
+    pub fn method_iface<IA: ArgBuilder, OA: ArgBuilder, N, F>(mut self, name: N, in_args: IA::strs, out_args: OA::strs, f: F) -> Self
+    where N: Into<MemberName<'static>>, F: FnMut(&mut I, &MutCtx, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
+        let m = MethodInfo { name: name.into(), handler: DebugMethod(Mut::typed_method_iface(f)), 
+            i_args: IA::build(in_args), o_args: OA::build(out_args), anns: Default::default() };
+        self.info.methods.push(m);
+        self
+    }
 }
 
 impl<H: Handlers> MethodInfo<'_, H> {

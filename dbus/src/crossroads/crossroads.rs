@@ -4,7 +4,7 @@ use std::ffi::{CString, CStr};
 use std::fmt;
 use crate::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature, Message, MessageType};
 use super::info::{IfaceInfo, MethodInfo, PropInfo, IfaceInfoBuilder};
-use super::handlers::{Handlers, Par, ParInfo};
+use super::handlers::{Handlers, Par, ParInfo, Mut, MutCtx, MutMethods};
 use super::stdimpl::DBusProperties;
 
 // The key is an IfaceName, but if we have that we bump into https://github.com/rust-lang/rust/issues/59732
@@ -16,7 +16,15 @@ struct IfaceReg<H: Handlers>(BTreeMap<CString, (TypeId, IfaceInfo<'static, H>)>)
 pub struct PathData<H: Handlers>(Vec<(TypeId, H::Iface)>);
 
 impl PathData<Par> {
-    pub fn insert<I: Any + 'static + Send + Sync>(&mut self, i: I) {
+    pub fn insert_par<I: Any + 'static + Send + Sync>(&mut self, i: I) {
+        let id = TypeId::of::<I>();
+        let t = Box::new(i);
+        self.0.push((id, t));
+    }
+}
+
+impl PathData<Mut> {
+    pub fn insert_mut<I: Any + 'static>(&mut self, i: I) {
         let id = TypeId::of::<I>();
         let t = Box::new(i);
         self.0.push((id, t));
@@ -86,7 +94,7 @@ impl<H: Handlers> Crossroads<H> {
 
     fn reg_lookup(&self, headers: &MsgHeaders) -> Option<(MLookup<H>, &MethodInfo<'static, H>)> {
        let (typeid, iinfo) = self.reg.0.get(headers.i.as_cstr())?;
-       let minfo = iinfo.methods.iter().find(|x| x.name == headers.m)?;
+       let minfo = iinfo.methods.iter().find(|x| x.name() == &headers.m)?;
        let data = self.paths.0.get(headers.p.as_cstr())?;
        let (_, iface) = data.0.iter().find(|x| x.0 == *typeid)?;
        Some((MLookup { cr: self, data, iface, iinfo }, minfo))
@@ -105,7 +113,7 @@ impl Crossroads<Par> {
     pub fn dispatch(&self, msg: &Message) -> Option<Vec<Message>> {
         let headers = msg_headers(msg)?;
         let (lookup, minfo) = self.reg_lookup(&headers)?;
-        let handler = &minfo.handler.0;
+        let handler = minfo.handler();
         let iface = &**lookup.iface;
         let mut info = ParInfo::new(msg, lookup);
         let r = (handler)(iface, &mut info);
@@ -122,6 +130,34 @@ impl Crossroads<Par> {
     }
 }
 
+impl Crossroads<Mut> {
+    pub fn dispatch_mut(&mut self, msg: &Message) -> Option<Vec<Message>> {
+        let headers = msg_headers(msg)?;
+        let (typeid, iinfo) = self.reg.0.get_mut(headers.i.as_cstr())?;
+        let minfo = iinfo.methods.iter_mut().find(|x| x.name() == &headers.m)?;
+        let ctx = MutCtx::new(msg);
+        let r = match minfo.handler_mut().0 {
+             MutMethods::MutIface(ref mut f) => {
+                let data = self.paths.0.get_mut(headers.p.as_cstr())?;
+                let (_, iface) = data.0.iter_mut().find(|x| x.0 == *typeid)?;
+                let iface = &mut **iface;
+                f(iface, &ctx)
+            }
+        };
+        Some(r.into_iter().collect())
+    }
+
+    pub fn new_mut() -> Self { 
+        let cr = Crossroads {
+            reg: IfaceReg(BTreeMap::new()),
+            paths: IfacePaths(BTreeMap::new()),
+        };
+        // DBusProperties::register(&mut cr);
+        cr
+    }
+}
+
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -136,9 +172,38 @@ mod test {
         is_sync(&c);
    }
 
+    #[test]
+    fn cr_mut() {
+        let mut cr = Crossroads::new_mut();
+
+        struct Score(u16);
+
+        let mut call_times = 0u32;
+        cr.register::<Score,_>("com.example.dbusrs.crossroads.score")
+            .method_iface("UpdateScore", ("change",), ("new_score", "call_times"), move |score, _, (change,): (u16,)| {
+                score.0 += change;
+                call_times += 1;
+                Ok((score.0, call_times))
+            });
+
+        let mut pdata = PathData::new();
+        pdata.insert_mut(Score(7u16));
+        cr.insert("/", pdata);
+
+        let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "com.example.dbusrs.crossroads.score", "UpdateScore").unwrap();
+        let mut msg = msg.append1(5u16);
+        crate::message::message_set_serial(&mut msg, 57);
+        let mut r = cr.dispatch_mut(&msg).unwrap();
+        assert_eq!(r.len(), 1);
+        r[0].as_result().unwrap();
+        let (new_score, call_times): (u16, u32) = r[0].read2().unwrap();
+        assert_eq!(new_score, 12);
+        assert_eq!(call_times, 1);
+    }
+
 
     #[test]
-    fn simple() {
+    fn cr_par() {
         let mut cr = Crossroads::new_par();
 
         struct Score(u16);
@@ -155,8 +220,8 @@ mod test {
             .signal::<(u16,),_>("ScoreChanged", ("NewScore",));
 
         let mut pdata = PathData::new();
-        pdata.insert(Score(7u16));
-        pdata.insert(DBusProperties);
+        pdata.insert_par(Score(7u16));
+        pdata.insert_par(DBusProperties);
         cr.insert("/", pdata);
 
         let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "com.example.dbusrs.crossroads.score", "Hello").unwrap();
