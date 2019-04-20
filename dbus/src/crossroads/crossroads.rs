@@ -144,13 +144,13 @@ mod test {
         struct Score(u16);
 
         cr.register::<Score,_>("com.example.dbusrs.crossroads.score")
-            .method("Hello", ("sender",), ("reply",), |score, _, sender: (String,)| {
+            .method("Hello", ("sender",), ("reply",), |score, _, (sender,): (String,)| {
                 assert_eq!(score.0, 7u16);
-                Ok((format!("Hello {}, my score is {}!", sender.0, score.0),))
+                Ok((format!("Hello {}, my score is {}!", sender, score.0),))
             })
             .prop_ro("Score", |score, _| {
                 assert_eq!(score.0, 7u16);
-                Some(score.0)
+                Ok(score.0)
             })
             .signal::<(u16,),_>("ScoreChanged", ("NewScore",));
 

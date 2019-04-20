@@ -179,17 +179,23 @@ impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Par> {
         self
     }
 
+    pub fn prop_rw<T, N, G, S>(mut self, name: N, getf: G, setf: S) -> Self
+    where T: Arg + Append + for<'z> Get<'z> + Send + Sync + 'static,
+    N: Into<MemberName<'static>>,
+    G: Fn(&I, &ParInfo) -> Result<T, MethodErr> + Send + Sync + 'static,
+    S: Fn(&I, &ParInfo, T) -> Result<(), MethodErr> + Send + Sync + 'static
+    {
+        let p = PropInfo::new(name.into(), T::signature(), Some(Par::typed_getprop(getf)), Some(Par::typed_setprop(setf)));
+        self.info.props.push(p);
+        self
+    }
+
     pub fn prop_ro<T, N, G>(mut self, name: N, getf: G) -> Self
     where T: Arg + Append + Send + Sync + 'static,
     N: Into<MemberName<'static>>,
-    G: Fn(&I, &ParInfo) -> Option<T> + Send + Sync + 'static {
-        let g: <Par as Handlers>::GetProp = Box::new(move |data, ia, info| {
-            let iface: &I = data.downcast_ref().unwrap();
-            if let Some(t) = getf(iface, info) {
-                ia.append(t); true
-            } else { false }
-        });
-        let p = PropInfo::new(name.into(), T::signature(), Some(g), None);
+    G: Fn(&I, &ParInfo) -> Result<T, MethodErr> + Send + Sync + 'static,
+    {
+        let p = PropInfo::new(name.into(), T::signature(), Some(Par::typed_getprop(getf)), None);
         self.info.props.push(p);
         self
     }

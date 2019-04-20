@@ -18,11 +18,11 @@ impl DBusProperties {
                 let iface = &**lookup.iface;
                 let mut pinfo = ParInfo::new(info.msg(), lookup);
                 let mut mret = info.msg().method_return();
-                let r = {
+                {
                     let mut ia = arg::IterAppend::new(&mut mret);
-                    (handler)(iface, &mut ia, &mut pinfo)
-                };
-                if r { Ok(Some(mret)) } else { Err(MethodErr::failed(&"Failed to read property")) }
+                    (handler)(iface, &mut ia, &mut pinfo)?;
+                }
+                Ok(Some(mret))
             })),
             vec!(), vec!()
         ));

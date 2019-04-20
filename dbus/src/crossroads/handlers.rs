@@ -26,6 +26,27 @@ pub trait Handlers {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Par;
 
+impl Par { 
+    pub fn typed_getprop<I: 'static, T: arg::Arg + arg::Append, G>(getf: G) -> <Par as Handlers>::GetProp
+    where G: Fn(&I, &ParInfo) -> Result<T, MethodErr> + Send + Sync + 'static {
+        Box::new(move |data, ia, info| {
+            let iface: &I = data.downcast_ref().unwrap();
+            let t = getf(iface, info)?;
+            ia.append(t);
+            Ok(())
+        })
+    }
+
+    pub fn typed_setprop<I: 'static, T: arg::Arg + for <'z> arg::Get<'z>, S>(setf: S) -> <Par as Handlers>::SetProp
+    where S: Fn(&I, &ParInfo, T) -> Result<(), MethodErr> + Send + Sync + 'static {
+        Box::new(move |data, ii, info| {
+            let iface: &I = data.downcast_ref().unwrap();
+            let t: T = ii.read()?;
+            setf(iface, info, t)
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct ParInfo<'a> {
     lookup: MLookup<'a, Par>,
@@ -43,8 +64,8 @@ impl<'a> ParInfo<'a> {
 
 impl Handlers for Par {
     type Method = Box<Fn(&(dyn Any + Send + Sync), &ParInfo) -> Option<Message> + Send + Sync + 'static>;
-    type GetProp = Box<Fn(&(dyn Any + Send + Sync), &mut arg::IterAppend, &ParInfo) -> bool + Send + Sync + 'static>;
-    type SetProp = ();
+    type GetProp = Box<Fn(&(dyn Any + Send + Sync), &mut arg::IterAppend, &ParInfo) -> Result<(), MethodErr> + Send + Sync + 'static>;
+    type SetProp = Box<Fn(&(dyn Any + Send + Sync), &mut arg::Iter, &ParInfo) -> Result<(), MethodErr> + Send + Sync + 'static>;
     type Iface = Box<dyn Any + 'static + Send + Sync>;
 }
 
@@ -58,21 +79,6 @@ impl MethodInfo<'_, Par> {
             let x = data.downcast_ref().unwrap();
             f(x, info).unwrap_or_else(|e| { Some(e.to_message(info.message)) })
         }))
-    }
-}
-
-impl PropInfo<'_, Par> {
-    pub fn new_par_ro<P, N, G, T>(name: N, getf: G) -> Self where
-    G: Fn(&T, &ParInfo) -> Option<P> + Send + Sync + 'static,
-    N: Into<MemberName<'static>>,
-    T: Any + Send + Sync + 'static,
-    P: arg::Append + arg::Arg,
-    {
-        Self::new(name.into(), P::signature(), Some(Box::new(move |data, ia, info| {
-            let x = data.downcast_ref().unwrap();
-            if let Some(t) = getf(x, info) { ia.append(t); true }
-            else { false }
-        })), None)
     }
 }
 
