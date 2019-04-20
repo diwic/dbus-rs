@@ -23,21 +23,6 @@ impl ArgBuilder for () {
     fn append(self, _: &mut Message) {}
 }
 
-impl<A1: Arg + Append + for<'z> Get<'z>> ArgBuilder for (A1,) {
-    type strs = &'static str; 
-    fn build(a: Self::strs) -> Vec<Argument<'static>> { vec!(
-        Argument { name: a.into(), sig: A1::signature() },
-    ) }
-    fn read(msg: &Message) -> Result<Self, TypeMismatchError> {
-        let a = msg.read1()?;
-        Ok((a,))
-    }
-    fn append(self, msg: &mut Message) {
-        let mut a = IterAppend::new(msg);
-        a.append(self.0);
-    }
-}
-
 macro_rules! argbuilder_impl {
     ($($n: ident $t: ident $s: ty,)+) => {
 
@@ -66,6 +51,7 @@ impl<$($t: Arg + Append + for<'z> Get<'z>),*> ArgBuilder for ($($t,)*) {
     }
 }
 
+argbuilder_impl!(a A &'static str,);
 argbuilder_impl!(a A &'static str, b B &'static str,);
 argbuilder_impl!(a A &'static str, b B &'static str, c C &'static str,);
 argbuilder_impl!(a A &'static str, b B &'static str, c C &'static str, d D &'static str,);
@@ -152,6 +138,12 @@ pub struct IfaceInfoBuilder<'a, I: 'static, H: Handlers> {
 impl<'a, I, H: Handlers> IfaceInfoBuilder<'a, I, H> {
     pub fn new(cr: Option<&'a mut Crossroads<H>>, name: IfaceName<'static>) -> Self {
         IfaceInfoBuilder { cr, _dummy: PhantomData, info: IfaceInfo::new_empty(name) }
+    }
+
+    pub fn signal<A: ArgBuilder, N: Into<MemberName<'static>>>(mut self, name: N, args: A::strs) -> Self {
+        let s = SignalInfo { name: name.into(), args: A::build(args), anns: Default::default() };
+        self.info.signals.push(s);
+        self
     }
 }
 

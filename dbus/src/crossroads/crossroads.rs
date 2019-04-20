@@ -144,27 +144,29 @@ mod test {
         struct Score(u16);
 
         cr.register::<Score,_>("com.example.dbusrs.crossroads.score")
-            .method("Hello", (), "reply", |score, info, _: ()| {
+            .method("Hello", ("sender",), ("reply",), |score, _, sender: (String,)| {
                 assert_eq!(score.0, 7u16);
-                Ok((format!("Hello, my score is {}!", score.0),))
+                Ok((format!("Hello {}, my score is {}!", sender.0, score.0),))
             })
             .prop_ro("Score", |score, _| {
                 assert_eq!(score.0, 7u16);
                 Some(score.0)
-            });
+            })
+            .signal::<(u16,),_>("ScoreChanged", ("NewScore",));
 
         let mut pdata = PathData::new();
         pdata.insert(Score(7u16));
         pdata.insert(DBusProperties);
         cr.insert("/", pdata);
 
-        let mut msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "com.example.dbusrs.crossroads.score", "Hello").unwrap();
+        let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "com.example.dbusrs.crossroads.score", "Hello").unwrap();
+        let mut msg = msg.append1("example");
         crate::message::message_set_serial(&mut msg, 57);
         let mut r = cr.dispatch(&msg).unwrap();
         assert_eq!(r.len(), 1);
         r[0].as_result().unwrap();
         let rr: String = r[0].read1().unwrap();
-        assert_eq!(&rr, "Hello, my score is 7!");
+        assert_eq!(&rr, "Hello example, my score is 7!");
 
         let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "org.freedesktop.DBus.Properties", "Get").unwrap();
         let mut msg = msg.append2("com.example.dbusrs.crossroads.score", "Score");
