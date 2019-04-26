@@ -47,8 +47,13 @@ Defaults to 'RefClosure'."))
              .help("If present, skips a specific prefix for interface names, e g 'org.freedesktop.DBus.'."))
         .arg(clap::Arg::with_name("futures").short("f").long("futures")
              .help("Generates code to use with futures 0.3 (experimental)"))
+        .arg(clap::Arg::with_name("file").required(false).help("D-Bus XML Introspection file"))
         .get_matches();
 
+    if matches.is_present("destination") && matches.is_present("file") {
+        panic!("Expected either xml file path as argument or destination option. But both are provided.");
+    }
+	
     let s = 
     if let Some(dest) = matches.value_of("destination") {
         let path = matches.value_of("path").unwrap_or("/");
@@ -56,6 +61,8 @@ Defaults to 'RefClosure'."))
         let c = dbus::Connection::get_private(bus).unwrap();
         let p = c.with_path(dest, path, 10000);
         p.introspect().unwrap()
+    } else if let Some(file_path) = matches.value_of("file")  {
+        std::fs::read_to_string(file_path.to_string()).unwrap()
     } else {
         let mut s = String::new();
         (&mut std::io::stdin() as &mut std::io::Read).read_to_string(&mut s).unwrap();
