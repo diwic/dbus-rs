@@ -9,8 +9,8 @@ futures-preview = { version = "0.3.0-alpha.12" }
 dbus = { path = "../dbus" }
 
 [dependencies.thin_main_loop]
-# git = "https://github.com/diwic/thin_main_loop.git"
-path = "../../thin_main_loop"
+git = "https://github.com/diwic/thin_main_loop.git"
+#path = "../../thin_main_loop"
 features = ["futures","glib"]
 optional = true
 
