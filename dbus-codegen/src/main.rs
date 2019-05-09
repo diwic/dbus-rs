@@ -47,6 +47,8 @@ Defaults to 'RefClosure'."))
              .help("If present, skips a specific prefix for interface names, e g 'org.freedesktop.DBus.'."))
         .arg(clap::Arg::with_name("futures").short("f").long("futures")
              .help("Generates code to use with futures 0.3 (experimental)"))
+        .arg(clap::Arg::with_name("output").short("o").long("output").takes_value(true).value_name("FILE")
+             .help("Write output into the specified file"))
         .arg(clap::Arg::with_name("file").required(false).help("D-Bus XML Introspection file"))
         .get_matches();
 
@@ -97,8 +99,14 @@ Defaults to 'RefClosure'."))
         crhandler: crhandler.map(|x| x.to_string()),
     };
 
-    let mut stdout = std::io::stdout();
-    let h: &mut std::io::Write = &mut stdout;
+    let mut h: Box<std::io::Write> = match matches.value_of("output") {
+        Some(file_path) => Box::new(std::fs::File::create(file_path)
+            .unwrap_or_else(|e| {
+                panic!("Failed to open {}", e);
+            })),
+        None => Box::new(std::io::stdout()),
+    };
+
     h.write(generate::generate(&s, &opts).unwrap().as_bytes()).unwrap();
     h.flush().unwrap();
 }
