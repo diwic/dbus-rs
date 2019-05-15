@@ -19,11 +19,11 @@ impl IoHandler for Io {
             }
         }).collect()))
     }
-    fn after_read_write(&mut self, lw: &task::LocalWaker) {
+    fn after_read_write(&mut self, ctx: &mut task::Context) {
         for io in &mut self.0 {
             use futures::Stream;
             let p = Pin::new(io);
-            let _ = p.poll_next(lw);
+            let _ = p.poll_next(ctx);
         }
     }
 }
