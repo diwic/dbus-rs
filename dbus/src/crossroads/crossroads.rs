@@ -110,7 +110,7 @@ impl<H: Handlers> Crossroads<H> {
 }
 
 impl Crossroads<Par> {
-    pub fn dispatch(&self, msg: &Message) -> Option<Vec<Message>> {
+    pub fn dispatch_par(&self, msg: &Message) -> Option<Vec<Message>> {
         let headers = msg_headers(msg)?;
         let (lookup, minfo) = self.reg_lookup(&headers)?;
         let handler = minfo.handler();
@@ -227,7 +227,7 @@ mod test {
         let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "com.example.dbusrs.crossroads.score", "Hello").unwrap();
         let mut msg = msg.append1("example");
         crate::message::message_set_serial(&mut msg, 57);
-        let mut r = cr.dispatch(&msg).unwrap();
+        let mut r = cr.dispatch_par(&msg).unwrap();
         assert_eq!(r.len(), 1);
         r[0].as_result().unwrap();
         let rr: String = r[0].read1().unwrap();
@@ -236,7 +236,7 @@ mod test {
         let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "org.freedesktop.DBus.Properties", "Get").unwrap();
         let mut msg = msg.append2("com.example.dbusrs.crossroads.score", "Score");
         crate::message::message_set_serial(&mut msg, 57);
-        let mut r = cr.dispatch(&msg).unwrap();
+        let mut r = cr.dispatch_par(&msg).unwrap();
         assert_eq!(r.len(), 1);
         r[0].as_result().unwrap();
         let z: u16 = r[0].read1().unwrap();

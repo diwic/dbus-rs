@@ -3,60 +3,19 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::any::Any;
 use std::mem;
-use crate::arg::{Arg, Append, Get, TypeMismatchError, IterAppend};
+use crate::arg::{Arg, Append, Get, ArgBuilder, TypeMismatchError, IterAppend};
 use std::marker::PhantomData;
 use super::MethodErr;
 use super::handlers::{Handlers, DebugMethod, DebugProp, Par, ParInfo, Mut, MutCtx};
 use super::crossroads::{Crossroads, PathData};
 
-pub trait ArgBuilder: Sized {
-    type strs;
-    fn build(a: Self::strs) -> Vec<Argument<'static>>;
-    fn read(msg: &Message) -> Result<Self, TypeMismatchError>;
-    fn append(self, msg: &mut Message);
+fn build_argvec<A: ArgBuilder>(a: A::strs) -> Vec<Argument<'static>> {
+    let mut v = vec!();
+    A::strs_sig(a, |name, sig| {
+        v.push(Argument { name: name.into(), sig })
+    });
+    v
 }
-
-impl ArgBuilder for () {
-    type strs = ();
-    fn build(_: Self::strs) -> Vec<Argument<'static>> { vec!() }
-    fn read(_: &Message) -> Result<Self, TypeMismatchError> { Ok(()) }
-    fn append(self, _: &mut Message) {}
-}
-
-macro_rules! argbuilder_impl {
-    ($($n: ident $t: ident $s: ty,)+) => {
-
-impl<$($t: Arg + Append + for<'z> Get<'z>),*> ArgBuilder for ($($t,)*) {
-    type strs = ($($s,)*); 
-    fn build(z: Self::strs) -> Vec<Argument<'static>> { 
-        let ( $($n,)*) = z;
-        vec!(
-            $( Argument { name: $n.into(), sig: $t::signature() }, )*
-        )
-    }
-
-    fn read(msg: &Message) -> Result<Self, TypeMismatchError> {
-        let mut ii = msg.iter_init();
-        $( let $n = ii.read()?; )*
-        Ok(($( $n, )* ))
-    }
-
-    fn append(self, msg: &mut Message) {
-        let ( $($n,)*) = self;
-        let mut ia = IterAppend::new(msg);
-        $( ia.append($n); )*
-    }
-}
-
-    }
-}
-
-argbuilder_impl!(a A &'static str,);
-argbuilder_impl!(a A &'static str, b B &'static str,);
-argbuilder_impl!(a A &'static str, b B &'static str, c C &'static str,);
-argbuilder_impl!(a A &'static str, b B &'static str, c C &'static str, d D &'static str,);
-argbuilder_impl!(a A &'static str, b B &'static str, c C &'static str, d D &'static str, e E &'static str,);
-
 
 
 #[derive(Default, Debug, Clone)]
@@ -147,7 +106,7 @@ impl<'a, I, H: Handlers> IfaceInfoBuilder<'a, I, H> {
     }
 
     pub fn signal<A: ArgBuilder, N: Into<MemberName<'static>>>(mut self, name: N, args: A::strs) -> Self {
-        let s = SignalInfo { name: name.into(), args: A::build(args), anns: Default::default() };
+        let s = SignalInfo { name: name.into(), args: build_argvec::<A>(args), anns: Default::default() };
         self.info.signals.push(s);
         self
     }
@@ -180,7 +139,7 @@ impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Par> {
         });
 
         let m = MethodInfo { name: name.into(), handler: DebugMethod(f), 
-            i_args: IA::build(in_args), o_args: OA::build(out_args), anns: Default::default() };
+            i_args: build_argvec::<IA>(in_args), o_args: build_argvec::<OA>(out_args), anns: Default::default() };
         self.info.methods.push(m);
         self
     }
@@ -212,7 +171,7 @@ impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Mut> {
     pub fn method_iface<IA: ArgBuilder, OA: ArgBuilder, N, F>(mut self, name: N, in_args: IA::strs, out_args: OA::strs, f: F) -> Self
     where N: Into<MemberName<'static>>, F: FnMut(&mut I, &MutCtx, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
         let m = MethodInfo { name: name.into(), handler: DebugMethod(Mut::typed_method_iface(f)), 
-            i_args: IA::build(in_args), o_args: OA::build(out_args), anns: Default::default() };
+            i_args: build_argvec::<IA>(in_args), o_args: build_argvec::<OA>(out_args), anns: Default::default() };
         self.info.methods.push(m);
         self
     }

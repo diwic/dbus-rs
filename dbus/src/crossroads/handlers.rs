@@ -1,8 +1,9 @@
 use std::{fmt, cell};
 use std::any::Any;
+use crate::arg::ArgBuilder;
 use crate::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature, Message, arg};
 use super::crossroads::{Crossroads, PathData, MLookup};
-use super::info::{MethodInfo, PropInfo, ArgBuilder};
+use super::info::{MethodInfo, PropInfo};
 use super::MethodErr;
 
 pub struct DebugMethod<H: Handlers>(pub H::Method);
