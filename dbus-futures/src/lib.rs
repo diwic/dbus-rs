@@ -68,6 +68,15 @@ impl<T: 'static> MethodReply<T> {
     }
 }
 
+impl<T: 'static + dbus::arg::ReadAll> MethodReply<T> {
+    pub fn new(msg: ReplyMessage) -> Self {
+        Self::from_msg(msg, |m| {
+            let mut ii = m.iter_init();
+            Ok(T::read(&mut ii)?)
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct MessageStream(Result<mpsc::UnboundedReceiver<dbus::Message>, Option<Error>>);
 
@@ -139,6 +148,17 @@ pub struct ConnPath<'a> {
 }
 
 impl<'a> ConnPath<'a> {
+    /// Make a D-Bus method call.
+    pub fn method_call<A: dbus::arg::AppendAll>(&self, i: &dbus::Interface, m: &dbus::Member, args: A) -> ReplyMessage {
+        let mut msg = dbus::Message::method_call(&self.dest, &self.path, i, m);
+        args.append(&mut dbus::arg::IterAppend::new(&mut msg));
+        match self.conn.send(msg) {
+            Ok(serial) => ReplyMessage::new(serial, &self.conn),
+            Err(e) => ReplyMessage(Err(Some(e))),
+        }
+    }
+
+
     /// Make a D-Bus method call, where you can append arguments inside the closure.
     pub fn method_call_with_args<F>(&self, i: &dbus::Interface, m: &dbus::Member, f: F) -> ReplyMessage 
     where F: FnOnce(&mut dbus::Message)
@@ -215,14 +235,9 @@ impl ConnHandle {
             if allow_replacement { 1 } else { 0 } +
             if replace_existing { 2 } else { 0 } +
             if do_not_queue { 4 } else { 0 };
-        let m = self.with_dbus_path().method_call_with_args(&"org.freedesktop.DBus".into(), &"RequestName".into(), |msg| {
-            let mut i = dbus::arg::IterAppend::new(msg);
-            i.append(name);
-            i.append(flags);
-        });
+        let m = self.with_dbus_path().method_call(&"org.freedesktop.DBus".into(), &"RequestName".into(), (name, flags));
         MethodReply::from_msg(m, |m| {
-            let mut i = m.iter_init();
-            let arg0: u32 = i.read()?;
+            let arg0: u32 = m.read1()?;
             use dbus::RequestNameReply::*;
             let all = [PrimaryOwner, InQueue, Exists, AlreadyOwner];
             all.into_iter().find(|x| **x as u32 == arg0).map(|x| *x).ok_or_else(|| Error::failed(&"Invalid reply from DBus server"))
@@ -231,13 +246,9 @@ impl ConnHandle {
 
     /// Release a previoulsy requested name on the D-Bus.
     pub fn release_name(&self, name: &str) -> MethodReply<dbus::ReleaseNameReply> {
-        let m = self.with_dbus_path().method_call_with_args(&"org.freedesktop.DBus".into(), &"ReleaseName".into(), |msg| {
-            let mut i = dbus::arg::IterAppend::new(msg);
-            i.append(name);
-        });
+        let m = self.with_dbus_path().method_call(&"org.freedesktop.DBus".into(), &"ReleaseName".into(), (name,));
         MethodReply::from_msg(m, |m| {
-            let mut i = m.iter_init();
-            let arg0: u32 = i.read()?;
+            let arg0: u32 = m.read1()?;
             use dbus::ReleaseNameReply::*;
             let all = [Released, NonExistent, NotOwner];
             all.into_iter().find(|x| **x as u32 == arg0).map(|x| *x).ok_or_else(|| Error::failed(&"Invalid reply from DBus server"))

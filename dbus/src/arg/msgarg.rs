@@ -28,11 +28,24 @@ pub trait Append: Sized {
     fn append(self, &mut IterAppend);
 }
 
+/// Helper trait to append many arguments to a message.
+pub trait AppendAll: Sized {
+    /// Performs the append operation.
+    fn append(self, &mut IterAppend);
+}
+
 /// Types that can be retrieved from a message as arguments implement this trait.
 pub trait Get<'a>: Sized {
     /// Performs the get operation.
     fn get(i: &mut Iter<'a>) -> Option<Self>;
 }
+
+/// Helper trait to read all arguments from a message.
+pub trait ReadAll: Sized {
+    /// Performs the read operation.
+    fn read(i: &mut Iter) -> Result<Self, TypeMismatchError>;
+}
+
 
 /// Object safe version of Arg + Append + Get.
 pub trait RefArg: fmt::Debug {
@@ -247,6 +260,21 @@ impl<$($t: Arg + Append + for<'z> Get<'z>),*> ArgBuilder for ($($t,)*) {
         $( ia.append($n); )*
     }
 }
+
+impl<$($t: Append),*> AppendAll for ($($t,)*) {
+    fn append(self, ia: &mut IterAppend) {
+        let ( $($n,)*) = self;
+        $( ia.append($n); )*
+    }
+}
+
+impl<$($t: Arg + for<'z> Get<'z>),*> ReadAll for ($($t,)*) {
+    fn read(ii: &mut Iter) -> Result<Self, TypeMismatchError> {
+        $( let $n = ii.read()?; )*
+        Ok(($( $n, )* ))
+    }
+}
+
 
     }
 }

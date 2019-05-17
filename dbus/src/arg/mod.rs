@@ -63,7 +63,7 @@ mod basic_impl;
 mod variantstruct_impl;
 mod array_impl;
 
-pub use self::msgarg::{Arg, FixedArray, Get, DictKey, Append, RefArg, ArgBuilder, cast, cast_mut};
+pub use self::msgarg::{Arg, FixedArray, Get, DictKey, Append, RefArg, AppendAll, ReadAll, cast, cast_mut};
 pub use self::array_impl::{Array, Dict};
 pub use self::variantstruct_impl::Variant;
 
@@ -238,7 +238,7 @@ impl<'a> Iter<'a> {
 
     /// Wrapper around `get` and `next`. Calls `get`, and then `next` if `get` succeeded. 
     ///
-    /// Also returns a `Result` rather than an `Option` to work better with `try!`.
+    /// Also returns a `Result` rather than an `Option` to give an error if successful.
     ///
     /// # Example
     /// ```ignore
@@ -254,12 +254,12 @@ impl<'a> Iter<'a> {
     /// fn service_browser_item_new_msg(m: &Message) -> Result<ServiceBrowserItemNew, TypeMismatchError> {
     ///     let mut iter = m.iter_init();
     ///     Ok(ServiceBrowserItemNew {
-    ///         interface: try!(iter.read()),
-    ///         protocol: try!(iter.read()),
-    ///         name: try!(iter.read()),
-    ///         item_type: try!(iter.read()),
-    ///         domain: try!(iter.read()),
-    ///         flags: try!(iter.read()),
+    ///         interface: iter.read()?,
+    ///         protocol: iter.read()?,
+    ///         name: iter.read()?,
+    ///         item_type: iter.read()?,
+    ///         domain: iter.read()?,
+    ///         flags: iter.read()?,
     ///     })
     /// }
     /// ```
