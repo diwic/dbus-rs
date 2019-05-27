@@ -429,7 +429,7 @@ fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box
 
 fn write_signal(s: &mut String, i: &Intf, ss: &Signal) -> Result<(), Box<error::Error>> {
     let structname = format!("{}{}", make_camel(&i.shortname), make_camel(&ss.name));
-    *s += "\n#[derive(Debug, Default)]\n";
+    *s += "\n#[derive(Debug)]\n";
     *s += &format!("pub struct {} {{\n", structname);
     for a in ss.args.iter() {
         *s += &format!("    pub {}: {},\n", a.varname(), a.typename(false)?.0);
@@ -444,11 +444,12 @@ fn write_signal(s: &mut String, i: &Intf, ss: &Signal) -> Result<(), Box<error::
         *s += &format!("        arg::RefArg::append(&self.{}, i);\n", a.varname());
     }
     *s += "    }\n";
-    *s += &format!("    fn get(&mut self, {}: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {{\n", if ss.args.len() > 0 {"i"} else {"_"});
+    *s += &format!("    fn get({}: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {{\n", if ss.args.len() > 0 {"i"} else {"_"});
+    *s += &format!("        Ok({} {{\n", structname);
     for a in ss.args.iter() {
-        *s += &format!("        self.{} = i.read()?;\n", a.varname());
+        *s += &format!("            {}: i.read()?,\n", a.varname());
     }
-    *s += "        Ok(())\n";
+    *s += "        })\n";
     *s += "    }\n";
     *s += "}\n";
     Ok(())

@@ -110,11 +110,12 @@ impl crate::SignalArgs for PropertiesPropertiesChanged {
         (&self.changed_properties as &arg::RefArg).append(i);
         (&self.invalidated_properties as &arg::RefArg).append(i);
     }
-    fn get(&mut self, i: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {
-        self.interface_name = i.read()?;
-        self.changed_properties = i.read()?;
-        self.invalidated_properties = i.read()?;
-        Ok(())
+    fn get(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
+        Ok(PropertiesPropertiesChanged {
+            interface_name: i.read()?,
+            changed_properties: i.read()?,
+            invalidated_properties: i.read()?,
+        })
     }
 }
 
@@ -152,10 +153,11 @@ impl crate::SignalArgs for ObjectManagerInterfacesAdded {
         (&self.object as &arg::RefArg).append(i);
         (&self.interfaces as &arg::RefArg).append(i);
     }
-    fn get(&mut self, i: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {
-        self.object = i.read()?;
-        self.interfaces = i.read()?;
-        Ok(())
+    fn get(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
+        Ok(ObjectManagerInterfacesAdded {
+            object: i.read()?,
+            interfaces: i.read()?,
+        })
     }
 }
 
@@ -174,10 +176,11 @@ impl crate::SignalArgs for ObjectManagerInterfacesRemoved {
         (&self.object as &arg::RefArg).append(i);
         (&self.interfaces as &arg::RefArg).append(i);
     }
-    fn get(&mut self, i: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {
-        self.object = i.read()?;
-        self.interfaces = i.read()?;
-        Ok(())
+    fn get(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
+        Ok(ObjectManagerInterfacesRemoved {
+            object: i.read()?,
+            interfaces: i.read()?,
+        })
     }
 }
 

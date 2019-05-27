@@ -15,14 +15,6 @@ impl Variant<Box<RefArg>> {
     }
 }
 
-impl Default for Variant<Box<RefArg>> {
-    // This is a bit silly, because there is no such thing as a default argument.
-    // Unfortunately due to a design mistake while making the SignalArgs trait, we'll
-    // have to work around that by adding a default implementation here.
-    // https://github.com/diwic/dbus-rs/issues/136
-    fn default() -> Self { Variant(Box::new(0u8) as Box<RefArg>) }
-}
-
 impl<T:Default> Default for Variant<T> {
     fn default() -> Self { Variant(T::default()) }
 }
