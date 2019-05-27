@@ -24,7 +24,7 @@ use crate::{Message, MessageType, BusName, Path, Interface, Member, MatchRule};
 /// }
 /// ```
 
-pub trait SignalArgs: Default {
+pub trait SignalArgs {
     /// D-Bus name of signal
     const NAME: &'static str;
 
@@ -39,7 +39,7 @@ pub trait SignalArgs: Default {
     /// Low-level method for getting arguments from a message.
     ///
     /// You're more likely to use one of the more high level functions.
-    fn get(&mut self, i: &mut arg::Iter) -> Result<(), arg::TypeMismatchError>;
+    fn get(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> where Self: Sized;
 
     /// Returns a message that emits the signal.
     fn to_emit_message(&self, path: &Path) -> Message {
@@ -51,13 +51,12 @@ pub trait SignalArgs: Default {
     /// If the message is a signal of the correct type, return its arguments, otherwise return None.
     ///
     /// This does not check sender and path of the message, which is likely relevant to you as well.
-    fn from_message(m: &Message) -> Option<Self> {
+    fn from_message(m: &Message) -> Option<Self> where Self: Sized {
         if m.msg_type() != MessageType::Signal { None }
         else if m.interface().as_ref().map(|x| &**x) != Some(Self::INTERFACE) { None }
         else if m.member().as_ref().map(|x| &**x) != Some(Self::NAME) { None }
         else {
-            let mut z: Self = Default::default();
-            z.get(&mut m.iter_init()).ok().map(|_| z)
+            Self::get(&mut m.iter_init()).ok()
         }
     }
 
