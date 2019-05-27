@@ -35,7 +35,9 @@ impl Drop for OwnedFd {
 
 impl Clone for OwnedFd {
     fn clone(&self) -> OwnedFd {
-        OwnedFd::new(unsafe { libc::dup(self.fd) } ) // FIXME: handle errors
+        let x = unsafe { libc::dup(self.fd) };
+        if x == -1 { panic!("Duplicating file descriptor failed") }
+        OwnedFd::new(x)
     }
 }
 
