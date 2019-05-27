@@ -23,14 +23,17 @@ pub trait Arg {
 }
 
 /// Types that can be appended to a message as arguments implement this trait.
-pub trait Append: Sized {
-    /// Performs the append operation.
-    fn append(self, _: &mut IterAppend);
+pub trait Append {
+    /// Performs the append operation by consuming self.
+    fn append(self, ia: &mut IterAppend) where Self: Sized { self.append_by_ref(ia) } 
+
+    /// Performs the append operation by borrowing self.
+    fn append_by_ref(&self, _: &mut IterAppend); 
 }
 
 /// Helper trait to append many arguments to a message.
 pub trait AppendAll: Sized {
-    /// Performs the append operation.
+    /// Performs the append operation by consuming self.
     fn append(self, _: &mut IterAppend);
 }
 
@@ -135,8 +138,8 @@ impl<'a, T: Arg> Arg for &'a T {
     const ARG_TYPE: ArgType = T::ARG_TYPE;
     fn signature() -> Signature<'static> { T::signature() }
 }
-impl<'a, T: Append + Clone> Append for &'a T {
-    fn append(self, i: &mut IterAppend) { self.clone().append(i) }
+impl<'a, T: Append> Append for &'a T {
+    fn append_by_ref(&self, i: &mut IterAppend) { (&**self).append_by_ref(i) }
 }
 impl<'a, T: DictKey> DictKey for &'a T {}
 
@@ -208,7 +211,7 @@ impl<'a, T: Get<'a>> Get<'a> for $t<T> {
 }
 
 impl<T: Append> Append for Box<T> {
-    fn append(self, i: &mut IterAppend) { let q: T = *self; q.append(i) }
+    fn append_by_ref(&self, i: &mut IterAppend) { (&**self).append_by_ref(i) }
 }
 
 deref_impl!(Box, self, &mut **self );

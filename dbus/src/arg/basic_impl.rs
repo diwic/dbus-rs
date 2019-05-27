@@ -69,7 +69,7 @@ impl Arg for $t {
 }
 
 impl Append for $t {
-    fn append(self, i: &mut IterAppend) { arg_append_basic(&mut i.0, ArgType::$s, self) }
+    fn append_by_ref(&self, i: &mut IterAppend) { arg_append_basic(&mut i.0, ArgType::$s, *self) }
 }
 
 impl<'a> Get<'a> for $t {
@@ -146,7 +146,7 @@ impl Arg for bool {
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"b\0") } }
 }
 impl Append for bool {
-    fn append(self, i: &mut IterAppend) { arg_append_basic(&mut i.0, ArgType::Boolean, if self {1} else {0}) }
+    fn append_by_ref(&self, i: &mut IterAppend) { arg_append_basic(&mut i.0, ArgType::Boolean, if *self {1} else {0}) }
 }
 impl DictKey for bool {}
 impl<'a> Get<'a> for bool {
@@ -160,7 +160,7 @@ impl Arg for f64 {
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"d\0") } }
 }
 impl Append for f64 {
-    fn append(self, i: &mut IterAppend) { arg_append_f64(&mut i.0, ArgType::Double, self) }
+    fn append_by_ref(&self, i: &mut IterAppend) { arg_append_f64(&mut i.0, ArgType::Double, *self) }
 }
 impl DictKey for f64 {}
 impl<'a> Get<'a> for f64 {
@@ -177,7 +177,7 @@ impl<'a> Arg for &'a str {
 }
 
 impl<'a> Append for &'a str {
-    fn append(self, i: &mut IterAppend) {
+    fn append_by_ref(&self, i: &mut IterAppend) {
         use std::borrow::Cow;
         let b: &[u8] = self.as_bytes();
         let v: Cow<[u8]> = if b.len() > 0 && b[b.len()-1] == 0 { Cow::Borrowed(b) }
@@ -205,6 +205,9 @@ impl<'a> Append for String {
         self.push_str("\0");
         let s: &str = &self;
         s.append(i)
+    }
+    fn append_by_ref(&self, i: &mut IterAppend) {
+        (&**self).append_by_ref(i)
     }
 }
 impl<'a> DictKey for String {}
@@ -239,7 +242,7 @@ impl Arg for OwnedFd {
     fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"h\0") } }
 }
 impl Append for OwnedFd {
-    fn append(self, i: &mut IterAppend) {
+    fn append_by_ref(&self, i: &mut IterAppend) {
         use std::os::unix::io::AsRawFd;
         arg_append_basic(&mut i.0, ArgType::UnixFd, self.as_raw_fd())
     }
@@ -278,7 +281,7 @@ impl RefArg for $t<'static> {
 impl<'a> DictKey for $t<'a> {}
 
 impl<'a> Append for $t<'a> {
-    fn append(self, i: &mut IterAppend) {
+    fn append_by_ref(&self, i: &mut IterAppend) {
         arg_append_str(&mut i.0, ArgType::$s, self.as_cstr())
     }
 }

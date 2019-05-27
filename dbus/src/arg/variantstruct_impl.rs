@@ -34,24 +34,24 @@ impl<T> Arg for Variant<T> {
 }
 
 impl<T: Arg + Append> Append for Variant<T> {
-    fn append(self, i: &mut IterAppend) {
-        let z = self.0;
-        i.append_container(ArgType::Variant, Some(T::signature().as_cstr()), |s| z.append(s));
+    fn append_by_ref(&self, i: &mut IterAppend) {
+        let z = &self.0;
+        i.append_container(ArgType::Variant, Some(T::signature().as_cstr()), |s| z.append_by_ref(s));
     }
 }
 
 impl Append for Variant<message::MessageItem> {
-    fn append(self, i: &mut IterAppend) {
-        let z = self.0;
+    fn append_by_ref(&self, i: &mut IterAppend) {
+        let z = &self.0;
         let asig = z.signature();
         let sig = asig.as_cstr();
-        i.append_container(ArgType::Variant, Some(&sig), |s| z.append(s));
+        i.append_container(ArgType::Variant, Some(&sig), |s| z.append_by_ref(s));
     }
 }
 
 impl Append for Variant<Box<RefArg>> {
-    fn append(self, i: &mut IterAppend) {
-        let z = self.0;
+    fn append_by_ref(&self, i: &mut IterAppend) {
+        let z = &self.0;
         i.append_container(ArgType::Variant, Some(z.signature().as_cstr()), |s| z.append(s));
     }
 }
@@ -118,9 +118,9 @@ impl<$($t: Arg),*> Arg for ($($t,)*) {
 }
 
 impl<$($t: Append),*> Append for ($($t,)*) {
-    fn append(self, i: &mut IterAppend) {
+    fn append_by_ref(&self, i: &mut IterAppend) {
         let ( $($n,)*) = self;
-        i.append_container(ArgType::Struct, None, |s| { $( $n.append(s); )* });
+        i.append_container(ArgType::Struct, None, |s| { $( $n.append_by_ref(s); )* });
     }
 }
 
@@ -217,7 +217,7 @@ impl RefArg for Vec<Box<RefArg>> {
 }
 
 impl Append for message::MessageItem {
-    fn append(self, i: &mut IterAppend) {
+    fn append_by_ref(&self, i: &mut IterAppend) {
         message::append_messageitem(&mut i.0, &self)
     }
 }
