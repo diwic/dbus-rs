@@ -32,9 +32,9 @@ pub trait Append {
 }
 
 /// Helper trait to append many arguments to a message.
-pub trait AppendAll: Sized {
-    /// Performs the append operation by consuming self.
-    fn append(self, _: &mut IterAppend);
+pub trait AppendAll {
+    /// Performs the append operation by borrowing self.
+    fn append(&self, _: &mut IterAppend);
 }
 
 /// Types that can be retrieved from a message as arguments implement this trait.
@@ -265,7 +265,7 @@ impl<$($t: Arg + Append + for<'z> Get<'z>),*> ArgBuilder for ($($t,)*) {
 }
 
 impl<$($t: Append),*> AppendAll for ($($t,)*) {
-    fn append(self, ia: &mut IterAppend) {
+    fn append(&self, ia: &mut IterAppend) {
         let ( $($n,)*) = self;
         $( ia.append($n); )*
     }
@@ -368,11 +368,11 @@ mod test {
         c.register_object_path("/hello").unwrap();
         let m = Message::new_method_call(&c.unique_name(), "/hello", "com.example.hello", "Hello").unwrap();
         let m = m.append1(2000u16);
-        let m = m.append1(Array::new(&vec![129u8, 5, 254]));
+        let m = m.append1(&Array::new(&vec![129u8, 5, 254]));
         let m = m.append2(Variant(&["Hello", "world"][..]), &[32768u16, 16u16, 12u16][..]);
         let m = m.append3(-1i32, &*format!("Hello world"), -3.14f64);
         let m = m.append1((256i16, Variant(18_446_744_073_709_551_615u64)));
-        let m = m.append2(Path::new("/a/valid/path").unwrap(), Signature::new("a{sv}").unwrap());
+        let m = m.append2(Path::new("/a/valid/path").unwrap(), &Signature::new("a{sv}").unwrap());
         let mut z = HashMap::new();
         z.insert(123543u32, true);
         z.insert(0u32, false);
