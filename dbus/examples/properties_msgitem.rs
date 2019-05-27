@@ -1,6 +1,5 @@
-extern crate dbus;
-
-use dbus::{Connection, BusType, Props};
+use dbus::{Connection, BusType};
+use dbus::arg::messageitem::Props;
 
 fn main() {
     let c = Connection::get_private(BusType::System).unwrap();

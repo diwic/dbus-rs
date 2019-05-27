@@ -7,7 +7,8 @@ extern crate libc;
 
 use std::cmp;
 
-use dbus::{Connection, BusType, Props, MessageItem, Message};
+use dbus::{Connection, BusType, Message};
+use dbus::arg::messageitem::{Props, MessageItem};
 
 fn item_as_i64(i: MessageItem) -> Result<i64, Box<std::error::Error>> {
     match i {

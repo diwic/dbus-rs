@@ -9,7 +9,7 @@
 //! let t = f.tree(()).add(f.object_path("/example", ()).introspectable()
 //!     .add(f.interface("com.example.dbus.rs", ())
 //!         .add_m(f.method("CallMe", (), |m| {
-//!             Ok(vec!(m.msg.method_return().append("Thanks!"))) }
+//!             Ok(vec!(m.msg.method_return().append1("Thanks!"))) }
 //!         ).out_arg("s"))
 //! ));
 //!
