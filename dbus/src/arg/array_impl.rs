@@ -47,7 +47,7 @@ fn array_append<T: Arg, F: FnMut(&T, &mut IterAppend)>(z: &[T], i: &mut IterAppe
 /// Appends a D-Bus array. Note: In case you have a large array of a type that implements FixedArray,
 /// using this method will be more efficient than using an Array.
 impl<'a, T: Arg + Append + Clone> Append for &'a [T] {
-    fn append(self, i: &mut IterAppend) {
+    fn append_by_ref(&self, i: &mut IterAppend) {
         array_append(self, i, |arg, s| arg.clone().append(s));
     }
 }
@@ -122,7 +122,7 @@ impl<'a, K: DictKey, V: Arg, I> Dict<'a, K, V, I> {
 }
 
 impl<'a, K: 'a + DictKey, V: 'a + Append + Arg, I: Iterator<Item=(K, V)>> Dict<'a, K, V, I> {
-    /// Creates a new Dict from an iterator. The iterator is consumed when appended.
+    /// Creates a new Dict from an iterator.
     pub fn new<J: IntoIterator<IntoIter=I, Item=(K, V)>>(j: J) -> Dict<'a, K, V, I> { Dict(j.into_iter(), PhantomData) }
 }
 
@@ -132,13 +132,13 @@ impl<'a, K: DictKey, V: Arg, I> Arg for Dict<'a, K, V, I> {
         Signature::from(format!("a{}", Self::entry_sig())) }
 }
 
-impl<'a, K: 'a + DictKey + Append, V: 'a + Append + Arg, I: Iterator<Item=(K, V)>> Append for Dict<'a, K, V, I> {
-    fn append(self, i: &mut IterAppend) {
-        let z = self.0;
+impl<'a, K: 'a + DictKey + Append, V: 'a + Append + Arg, I: Iterator<Item=(K, V)> + Clone> Append for Dict<'a, K, V, I> {
+    fn append_by_ref(&self, i: &mut IterAppend) {
+        let z = self.0.clone();
         i.append_container(Self::ARG_TYPE, Some(&CString::new(Self::entry_sig()).unwrap()), |s| for (k, v) in z {
             s.append_container(ArgType::DictEntry, None, |ss| {
-                k.append(ss);
-                v.append(ss);
+                k.append_by_ref(ss);
+                v.append_by_ref(ss);
             })
         });
     }
@@ -175,8 +175,8 @@ impl<K: DictKey, V: Arg> Arg for HashMap<K, V> {
 }
 
 impl<K: DictKey + Append + Eq + Hash, V: Arg + Append> Append for HashMap<K, V> {
-    fn append(self, i: &mut IterAppend) {
-        Dict::new(self.into_iter()).append(i);
+    fn append_by_ref(&self, i: &mut IterAppend) {
+        Dict::new(self.iter()).append_by_ref(i);
     }
 }
 
@@ -221,8 +221,8 @@ impl<T: Arg> Arg for Vec<T> {
 }
 
 impl<T: Arg + Append> Append for Vec<T> {
-    fn append(self, i: &mut IterAppend) {
-        Array::new(self).append(i);
+    fn append_by_ref(&self, i: &mut IterAppend) {
+        Array::new(self).append_by_ref(i);
     }
 }
 
@@ -240,7 +240,7 @@ impl<'a, T: Arg + Get<'a>> Get<'a> for Vec<T> {
 pub struct Array<'a, T, I>(I, PhantomData<(*const T, &'a Message)>);
 
 impl<'a, T: 'a, I: Iterator<Item=T>> Array<'a, T, I> {
-    /// Creates a new Array from an iterator. The iterator is consumed when appending.
+    /// Creates a new Array from an iterator.
     pub fn new<J: IntoIterator<IntoIter=I, Item=T>>(j: J) -> Array<'a, T, I> { Array(j.into_iter(), PhantomData) }
 }
 
@@ -249,10 +249,10 @@ impl<'a, T: Arg, I> Arg for Array<'a, T, I> {
     fn signature() -> Signature<'static> { Signature::from(format!("a{}", T::signature())) }
 }
 
-impl<'a, T: 'a + Arg + Append, I: Iterator<Item=T>> Append for Array<'a, T, I> {
-    fn append(self, i: &mut IterAppend) {
-        let z = self.0;
-        i.append_container(ArgType::Array, Some(T::signature().as_cstr()), |s| for arg in z { arg.append(s) });
+impl<'a, T: 'a + Arg + Append, I: Iterator<Item=T> + Clone> Append for Array<'a, T, I> {
+    fn append_by_ref(&self, i: &mut IterAppend) {
+        let z = self.0.clone();
+        i.append_container(ArgType::Array, Some(T::signature().as_cstr()), |s| for arg in z { arg.append_by_ref(s) });
     }
 }
 
