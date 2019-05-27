@@ -17,6 +17,10 @@
 
 extern crate libc;
 
+#[allow(missing_docs)]
+extern crate libdbus_sys as ffi;
+
+
 pub use crate::ffi::DBusBusType as BusType;
 pub use crate::connection::DBusNameFlag as NameFlag;
 pub use crate::ffi::DBusRequestNameReply as RequestNameReply;
@@ -34,17 +38,14 @@ pub use crate::signalargs::SignalArgs;
 #[deprecated(note="Use Signature instead")]
 pub type TypeSig<'a> = std::borrow::Cow<'a, str>;
 
-use std::ffi::{CString, CStr};
-use std::ptr;
-use std::os::raw::c_char;
-
-#[allow(missing_docs)]
-extern crate libdbus_sys as ffi;
 mod message;
 mod prop;
 mod watch;
 mod connection;
 mod signalargs;
+
+mod error;
+pub use error::Error;
 
 mod connection2;
 mod dispatcher;
@@ -66,6 +67,10 @@ pub mod tree;
 
 static INITDBUS: std::sync::Once = std::sync::ONCE_INIT;
 
+use std::ffi::{CString, CStr};
+use std::os::raw::c_char;
+use std::ptr;
+
 fn init_dbus() {
     INITDBUS.call_once(|| {
         if unsafe { ffi::dbus_threads_init_default() } == 0 {
@@ -74,19 +79,6 @@ fn init_dbus() {
     });
 }
 
-/// D-Bus Error wrapper.
-pub struct Error {
-    e: ffi::DBusError,
-}
-
-unsafe impl Send for Error {}
-
-// Note! For this Sync impl to be safe, it requires that no functions that take &self,
-// actually calls into FFI. All functions that call into FFI with a ffi::DBusError
-// must take &mut self.
-
-unsafe impl Sync for Error {}
-
 fn c_str_to_slice(c: & *const c_char) -> Option<&str> {
     if *c == ptr::null() { None }
     else { std::str::from_utf8( unsafe { CStr::from_ptr(*c).to_bytes() }).ok() }
@@ -94,79 +86,6 @@ fn c_str_to_slice(c: & *const c_char) -> Option<&str> {
 
 fn to_c_str(n: &str) -> CString { CString::new(n.as_bytes()).unwrap() }
 
-impl Error {
-
-    /// Create a new custom D-Bus Error.
-    pub fn new_custom(name: &str, message: &str) -> Error {
-        let n = to_c_str(name);
-        let m = to_c_str(&message.replace("%","%%"));
-        let mut e = Error::empty();
-
-        unsafe { ffi::dbus_set_error(e.get_mut(), n.as_ptr(), m.as_ptr()) };
-        e
-    }
-
-    fn empty() -> Error {
-        init_dbus();
-        let mut e = ffi::DBusError {
-            name: ptr::null(),
-            message: ptr::null(),
-            dummy: 0,
-            padding1: ptr::null()
-        };
-        unsafe { ffi::dbus_error_init(&mut e); }
-        Error{ e: e }
-    }
-
-    /// Error name/type, e g 'org.freedesktop.DBus.Error.Failed'
-    pub fn name(&self) -> Option<&str> {
-        c_str_to_slice(&self.e.name)
-    }
-
-    /// Custom message, e g 'Could not find a matching object path'
-    pub fn message(&self) -> Option<&str> {
-        c_str_to_slice(&self.e.message)
-    }
-
-    fn get_mut(&mut self) -> &mut ffi::DBusError { &mut self.e }
-}
-
-impl Drop for Error {
-    fn drop(&mut self) {
-        unsafe { ffi::dbus_error_free(&mut self.e); }
-    }
-}
-
-impl std::fmt::Debug for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-        write!(f, "D-Bus error: {} ({})", self.message().unwrap_or(""),
-            self.name().unwrap_or(""))
-    }
-}
-
-impl std::error::Error for Error {
-    fn description(&self) -> &str { "D-Bus error" }
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> Result<(),std::fmt::Error> {
-        if let Some(x) = self.message() {
-             write!(f, "{:?}", x.to_string())
-        } else { Ok(()) }
-    }
-}
-
-impl From<arg::TypeMismatchError> for Error {
-    fn from(t: arg::TypeMismatchError) -> Error {
-        Error::new_custom("org.freedesktop.DBus.Error.Failed", &format!("{}", t))
-    }
-}
-
-impl From<tree::MethodErr> for Error {
-    fn from(t: tree::MethodErr) -> Error {
-        Error::new_custom(t.errorname(), t.description())
-    }
-}
 
 #[cfg(test)]
 mod test {
