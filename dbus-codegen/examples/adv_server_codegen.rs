@@ -126,8 +126,9 @@ impl dbus::SignalArgs for DeviceCheckComplete {
     const INTERFACE: &'static str = "com.example.dbus.rs.device";
     fn append(&self, _: &mut arg::IterAppend) {
     }
-    fn get(&mut self, _: &mut arg::Iter) -> Result<(), arg::TypeMismatchError> {
-        Ok(())
+    fn get(_: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
+        Ok(DeviceCheckComplete {
+        })
     }
 }
 
