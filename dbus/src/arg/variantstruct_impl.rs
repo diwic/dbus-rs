@@ -1,5 +1,5 @@
 use super::*;
-use crate::{message, Signature};
+use crate::Signature;
 use std::any;
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -29,15 +29,6 @@ impl<T: Arg + Append> Append for Variant<T> {
     fn append_by_ref(&self, i: &mut IterAppend) {
         let z = &self.0;
         i.append_container(ArgType::Variant, Some(T::signature().as_cstr()), |s| z.append_by_ref(s));
-    }
-}
-
-impl Append for Variant<message::MessageItem> {
-    fn append_by_ref(&self, i: &mut IterAppend) {
-        let z = &self.0;
-        let asig = z.signature();
-        let sig = asig.as_cstr();
-        i.append_container(ArgType::Variant, Some(&sig), |s| z.append_by_ref(s));
     }
 }
 
@@ -206,29 +197,5 @@ impl RefArg for Vec<Box<RefArg>> {
         let t: Vec<Box<RefArg + 'static>> = self.iter().map(|x| x.box_clone()).collect();
         Box::new(t)
     }
-}
-
-impl Append for message::MessageItem {
-    fn append_by_ref(&self, i: &mut IterAppend) {
-        message::append_messageitem(&mut i.0, &self)
-    }
-}
-
-impl<'a> Get<'a> for message::MessageItem {
-    fn get(i: &mut Iter<'a>) -> Option<Self> {
-        message::get_messageitem(&mut i.0)
-    }
-}
-
-impl RefArg for message::MessageItem {
-    fn arg_type(&self) -> ArgType { ArgType::from_i32(self.array_type()).unwrap() }
-    fn signature(&self) -> Signature<'static> { message::MessageItem::signature(&self) }
-    fn append(&self, i: &mut IterAppend) { message::append_messageitem(&mut i.0, self) }
-    #[inline]
-    fn as_any(&self) -> &any::Any where Self: 'static { self }
-    #[inline]
-    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
-    #[inline]
-    fn box_clone(&self) -> Box<RefArg + 'static> { Box::new(self.clone()) }
 }
 

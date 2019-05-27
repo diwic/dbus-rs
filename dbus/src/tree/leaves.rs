@@ -1,7 +1,7 @@
 // Methods, signals, properties, and interfaces.
 use super::utils::{Argument, Annotations, Introspect, introspect_args};
 use super::{MethodType, MethodInfo, MethodResult, MethodErr, DataType, PropInfo, MTFn, MTFnMut, MTSync};
-use crate::{Member, Signature, Message, Path, MessageItem};
+use crate::{Member, Signature, Message, Path};
 use crate::Interface as IfaceName;
 use crate::arg;
 use std::fmt;
@@ -127,16 +127,17 @@ impl<D: DataType> Signal<D> {
 
     /// Returns a message which emits the signal when sent.
     ///
-    /// Same as "msg" but also takes a "MessageItem" argument.
-    pub fn emit(&self, p: &Path<'static>, i: &IfaceName<'static>, items: &[MessageItem]) -> Message {
+    /// Same as "msg" but also takes a list of arguments to send.
+    pub fn emit<A: arg::Append>(&self, p: &Path<'static>, i: &IfaceName<'static>, items: &[A]) -> Message {
         let mut m = self.msg(p, i);
-        m.append_items(items);
+        let mut ia = arg::IterAppend::new(&mut m);
+        for a in items { a.append_by_ref(&mut ia) }
         m
     }
 
     /// Returns a message which emits the signal when sent.
     ///
-    /// Same as "emit" but does not take a "MessageItem" argument.
+    /// Same as "emit" but does not take an "items" argument.
     pub fn msg(&self, p: &Path<'static>, i: &IfaceName<'static>) -> Message {
         Message::signal(p, i, &self.name)
     }
@@ -641,7 +642,7 @@ fn test_sync_prop() {
 
     loop {
         let mut msg = Message::new_method_call("com.example.echoserver", "/syncprop", "org.freedesktop.DBus.Properties", "Get").unwrap()
-            .append("com.example.syncprop").append1("syncprop");
+            .append1("com.example.syncprop").append1("syncprop");
         crate::message::message_set_serial(&mut msg, 4);
         let mut r = tree1.handle(&msg).unwrap();
         let r = r[0].as_result().unwrap();

@@ -27,15 +27,15 @@ pub use crate::ffi::DBusRequestNameReply as RequestNameReply;
 pub use crate::ffi::DBusReleaseNameReply as ReleaseNameReply;
 pub use crate::ffi::DBusMessageType as MessageType;
 
-pub use crate::message::{Message, MessageItem, MessageItemArray, FromMessageItem, OwnedFd, ArrayError, ConnPath};
+pub use crate::message::{Message, OwnedFd, ConnPath};
 pub use crate::connection::{Connection, ConnectionItems, ConnectionItem, ConnMsgs, MsgHandler, MsgHandlerResult, MsgHandlerType, MessageCallback};
-pub use crate::prop::PropHandler;
-pub use crate::prop::Props;
+//pub use crate::prop::PropHandler;
+//pub use crate::prop::Props;
 pub use crate::watch::{Watch, WatchEvent};
 pub use crate::signalargs::SignalArgs;
 
 mod message;
-mod prop;
+// mod prop;
 mod watch;
 mod connection;
 mod signalargs;
@@ -85,7 +85,7 @@ fn to_c_str(n: &str) -> CString { CString::new(n.as_bytes()).unwrap() }
 
 #[cfg(test)]
 mod test {
-    use super::{Connection, Message, BusType, MessageItem, ConnectionItem, NameFlag,
+    use super::{Connection, Message, BusType, ConnectionItem, NameFlag,
         RequestNameReply, ReleaseNameReply};
 
     #[test]
@@ -102,27 +102,6 @@ mod test {
         let m = Message::new_method_call("foo.bar", "/", "foo.bar", "FooBar").unwrap();
         let e = c.send_with_reply_and_block(m, 2000).err().unwrap();
         assert!(e.name().unwrap() == "org.freedesktop.DBus.Error.ServiceUnknown");
-    }
-
-    #[test]
-    fn message_listnames() {
-        let c = Connection::get_private(BusType::Session).unwrap();
-        let m = Message::method_call(&"org.freedesktop.DBus".into(), &"/".into(),
-            &"org.freedesktop.DBus".into(), &"ListNames".into());
-        let r = c.send_with_reply_and_block(m, 2000).unwrap();
-        let reply = r.get_items();
-        println!("{:?}", reply);
-    }
-
-    #[test]
-    fn message_namehasowner() {
-        let c = Connection::get_private(BusType::Session).unwrap();
-        let mut m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "NameHasOwner").unwrap();
-        m.append_items(&[MessageItem::Str("org.freedesktop.DBus".to_string())]);
-        let r = c.send_with_reply_and_block(m, 2000).unwrap();
-        let reply = r.get_items();
-        println!("{:?}", reply);
-        assert_eq!(reply, vec!(MessageItem::Bool(true)));
     }
 
     #[test]
