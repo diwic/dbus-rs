@@ -155,6 +155,9 @@ pub enum MessageItem {
     /// A D-Bus objectpath requires its content to be a valid objectpath,
     /// so this cannot be any string.
     ObjectPath(Path<'static>),
+    /// A D-Bus signature requires its content to be a valid type signature,
+    /// so this cannot be any string.
+    Signature(Signature<'static>),
     /// A D-Bus String is zero terminated, so no \0 s in the String, please.
     /// (D-Bus strings are also - like Rust strings - required to be valid UTF-8.)
     Str(String),
@@ -201,6 +204,7 @@ impl MessageItem {
             MessageItem::Variant(_) => <Variant<u8> as Arg>::signature(),
             MessageItem::Dict(ref a) => a.sig.clone(),
             MessageItem::ObjectPath(_) => <Path as Arg>::signature(),
+            MessageItem::Signature(_) => <Signature as Arg>::signature(),
             MessageItem::UnixFd(_) => <OwnedFd as Arg>::signature(),
         }
     }
@@ -223,6 +227,7 @@ impl MessageItem {
             &MessageItem::Variant(_) => ArgType::Variant,
             &MessageItem::Dict(_) => ArgType::Array,
             &MessageItem::ObjectPath(_) => ArgType::ObjectPath,
+            &MessageItem::Signature(_) => ArgType::Signature,
             &MessageItem::UnixFd(_) => ArgType::UnixFd,
         }
     }
@@ -343,6 +348,8 @@ impl From<String> for MessageItem { fn from(i: String) -> MessageItem { MessageI
 
 impl From<Path<'static>> for MessageItem { fn from(i: Path<'static>) -> MessageItem { MessageItem::ObjectPath(i) } }
 
+impl From<Signature<'static>> for MessageItem { fn from(i: Signature<'static>) -> MessageItem { MessageItem::Signature(i) } }
+
 impl From<OwnedFd> for MessageItem { fn from(i: OwnedFd) -> MessageItem { MessageItem::UnixFd(i) } }
 
 /// Create a `MessageItem::Variant`
@@ -361,6 +368,7 @@ impl<'a> FromMessageItem<'a> for &'a str {
         match i {
             &MessageItem::Str(ref b) => Ok(&b),
             &MessageItem::ObjectPath(ref b) => Ok(&b),
+            &MessageItem::Signature(ref b) => Ok(&b),
             _ => Err(()),
         }
     }
@@ -372,6 +380,10 @@ impl<'a> FromMessageItem<'a> for &'a String {
 
 impl<'a> FromMessageItem<'a> for &'a Path<'static> {
     fn from(i: &'a MessageItem) -> Result<&'a Path<'static>,()> { if let &MessageItem::ObjectPath(ref b) = i { Ok(&b) } else { Err(()) } }
+}
+
+impl<'a> FromMessageItem<'a> for &'a Signature<'static> {
+    fn from(i: &'a MessageItem) -> Result<&'a Signature<'static>,()> { if let &MessageItem::Signature(ref b) = i { Ok(&b) } else { Err(()) } }
 }
 
 impl<'a> FromMessageItem<'a> for &'a MessageItem {
@@ -425,6 +437,7 @@ impl arg::Append for MessageItem {
             },
             MessageItem::Dict(a) => a.append_by_ref(i),
             MessageItem::ObjectPath(a) => a.append_by_ref(i),
+            MessageItem::Signature(a) => a.append_by_ref(i),
             MessageItem::UnixFd(a) => a.append_by_ref(i),
         }
     }
@@ -476,7 +489,7 @@ impl<'a> arg::Get<'a> for MessageItem {
                 v
             }),
 	    ArgType::ObjectPath => MessageItem::ObjectPath(i.get::<Path>().unwrap().into_static()),
-	    ArgType::Signature => return None, // FIXME! MessageItem::Signature(i.get::<Signature>().unwrap().into_static()),
+	    ArgType::Signature => MessageItem::Signature(i.get::<Signature>().unwrap().into_static()),
         })
     }
 }
