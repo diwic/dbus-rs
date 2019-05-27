@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::{fmt, mem, ptr, ops};
 use super::{ffi, Error, MessageType, Signature, libc, to_c_str, c_str_to_slice, init_dbus};
 use super::{BusName, Path, Interface, Member, ErrorName, Connection, SignalArgs};
@@ -236,13 +235,6 @@ impl MessageItem {
             MessageItem::ObjectPath(_) => <Path as Arg>::signature(),
             MessageItem::UnixFd(_) => <OwnedFd as Arg>::signature(),
         }
-    }
-
-    /// Get the D-Bus ASCII type-code for this MessageItem.
-    #[deprecated(note="superseded by signature")]
-    #[allow(deprecated)]
-    pub fn type_sig(&self) -> super::TypeSig<'static> {
-        Cow::Owned(format!("{}", self.signature()))
     }
 
     /// Get the integer value for this MessageItem's type-code.

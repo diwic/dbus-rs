@@ -34,10 +34,6 @@ pub use crate::prop::Props;
 pub use crate::watch::{Watch, WatchEvent};
 pub use crate::signalargs::SignalArgs;
 
-/// A TypeSig describes the type of a MessageItem.
-#[deprecated(note="Use Signature instead")]
-pub type TypeSig<'a> = std::borrow::Cow<'a, str>;
-
 mod message;
 mod prop;
 mod watch;
