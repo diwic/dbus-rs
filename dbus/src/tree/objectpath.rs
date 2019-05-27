@@ -1,8 +1,8 @@
 use super::utils::{ArcMap, Iter, IterE, Annotations, Introspect};
 use super::{Factory, MethodType, MethodInfo, MethodResult, MethodErr, DataType, Property, Method, Signal, methodtype};
 use std::sync::{Arc, Mutex};
-use {Member, Message, Path, Signature, MessageType, Connection, ConnectionItem, Error, arg, MsgHandler, MsgHandlerType, MsgHandlerResult};
-use Interface as IfaceName;
+use crate::{Member, Message, Path, Signature, MessageType, Connection, ConnectionItem, Error, arg, MsgHandler, MsgHandlerType, MsgHandlerResult};
+use crate::Interface as IfaceName;
 use std::fmt;
 use std::ffi::CStr;
 use super::leaves::prop_append_dict;
@@ -163,54 +163,54 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
     }
 
     fn get_iface<'a>(&'a self, iface_name: &'a CStr) -> Result<&Arc<Interface<M, D>>, MethodErr> {
-        let j = try!(IfaceName::from_slice(iface_name.to_bytes_with_nul()).map_err(|e| MethodErr::invalid_arg(&e)));
+        let j = IfaceName::from_slice(iface_name.to_bytes_with_nul()).map_err(|e| MethodErr::invalid_arg(&e))?;
         self.ifaces.get(&j).ok_or_else(|| MethodErr::no_interface(&j))
     }
 
     fn prop_get(&self, m: &MethodInfo<M, D>) -> MethodResult {
-        let (iname, prop_name): (&CStr, &str) = try!(m.msg.read2());
-        let iface = try!(self.get_iface(iname));
-        let prop: &Property<M, D> = try!(iface.properties.get(&String::from(prop_name))
-            .ok_or_else(|| MethodErr::no_property(&prop_name)));
-        try!(prop.can_get());
+        let (iname, prop_name): (&CStr, &str) = m.msg.read2()?;
+        let iface = self.get_iface(iname)?;
+        let prop: &Property<M, D> = iface.properties.get(&String::from(prop_name))
+            .ok_or_else(|| MethodErr::no_property(&prop_name))?;
+        prop.can_get()?;
         let mut mret = m.msg.method_return();
         {
             let mut iter = arg::IterAppend::new(&mut mret); 
             let pinfo = m.to_prop_info(iface, prop);
-            try!(prop.get_as_variant(&mut iter, &pinfo));
+            prop.get_as_variant(&mut iter, &pinfo)?;
         }
         Ok(vec!(mret))
     }
 
     fn prop_get_all(&self, m: &MethodInfo<M, D>) -> MethodResult {
-        let iface = try!(self.get_iface(try!(m.msg.read1())));
+        let iface = self.get_iface(m.msg.read1()?)?;
         let mut mret = m.msg.method_return(); 
-        try!(prop_append_dict(&mut arg::IterAppend::new(&mut mret), 
-            iface.properties.values().map(|v| &**v), m));
+        prop_append_dict(&mut arg::IterAppend::new(&mut mret), 
+            iface.properties.values().map(|v| &**v), m)?;
         Ok(vec!(mret))
     }
 
 
     fn prop_set(&self, m: &MethodInfo<M, D>) -> MethodResult {
-        let (iname, prop_name): (&CStr, &str) = try!(m.msg.read2());
-        let iface = try!(self.get_iface(iname));
-        let prop: &Property<M, D> = try!(iface.properties.get(&String::from(prop_name))
-            .ok_or_else(|| MethodErr::no_property(&prop_name)));
+        let (iname, prop_name): (&CStr, &str) = m.msg.read2()?;
+        let iface = self.get_iface(iname)?;
+        let prop: &Property<M, D> = iface.properties.get(&String::from(prop_name))
+            .ok_or_else(|| MethodErr::no_property(&prop_name))?;
 
         let mut iter = arg::Iter::new(m.msg);
         iter.next(); iter.next();
         let mut iter2 = iter;
-        try!(prop.can_set(Some(iter)));
+        prop.can_set(Some(iter))?;
 
         let pinfo = m.to_prop_info(iface, prop);
-        let mut r: Vec<Message> = try!(prop.set_as_variant(&mut iter2, &pinfo)).into_iter().collect();
+        let mut r: Vec<Message> = prop.set_as_variant(&mut iter2, &pinfo)?.into_iter().collect();
         r.push(m.msg.method_return());
         Ok(r)
 
     }
 
     fn get_managed_objects(&self, m: &MethodInfo<M, D>) -> MethodResult {
-        use arg::{Dict, Variant};
+        use crate::arg::{Dict, Variant};
         let mut paths = m.tree.children(&self, false);
         paths.push(&self);
         let mut result = Ok(());
@@ -236,13 +236,13 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
                 }
             });
         }
-        try!(result);
+        result?;
         Ok(vec!(r))
     }
 
     fn handle(&self, m: &Message, t: &Tree<M, D>) -> MethodResult {
-        let i = try!(m.interface().and_then(|i| self.ifaces.get(&i)).ok_or_else(|| MethodErr::no_interface(&"")));
-        let me = try!(m.member().and_then(|me| i.methods.get(&me)).ok_or_else(|| MethodErr::no_method(&"")));
+        let i = m.interface().and_then(|i| self.ifaces.get(&i)).ok_or_else(|| MethodErr::no_interface(&""))?;
+        let me = m.member().and_then(|me| i.methods.get(&me)).ok_or_else(|| MethodErr::no_method(&""))?;
         let minfo = MethodInfo { msg: m, tree: t, path: self, iface: i, method: me };
         me.call(&minfo)
     }
@@ -274,7 +274,7 @@ where <D as DataType>::Interface: Default, <D as DataType>::Method: Default
     /// It is not possible to add/remove interfaces while the object path belongs to a tree,
     /// hence no InterfacesAdded / InterfacesRemoved signals are sent.
     pub fn object_manager(mut self) -> Self {
-        use arg::{Variant, Dict};
+        use crate::arg::{Variant, Dict};
         let ifname = IfaceName::from("org.freedesktop.DBus.ObjectManager");
         if self.ifaces.contains_key(&ifname) { return self };
         let z = self.ifacecache.get(ifname, |i| {
@@ -287,7 +287,7 @@ where <D as DataType>::Interface: Default, <D as DataType>::Method: Default
     }
 
     fn add_property_handler(&mut self) {
-        use arg::{Variant, Dict};
+        use crate::arg::{Variant, Dict};
         let ifname = IfaceName::from("org.freedesktop.DBus.Properties");
         if self.ifaces.contains_key(&ifname) { return };
         let z = self.ifacecache.get(ifname, |i| {

@@ -1,8 +1,8 @@
 // Methods and method types. Glue to make stuff generic over MFn, MFnMut and MSync
 
 use std::fmt;
-use {ErrorName, Message, stdintf};
-use arg::{Iter, IterAppend, TypeMismatchError};
+use crate::{ErrorName, Message, stdintf};
+use crate::arg::{Iter, IterAppend, TypeMismatchError};
 use std::marker::PhantomData;
 use super::{Method, Interface, Property, ObjectPath, Tree};
 use std::cell::RefCell;
@@ -117,11 +117,11 @@ pub trait MethodType<D: DataType>: Sized + Default {
     type SetProp: ?Sized;
 
     /// For internal use.
-    fn call_getprop(&Self::GetProp, &mut IterAppend, &PropInfo<Self, D>) -> Result<(), MethodErr>;
+    fn call_getprop(_: &Self::GetProp, _: &mut IterAppend, _: &PropInfo<Self, D>) -> Result<(), MethodErr>;
     /// For internal use.
-    fn call_setprop(&Self::SetProp, &mut Iter, &PropInfo<Self, D>) -> Result<(), MethodErr>;
+    fn call_setprop(_: &Self::SetProp, _: &mut Iter, _: &PropInfo<Self, D>) -> Result<(), MethodErr>;
     /// For internal use.
-    fn call_method(&Self::Method, &MethodInfo<Self, D>) -> MethodResult;
+    fn call_method(_: &Self::Method, _: &MethodInfo<Self, D>) -> MethodResult;
 
     /// For internal use.
     fn make_getprop<H>(h: H) -> Box<Self::GetProp>
@@ -239,7 +239,7 @@ where
     let i = factory.interface("org.freedesktop.DBus.Introspectable", data);
     let h = move |minfo: &super::MethodInfo<M, D>| {
         let d: &stdintf::OrgFreedesktopDBusIntrospectable<Err=super::MethodErr> = minfo;
-        let arg0 = try!(d.introspect());
+        let arg0 = d.introspect()?;
         let rm = minfo.msg.method_return();
         let rm = rm.append1(arg0);
         Ok(vec!(rm))

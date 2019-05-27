@@ -1,6 +1,6 @@
 // Small structs that don't have their own unit.
 
-use {Signature, Member, Path, Interface as IfaceName};
+use crate::{Signature, Member, Path, Interface as IfaceName};
 use std::collections::{BTreeMap, btree_map};
 use std::sync::Arc;
 

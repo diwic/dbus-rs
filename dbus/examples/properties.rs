@@ -16,7 +16,7 @@ fn main() {
     // in this case we'll use OrgFreedesktopDBusProperties, which allows us to call "get".
     let c = Connection::get_private(BusType::Session).unwrap();
     let p = c.with_path("org.mpris.MediaPlayer2.rhythmbox", "/org/mpris/MediaPlayer2", 5000);
-    use stdintf::org_freedesktop_dbus::Properties;
+    use crate::stdintf::org_freedesktop_dbus::Properties;
 
     // The Metadata property is a Dict<String, Variant>. 
 

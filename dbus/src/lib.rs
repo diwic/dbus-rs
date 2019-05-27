@@ -17,18 +17,18 @@
 
 extern crate libc;
 
-pub use ffi::DBusBusType as BusType;
-pub use connection::DBusNameFlag as NameFlag;
-pub use ffi::DBusRequestNameReply as RequestNameReply;
-pub use ffi::DBusReleaseNameReply as ReleaseNameReply;
-pub use ffi::DBusMessageType as MessageType;
+pub use crate::ffi::DBusBusType as BusType;
+pub use crate::connection::DBusNameFlag as NameFlag;
+pub use crate::ffi::DBusRequestNameReply as RequestNameReply;
+pub use crate::ffi::DBusReleaseNameReply as ReleaseNameReply;
+pub use crate::ffi::DBusMessageType as MessageType;
 
-pub use message::{Message, MessageItem, MessageItemArray, FromMessageItem, OwnedFd, ArrayError, ConnPath};
-pub use connection::{Connection, ConnectionItems, ConnectionItem, ConnMsgs, MsgHandler, MsgHandlerResult, MsgHandlerType, MessageCallback};
-pub use prop::PropHandler;
-pub use prop::Props;
-pub use watch::{Watch, WatchEvent};
-pub use signalargs::SignalArgs;
+pub use crate::message::{Message, MessageItem, MessageItemArray, FromMessageItem, OwnedFd, ArrayError, ConnPath};
+pub use crate::connection::{Connection, ConnectionItems, ConnectionItem, ConnMsgs, MsgHandler, MsgHandlerResult, MsgHandlerType, MessageCallback};
+pub use crate::prop::PropHandler;
+pub use crate::prop::Props;
+pub use crate::watch::{Watch, WatchEvent};
+pub use crate::signalargs::SignalArgs;
 
 /// A TypeSig describes the type of a MessageItem.
 #[deprecated(note="Use Signature instead")]
@@ -48,15 +48,15 @@ mod signalargs;
 
 mod connection2;
 mod dispatcher;
-pub use connection2::TxRx;
-pub use dispatcher::{MessageDispatcher, MessageDispatcherConfig};
+pub use crate::connection2::TxRx;
+pub use crate::dispatcher::{MessageDispatcher, MessageDispatcherConfig};
 // pub mod crossroads;
 
 mod matchrule;
-pub use matchrule::MatchRule;
+pub use crate::matchrule::MatchRule;
 
 mod strings;
-pub use strings::{Signature, Path, Interface, Member, ErrorName, BusName};
+pub use crate::strings::{Signature, Path, Interface, Member, ErrorName, BusName};
 
 pub mod arg;
 

@@ -11,6 +11,7 @@ keywords = ["D-Bus", "DBus", "IPC"]
 license = "Apache-2.0/MIT"
 categories = ["os::unix-apis", "api-bindings"]
 readme = "../README.md"
+edition = "2018"
 
 [dependencies]
 libc = "0.2.7"

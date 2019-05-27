@@ -1,5 +1,5 @@
-use arg;
-use {Message, MessageType, BusName, Path, Interface, Member, MatchRule};
+use crate::arg;
+use crate::{Message, MessageType, BusName, Path, Interface, Member, MatchRule};
 
 /// Helper methods for structs representing a Signal
 ///
@@ -85,8 +85,8 @@ pub trait SignalArgs: Default {
 
 #[test]
 fn intf_removed() {
-    use {Connection, BusType};
-    use stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
+    use crate::{Connection, BusType};
+    use crate::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
     let c = Connection::get_private(BusType::Session).unwrap();
     let mstr = IR::match_str(Some(&c.unique_name().into()), Some(&"/hello".into()));
     println!("Match str: {}", mstr);

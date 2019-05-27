@@ -21,22 +21,22 @@ fn rtkit_set_realtime(c: &Connection, thread: u64, prio: u32) -> Result<(), ::db
     let mut m = Message::new_method_call("org.freedesktop.RealtimeKit1", "/org/freedesktop/RealtimeKit1",
         "org.freedesktop.RealtimeKit1", "MakeThreadRealtime").unwrap();
     m.append_items(&[thread.into(), prio.into()]);
-    let mut r = try!(c.send_with_reply_and_block(m, 10000));
+    let mut r = c.send_with_reply_and_block(m, 10000)?;
     r.as_result().map(|_| ())
 }
 
 fn make_realtime(prio: u32) -> Result<u32, Box<std::error::Error>> {
-    let c = try!(Connection::get_private(BusType::System));
+    let c = Connection::get_private(BusType::System)?;
 
     let p = Props::new(&c, "org.freedesktop.RealtimeKit1", "/org/freedesktop/RealtimeKit1",
         "org.freedesktop.RealtimeKit1", 10000);
 
     // Make sure we don't fail by wanting too much
-    let max_prio = try!(item_as_i64(try!(p.get("MaxRealtimePriority")))) as u32;
+    let max_prio = item_as_i64(p.get("MaxRealtimePriority")?)? as u32;
     let prio = cmp::min(prio, max_prio);
 
     // Enforce RLIMIT_RTPRIO, also a must before asking rtkit for rtprio
-    let max_rttime = try!(item_as_i64(try!(p.get("RTTimeUSecMax")))) as u64;
+    let max_rttime = item_as_i64(p.get("RTTimeUSecMax")?)? as u64;
     let new_limit = libc::rlimit64 { rlim_cur: max_rttime, rlim_max: max_rttime };
     let mut old_limit = new_limit;
     if unsafe { libc::getrlimit64(libc::RLIMIT_RTTIME, &mut old_limit) } < 0 {
@@ -54,7 +54,7 @@ fn make_realtime(prio: u32) -> Result<u32, Box<std::error::Error>> {
         unsafe { libc::setrlimit64(libc::RLIMIT_RTTIME, &old_limit) };
     }
 
-    try!(r);
+    r?;
     Ok(prio)
 }
 

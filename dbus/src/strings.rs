@@ -6,9 +6,9 @@ use std::borrow::{Borrow, Cow};
 use std::os::raw::c_char;
 
 #[cfg(not(feature = "no-string-validation"))]
-use Error;
+use crate::Error;
 #[cfg(not(feature = "no-string-validation"))]
-use ffi;
+use crate::ffi;
 
 macro_rules! cstring_wrapper {
     ($t: ident, $s: ident) => {
@@ -29,7 +29,7 @@ impl<'m> $t<'m> {
     /// Note: If the no-string-validation feature is activated, this string
     /// will not be checked for conformance with the D-Bus specification.
     pub fn new<S: Into<Vec<u8>>>(s: S) -> Result<$t<'m>, String> {
-        let c = try!(CString::new(s).map_err(|e| e.to_string()));
+        let c = CString::new(s).map_err(|e| e.to_string())?;
         $t::check_valid(c.as_ptr()).map(|_| $t(Cow::Owned(c)))
     }
 

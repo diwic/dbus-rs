@@ -28,8 +28,8 @@ impl<'a> Props<'a> {
         let mut m = Message::method_call(&self.name, &self.path,
             &"org.freedesktop.DBus.Properties".into(), &"Get".into());
         m.append_items(&[self.interface.to_string().into(), propname.to_string().into()]);
-        let mut r = try!(self.conn.send_with_reply_and_block(m, self.timeout_ms));
-        let reply = try!(r.as_result()).get_items();
+        let mut r = self.conn.send_with_reply_and_block(m, self.timeout_ms)?;
+        let reply = r.as_result()?.get_items();
         if reply.len() == 1 {
             if let &MessageItem::Variant(ref v) = &reply[0] {
                 return Ok((**v).clone())
@@ -44,8 +44,8 @@ impl<'a> Props<'a> {
         let mut m = Message::method_call(&self.name, &self.path,
             &"org.freedesktop.DBus.Properties".into(), &"Set".into());
         m.append_items(&[self.interface.to_string().into(), propname.to_string().into(), Box::new(value).into()]);
-        let mut r = try!(self.conn.send_with_reply_and_block(m, self.timeout_ms));
-        try!(r.as_result());
+        let mut r = self.conn.send_with_reply_and_block(m, self.timeout_ms)?;
+        r.as_result()?;
         Ok(())
     }
 
@@ -54,16 +54,16 @@ impl<'a> Props<'a> {
         let mut m = Message::method_call(&self.name, &self.path,
             &"org.freedesktop.DBus.Properties".into(), &"GetAll".into());
         m.append_items(&[self.interface.to_string().into()]);
-        let mut r = try!(self.conn.send_with_reply_and_block(m, self.timeout_ms));
-        let reply = try!(r.as_result()).get_items();
+        let mut r = self.conn.send_with_reply_and_block(m, self.timeout_ms)?;
+        let reply = r.as_result()?.get_items();
 
         (|| {
             if reply.len() != 1 { return Err(()) };
             let mut t = BTreeMap::new();
-            let a: &[MessageItem] = try!(reply[0].inner());
+            let a: &[MessageItem] = reply[0].inner()?;
             for p in a.iter() {
-                let (k, v) = try!(p.inner());
-                let (k, v): (&String, &MessageItem) = (try!(k.inner()), try!(v.inner()));
+                let (k, v) = p.inner()?;
+                let (k, v): (&String, &MessageItem) = (k.inner()?, v.inner()?);
                 t.insert(k.clone(), v.clone());
             }
             Ok(t)
@@ -88,7 +88,7 @@ impl<'a> PropHandler<'a> {
 
     /// Get a map of all the properties' names and their values.
     pub fn get_all(&mut self) -> Result<(), Error> {
-        self.map = try!(self.p.get_all());
+        self.map = self.p.get_all()?;
         Ok(())
     }
 
@@ -100,14 +100,14 @@ impl<'a> PropHandler<'a> {
 
     /// Get a single property's value.
     pub fn get(&mut self, propname: &str) -> Result<&MessageItem, Error> {
-        let v = try!(self.p.get(propname));
+        let v = self.p.get(propname)?;
         self.map.insert(propname.to_string(), v);
         Ok(self.map.get(propname).unwrap())
     }
 
     /// Set a single property's value.
     pub fn set(&mut self, propname: &str, value: MessageItem) -> Result<(), Error> {
-        try!(self.p.set(propname, value.clone()));
+        self.p.set(propname, value.clone())?;
         self.map.insert(propname.to_string(), value);
         Ok(())
     }
