@@ -1,7 +1,6 @@
 use std::ptr;
 use crate::{tree, arg, to_c_str, c_str_to_slice, init_dbus};
-
-
+use crate::strings::ErrorName;
 
 /// D-Bus Error wrapper.
 pub struct Error {
@@ -19,8 +18,8 @@ unsafe impl Sync for Error {}
 impl Error {
 
     /// Create a new custom D-Bus Error.
-    pub fn new_custom(name: &str, message: &str) -> Error {
-        let n = to_c_str(name);
+    pub fn new_custom<'a, N: Into<ErrorName<'a>>>(name: N, message: &str) -> Error {
+        let n = to_c_str(&name.into());
         let m = to_c_str(&message.replace("%","%%"));
         let mut e = Error::empty();
 
