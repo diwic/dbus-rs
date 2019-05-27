@@ -198,7 +198,7 @@ fn txrx_simple_test() {
             println!("{:?}", msg);
             if msg.get_reply_serial() == Some(reply) {
                 let r = msg.as_result().unwrap();
-                let z: ::arg::Array<&str, _>  = r.get1().unwrap();
+                let z: crate::arg::Array<&str, _>  = r.get1().unwrap();
                 for n in z {
                     println!("{}", n);
                     if n == my_name { return; } // Hooray, we found ourselves!

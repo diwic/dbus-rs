@@ -1,7 +1,7 @@
-use ffi;
+use crate::ffi;
 use super::*;
 use super::check;
-use {Signature, Path, OwnedFd};
+use crate::{Signature, Path, OwnedFd};
 use std::{ptr, any, mem};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_char, c_int};

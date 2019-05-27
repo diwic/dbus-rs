@@ -21,7 +21,7 @@ pub struct MatchRule<'a> {
 }
 
 fn msg_type_str(m: MessageType) -> &'static str {
-    use MessageType::*;
+    use crate::MessageType::*;
     match m {
         Signal => "signal",
         MethodCall => "method_call",

@@ -68,7 +68,7 @@ pub use self::array_impl::{Array, Dict};
 pub use self::variantstruct_impl::Variant;
 
 use std::{fmt, mem, ptr, error};
-use {ffi, Message, Signature, Path, OwnedFd};
+use crate::{ffi, Message, Signature, Path, OwnedFd};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_void, c_int};
 
@@ -264,8 +264,8 @@ impl<'a> Iter<'a> {
     /// }
     /// ```
     pub fn read<T: Arg + Get<'a>>(&mut self) -> Result<T, TypeMismatchError> {
-        let r = try!(self.get().ok_or_else(||
-             TypeMismatchError { expected: T::ARG_TYPE, found: self.arg_type(), position: self.2 }));
+        let r = self.get().ok_or_else(||
+             TypeMismatchError { expected: T::ARG_TYPE, found: self.arg_type(), position: self.2 })?;
         self.next();
         Ok(r)
     }

@@ -1,5 +1,5 @@
 use super::*;
-use {message, Signature};
+use crate::{message, Signature};
 use std::any;
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]

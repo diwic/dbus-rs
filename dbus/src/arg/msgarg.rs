@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use {Signature, Message, arg::TypeMismatchError};
+use crate::{Signature, Message, arg::TypeMismatchError};
 use std::{fmt, any};
 use std::sync::Arc;
 use std::rc::Rc;
@@ -25,13 +25,13 @@ pub trait Arg {
 /// Types that can be appended to a message as arguments implement this trait.
 pub trait Append: Sized {
     /// Performs the append operation.
-    fn append(self, &mut IterAppend);
+    fn append(self, _: &mut IterAppend);
 }
 
 /// Helper trait to append many arguments to a message.
 pub trait AppendAll: Sized {
     /// Performs the append operation.
-    fn append(self, &mut IterAppend);
+    fn append(self, _: &mut IterAppend);
 }
 
 /// Types that can be retrieved from a message as arguments implement this trait.
@@ -54,7 +54,7 @@ pub trait RefArg: fmt::Debug {
     /// The corresponding D-Bus type signature for this type. 
     fn signature(&self) -> Signature<'static>;
     /// Performs the append operation.
-    fn append(&self, &mut IterAppend);
+    fn append(&self, _: &mut IterAppend);
     /// Transforms this argument to Any (which can be downcasted to read the current value).
     ///
     /// Note: The internal representation of complex types (Array, Dict, Struct) is unstable
@@ -296,8 +296,8 @@ argbuilder_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, 
 mod test {
     extern crate tempdir;
 
-    use {Connection, ConnectionItem, Message, BusType, Path, Signature};
-    use arg::{Array, Variant, Dict, Iter, ArgType, TypeMismatchError, RefArg, cast};
+    use crate::{Connection, ConnectionItem, Message, BusType, Path, Signature};
+    use crate::arg::{Array, Variant, Dict, Iter, ArgType, TypeMismatchError, RefArg, cast};
 
     use std::collections::HashMap;
 

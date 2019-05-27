@@ -217,7 +217,7 @@ impl MessageItem {
     ///
     /// Note: Since dictionary entries have no valid signature, calling this function for a dict entry will cause a panic.
     pub fn signature(&self) -> Signature<'static> {
-        use arg::Variant;
+        use crate::arg::Variant;
         match *self {
             MessageItem::Str(_) => <String as Arg>::signature(),
             MessageItem::Bool(_) => <bool as Arg>::signature(),
@@ -272,7 +272,7 @@ impl MessageItem {
     pub fn from_dict<E, I: Iterator<Item=Result<(String, MessageItem),E>>>(i: I) -> Result<MessageItem, E> {
         let mut v = Vec::new();
         for r in i {
-            let (s, vv) = try!(r);
+            let (s, vv) = r?;
             v.push((s.into(), Box::new(vv).into()).into());
         }
         Ok(MessageItem::Array(MessageItemArray::new(v, Signature::new("a{sv}").unwrap()).unwrap()))
@@ -594,9 +594,9 @@ impl Message {
     where P: Into<Vec<u8>>, I: Into<Vec<u8>>, M: Into<Vec<u8>> {
         init_dbus();
 
-        let p = try!(Path::new(path));
-        let i = try!(Interface::new(iface));
-        let m = try!(Member::new(name));
+        let p = Path::new(path)?;
+        let i = Interface::new(iface)?;
+        let m = Member::new(name)?;
 
         let ptr = unsafe {
             ffi::dbus_message_new_signal(p.as_ref().as_ptr(), i.as_ref().as_ptr(), m.as_ref().as_ptr())
@@ -818,7 +818,7 @@ impl Message {
     /// Returns a TypeMismatchError if there are not enough arguments, or if types don't match.
     pub fn read2<'a, G1: Arg + Get<'a>, G2: Arg + Get<'a>>(&'a self) -> Result<(G1, G2), TypeMismatchError> {
         let mut i = Iter::new(&self);
-        Ok((try!(i.read()), try!(i.read())))
+        Ok((i.read()?, i.read()?))
     }
 
     /// Gets the first three arguments from the message, if those arguments are of type G1, G2 and G3.
@@ -827,7 +827,7 @@ impl Message {
     pub fn read3<'a, G1: Arg + Get<'a>, G2: Arg + Get<'a>, G3: Arg + Get<'a>>(&'a self) -> 
         Result<(G1, G2, G3), TypeMismatchError> {
         let mut i = Iter::new(&self);
-        Ok((try!(i.read()), try!(i.read()), try!(i.read())))
+        Ok((i.read()?, i.read()?, i.read()?))
     }
 
     /// Gets the first four arguments from the message, if those arguments are of type G1, G2, G3 and G4.
@@ -836,7 +836,7 @@ impl Message {
     pub fn read4<'a, G1: Arg + Get<'a>, G2: Arg + Get<'a>, G3: Arg + Get<'a>, G4: Arg + Get<'a>>(&'a self) ->
         Result<(G1, G2, G3, G4), TypeMismatchError> {
         let mut i = Iter::new(&self);
-        Ok((try!(i.read()), try!(i.read()), try!(i.read()), try!(i.read())))
+        Ok((i.read()?, i.read()?, i.read()?, i.read()?))
     }
 
     /// Gets the first five arguments from the message, if those arguments are of type G1, G2, G3, G4 and G5.
@@ -846,7 +846,7 @@ impl Message {
     pub fn read5<'a, G1: Arg + Get<'a>, G2: Arg + Get<'a>, G3: Arg + Get<'a>, G4: Arg + Get<'a>, G5: Arg + Get<'a>>(&'a self) ->
         Result<(G1, G2, G3, G4, G5), TypeMismatchError> {
         let mut i = Iter::new(&self);
-        Ok((try!(i.read()), try!(i.read()), try!(i.read()), try!(i.read()), try!(i.read())))
+        Ok((i.read()?, i.read()?, i.read()?, i.read()?, i.read()?))
     }
 
     /// Returns a struct for retreiving the arguments from a message. Supersedes get_items().

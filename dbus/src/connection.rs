@@ -724,7 +724,7 @@ fn message_reply() {
     let quit2 = quit.clone();
     let reply = c.send_with_reply(m, move |result| {
         let r = result.unwrap();
-        let _: ::arg::Array<&str, _>  = r.get1().unwrap();
+        let _: crate::arg::Array<&str, _>  = r.get1().unwrap();
         quit2.set(true);
     }).unwrap();
     for _ in c.iter(1000).with(reply) { if quit.get() { return; } }

@@ -1,4 +1,4 @@
-use ffi;
+use crate::ffi;
 use libc;
 use super::Connection;
 
@@ -203,7 +203,7 @@ mod test {
     use super::super::{Connection, Message, BusType, WatchEvent, ConnectionItem, MessageType};
 
     #[test]
-    fn async() {
+    fn test_async() {
         let c = Connection::get_private(BusType::Session).unwrap();
         c.register_object_path("/test").unwrap();
         let m = Message::new_method_call(&c.unique_name(), "/test", "com.example.asynctest", "AsyncTest").unwrap();
