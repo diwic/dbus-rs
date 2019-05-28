@@ -4,7 +4,7 @@ extern crate dbus;
 // FocusedWindowChanged signal. The signal contains "window_id", "app_id" and "stage",
 // we print only "app_id". 
 
-use dbus::{Connection, BusType, ConnectionItem};
+use dbus::connection::{Connection, BusType, ConnectionItem};
 
 fn focus_msg(ci: &ConnectionItem) -> Option<&str> {
     let m = if let &ConnectionItem::Signal(ref s) = ci { s } else { return None };

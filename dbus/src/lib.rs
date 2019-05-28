@@ -20,24 +20,16 @@ extern crate libc;
 #[allow(missing_docs)]
 extern crate libdbus_sys as ffi;
 
-
-pub use crate::ffi::DBusBusType as BusType;
-pub use crate::connection::DBusNameFlag as NameFlag;
-pub use crate::ffi::DBusRequestNameReply as RequestNameReply;
-pub use crate::ffi::DBusReleaseNameReply as ReleaseNameReply;
 pub use crate::ffi::DBusMessageType as MessageType;
 
 pub use crate::message::{Message, OwnedFd, ConnPath};
-pub use crate::connection::{Connection, ConnectionItems, ConnectionItem, ConnMsgs, MsgHandler, MsgHandlerResult, MsgHandlerType, MessageCallback};
-//pub use crate::prop::PropHandler;
-//pub use crate::prop::Props;
-pub use crate::watch::{Watch, WatchEvent};
+pub use crate::connection::{Connection, BusType};
+
 pub use crate::signalargs::SignalArgs;
 
 mod message;
-// mod prop;
-mod watch;
-mod connection;
+
+pub mod connection;
 mod signalargs;
 
 mod error;
@@ -83,102 +75,4 @@ fn c_str_to_slice(c: & *const c_char) -> Option<&str> {
 fn to_c_str(n: &str) -> CString { CString::new(n.as_bytes()).unwrap() }
 
 
-#[cfg(test)]
-mod test {
-    use super::{Connection, Message, BusType, ConnectionItem, NameFlag,
-        RequestNameReply, ReleaseNameReply};
 
-    #[test]
-    fn connection() {
-        let c = Connection::get_private(BusType::Session).unwrap();
-        let n = c.unique_name();
-        assert!(n.starts_with(":1."));
-        println!("Connected to DBus, unique name: {}", n);
-    }
-
-    #[test]
-    fn invalid_message() {
-        let c = Connection::get_private(BusType::Session).unwrap();
-        let m = Message::new_method_call("foo.bar", "/", "foo.bar", "FooBar").unwrap();
-        let e = c.send_with_reply_and_block(m, 2000).err().unwrap();
-        assert!(e.name().unwrap() == "org.freedesktop.DBus.Error.ServiceUnknown");
-    }
-
-    #[test]
-    fn object_path() {
-        use  std::sync::mpsc;
-        let (tx, rx) = mpsc::channel();
-        let thread = ::std::thread::spawn(move || {
-            let c = Connection::get_private(BusType::Session).unwrap();
-            c.register_object_path("/hello").unwrap();
-            // println!("Waiting...");
-            tx.send(c.unique_name()).unwrap();
-            for n in c.iter(1000) {
-                // println!("Found message... ({})", n);
-                match n {
-                    ConnectionItem::MethodCall(ref m) => {
-                        let reply = Message::new_method_return(m).unwrap();
-                        c.send(reply).unwrap();
-                        break;
-                    }
-                    _ => {}
-                }
-            }
-            c.unregister_object_path("/hello");
-        });
-
-        let c = Connection::get_private(BusType::Session).unwrap();
-        let n = rx.recv().unwrap();
-        let m = Message::new_method_call(&n, "/hello", "com.example.hello", "Hello").unwrap();
-        println!("Sending...");
-        let r = c.send_with_reply_and_block(m, 8000).unwrap();
-        let reply = r.get_items();
-        println!("{:?}", reply);
-        thread.join().unwrap();
-
-    }
-
-    #[test]
-    fn register_name() {
-        let c = Connection::get_private(BusType::Session).unwrap();
-        let n = format!("com.example.hello.test.register_name");
-        assert_eq!(c.register_name(&n, NameFlag::ReplaceExisting as u32).unwrap(), RequestNameReply::PrimaryOwner);
-        assert_eq!(c.release_name(&n).unwrap(), ReleaseNameReply::Released);
-    }
-
-    #[test]
-    fn signal() {
-        let c = Connection::get_private(BusType::Session).unwrap();
-        let iface = "com.example.signaltest";
-        let mstr = format!("interface='{}',member='ThisIsASignal'", iface);
-        c.add_match(&mstr).unwrap();
-        let m = Message::new_signal("/mysignal", iface, "ThisIsASignal").unwrap();
-        let uname = c.unique_name();
-        c.send(m).unwrap();
-        for n in c.iter(1000) {
-            match n {
-                ConnectionItem::Signal(s) => {
-                    let (_, p, i, m) = s.headers();
-                    match (&*p.unwrap(), &*i.unwrap(), &*m.unwrap()) {
-                        ("/mysignal", "com.example.signaltest", "ThisIsASignal") => {
-                            assert_eq!(&*s.sender().unwrap(), &*uname);
-                            break;
-                        },
-                        (_, _, _) => println!("Other signal: {:?}", s.headers()),
-                    }
-                }
-                _ => {},
-            }
-        }
-        c.remove_match(&mstr).unwrap();
-    }
-
-
-    #[test]
-    fn watch() {
-        let c = Connection::get_private(BusType::Session).unwrap();
-        let d = c.watch_fds();
-        assert!(d.len() > 0);
-        println!("Fds to watch: {:?}", d);
-    }
-}

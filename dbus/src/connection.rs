@@ -1,6 +1,6 @@
-use super::{Error, ffi, to_c_str, c_str_to_slice, Watch, Message, MessageType, BusName, Path, ConnPath};
-use super::{RequestNameReply, ReleaseNameReply, BusType};
-use super::watch::WatchList;
+//! Contains structs and traits relevant to the connection itself, and dispatching incoming messages. 
+
+use super::{Error, ffi, to_c_str, c_str_to_slice, Message, MessageType, BusName, Path, ConnPath};
 use std::{fmt, mem, ptr, thread, panic, ops};
 use std::collections::VecDeque;
 use std::cell::{Cell, RefCell};
@@ -12,12 +12,21 @@ use std::os::raw::{c_void, c_char, c_int, c_uint};
 /// See the documentation for Connection::replace_message_callback for more information.
 pub type MessageCallback = Box<FnMut(&Connection, Message) -> bool + 'static>;
 
+pub use crate::ffi::DBusRequestNameReply as RequestNameReply;
+pub use crate::ffi::DBusReleaseNameReply as ReleaseNameReply;
+pub use crate::ffi::DBusBusType as BusType;
+
+mod watch;
+
+pub use self::watch::{Watch, WatchEvent};
+use watch::WatchList;
+
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone)]
 /// Flags to use for Connection::register_name.
 ///
 /// More than one flag can be specified, if so just add their values.
-pub enum DBusNameFlag {
+pub enum NameFlag {
     /// Allow another service to become the primary owner if requested
     AllowReplacement = ffi::DBUS_NAME_FLAG_ALLOW_REPLACEMENT as isize,
     /// Request to replace the current primary owner
@@ -26,7 +35,7 @@ pub enum DBusNameFlag {
     DoNotQueue = ffi::DBUS_NAME_FLAG_DO_NOT_QUEUE as isize,
 }
 
-impl DBusNameFlag {
+impl NameFlag {
     /// u32 value of flag.
     pub fn value(self) -> u32 { self as u32 }
 }
@@ -196,7 +205,7 @@ pub struct Connection {
     i: Box<IConnection>,
 }
 
-pub fn conn_handle(c: &Connection) -> *mut ffi::DBusConnection {
+pub (crate) fn conn_handle(c: &Connection) -> *mut ffi::DBusConnection {
     c.i.conn.get()
 }
 
@@ -731,3 +740,103 @@ fn message_reply() {
     assert!(false);
 }
 
+#[cfg(test)]
+mod test {
+    use super::{Connection, BusType, ConnectionItem, NameFlag,
+        RequestNameReply, ReleaseNameReply};
+    use crate::Message;
+
+    #[test]
+    fn connection() {
+        let c = Connection::get_private(BusType::Session).unwrap();
+        let n = c.unique_name();
+        assert!(n.starts_with(":1."));
+        println!("Connected to DBus, unique name: {}", n);
+    }
+
+    #[test]
+    fn invalid_message() {
+        let c = Connection::get_private(BusType::Session).unwrap();
+        let m = Message::new_method_call("foo.bar", "/", "foo.bar", "FooBar").unwrap();
+        let e = c.send_with_reply_and_block(m, 2000).err().unwrap();
+        assert!(e.name().unwrap() == "org.freedesktop.DBus.Error.ServiceUnknown");
+    }
+
+    #[test]
+    fn object_path() {
+        use  std::sync::mpsc;
+        let (tx, rx) = mpsc::channel();
+        let thread = ::std::thread::spawn(move || {
+            let c = Connection::get_private(BusType::Session).unwrap();
+            c.register_object_path("/hello").unwrap();
+            // println!("Waiting...");
+            tx.send(c.unique_name()).unwrap();
+            for n in c.iter(1000) {
+                // println!("Found message... ({})", n);
+                match n {
+                    ConnectionItem::MethodCall(ref m) => {
+                        let reply = Message::new_method_return(m).unwrap();
+                        c.send(reply).unwrap();
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+            c.unregister_object_path("/hello");
+        });
+
+        let c = Connection::get_private(BusType::Session).unwrap();
+        let n = rx.recv().unwrap();
+        let m = Message::new_method_call(&n, "/hello", "com.example.hello", "Hello").unwrap();
+        println!("Sending...");
+        let r = c.send_with_reply_and_block(m, 8000).unwrap();
+        let reply = r.get_items();
+        println!("{:?}", reply);
+        thread.join().unwrap();
+
+    }
+
+    #[test]
+    fn register_name() {
+        let c = Connection::get_private(BusType::Session).unwrap();
+        let n = format!("com.example.hello.test.register_name");
+        assert_eq!(c.register_name(&n, NameFlag::ReplaceExisting as u32).unwrap(), RequestNameReply::PrimaryOwner);
+        assert_eq!(c.release_name(&n).unwrap(), ReleaseNameReply::Released);
+    }
+
+    #[test]
+    fn signal() {
+        let c = Connection::get_private(BusType::Session).unwrap();
+        let iface = "com.example.signaltest";
+        let mstr = format!("interface='{}',member='ThisIsASignal'", iface);
+        c.add_match(&mstr).unwrap();
+        let m = Message::new_signal("/mysignal", iface, "ThisIsASignal").unwrap();
+        let uname = c.unique_name();
+        c.send(m).unwrap();
+        for n in c.iter(1000) {
+            match n {
+                ConnectionItem::Signal(s) => {
+                    let (_, p, i, m) = s.headers();
+                    match (&*p.unwrap(), &*i.unwrap(), &*m.unwrap()) {
+                        ("/mysignal", "com.example.signaltest", "ThisIsASignal") => {
+                            assert_eq!(&*s.sender().unwrap(), &*uname);
+                            break;
+                        },
+                        (_, _, _) => println!("Other signal: {:?}", s.headers()),
+                    }
+                }
+                _ => {},
+            }
+        }
+        c.remove_match(&mstr).unwrap();
+    }
+
+
+    #[test]
+    fn watch() {
+        let c = Connection::get_private(BusType::Session).unwrap();
+        let d = c.watch_fds();
+        assert!(d.len() > 0);
+        println!("Fds to watch: {:?}", d);
+    }
+}
