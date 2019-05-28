@@ -82,6 +82,14 @@ pub trait SignalArgs {
     }
 }
 
+impl<T: SignalArgs> arg::AppendAll for T {
+    fn append(&self, i: &mut arg::IterAppend) { SignalArgs::append(self, i) }
+} 
+
+impl<T: SignalArgs> arg::ReadAll for T {
+    fn read(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> { SignalArgs::get(i) }
+}
+
 #[test]
 fn intf_removed() {
     use crate::{Connection, BusType};
