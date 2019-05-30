@@ -31,32 +31,22 @@ pub trait SignalArgs {
     /// D-Bus name of interface this signal belongs to
     const INTERFACE: &'static str;
 
-    /// Low-level method for appending this struct to a message.
-    ///
-    /// You're more likely to use one of the more high level functions.
-    fn append(&self, i: &mut arg::IterAppend);
-
-    /// Low-level method for getting arguments from a message.
-    ///
-    /// You're more likely to use one of the more high level functions.
-    fn get(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> where Self: Sized;
-
     /// Returns a message that emits the signal.
-    fn to_emit_message(&self, path: &Path) -> Message {
+    fn to_emit_message(&self, path: &Path) -> Message where Self: arg::AppendAll {
         let mut m = Message::signal(path, &Interface::from(Self::INTERFACE), &Member::from(Self::NAME));
-        self.append(&mut arg::IterAppend::new(&mut m));
+        arg::AppendAll::append(self, &mut arg::IterAppend::new(&mut m));
         m
-    }
+    } 
 
     /// If the message is a signal of the correct type, return its arguments, otherwise return None.
     ///
     /// This does not check sender and path of the message, which is likely relevant to you as well.
-    fn from_message(m: &Message) -> Option<Self> where Self: Sized {
+    fn from_message(m: &Message) -> Option<Self> where Self: Sized + arg::ReadAll {
         if m.msg_type() != MessageType::Signal { None }
         else if m.interface().as_ref().map(|x| &**x) != Some(Self::INTERFACE) { None }
         else if m.member().as_ref().map(|x| &**x) != Some(Self::NAME) { None }
         else {
-            Self::get(&mut m.iter_init()).ok()
+            arg::ReadAll::read(&mut m.iter_init()).ok()
         }
     }
 
@@ -80,14 +70,6 @@ pub trait SignalArgs {
     fn match_str(sender: Option<&BusName>, path: Option<&Path>) -> String {
         Self::match_rule(sender, path).match_str()
     }
-}
-
-impl<T: SignalArgs> arg::AppendAll for T {
-    fn append(&self, i: &mut arg::IterAppend) { SignalArgs::append(self, i) }
-} 
-
-impl<T: SignalArgs> arg::ReadAll for T {
-    fn read(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> { SignalArgs::get(i) }
 }
 
 #[test]

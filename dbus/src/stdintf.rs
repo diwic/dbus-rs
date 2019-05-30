@@ -102,21 +102,27 @@ pub struct PropertiesPropertiesChanged {
     pub invalidated_properties: Vec<String>,
 }
 
-impl crate::SignalArgs for PropertiesPropertiesChanged {
-    const NAME: &'static str = "PropertiesChanged";
-    const INTERFACE: &'static str = "org.freedesktop.DBus.Properties";
+impl arg::AppendAll for PropertiesPropertiesChanged {
     fn append(&self, i: &mut arg::IterAppend) {
         (&self.interface_name as &arg::RefArg).append(i);
         (&self.changed_properties as &arg::RefArg).append(i);
         (&self.invalidated_properties as &arg::RefArg).append(i);
     }
-    fn get(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
+}
+
+impl arg::ReadAll for PropertiesPropertiesChanged {
+    fn read(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
         Ok(PropertiesPropertiesChanged {
             interface_name: i.read()?,
             changed_properties: i.read()?,
             invalidated_properties: i.read()?,
         })
     }
+}
+
+impl crate::SignalArgs for PropertiesPropertiesChanged {
+    const NAME: &'static str = "PropertiesChanged";
+    const INTERFACE: &'static str = "org.freedesktop.DBus.Properties";
 }
 
 /// Method of the [org.freedesktop.DBus.ObjectManager](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-objectmanager) interface.
@@ -146,19 +152,25 @@ pub struct ObjectManagerInterfacesAdded {
     pub interfaces: ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>>,
 }
 
-impl crate::SignalArgs for ObjectManagerInterfacesAdded {
-    const NAME: &'static str = "InterfacesAdded";
-    const INTERFACE: &'static str = "org.freedesktop.DBus.ObjectManager";
+impl arg::AppendAll for ObjectManagerInterfacesAdded {
     fn append(&self, i: &mut arg::IterAppend) {
         (&self.object as &arg::RefArg).append(i);
         (&self.interfaces as &arg::RefArg).append(i);
     }
-    fn get(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
+}
+
+impl arg::ReadAll for ObjectManagerInterfacesAdded {
+    fn read(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
         Ok(ObjectManagerInterfacesAdded {
             object: i.read()?,
             interfaces: i.read()?,
         })
     }
+}
+
+impl crate::SignalArgs for ObjectManagerInterfacesAdded {
+    const NAME: &'static str = "InterfacesAdded";
+    const INTERFACE: &'static str = "org.freedesktop.DBus.ObjectManager";
 }
 
 #[derive(Debug, Default)]
@@ -169,19 +181,25 @@ pub struct ObjectManagerInterfacesRemoved {
     pub interfaces: Vec<String>,
 }
 
-impl crate::SignalArgs for ObjectManagerInterfacesRemoved {
-    const NAME: &'static str = "InterfacesRemoved";
-    const INTERFACE: &'static str = "org.freedesktop.DBus.ObjectManager";
+impl arg::AppendAll for ObjectManagerInterfacesRemoved {
     fn append(&self, i: &mut arg::IterAppend) {
         (&self.object as &arg::RefArg).append(i);
         (&self.interfaces as &arg::RefArg).append(i);
     }
-    fn get(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
+}
+
+impl arg::ReadAll for ObjectManagerInterfacesRemoved {
+    fn read(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
         Ok(ObjectManagerInterfacesRemoved {
             object: i.read()?,
             interfaces: i.read()?,
         })
     }
+}
+
+impl crate::SignalArgs for ObjectManagerInterfacesRemoved {
+    const NAME: &'static str = "InterfacesRemoved";
+    const INTERFACE: &'static str = "org.freedesktop.DBus.ObjectManager";
 }
 
 /// Methods of the [org.freedesktop.DBus.Peer](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-peer) interface.

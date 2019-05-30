@@ -296,7 +296,7 @@ impl Drop for AMessageStream {
 fn aconnection_test() {
     let conn = Rc::new(Connection::get_private(::dbus::BusType::Session).unwrap());
     let mut rt = Runtime::new().unwrap();
-    let aconn = AConnection::new(conn.clone(), CoreHandle::current(), &mut rt).unwrap();
+    let aconn = AConnection::new(conn.clone(), CoreHandle::default(), &mut rt).unwrap();
 
     let m = ::dbus::Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
     let reply = rt.block_on(aconn.method_call(m).unwrap()).unwrap();
@@ -309,7 +309,7 @@ fn aconnection_test() {
 fn astream_test() {
     let conn = Rc::new(Connection::get_private(::dbus::BusType::Session).unwrap());
     let mut rt = Runtime::new().unwrap();
-    let aconn = AConnection::new(conn.clone(), CoreHandle::current(), &mut rt).unwrap();
+    let aconn = AConnection::new(conn.clone(), CoreHandle::default(), &mut rt).unwrap();
 
     let items: AMessageStream = aconn.messages().unwrap();
     let signals = items.filter_map(|m| if m.msg_type() == ::dbus::MessageType::Signal { Some(m) } else { None });
