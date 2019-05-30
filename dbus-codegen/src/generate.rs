@@ -436,21 +436,27 @@ fn write_signal(s: &mut String, i: &Intf, ss: &Signal) -> Result<(), Box<error::
     }
     *s += "}\n\n";
 
-    *s += &format!("impl dbus::SignalArgs for {} {{\n", structname);
-    *s += &format!("    const NAME: &'static str = \"{}\";\n", ss.name);
-    *s += &format!("    const INTERFACE: &'static str = \"{}\";\n", i.origname);
+    *s += &format!("impl arg::AppendAll for {} {{\n", structname);
     *s += &format!("    fn append(&self, {}: &mut arg::IterAppend) {{\n", if ss.args.len() > 0 {"i"} else {"_"});
     for a in ss.args.iter() {
         *s += &format!("        arg::RefArg::append(&self.{}, i);\n", a.varname());
     }
     *s += "    }\n";
-    *s += &format!("    fn get({}: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {{\n", if ss.args.len() > 0 {"i"} else {"_"});
+    *s += "}\n\n";
+
+    *s += &format!("impl arg::ReadAll for {} {{\n", structname);
+    *s += &format!("    fn read({}: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {{\n", if ss.args.len() > 0 {"i"} else {"_"});
     *s += &format!("        Ok({} {{\n", structname);
     for a in ss.args.iter() {
         *s += &format!("            {}: i.read()?,\n", a.varname());
     }
     *s += "        })\n";
     *s += "    }\n";
+    *s += "}\n\n";
+
+    *s += &format!("impl dbus::SignalArgs for {} {{\n", structname);
+    *s += &format!("    const NAME: &'static str = \"{}\";\n", ss.name);
+    *s += &format!("    const INTERFACE: &'static str = \"{}\";\n", i.origname);
     *s += "}\n";
     Ok(())
 }

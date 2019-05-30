@@ -32,7 +32,7 @@ fn main() {
 
     // Create Tokio event loop along with asynchronous connection object
     let mut rt = Runtime::new().unwrap();
-    let aconn = AConnection::new(c.clone(), Handle::current(), &mut rt).unwrap();
+    let aconn = AConnection::new(c.clone(), Handle::default(), &mut rt).unwrap();
 
     // Create interval - a Stream that will fire an event periodically
     let interval = Interval::new(clock::now(), Duration::from_secs(2));

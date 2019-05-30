@@ -4,7 +4,7 @@ use super::{BusName, Path, Interface, Member, ErrorName, Connection, SignalArgs}
 use std::os::unix::io::{RawFd, AsRawFd};
 use std::ffi::CStr;
 
-use super::arg::{Append, IterAppend, Get, Iter, Arg, RefArg, TypeMismatchError};
+use super::arg::{Append, AppendAll, IterAppend, Get, Iter, Arg, RefArg, TypeMismatchError};
 
 /// An RAII wrapper around Fd to ensure that file descriptor is closed
 /// when the scope ends.
@@ -467,7 +467,7 @@ impl<'a, C: ::std::ops::Deref<Target=Connection>> ConnPath<'a, C> {
     }
 
     /// Emit a D-Bus signal, where the arguments are in a struct.
-    pub fn emit<S: SignalArgs>(&self, signal: &S) -> Result<u32, Error> {
+    pub fn emit<S: SignalArgs + AppendAll>(&self, signal: &S) -> Result<u32, Error> {
         let msg = signal.to_emit_message(&self.path);
         self.conn.send(msg).map_err(|_| Error::new_custom("org.freedesktop.DBus.Error.Failed", "Sending signal failed"))
     }

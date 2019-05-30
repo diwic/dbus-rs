@@ -117,19 +117,25 @@ where
     i
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct DeviceCheckComplete {
+}
+
+impl arg::AppendAll for DeviceCheckComplete {
+    fn append(&self, _: &mut arg::IterAppend) {
+    }
+}
+
+impl arg::ReadAll for DeviceCheckComplete {
+    fn read(_: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
+        Ok(DeviceCheckComplete {
+        })
+    }
 }
 
 impl dbus::SignalArgs for DeviceCheckComplete {
     const NAME: &'static str = "CheckComplete";
     const INTERFACE: &'static str = "com.example.dbus.rs.device";
-    fn append(&self, _: &mut arg::IterAppend) {
-    }
-    fn get(_: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
-        Ok(DeviceCheckComplete {
-        })
-    }
 }
 
 // === Imported code end ===
