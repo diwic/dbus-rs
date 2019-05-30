@@ -1,7 +1,8 @@
 use mio::{self, unix, Ready};
 use mio::unix::UnixReady;
 use std::io;
-use dbus::{Connection, ConnMsgs, Watch, WatchEvent, Message, MessageType, Error as DBusError};
+use dbus::{Message, MessageType, Error as DBusError};
+use dbus::connection::{Connection, ConnMsgs, Watch, WatchEvent};
 use futures::{Async, Future, Stream, Poll};
 use futures::sync::{oneshot, mpsc};
 use tokio::reactor::Handle as CoreHandle;
