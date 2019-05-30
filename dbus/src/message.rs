@@ -4,7 +4,7 @@ use super::{BusName, Path, Interface, Member, ErrorName, Connection, SignalArgs}
 use std::os::unix::io::{RawFd, AsRawFd};
 use std::ffi::CStr;
 
-use super::arg::{Append, AppendAll, IterAppend, Get, Iter, Arg, RefArg, TypeMismatchError};
+use super::arg::{Append, AppendAll, IterAppend, ReadAll, Get, Iter, Arg, RefArg, TypeMismatchError};
 
 /// An RAII wrapper around Fd to ensure that file descriptor is closed
 /// when the scope ends.
@@ -470,6 +470,27 @@ impl<'a, C: ::std::ops::Deref<Target=Connection>> ConnPath<'a, C> {
     pub fn emit<S: SignalArgs + AppendAll>(&self, signal: &S) -> Result<u32, Error> {
         let msg = signal.to_emit_message(&self.path);
         self.conn.send(msg).map_err(|_| Error::new_custom("org.freedesktop.DBus.Error.Failed", "Sending signal failed"))
+    }
+
+    /// Make a method call using typed input and output arguments.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use dbus::connection::{Connection, BusType};
+    ///
+    /// let conn = Connection::get_private(BusType::Session)?;
+    /// let dest = conn.with_path("org.freedesktop.DBus", "/", 5000);
+    /// let (has_owner,): (bool,) = dest.method_call("org.freedesktop.DBus", "NameHasOwner", ("dummy.name.without.owner",))?;
+    /// assert_eq!(has_owner, false);
+    /// # Ok::<(), Box<std::error::Error>>(())
+    /// ```
+    pub fn method_call<'i, 'm, R: ReadAll, A: AppendAll, I: Into<Interface<'i>>, M: Into<Member<'m>>>(&self, i: I, m: M, args: A) -> Result<R, Error> {
+        let mut r = self.method_call_with_args(&i.into(), &m.into(), |mut msg| {
+            args.append(&mut IterAppend::new(&mut msg));
+        })?;
+        r.as_result()?;
+        Ok(R::read(&mut r.iter_init())?)
     }
 }
 
