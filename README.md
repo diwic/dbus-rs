@@ -11,14 +11,14 @@ The main dbus crate is fairly mature and the features you need should be all the
  * Use `Message` to send and receive messages. Get and append arguments of all types (including Unix Fd), see the [argument guide](dbus/examples/argument_guide.md) for details.
  * Build method dispatching servers using the `tree` module. Standard D-Bus interfaces (introspection, properties, object manager) are supported.
 
-If you have further questions or comments, [filing an issue](https://github.com/diwic/dbus-rs/issues) with your question is fine.
+If you have questions or comments that the documentation cannot answer in an easy way, [filing an issue](https://github.com/diwic/dbus-rs/issues) with your question is fine. Pull requests that improve the code, documentation, etc, are welcome!
 
 Additional crates
 -----------------
 
  * [dbus-codegen](http://crates.io/crates/dbus-codegen/) installs a binary tool which generates Rust code from D-Bus XML introspection data. The [readme](https://github.com/diwic/dbus-rs/tree/master/dbus-codegen) contains an introduction to how to use it.
  * [libdbus-sys](http://crates.io/crates/libdbus-sys/) contains the raw FFI bindings to libdbus.
- * [dbus-tokio](http://crates.io/crates/dbus-tokio/) integrates D-Bus with [Tokio](http://tokio.rs). [![API documentation](https://docs.rs/dbus-tokio/badge.svg)](https://docs.rs/dbus-tokio) It will be deprecated or rewritten from scratch when Tokio has caught up with `std::future` and async/await. 
+ * [dbus-tokio](http://crates.io/crates/dbus-tokio/) integrates D-Bus with [Tokio](http://tokio.rs). It will be deprecated or rewritten from scratch when Tokio has caught up with `std::future` and async/await. [![API documentation](https://docs.rs/dbus-tokio/badge.svg)](https://docs.rs/dbus-tokio)
 
 
 Examples
@@ -45,7 +45,7 @@ You can try a similar example by running:
 Server
 ------
 
-This example grabs the com.example.dbustest bus name, registers the /hello path and adds a method which returns a string.
+This example grabs the `com.example.dbustest` bus name, registers the `/hello` path and adds a method which returns a string.
 It then listens for incoming D-Bus events and handles them accordingly.
 
 ```rust
