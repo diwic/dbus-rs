@@ -1,25 +1,25 @@
-A D-Bus binding for Rust.
-========================
+D-Bus bindings for Rust
+=======================
 
-Current state of the [dbus](http://crates.io/crates/dbus/) crate: Slowly maturing. Most stuff you need should be working:
+[![crates.io](https://img.shields.io/crates/v/dbus.svg)](https://crates.io/crates/dbus)
+[![API documentation](https://docs.rs/dbus/badge.svg)](https://docs.rs/dbus)
+[![license](https://img.shields.io/crates/l/dbus.svg)](https://crates.io/crates/dbus)
 
- * Connect to system or session bus
- * Messages send/receive (method calls, method returns, signals, errors)
- * Message get/append arguments (through either generics, trait objects or enums), all types (including Unix Fd). See [argument guide](dbus/examples/argument_guide.md).
- * Build server side trees, with introspection and method dispatch (boxed closures)
- * Properties, on both client and server sides (set/get/getall methods, signals)
- * Optional async API (for poll-based mainloops, e g mio)
+The main dbus crate is fairly mature and the features you need should be all there. [Breaking changes](https://github.com/diwic/dbus-rs/issues/185) can still happen, but not often.
 
-[API Documentation is here](http://docs.rs/dbus/). If you have further questions or comments, [filing an issue](https://github.com/diwic/dbus-rs/issues) with your question is fine.
+ * Use `Connection` to connect to the system or session bus.
+ * Use `Message` to send and receive messages. Get and append arguments of all types (including Unix Fd), see the [argument guide](dbus/examples/argument_guide.md) for details.
+ * Build method dispatching servers using the `tree` module. Standard D-Bus interfaces (introspection, properties, object manager) are supported.
+
+If you have further questions or comments, [filing an issue](https://github.com/diwic/dbus-rs/issues) with your question is fine.
 
 Additional crates
 -----------------
 
+ * [dbus-codegen](http://crates.io/crates/dbus-codegen/) installs a binary tool which generates Rust code from D-Bus XML introspection data. The [readme](https://github.com/diwic/dbus-rs/tree/master/dbus-codegen) contains an introduction to how to use it.
  * [libdbus-sys](http://crates.io/crates/libdbus-sys/) contains the raw FFI bindings to libdbus.
- * [dbus-codegen](http://crates.io/crates/dbus-codegen/) installs a binary tool which generates Rust code from D-Bus XML introspection data.
- * [dbus-tokio](http://crates.io/crates/dbus-tokio/) integrates D-Bus with [Tokio](http://tokio.rs).
+ * [dbus-tokio](http://crates.io/crates/dbus-tokio/) integrates D-Bus with [Tokio](http://tokio.rs). [![API documentation](https://docs.rs/dbus-tokio/badge.svg)](https://docs.rs/dbus-tokio) It will be deprecated or rewritten from scratch when Tokio has caught up with `std::future` and async/await. 
 
-All these crates are less tested and less mature than the main "dbus" crate.
 
 Examples
 ========
@@ -75,19 +75,7 @@ Or a more advanced server example:
 
     cargo run --example adv_server
 
-Properties
-----------
-
-There are two examples of getting properties in the examples directory, one
-which uses the newer `arg` style and one that uses the older `MessageItem` style. See:
-
-    cargo run --example properties
-    cargo run --example properties_msgitem
-
-For an extended example, which also uses non-panicking error handling, see
-
-    examples/rtkit.rs
-
+More examples are available in the [examples](https://github.com/diwic/dbus-rs/tree/master/dbus/examples) directory.
 
 Requirements
 ============
@@ -96,8 +84,9 @@ Requirements
 
 However, if you enable the feature `no-string-validation`, you might be able to build and run with older versions of the D-Bus library. This feature skips an extra check that a specific string (e g a Path, ErrorName etc) conforms to the D-Bus specification, which might also make things a tiny bit faster. But - if you do so, and then actually send invalid strings to the D-Bus library, you might get a panic instead of a proper error.
 
+Cross compiling libdbus might be tricky because it binds to a C library, there are some notes [here](https://github.com/diwic/dbus-rs/blob/master/libdbus-sys/cross_compile.md). If you have succeeded, please help out by updating that document.
 
 License
 =======
 
-Apache 2.0 / MIT dual licensed.
+Apache 2.0 / MIT dual licensed. Any PR you make is assumed to have this license.
