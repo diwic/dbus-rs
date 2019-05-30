@@ -30,14 +30,13 @@ Client
 This example opens a connection to the session bus and asks for a list of all names currently present.
 
 ```rust
-let c = Connection::get_private(BusType::Session)?;
-let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames")?;
-let r = c.send_with_reply_and_block(m, 2000)?;
-let arr: Array<&str, _>  = r.get1()?;
-for name in arr { println!("{}", name); }
+let conn = Connection::get_private(BusType::Session)?;
+let obj = conn.with_path("org.freedesktop.DBus", "/", 5000);
+let (names,): (Vec<String>,) = obj.method_call("org.freedesktop.DBus", "ListNames", ())?;
+for name in names { println!("{}", name); }
 ```
 
-You can try a similar example by running:
+You can try a similar example (which has more comments) by running:
 
     cargo run --example client
 

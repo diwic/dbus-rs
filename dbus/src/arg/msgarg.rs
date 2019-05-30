@@ -282,6 +282,16 @@ impl<$($t: Arg + for<'z> Get<'z>),*> ReadAll for ($($t,)*) {
     }
 }
 
+impl AppendAll for () {
+    fn append(&self, _: &mut IterAppend) {}
+}
+
+impl ReadAll for () {
+    fn read(_: &mut Iter) -> Result<Self, TypeMismatchError> {
+        Ok(())
+    }
+}
+
 argbuilder_impl!(a A str,);
 argbuilder_impl!(a A str, b B str,);
 argbuilder_impl!(a A str, b B str, c C str,);
