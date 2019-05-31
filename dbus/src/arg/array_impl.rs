@@ -1,5 +1,5 @@
 use super::*;
-use crate::{Message, ffi, OwnedFd};
+use crate::{Message, ffi};
 use crate::strings::{Signature, Path};
 use std::marker::PhantomData;
 use std::{ptr, mem, any, fmt};

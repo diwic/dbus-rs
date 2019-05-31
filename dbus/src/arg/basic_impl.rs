@@ -1,7 +1,6 @@
 use crate::ffi;
 use super::*;
 use super::check;
-use crate::{OwnedFd};
 use crate::strings::{Signature, Path};
 use std::{ptr, any, mem};
 use std::ffi::CStr;
@@ -244,7 +243,6 @@ impl Arg for OwnedFd {
 }
 impl Append for OwnedFd {
     fn append_by_ref(&self, i: &mut IterAppend) {
-        use std::os::unix::io::AsRawFd;
         arg_append_basic(&mut i.0, ArgType::UnixFd, self.as_raw_fd())
     }
 }

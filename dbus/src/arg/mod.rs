@@ -70,14 +70,56 @@ pub use self::array_impl::{Array, Dict};
 pub use self::variantstruct_impl::Variant;
 
 use std::{fmt, mem, ptr, error};
-use crate::{ffi, Message, Signature, Path, OwnedFd};
+use crate::{ffi, Message, Signature, Path};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_void, c_int};
-
+use std::os::unix::io::{RawFd, AsRawFd};
 
 fn check(f: &str, i: u32) { if i == 0 { panic!("D-Bus error: '{}' failed", f) }} 
 
 fn ffi_iter() -> ffi::DBusMessageIter { unsafe { mem::zeroed() }} 
+
+/// An RAII wrapper around Fd to ensure that file descriptor is closed
+/// when the scope ends.
+#[derive(Debug, PartialEq, PartialOrd)]
+pub struct OwnedFd {
+    fd: RawFd
+}
+
+impl OwnedFd {
+    /// Create a new OwnedFd from a RawFd.
+    pub fn new(fd: RawFd) -> OwnedFd {
+        OwnedFd { fd: fd }
+    }
+
+    /// Convert an OwnedFD back into a RawFd.
+    pub fn into_fd(self) -> RawFd {
+        let s = self.fd;
+        ::std::mem::forget(self);
+        s
+    }
+}
+
+impl Drop for OwnedFd {
+    fn drop(&mut self) {
+        unsafe { libc::close(self.fd); }
+    }
+}
+
+impl Clone for OwnedFd {
+    fn clone(&self) -> OwnedFd {
+        let x = unsafe { libc::dup(self.fd) };
+        if x == -1 { panic!("Duplicating file descriptor failed") }
+        OwnedFd::new(x)
+    }
+}
+
+impl AsRawFd for OwnedFd {
+    fn as_raw_fd(&self) -> RawFd {
+        self.fd
+    }
+}
+
 
 #[derive(Clone, Copy)]
 /// Helper struct for appending one or more arguments to a Message. 

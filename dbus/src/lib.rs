@@ -22,7 +22,7 @@ extern crate libdbus_sys as ffi;
 
 pub use crate::ffi::DBusMessageType as MessageType;
 
-pub use crate::message::{Message, OwnedFd, ConnPath};
+pub use crate::message::{Message, ConnPath};
 pub use crate::connection::{Connection, BusType};
 
 pub use crate::signalargs::SignalArgs;
