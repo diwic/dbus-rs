@@ -1,5 +1,5 @@
-use crate::{Message, MessageType, BusName, Path, Interface, Member};
-
+use crate::{Message, MessageType};
+use crate::strings::{BusName, Path, Interface, Member};
 
 #[derive(Clone, Debug, Default)]
 /// A "match rule", that can match Messages on its headers.

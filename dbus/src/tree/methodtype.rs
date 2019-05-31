@@ -1,13 +1,14 @@
 // Methods and method types. Glue to make stuff generic over MFn, MFnMut and MSync
 
 use std::fmt;
-use crate::{ErrorName, Message, stdintf};
+use crate::{Message, stdintf};
 use crate::arg::{Iter, IterAppend, TypeMismatchError};
 use std::marker::PhantomData;
 use super::{Method, Interface, Property, ObjectPath, Tree};
+use crate::strings::{ErrorName}; 
 use std::cell::RefCell;
 use std::ffi::CString;
-use super::super::Error as dbusError;
+use crate::Error as dbusError;
 
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
 /// A D-Bus Method Error, containing an error name and a description.

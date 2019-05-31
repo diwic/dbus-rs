@@ -44,8 +44,8 @@ pub use crate::dispatcher::{MessageDispatcher, MessageDispatcherConfig};
 mod matchrule;
 pub use crate::matchrule::MatchRule;
 
-mod strings;
-pub use crate::strings::{Signature, Path, Interface, Member, ErrorName, BusName};
+pub mod strings;
+pub use crate::strings::{Signature, Path};
 
 pub mod arg;
 

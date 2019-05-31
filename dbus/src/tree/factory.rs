@@ -2,8 +2,8 @@ use super::{MethodType, DataType, MTFn, MTFnMut, MTSync, MethodResult, MethodInf
 use super::{Tree, ObjectPath, Interface, Property, Signal, Method};
 use super::objectpath::IfaceCache;
 use std::sync::Arc;
-use crate::Interface as IfaceName;
-use crate::{Member, Path, arg};
+use crate::strings::{Interface as IfaceName, Member};
+use crate::{Path, arg};
 use std::cell::RefCell;
 
 /// The factory is used to create object paths, interfaces, methods etc.

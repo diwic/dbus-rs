@@ -1,9 +1,8 @@
 // Methods, signals, properties, and interfaces.
 use super::utils::{Argument, Annotations, Introspect, introspect_args};
 use super::{MethodType, MethodInfo, MethodResult, MethodErr, DataType, PropInfo, MTFn, MTFnMut, MTSync};
-use crate::{Member, Signature, Message, Path};
-use crate::Interface as IfaceName;
-use crate::arg;
+use crate::strings::{Interface as IfaceName, Member, Signature, Path};
+use crate::{arg, Message};
 use std::fmt;
 use std::cell::RefCell;
 use crate::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged;

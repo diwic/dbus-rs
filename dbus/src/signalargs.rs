@@ -1,5 +1,6 @@
 use crate::arg;
-use crate::{Message, MessageType, BusName, Path, Interface, Member, MatchRule};
+use crate::{Message, MessageType, MatchRule};
+use crate::strings::{BusName, Path, Interface, Member};
 
 /// Helper methods for structs representing a Signal
 ///
