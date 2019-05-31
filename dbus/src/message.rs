@@ -2,51 +2,9 @@ use std::{fmt, mem, ptr};
 use super::{ffi, Error, MessageType, libc, to_c_str, c_str_to_slice, init_dbus};
 use super::{Connection, SignalArgs};
 use crate::strings::{BusName, Path, Interface, Member, ErrorName};
-use std::os::unix::io::{RawFd, AsRawFd};
 use std::ffi::CStr;
 
 use super::arg::{Append, AppendAll, IterAppend, ReadAll, Get, Iter, Arg, RefArg, TypeMismatchError};
-
-/// An RAII wrapper around Fd to ensure that file descriptor is closed
-/// when the scope ends.
-#[derive(Debug, PartialEq, PartialOrd)]
-pub struct OwnedFd {
-    fd: RawFd
-}
-
-impl OwnedFd {
-    /// Create a new OwnedFd from a RawFd.
-    pub fn new(fd: RawFd) -> OwnedFd {
-        OwnedFd { fd: fd }
-    }
-
-    /// Convert an OwnedFD back into a RawFd.
-    pub fn into_fd(self) -> RawFd {
-        let s = self.fd;
-        ::std::mem::forget(self);
-        s
-    }
-}
-
-impl Drop for OwnedFd {
-    fn drop(&mut self) {
-        unsafe { libc::close(self.fd); }
-    }
-}
-
-impl Clone for OwnedFd {
-    fn clone(&self) -> OwnedFd {
-        let x = unsafe { libc::dup(self.fd) };
-        if x == -1 { panic!("Duplicating file descriptor failed") }
-        OwnedFd::new(x)
-    }
-}
-
-impl AsRawFd for OwnedFd {
-    fn as_raw_fd(&self) -> RawFd {
-        self.fd
-    }
-}
 
 /// A D-Bus message. A message contains some headers (e g sender and destination address)
 /// and a list of MessageItems.

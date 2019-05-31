@@ -9,8 +9,7 @@
 use crate::strings::{Signature, Path, Interface, BusName};
 
 use crate::arg;
-use crate::arg::{Iter, IterAppend, Arg, ArgType};
-use crate::message::OwnedFd;
+use crate::arg::{Iter, IterAppend, Arg, ArgType, OwnedFd};
 use std::ffi::CStr;
 use std::{ops, any};
 
@@ -633,8 +632,9 @@ impl<'a> PropHandler<'a> {
 mod test {
     extern crate tempdir;
 
-    use crate::{Connection, Message, MessageType, BusType, OwnedFd, libc, Path};
+    use crate::{Connection, Message, MessageType, BusType, libc, Path};
     use crate::arg::messageitem::MessageItem;
+    use crate::arg::OwnedFd;
 
     #[test]
     fn unix_fd() {
