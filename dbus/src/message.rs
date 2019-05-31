@@ -1,6 +1,7 @@
 use std::{fmt, mem, ptr};
 use super::{ffi, Error, MessageType, libc, to_c_str, c_str_to_slice, init_dbus};
-use super::{BusName, Path, Interface, Member, ErrorName, Connection, SignalArgs};
+use super::{Connection, SignalArgs};
+use crate::strings::{BusName, Path, Interface, Member, ErrorName};
 use std::os::unix::io::{RawFd, AsRawFd};
 use std::ffi::CStr;
 
@@ -502,7 +503,8 @@ pub (crate) fn message_set_serial(m: &mut Message, s: u32) {
 
 #[cfg(test)]
 mod test {
-    use crate::{Message, BusName};
+    use crate::{Message};
+    use crate::strings::BusName;
 
     #[test]
     fn set_valid_destination() {

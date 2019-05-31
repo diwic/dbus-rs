@@ -1,4 +1,8 @@
-// CString wrappers.
+//! This module contains strings with a specific format, such as a valid
+//! Interface name, a valid Error name, etc.
+//!
+//! (The internal representation of these strings are `Cow<CStr>`, which
+//! makes it possible to use them in libdbus without conversion costs.)
 
 use std::{str, fmt, ops, default, hash};
 use std::ffi::{CStr, CString};
@@ -133,7 +137,7 @@ impl<'m> hash::Hash for $t<'m> {
 }}
 
 /// A wrapper around a string that is guaranteed to be
-/// a valid (single) D-Bus type signature. Supersedes TypeSig.
+/// a valid (single) D-Bus type signature.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct Signature<'a>(Cow<'a, CStr>);
 

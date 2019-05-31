@@ -1,9 +1,9 @@
 use super::utils::{ArcMap, Iter, IterE, Annotations, Introspect};
 use super::{Factory, MethodType, MethodInfo, MethodResult, MethodErr, DataType, Property, Method, Signal, methodtype};
 use std::sync::{Arc, Mutex};
-use crate::{Member, Message, Path, Signature, MessageType, Error, arg};
+use crate::{Message, MessageType, Error, arg};
+use crate::strings::{Member, Path, Signature, Interface as IfaceName};
 use crate::connection::{ConnectionItem, MsgHandler, Connection, MsgHandlerType, MsgHandlerResult};
-use crate::Interface as IfaceName;
 use std::fmt;
 use std::ffi::CStr;
 use super::leaves::prop_append_dict;

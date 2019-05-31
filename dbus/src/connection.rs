@@ -1,11 +1,12 @@
 //! Contains structs and traits relevant to the connection itself, and dispatching incoming messages. 
 
-use super::{Error, ffi, to_c_str, c_str_to_slice, Message, MessageType, BusName, Path, ConnPath};
+use super::{Error, ffi, to_c_str, c_str_to_slice, Message, MessageType, ConnPath};
 use std::{fmt, mem, ptr, thread, panic, ops};
 use std::collections::VecDeque;
 use std::cell::{Cell, RefCell};
 use std::os::unix::io::RawFd;
 use std::os::raw::{c_void, c_char, c_int, c_uint};
+use crate::strings::{BusName, Path};
 
 /// The type of function to use for replacing the message callback.
 ///
