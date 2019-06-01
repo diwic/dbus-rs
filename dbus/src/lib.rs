@@ -35,10 +35,7 @@ mod signalargs;
 mod error;
 pub use error::Error;
 
-mod connection2;
-mod dispatcher;
-pub use crate::connection2::TxRx;
-pub use crate::dispatcher::{MessageDispatcher, MessageDispatcherConfig};
+pub mod channel;
 // pub mod crossroads;
 
 mod matchrule;

@@ -1,11 +1,16 @@
+//! Experimental rewrite of Connection [unstable / experimental]
+
 use crate::{Error, Message, to_c_str};
 use crate::connection::{BusType, Watch};
 use std::{ptr, str};
 use std::ffi::CStr;
 use std::os::raw::{c_void};
 
+mod dispatcher;
+pub use self::dispatcher::{MessageDispatcher, MessageDispatcherConfig};
+
 #[derive(Debug)]
-pub struct ConnHandle(*mut ffi::DBusConnection);
+struct ConnHandle(*mut ffi::DBusConnection);
 
 unsafe impl Send for ConnHandle {}
 unsafe impl Sync for ConnHandle {}
@@ -32,23 +37,23 @@ impl Drop for ConnHandle {
 /// callbacks from that function. Instead the same functionality needs to be
 /// implemented by these bindings somehow - this is not done yet.
 #[derive(Debug)]
-pub struct TxRx {
+pub struct Channel {
     handle: ConnHandle,
 }
 
-impl TxRx {
+impl Channel {
     #[inline(always)]
     pub (crate) fn conn(&self) -> *mut ffi::DBusConnection {
         self.handle.0
     }
 
-    fn conn_from_ptr(ptr: *mut ffi::DBusConnection) -> Result<TxRx, Error> {
+    fn conn_from_ptr(ptr: *mut ffi::DBusConnection) -> Result<Channel, Error> {
         let handle = ConnHandle(ptr);
 
         /* No, we don't want our app to suddenly quit if dbus goes down */
         unsafe { ffi::dbus_connection_set_exit_on_disconnect(ptr, 0) };
 
-        let c = TxRx { handle };
+        let c = Channel { handle };
 
         Ok(c)
     }
@@ -57,7 +62,7 @@ impl TxRx {
     /// Creates a new D-Bus connection.
     ///
     /// Blocking: until the connection is up and running. 
-    pub fn get_private(bus: BusType) -> Result<TxRx, Error> {
+    pub fn get_private(bus: BusType) -> Result<Channel, Error> {
         let mut e = Error::empty();
         let conn = unsafe { ffi::dbus_bus_get_private(bus, e.get_mut()) };
         if conn == ptr::null_mut() {
@@ -71,7 +76,7 @@ impl TxRx {
     /// Note: for all common cases (System / Session bus) you probably want "get_private" instead.
     ///
     /// Blocking: until the connection is established.
-    pub fn open_private(address: &str) -> Result<TxRx, Error> {
+    pub fn open_private(address: &str) -> Result<Channel, Error> {
         let mut e = Error::empty();
         let conn = unsafe { ffi::dbus_connection_open_private(to_c_str(address).as_ptr(), e.get_mut()) };
         if conn == ptr::null_mut() {
@@ -176,17 +181,17 @@ impl TxRx {
 }
 
 #[test]
-fn test_txrx_send_sync() {
+fn test_channel_send_sync() {
     fn is_send<T: Send>(_: &T) {}
     fn is_sync<T: Sync>(_: &T) {}
-    let c = TxRx::get_private(BusType::Session).unwrap();
+    let c = Channel::get_private(BusType::Session).unwrap();
     is_send(&c);
     is_sync(&c);
 }
 
 #[test]
-fn txrx_simple_test() {
-    let mut c = TxRx::get_private(BusType::Session).unwrap();
+fn channel_simple_test() {
+    let mut c = Channel::get_private(BusType::Session).unwrap();
     assert!(c.is_connected());
     let fds = c.watch_fds().unwrap();
     println!("{:?}", fds);
@@ -205,7 +210,7 @@ fn txrx_simple_test() {
                     if n == my_name { return; } // Hooray, we found ourselves!
                 }
                 assert!(false);
-            } else if let Some(r) = crate::MessageDispatcher::<()>::default_dispatch(&msg) {
+            } else if let Some(r) = crate::channel::MessageDispatcher::<()>::default_dispatch(&msg) {
                 c.send(r).unwrap();
             }
         }
