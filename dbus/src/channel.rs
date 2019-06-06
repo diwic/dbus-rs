@@ -4,7 +4,7 @@ use crate::{Error, Message, to_c_str};
 use crate::connection::{BusType, Watch};
 use std::{ptr, str};
 use std::ffi::CStr;
-use std::os::raw::{c_void};
+use std::os::raw::{c_void, c_int};
 
 mod dispatcher;
 pub use self::dispatcher::{MessageDispatcher, MessageDispatcherConfig};
@@ -22,6 +22,18 @@ impl Drop for ConnHandle {
             ffi::dbus_connection_unref(self.0);
         }
     }
+}
+
+/// Experimental rewrite of Connection, thread local + non-async version
+pub struct Connection {
+    channel: Channel
+}
+
+impl Connection {
+    /// Create a new connection to the session bus.
+    pub fn new_session() -> Result<Self, Error> { Ok(Connection { channel: Channel::get_private(BusType::Session)? })} 
+    /// Create a new connection to the system-wide bus.
+    pub fn new_system() -> Result<Self, Error> { Ok(Connection { channel: Channel::get_private(BusType::System)? })} 
 }
 
 /// Experimental rewrite of Connection [unstable / experimental]
@@ -126,6 +138,26 @@ impl Channel {
         Ok(serial)
     }
 
+    /// Sends a message over the D-Bus and waits for a reply. This is used for method calls.
+    /// 
+    /// Blocking: until a reply is received or the timeout expires.
+    ///
+    /// Note: In case of an error reply, this is returned as an Err(), not as a Ok(Message) with the error type.
+    ///
+    /// Note: In case pop_message and send_with_reply_and_block is called in parallel from different threads,
+    /// they might race to retreive the reply message from the internal queue.
+    pub fn send_with_reply_and_block(&self, msg: Message, timeout_ms: i32) -> Result<Message, Error> {
+        let mut e = Error::empty();
+        let response = unsafe {
+            ffi::dbus_connection_send_with_reply_and_block(self.conn(), msg.ptr(),
+                timeout_ms as c_int, e.get_mut())
+        };
+        if response == ptr::null_mut() {
+            return Err(e);
+        }
+        Ok(Message::from_ptr(response, false))
+    }
+
     /// Flush the queue of outgoing messages.
     /// 
     /// Blocking: until the outgoing queue is empty.
@@ -177,6 +209,42 @@ impl Channel {
         assert!(unsafe { ffi::dbus_connection_set_watch_functions(self.conn(),
             None, None, None, ptr::null_mut(), None) } != 0);
         Ok(r)
+    }
+}
+
+/// Abstraction over different connections
+pub trait Sender {
+    /// Schedules a message for sending.
+    ///
+    /// Returns a serial number than can be used to match against a reply.
+    fn send(&self, msg: Message) -> Result<u32, ()>;
+}
+
+/// Abstraction over different connections
+pub trait BlockingSender {
+    /// Sends a message over the D-Bus and blocks, waiting for a reply or a timeout. This is used for method calls.
+    ///
+    /// Note: In case of an error reply, this is returned as an Err(), not as a Ok(Message) with the error type.
+    fn send_with_reply_and_block(&self, msg: Message, timeout_ms: i32) -> Result<Message, Error>;
+}
+
+impl Sender for Channel {
+    fn send(&self, msg: Message) -> Result<u32, ()> { Channel::send(self, msg) }
+}
+
+impl BlockingSender for Channel {
+    fn send_with_reply_and_block(&self, msg: Message, timeout_ms: i32) -> Result<Message, Error> {
+        Channel::send_with_reply_and_block(self, msg, timeout_ms)
+    }
+}
+
+impl Sender for Connection {
+    fn send(&self, msg: Message) -> Result<u32, ()> { self.channel.send(msg) }
+}
+
+impl BlockingSender for Connection {
+    fn send_with_reply_and_block(&self, msg: Message, timeout_ms: i32) -> Result<Message, Error> {
+        self.channel.send_with_reply_and_block(msg, timeout_ms)
     }
 }
 

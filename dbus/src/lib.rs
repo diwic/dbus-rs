@@ -38,6 +38,8 @@ pub use error::Error;
 pub mod channel;
 // pub mod crossroads;
 
+pub mod proxy;
+
 mod matchrule;
 pub use crate::matchrule::MatchRule;
 

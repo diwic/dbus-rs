@@ -637,6 +637,18 @@ impl fmt::Debug for Connection {
     }
 }
 
+impl crate::channel::Sender for Connection {
+    fn send(&self, msg: Message) -> Result<u32, ()> { Connection::send(self, msg) }
+}
+
+impl crate::channel::BlockingSender for Connection {
+    fn send_with_reply_and_block(&self, msg: Message, timeout_ms: i32) -> Result<Message, Error> {
+        Connection::send_with_reply_and_block(self, msg, timeout_ms)
+    }
+}
+
+
+
 #[derive(Clone, Debug)]
 /// Type of messages to be handled by a MsgHandler.
 ///
