@@ -8,6 +8,7 @@ pub type DBusTimeout = c_void;
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Copy, Clone)]
+/// System or Session bus
 pub enum DBusBusType {
     Session = 0,
     System = 1,
@@ -72,11 +73,17 @@ pub enum DBusHandlerResult {
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Copy, Clone)]
+/// One of the four different D-Bus message types.
 pub enum DBusMessageType {
+    /// This is not a valid message type (rarely used)
     Invalid = 0,
+    /// This is a method call D-Bus message
     MethodCall = 1,
+    /// This is a method return Ok D-Bus message, used when the method call message was successfully processed
     MethodReturn = 2,
+    /// This is a method return with error D-Bus message, used when the method call message could not be handled 
     Error = 3,
+    /// This is a signal, usually sent to whoever wants to listen
     Signal = 4,
 }
 
