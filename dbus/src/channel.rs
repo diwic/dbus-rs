@@ -5,6 +5,8 @@ use crate::connection::{BusType, Watch};
 use std::{ptr, str};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_int};
+use crate::matchrule::MatchRule;
+use std::cell::RefCell;
 
 mod dispatcher;
 pub use self::dispatcher::{MessageDispatcher, MessageDispatcherConfig};
@@ -24,16 +26,52 @@ impl Drop for ConnHandle {
     }
 }
 
+struct Filter {
+   id: u32,
+   rule: MatchRule<'static>,
+   f: Box<FnMut(Message) -> bool>,
+}
+
 /// Experimental rewrite of Connection, thread local + non-async version
 pub struct Connection {
-    channel: Channel
+    channel: Channel,
+    filters: RefCell<Vec<Filter>>
 }
 
 impl Connection {
     /// Create a new connection to the session bus.
-    pub fn new_session() -> Result<Self, Error> { Ok(Connection { channel: Channel::get_private(BusType::Session)? })} 
+    pub fn new_session() -> Result<Self, Error> { Ok(Connection {
+        channel: Channel::get_private(BusType::Session)?,
+        filters: Default::default(),
+    })}
+
     /// Create a new connection to the system-wide bus.
-    pub fn new_system() -> Result<Self, Error> { Ok(Connection { channel: Channel::get_private(BusType::System)? })} 
+    pub fn new_system() -> Result<Self, Error> { Ok(Connection { 
+        channel: Channel::get_private(BusType::System)?, 
+        filters: Default::default(),
+    })}
+
+    fn dispatch(&self, msg: Message) {
+        
+    }
+
+    /// Tries to handle an incoming message if there is one. If there isn't one,
+    /// it will wait up to timeout_ms milliseconds.
+    ///
+    /// Note: Might panic if called recursively.
+    pub fn process(&self, timeout_ms: i32) -> Result<bool, Error> {
+        if let Some(msg) = self.channel.pop_message() {
+            self.dispatch(msg);
+            return Ok(true);
+        }
+        self.channel.read_write(Some(timeout_ms)).map_err(|_| 
+            Error::new_custom("org.freedesktop.dbus.error.failed", "Failed to read/write data, disconnected from D-Bus?")
+        )?;
+        if let Some(msg) = self.channel.pop_message() {
+            self.dispatch(msg);
+            Ok(true)
+        } else { Ok(false) }
+    }
 }
 
 /// Experimental rewrite of Connection [unstable / experimental]
@@ -228,6 +266,11 @@ pub trait BlockingSender {
     fn send_with_reply_and_block(&self, msg: Message, timeout_ms: i32) -> Result<Message, Error>;
 }
 
+pub trait MatchingReceiver {
+    type F;
+    fn start_receive(&self, id: u32, m: MatchRule<'static>, f: Self::F);
+}
+
 impl Sender for Channel {
     fn send(&self, msg: Message) -> Result<u32, ()> { Channel::send(self, msg) }
 }
@@ -247,6 +290,14 @@ impl BlockingSender for Connection {
         self.channel.send_with_reply_and_block(msg, timeout_ms)
     }
 }
+
+impl MatchingReceiver for Connection {
+    type F = Box<FnMut(Message) -> bool>;
+    fn start_receive(&self, id: u32, m: MatchRule<'static>, f: Self::F) {
+        self.filters.borrow_mut().push(Filter { id, rule: m, f } )
+    }
+}
+
 
 #[test]
 fn test_channel_send_sync() {
