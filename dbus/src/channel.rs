@@ -1,4 +1,6 @@
 //! Experimental rewrite of Connection [unstable / experimental]
+#![allow(missing_docs)]
+#![allow(dead_code)]
 
 use crate::{Error, Message, to_c_str};
 use crate::connection::{BusType, Watch};
@@ -51,8 +53,8 @@ impl Connection {
         filters: Default::default(),
     })}
 
-    fn dispatch(&self, msg: Message) {
-        
+    fn dispatch(&self, _msg: Message) {
+        unimplemented!()
     }
 
     /// Tries to handle an incoming message if there is one. If there isn't one,
