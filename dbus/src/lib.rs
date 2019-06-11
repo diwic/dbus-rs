@@ -20,9 +20,7 @@ extern crate libc;
 #[allow(missing_docs)]
 extern crate libdbus_sys as ffi;
 
-pub use crate::ffi::DBusMessageType as MessageType;
-
-pub use crate::message::{Message, ConnPath};
+pub use crate::message::{Message, ConnPath, MessageType};
 pub use crate::connection::{Connection, BusType};
 
 pub mod message;
