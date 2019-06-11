@@ -1,5 +1,6 @@
 use crate::arg;
-use crate::{Message, MessageType, MatchRule};
+use crate::{Message, MessageType};
+use crate::message::MatchRule;
 use crate::strings::{BusName, Path, Interface, Member};
 
 /// Helper methods for structs representing a Signal
@@ -9,7 +10,8 @@ use crate::strings::{BusName, Path, Interface, Member};
 /// Listen to InterfacesRemoved signal from org.bluez.obex.
 ///
 /// ```rust,no_run
-/// use dbus::{Connection, BusType, SignalArgs};
+/// use dbus::{Connection, BusType};
+/// use dbus::message::SignalArgs;
 /// use dbus::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
 ///
 /// let c = Connection::get_private(BusType::Session).unwrap();

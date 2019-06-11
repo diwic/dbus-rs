@@ -25,12 +25,9 @@ pub use crate::ffi::DBusMessageType as MessageType;
 pub use crate::message::{Message, ConnPath};
 pub use crate::connection::{Connection, BusType};
 
-pub use crate::signalargs::SignalArgs;
-
-mod message;
+pub mod message;
 
 pub mod connection;
-mod signalargs;
 
 mod error;
 pub use error::Error;
@@ -40,8 +37,6 @@ pub mod channel;
 
 pub mod proxy;
 
-mod matchrule;
-pub use crate::matchrule::MatchRule;
 
 pub mod strings;
 pub use crate::strings::{Signature, Path};

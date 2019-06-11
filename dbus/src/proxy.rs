@@ -5,8 +5,7 @@
 use crate::strings::{BusName, Path, Interface, Member};
 use crate::arg::{AppendAll, ReadAll, IterAppend};
 use crate::{channel, Error, Message};
-use crate::matchrule::MatchRule;
-use crate::signalargs::SignalArgs;
+use crate::message::{MatchRule, SignalArgs};
 
 /// A struct that wraps a connection, destination and path.
 ///

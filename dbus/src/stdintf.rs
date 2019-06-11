@@ -26,7 +26,7 @@ pub use self::org_freedesktop_dbus::ObjectManager as OrgFreedesktopDBusObjectMan
 
 pub mod org_freedesktop_dbus {
 
-use crate::arg;
+use crate::{arg, message};
 
 /// Method of the [org.freedesktop.DBus.Introspectable](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-introspectable) interface.
 pub trait Introspectable {
@@ -120,7 +120,7 @@ impl arg::ReadAll for PropertiesPropertiesChanged {
     }
 }
 
-impl crate::SignalArgs for PropertiesPropertiesChanged {
+impl message::SignalArgs for PropertiesPropertiesChanged {
     const NAME: &'static str = "PropertiesChanged";
     const INTERFACE: &'static str = "org.freedesktop.DBus.Properties";
 }
@@ -168,7 +168,7 @@ impl arg::ReadAll for ObjectManagerInterfacesAdded {
     }
 }
 
-impl crate::SignalArgs for ObjectManagerInterfacesAdded {
+impl message::SignalArgs for ObjectManagerInterfacesAdded {
     const NAME: &'static str = "InterfacesAdded";
     const INTERFACE: &'static str = "org.freedesktop.DBus.ObjectManager";
 }
@@ -197,7 +197,7 @@ impl arg::ReadAll for ObjectManagerInterfacesRemoved {
     }
 }
 
-impl crate::SignalArgs for ObjectManagerInterfacesRemoved {
+impl message::SignalArgs for ObjectManagerInterfacesRemoved {
     const NAME: &'static str = "InterfacesRemoved";
     const INTERFACE: &'static str = "org.freedesktop.DBus.ObjectManager";
 }

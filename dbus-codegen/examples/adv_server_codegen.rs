@@ -133,7 +133,7 @@ impl arg::ReadAll for DeviceCheckComplete {
     }
 }
 
-impl dbus::SignalArgs for DeviceCheckComplete {
+impl dbus::message::SignalArgs for DeviceCheckComplete {
     const NAME: &'static str = "CheckComplete";
     const INTERFACE: &'static str = "com.example.dbus.rs.device";
 }
@@ -289,7 +289,7 @@ fn run() -> Result<(), Box<std::error::Error>> {
             let dev = &devices[idx as usize];
             dev.checking.set(false);
             let sig = com_example_dbus_rs::DeviceCheckComplete {};
-            use dbus::SignalArgs;
+            use dbus::message::SignalArgs;
             c.send(sig.to_emit_message(&dev.path))
                 .map_err(|_| "Sending DBus signal failed")?;
         }
