@@ -454,7 +454,7 @@ fn write_signal(s: &mut String, i: &Intf, ss: &Signal) -> Result<(), Box<error::
     *s += "    }\n";
     *s += "}\n\n";
 
-    *s += &format!("impl dbus::SignalArgs for {} {{\n", structname);
+    *s += &format!("impl dbus::message::SignalArgs for {} {{\n", structname);
     *s += &format!("    const NAME: &'static str = \"{}\";\n", ss.name);
     *s += &format!("    const INTERFACE: &'static str = \"{}\";\n", i.origname);
     *s += "}\n";

@@ -1,10 +1,19 @@
+//! Contains structs and traits closely related to D-Bus messages.
+
 use std::{fmt, mem, ptr};
 use super::{ffi, Error, MessageType, libc, to_c_str, c_str_to_slice, init_dbus};
-use super::{Connection, SignalArgs};
+use super::Connection;
 use crate::strings::{BusName, Path, Interface, Member, ErrorName};
 use std::ffi::CStr;
 
 use super::arg::{Append, AppendAll, IterAppend, ReadAll, Get, Iter, Arg, RefArg, TypeMismatchError};
+
+mod signalargs;
+pub use self::signalargs::SignalArgs;
+
+mod matchrule;
+pub use self::matchrule::MatchRule;
+
 
 /// A D-Bus message. A message contains headers - usually destination address, path, interface and member,
 /// and a list of arguments.

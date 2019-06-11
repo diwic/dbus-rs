@@ -7,7 +7,7 @@ use crate::connection::{BusType, Watch};
 use std::{ptr, str};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_int};
-use crate::matchrule::MatchRule;
+use crate::message::MatchRule;
 use std::cell::RefCell;
 
 mod dispatcher;
