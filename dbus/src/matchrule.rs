@@ -63,8 +63,8 @@ impl<'a> MatchRule<'a> {
     /// Create a new struct which matches every message.
     pub fn new() -> Self { Default::default() }
 
-    /// Returns a clone with no static references
-    pub fn into_static(&self) -> MatchRule<'static> {
+    /// Returns a clone with no borrowed references
+    pub fn static_clone(&self) -> MatchRule<'static> {
         MatchRule {
             msg_type: self.msg_type,
             sender: self.sender.as_ref().map(|x| x.clone().into_static()),

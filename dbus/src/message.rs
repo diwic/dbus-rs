@@ -34,9 +34,18 @@ impl Message {
             ffi::dbus_message_new_method_call(destination.as_ref().as_ptr(), path.as_ref().as_ptr(),
                 iface.as_ref().as_ptr(), name.as_ref().as_ptr())
         };
-        if ptr == ptr::null_mut() { panic!("D-Bus error: dbus_message_new_signal failed") }
+        if ptr == ptr::null_mut() { panic!("D-Bus error: dbus_message_new_method_call failed") }
         Message { msg: ptr}
     }
+
+    /// Creates a new method call message.
+    pub fn call_with_args<'d, 'p, 'i, 'm, A, D, P, I, M>(destination: D, path: P, iface: I, method: M, args: A) -> Message 
+    where D: Into<BusName<'d>>, P: Into<Path<'p>>, I: Into<Interface<'i>>, M: Into<Member<'m>>, A: AppendAll {
+        let mut msg = Message::method_call(&destination.into(), &path.into(), &iface.into(), &method.into());
+        args.append(&mut IterAppend::new(&mut msg));
+        msg
+    }
+
 
     /// Creates a new signal message.
     pub fn new_signal<P, I, M>(path: P, iface: I, name: M) -> Result<Message, String>
