@@ -59,6 +59,8 @@ where
     T: channel::BlockingSender + channel::MatchingReceiver<F=Box<FnMut(Message) -> bool>>,
     C: 'static + std::ops::Deref<Target=T> + Clone
 {
+
+    /// TODO: Docs
     pub fn blocking_add_match<R: ReadAll, F: 'static + FnMut(R) -> bool>(&self, mr: &MatchRule, mut f: F) -> Result<u32, Error> {
         let mut mr = mr.static_clone();
         mr.path = Some(self.path.clone().into_static());
@@ -82,6 +84,7 @@ where
         Ok(id)
     }
 
+    /// TODO: Docs
     pub fn blocking_match_signal<S: SignalArgs + ReadAll, F: 'static + FnMut(S) -> bool>(&self, f: F) -> Result<u32, Error> {
         self.blocking_add_match(&S::match_rule(Some(&self.destination), Some(&self.path)), f)
     }

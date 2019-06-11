@@ -6,8 +6,8 @@ use std::ffi::CStr;
 
 use super::arg::{Append, AppendAll, IterAppend, ReadAll, Get, Iter, Arg, RefArg, TypeMismatchError};
 
-/// A D-Bus message. A message contains some headers (e g sender and destination address)
-/// and a list of MessageItems.
+/// A D-Bus message. A message contains headers - usually destination address, path, interface and member,
+/// and a list of arguments.
 pub struct Message {
     msg: *mut ffi::DBusMessage,
 }
