@@ -33,7 +33,7 @@ pub use error::Error;
 pub mod channel;
 // pub mod crossroads;
 
-pub mod proxy;
+pub mod blocking;
 
 
 pub mod strings;
