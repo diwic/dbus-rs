@@ -139,7 +139,7 @@ impl Message {
     /// Set whether or not the message expects a reply.
     ///
     /// Set to true if you send a method call and do not want a reply.
-    pub fn set_no_reply(&self, v: bool) {
+    pub fn set_no_reply(&mut self, v: bool) {
         unsafe { ffi::dbus_message_set_no_reply(self.msg, if v { 1 } else { 0 }) }
     }
 
@@ -149,7 +149,7 @@ impl Message {
     /// Sets whether or not the message can cause a service to be auto-started.
     ///
     /// Defaults to true.
-    pub fn set_auto_start(&self, v: bool) {
+    pub fn set_auto_start(&mut self, v: bool) {
         unsafe { ffi::dbus_message_set_auto_start(self.msg, if v { 1 } else { 0 }) }
     }
 
