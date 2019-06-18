@@ -7,22 +7,21 @@
    someone calls the "Hello" method.
 */
 
-
 extern crate dbus;
-extern crate futures;
-extern crate tokio_timer;
 extern crate dbus_tokio;
+extern crate futures;
 extern crate tokio;
+extern crate tokio_timer;
 
-use std::time::Duration;
-use std::sync::Arc;
-use std::rc::Rc;
-use dbus::{Connection, BusType, NameFlag};
 use dbus::tree::MethodErr;
+use dbus::{BusType, Connection, NameFlag};
 use dbus_tokio::tree::{AFactory, ATree, ATreeServer};
 use dbus_tokio::AConnection;
+use std::rc::Rc;
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::reactor::Handle;
-use tokio::runtime::current_thread::Runtime;
+use tokio::runtime::current_thread;
 
 use futures::{Future, Stream};
 
@@ -30,7 +29,8 @@ fn main() {
     // Let's start by starting up a connection to the session bus and register a name.
     let c = Rc::new(Connection::get_private(BusType::Session).unwrap());
 
-    c.register_name("com.example.dbustest", NameFlag::ReplaceExisting as u32).unwrap();
+    c.register_name("com.example.dbustest", NameFlag::ReplaceExisting as u32)
+        .unwrap();
 
     // The choice of factory tells us what type of tree we want,
     // and if we want any extra data inside. We pick the simplest variant.
@@ -38,60 +38,70 @@ fn main() {
 
     // We create the signal first, since we'll need it in both inside the method callback
     // and when creating the tree.
-    let signal = Arc::new(f.signal("HelloHappened", ()).sarg::<&str,_>("sender"));
+    let signal = Arc::new(f.signal("HelloHappened", ()).sarg::<&str, _>("sender"));
     let signal2 = signal.clone();
 
     // We create a tree with one object path inside and make that path introspectable.
-    let tree = f.tree(ATree::new()).add(f.object_path("/hello", ()).introspectable().add(
+    let tree = f.tree(ATree::new()).add(
+        f.object_path("/hello", ()).introspectable().add(
+            // We add an interface to the object path...
+            f.interface("com.example.dbustest", ())
+                .add_m(
+                    // ...and a method inside the interface.
+                    f.amethod("Hello", (), move |m| {
+                        // This is the callback that will be called when another peer on the bus calls our method.
+                        // the callback receives "MethodInfo" struct and can return either an error, or a list of
+                        // messages to send back.
 
-        // We add an interface to the object path...
-        f.interface("com.example.dbustest", ()).add_m(
+                        // FIXME: This error should be properly handled instead of being unwrapped!
+                        let t: u32 = m.msg.read1().unwrap();
+                        let sleep_future = tokio_timer::sleep(Duration::from_millis(t as u64));
 
-            // ...and a method inside the interface.
-            f.amethod("Hello", (), move |m| {
-                // This is the callback that will be called when another peer on the bus calls our method.
-                // the callback receives "MethodInfo" struct and can return either an error, or a list of
-                // messages to send back.
+                        // These are the variables we need after the timeout period. We need to
+                        // clone all strings now, because the tree might get destroyed during the sleep.
+                        let sender = m.msg.sender().unwrap().into_static();
+                        let (pname, iname) =
+                            (m.path.get_name().clone(), m.iface.get_name().clone());
+                        let mret = m.msg.method_return();
+                        let signal3 = signal.clone();
 
-                // FIXME: This error should be properly handled instead of being unwrapped!
-                let t: u32 = m.msg.read1().unwrap();
-                let sleep_future = tokio_timer::sleep(Duration::from_millis(t as u64));
+                        sleep_future
+                            .and_then(move |_| {
+                                let s = format!("Hello {}!", sender);
+                                let mret = mret.append1(s);
+                                let sig = signal3.msg(&pname, &iname).append1(&*sender);
 
-                // These are the variables we need after the timeout period. We need to
-                // clone all strings now, because the tree might get destroyed during the sleep.
-                let sender = m.msg.sender().unwrap().into_static();
-                let (pname, iname) = (m.path.get_name().clone(), m.iface.get_name().clone());
-                let mret = m.msg.method_return();
-                let signal3 = signal.clone();
+                                // Two messages will be returned - one is the method return (and should always be there),
+                                // and in our case we also have a signal we want to send at the same time.
+                                Ok(vec![mret, sig])
+                            })
+                            .map_err(|e| MethodErr::failed(&e))
 
-                sleep_future.and_then(move |_| {
-                    let s = format!("Hello {}!", sender);
-                    let mret = mret.append1(s);
-                    let sig = signal3.msg(&pname, &iname).append1(&*sender);
-
-                    // Two messages will be returned - one is the method return (and should always be there),
-                    // and in our case we also have a signal we want to send at the same time.
-                    Ok(vec!(mret, sig))
-                }).map_err(|e| MethodErr::failed(&e))
-
-            // Our method has one output argument, no input arguments.
-            }).inarg::<u32,_>("sleep_millis")
-              .outarg::<&str,_>("reply")
-
-        // We also add the signal to the interface. This is mainly for introspection.
-        ).add_s(signal2)
-    ));
+                        // Our method has one output argument, no input arguments.
+                    })
+                    .inarg::<u32, _>("sleep_millis")
+                    .outarg::<&str, _>("reply"), // We also add the signal to the interface. This is mainly for introspection.
+                )
+                .add_s(signal2),
+        ),
+    );
 
     // We register all object paths in the tree.
     tree.set_registered(&c, true).unwrap();
 
-    // Setup Tokio
-    let mut rt = Runtime::new().unwrap();
-    let aconn = AConnection::new(c.clone(), Handle::default(), &mut rt).unwrap();
-    let server = ATreeServer::new(c.clone(), &tree, aconn.messages().unwrap());
+    // Setup a connection
+    let f = AConnection::new(c.clone(), Handle::default())
+        // Here is where you would handle failures to create a connection
+        .map_err(|_| ())
+        .and_then(|aconn| {
+            // Set up server
+            let server = ATreeServer::new(c.clone(), &tree, aconn.messages().unwrap());
 
-    // Make the server run forever
-    let server = server.for_each(|m| { println!("Unhandled message: {:?}", m); Ok(()) });
-    rt.block_on(server).unwrap();
-    rt.run().unwrap();
+            // Make the server run forever
+            server.for_each(|m| {
+                println!("Unhandled message: {:?}", m);
+                Ok(())
+            })
+        });
+    current_thread::block_on_all(f).unwrap();
 }
