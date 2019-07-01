@@ -3,6 +3,11 @@ use std::sync::Arc;
 use std::pin::Pin;
 use futures::channel::{oneshot, mpsc};
 
+use dbus::connection::{RequestNameReply, ReleaseNameReply};
+use dbus::strings::{BusName, Interface, Member};
+use dbus::message::{SignalArgs, MatchRule};
+
+
 use futures::task;
 use futures::future::ready;
 
@@ -14,7 +19,7 @@ pub mod stdintf;
 #[derive(Debug)]
 enum Command {
     AddReply(u32, oneshot::Sender<dbus::Message>),
-    AddStream(dbus::MatchRule<'static>, mpsc::UnboundedSender<dbus::Message>),
+    AddStream(MatchRule<'static>, mpsc::UnboundedSender<dbus::Message>),
     Quit,
 }
 
@@ -110,8 +115,8 @@ impl<T> futures::TryStream for SignalStream<T> {
     }
 }
 
-impl<T: dbus::SignalArgs + 'static> SignalStream<T> {
-    fn new(mr: dbus::MatchRule<'static>, handle: ConnHandle) -> Self {
+impl<T: SignalArgs + 'static> SignalStream<T> {
+    fn new(mr: MatchRule<'static>, handle: ConnHandle) -> Self {
         use crate::stdintf::org_freedesktop::DBus;
         use futures::{TryFutureExt, TryStreamExt, FutureExt, StreamExt};
 
@@ -142,14 +147,14 @@ pub struct ConnPath<'a> {
     /// A clone of the connection handle
     pub conn: ConnHandle,
     /// Destination, i e what D-Bus service you're communicating with
-    pub dest: dbus::BusName<'a>,
+    pub dest: BusName<'a>,
     /// Object path on the destination
     pub path: dbus::Path<'a>,
 }
 
 impl<'a> ConnPath<'a> {
     /// Make a D-Bus method call.
-    pub fn method_call<A: dbus::arg::AppendAll>(&self, i: &dbus::Interface, m: &dbus::Member, args: A) -> ReplyMessage {
+    pub fn method_call<A: dbus::arg::AppendAll>(&self, i: &Interface, m: &Member, args: A) -> ReplyMessage {
         let mut msg = dbus::Message::method_call(&self.dest, &self.path, i, m);
         args.append(&mut dbus::arg::IterAppend::new(&mut msg));
         match self.conn.send(msg) {
@@ -160,7 +165,7 @@ impl<'a> ConnPath<'a> {
 
 
     /// Make a D-Bus method call, where you can append arguments inside the closure.
-    pub fn method_call_with_args<F>(&self, i: &dbus::Interface, m: &dbus::Member, f: F) -> ReplyMessage 
+    pub fn method_call_with_args<F>(&self, i: &Interface, m: &Member, f: F) -> ReplyMessage 
     where F: FnOnce(&mut dbus::Message)
     {
         let mut msg = dbus::Message::method_call(&self.dest, &self.path, i, m);
@@ -172,21 +177,21 @@ impl<'a> ConnPath<'a> {
     }
 
     /// Emit a D-Bus signal, where you can append arguments inside the closure.
-    pub fn signal_with_args<F: FnOnce(&mut dbus::Message)>(&self, i: &dbus::Interface, m: &dbus::Member, f: F) -> Result<u32, Error> {
+    pub fn signal_with_args<F: FnOnce(&mut dbus::Message)>(&self, i: &Interface, m: &Member, f: F) -> Result<u32, Error> {
         let mut msg = dbus::Message::signal(&self.path, i, m);
         f(&mut msg);
         self.conn.send(msg)
     }
 
     /// Emit a D-Bus signal, where the arguments are in a struct.
-    pub fn emit<S: dbus::SignalArgs>(&self, signal: &S) -> Result<u32, Error> {
+    pub fn emit<S: SignalArgs>(&self, signal: &S) -> Result<u32, Error> {
         let msg = signal.to_emit_message(&self.path);
         self.conn.send(msg)
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct ConnHandle(Arc<dbus::TxRx>, mpsc::UnboundedSender<Command>);
+pub struct ConnHandle(Arc<dbus::channel::Channel>, mpsc::UnboundedSender<Command>);
 
 impl ConnHandle {
     /// Get the connection's unique name.
@@ -203,7 +208,7 @@ impl ConnHandle {
     }
 
     /// Create a convenience struct for easier calling of many methods on the same destination and path.
-    pub fn with_path<'a, D: Into<dbus::BusName<'a>>, P: Into<dbus::Path<'a>>>(&'a self, dest: D, path: P) -> ConnPath<'a> {
+    pub fn with_path<'a, D: Into<BusName<'a>>, P: Into<dbus::Path<'a>>>(&'a self, dest: D, path: P) -> ConnPath<'a> {
         ConnPath { conn: self.clone(), dest: dest.into(), path: path.into() }
     }
 
@@ -213,7 +218,7 @@ impl ConnHandle {
     }
 
     /// If a message matches the rule, it is sent to the stream. Note: Currently only works for signals.
-    pub fn add_stream(&self, rule: dbus::MatchRule<'static>) -> MessageStream {
+    pub fn add_stream(&self, rule: MatchRule<'static>) -> MessageStream {
         let (s, r) = mpsc::unbounded();
         MessageStream(self.1.unbounded_send(Command::AddStream(rule, s)).map(|_| r).map_err(|e| Some(Error::failed(&e))))
     }
@@ -221,7 +226,7 @@ impl ConnHandle {
     /// Returns a stream of corresponding signals, optionally filtered on sender and path.
     ///
     /// Makes a call to the D-Bus server to add the match as well.
-    pub fn add_signal_stream<T: dbus::SignalArgs + 'static>(&self, sender: Option<dbus::BusName<'static>>, path: Option<dbus::Path<'static>>) -> SignalStream<T>
+    pub fn add_signal_stream<T: SignalArgs + 'static>(&self, sender: Option<BusName<'static>>, path: Option<dbus::Path<'static>>) -> SignalStream<T>
     {
         let mr = T::match_rule(sender.as_ref(), path.as_ref()).into_static();
         SignalStream::new(mr, self.clone())
@@ -230,7 +235,7 @@ impl ConnHandle {
     /// Request a name on the D-Bus.
     ///
     /// For detailed information on the flags and return values, see the libdbus documentation.
-    pub fn request_name(&self, name: &str, allow_replacement: bool, replace_existing: bool, do_not_queue: bool) -> MethodReply<dbus::RequestNameReply> {
+    pub fn request_name(&self, name: &str, allow_replacement: bool, replace_existing: bool, do_not_queue: bool) -> MethodReply<RequestNameReply> {
         let flags: u32 = 
             if allow_replacement { 1 } else { 0 } +
             if replace_existing { 2 } else { 0 } +
@@ -238,18 +243,18 @@ impl ConnHandle {
         let m = self.with_dbus_path().method_call(&"org.freedesktop.DBus".into(), &"RequestName".into(), (name, flags));
         MethodReply::from_msg(m, |m| {
             let arg0: u32 = m.read1()?;
-            use dbus::RequestNameReply::*;
+            use dbus::connection::RequestNameReply::*;
             let all = [PrimaryOwner, InQueue, Exists, AlreadyOwner];
             all.into_iter().find(|x| **x as u32 == arg0).map(|x| *x).ok_or_else(|| Error::failed(&"Invalid reply from DBus server"))
         })
     }
 
     /// Release a previoulsy requested name on the D-Bus.
-    pub fn release_name(&self, name: &str) -> MethodReply<dbus::ReleaseNameReply> {
+    pub fn release_name(&self, name: &str) -> MethodReply<ReleaseNameReply> {
         let m = self.with_dbus_path().method_call(&"org.freedesktop.DBus".into(), &"ReleaseName".into(), (name,));
         MethodReply::from_msg(m, |m| {
             let arg0: u32 = m.read1()?;
-            use dbus::ReleaseNameReply::*;
+            use dbus::connection::ReleaseNameReply::*;
             let all = [Released, NonExistent, NotOwner];
             all.into_iter().find(|x| **x as u32 == arg0).map(|x| *x).ok_or_else(|| Error::failed(&"Invalid reply from DBus server"))
         })

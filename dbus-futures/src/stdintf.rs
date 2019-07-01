@@ -275,7 +275,7 @@ pub struct DBusNameOwnerChanged {
     pub new_owner: String,
 }
 
-impl dbus::SignalArgs for DBusNameOwnerChanged {
+impl dbus::message::SignalArgs for DBusNameOwnerChanged {
     const NAME: &'static str = "NameOwnerChanged";
     const INTERFACE: &'static str = "org.freedesktop.DBus";
     fn append(&self, i: &mut arg::IterAppend) {
@@ -296,7 +296,7 @@ pub struct DBusNameLost {
     pub arg0: String,
 }
 
-impl dbus::SignalArgs for DBusNameLost {
+impl dbus::message::SignalArgs for DBusNameLost {
     const NAME: &'static str = "NameLost";
     const INTERFACE: &'static str = "org.freedesktop.DBus";
     fn append(&self, i: &mut arg::IterAppend) {
@@ -313,7 +313,7 @@ pub struct DBusNameAcquired {
     pub arg0: String,
 }
 
-impl dbus::SignalArgs for DBusNameAcquired {
+impl dbus::message::SignalArgs for DBusNameAcquired {
     const NAME: &'static str = "NameAcquired";
     const INTERFACE: &'static str = "org.freedesktop.DBus";
     fn append(&self, i: &mut arg::IterAppend) {
@@ -378,7 +378,7 @@ pub struct DBusPropertiesPropertiesChanged {
     pub invalidated_properties: Vec<String>,
 }
 
-impl dbus::SignalArgs for DBusPropertiesPropertiesChanged {
+impl dbus::message::SignalArgs for DBusPropertiesPropertiesChanged {
     const NAME: &'static str = "PropertiesChanged";
     const INTERFACE: &'static str = "org.freedesktop.DBus.Properties";
     fn append(&self, i: &mut arg::IterAppend) {

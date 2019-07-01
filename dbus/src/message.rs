@@ -2,11 +2,10 @@
 
 use std::{fmt, mem, ptr};
 use super::{ffi, Error, libc, to_c_str, c_str_to_slice, init_dbus};
-use super::Connection;
 use crate::strings::{BusName, Path, Interface, Member, ErrorName};
 use std::ffi::CStr;
 
-use super::arg::{Append, AppendAll, IterAppend, ReadAll, Get, Iter, Arg, RefArg, TypeMismatchError};
+use super::arg::{Append, AppendAll, IterAppend, Get, Iter, Arg, RefArg, TypeMismatchError};
 
 pub use crate::ffi::DBusMessageType as MessageType;
 
@@ -98,6 +97,7 @@ impl Message {
     }
 
     /// The old way to create a new error reply
+    #[deprecated]
     pub fn new_error(m: &Message, error_name: &str, error_message: &str) -> Option<Message> {
         let (en, em) = (to_c_str(error_name), to_c_str(error_message));
         let ptr = unsafe { ffi::dbus_message_new_error(m.msg, en.as_ptr(), em.as_ptr()) };
@@ -412,64 +412,6 @@ impl Drop for Message {
 impl fmt::Debug for Message {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "{:?}", self.headers())
-    }
-}
-
-/// A convenience struct that wraps connection, destination and path.
-///
-/// Useful if you want to make many method calls to the same destination path.
-#[derive(Clone, Debug)]
-pub struct ConnPath<'a, C> {
-    /// Some way to access the connection, e g a &Connection or Rc<Connection>
-    pub conn: C,
-    /// Destination, i e what D-Bus service you're communicating with
-    pub dest: BusName<'a>,
-    /// Object path on the destination
-    pub path: Path<'a>,
-    /// Timeout in milliseconds for blocking method calls
-    pub timeout: i32,
-}
-
-impl<'a, C: ::std::ops::Deref<Target=Connection>> ConnPath<'a, C> {
-    /// Make a D-Bus method call, where you can append arguments inside the closure.
-    pub fn method_call_with_args<F: FnOnce(&mut Message)>(&self, i: &Interface, m: &Member, f: F) -> Result<Message, Error> {
-        let mut msg = Message::method_call(&self.dest, &self.path, i, m);
-        f(&mut msg);
-        self.conn.send_with_reply_and_block(msg, self.timeout)
-    }
-
-    /// Emit a D-Bus signal, where you can append arguments inside the closure.
-    pub fn signal_with_args<F: FnOnce(&mut Message)>(&self, i: &Interface, m: &Member, f: F) -> Result<u32, Error> {
-        let mut msg = Message::signal(&self.path, i, m);
-        f(&mut msg);
-        self.conn.send(msg).map_err(|_| Error::new_custom("org.freedesktop.DBus.Error.Failed", "Sending signal failed"))
-    }
-
-    /// Emit a D-Bus signal, where the arguments are in a struct.
-    pub fn emit<S: SignalArgs + AppendAll>(&self, signal: &S) -> Result<u32, Error> {
-        let msg = signal.to_emit_message(&self.path);
-        self.conn.send(msg).map_err(|_| Error::new_custom("org.freedesktop.DBus.Error.Failed", "Sending signal failed"))
-    }
-
-    /// Make a method call using typed input and output arguments.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use dbus::connection::{Connection, BusType};
-    ///
-    /// let conn = Connection::get_private(BusType::Session)?;
-    /// let dest = conn.with_path("org.freedesktop.DBus", "/", 5000);
-    /// let (has_owner,): (bool,) = dest.method_call("org.freedesktop.DBus", "NameHasOwner", ("dummy.name.without.owner",))?;
-    /// assert_eq!(has_owner, false);
-    /// # Ok::<(), Box<std::error::Error>>(())
-    /// ```
-    pub fn method_call<'i, 'm, R: ReadAll, A: AppendAll, I: Into<Interface<'i>>, M: Into<Member<'m>>>(&self, i: I, m: M, args: A) -> Result<R, Error> {
-        let mut r = self.method_call_with_args(&i.into(), &m.into(), |mut msg| {
-            args.append(&mut IterAppend::new(&mut msg));
-        })?;
-        r.as_result()?;
-        Ok(R::read(&mut r.iter_init())?)
     }
 }
 
