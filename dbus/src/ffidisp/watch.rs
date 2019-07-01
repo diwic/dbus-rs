@@ -1,6 +1,6 @@
 use crate::ffi;
 use libc;
-use crate::Connection;
+use crate::ffidisp::Connection;
 
 use std::mem;
 use std::sync::{Mutex, RwLock};
@@ -14,7 +14,7 @@ use std::os::raw::{c_void, c_uint};
 /// extern crate libc;
 /// extern crate dbus;
 /// fn main() {
-///     use dbus::connection::{Connection, BusType, WatchEvent};
+///     use dbus::ffidisp::{Connection, BusType, WatchEvent};
 ///     let c = Connection::get_private(BusType::Session).unwrap();
 ///
 ///     // Get a list of fds to poll for
@@ -111,7 +111,7 @@ pub struct WatchList {
 impl WatchList {
     pub fn new(c: &Connection, on_update: Box<Fn(Watch) + Send>) -> Box<WatchList> {
         let w = Box::new(WatchList { on_update: Mutex::new(on_update), watches: RwLock::new(vec!()), enabled_fds: Mutex::new(vec!()) });
-        if unsafe { ffi::dbus_connection_set_watch_functions(crate::connection::conn_handle(c),
+        if unsafe { ffi::dbus_connection_set_watch_functions(crate::ffidisp::connection::conn_handle(c),
             Some(add_watch_cb), Some(remove_watch_cb), Some(toggled_watch_cb), &*w as *const _ as *mut _, None) } == 0 {
             panic!("dbus_connection_set_watch_functions failed");
         }

@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 
 use crate::{Error, Message, to_c_str};
-use crate::connection::{BusType, Watch};
+use crate::ffidisp::{BusType, Watch};
 use std::{ptr, str};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_int};

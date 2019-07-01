@@ -1,6 +1,6 @@
 extern crate dbus;
 
-use dbus::connection::{Connection, BusType};
+use dbus::ffidisp::{Connection, BusType};
 
 fn main() -> Result<(), Box<std::error::Error>> {
     // First open up a connection to the session bus.

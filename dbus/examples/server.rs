@@ -11,7 +11,7 @@
 extern crate dbus;
 
 use std::sync::Arc;
-use dbus::connection::{Connection, BusType, NameFlag};
+use dbus::ffidisp::{Connection, BusType, NameFlag};
 use dbus::tree::Factory;
 
 fn main() {

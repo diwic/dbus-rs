@@ -4,13 +4,17 @@ use std::pin::Pin;
 
 use crate::{Error, ConnHandle, Command};
 
+use dbus::channel::{MessageDispatcher, MessageDispatcherConfig, Channel};
+use dbus::message::MatchRule;
+use dbus::connection::Watch;
+
 use futures::task;
 use futures::channel::{mpsc, oneshot};
 
 /// Internal trait. Don't mess with it unless you want to use it for
 /// your own main loop.
 pub trait IoHandler {
-    fn new(watches: &[dbus::Watch]) -> Result<Self, Error> where Self: Sized;
+    fn new(watches: &[Watch]) -> Result<Self, Error> where Self: Sized;
     fn after_read_write(&mut self, ctx: &mut task::Context);
 }
 
@@ -22,11 +26,11 @@ pub trait IoHandler {
 ///  * spawn the Connection onto a compatible reactor/executor:
 ///    This must match the IoHandler you created the Connection with.
 pub struct Connection {
-    txrx: Arc<dbus::TxRx>,
+    txrx: Arc<Channel>,
     io: Box<IoHandler>,
     command_sender: mpsc::UnboundedSender<Command>,
     command_receiver: mpsc::UnboundedReceiver<Command>,
-    dispatcher: dbus::MessageDispatcher<DispatcherCfg>,
+    dispatcher: MessageDispatcher<DispatcherCfg>,
     quit: bool,
 }
 
@@ -101,16 +105,16 @@ impl futures::Future for Connection {
 }
 
 struct DispatcherCfg {
-    txrx: Arc<dbus::TxRx>,
-    streams: Vec<(dbus::MatchRule<'static>, mpsc::UnboundedSender<dbus::Message>)>,
+    txrx: Arc<dbus::channel::Channel>,
+    streams: Vec<(MatchRule<'static>, mpsc::UnboundedSender<dbus::Message>)>,
 }
 
-impl dbus::MessageDispatcherConfig for DispatcherCfg {
+impl MessageDispatcherConfig for DispatcherCfg {
     type Reply = oneshot::Sender<dbus::Message>;
-    fn on_reply(r: Self::Reply, msg: dbus::Message, _: &mut dbus::MessageDispatcher<Self>) {
+    fn on_reply(r: Self::Reply, msg: dbus::Message, _: &mut MessageDispatcher<Self>) {
         let _ = r.send(msg); // If the receiver has been canceled, the best thing is probably to ignore.
     }
-    fn on_signal(msg: dbus::Message, cfg: &mut dbus::MessageDispatcher<Self>) {
+    fn on_signal(msg: dbus::Message, cfg: &mut MessageDispatcher<Self>) {
         for &mut (ref rule, ref mut sender) in &mut cfg.inner_mut().streams {
             if rule.matches(&msg) {
                 let _ = sender.unbounded_send(msg); // TODO: If receiver has been dropped, the best thing is probably to remove the receiver.
@@ -118,7 +122,7 @@ impl dbus::MessageDispatcherConfig for DispatcherCfg {
             }
         }
     }
-    fn on_send(msg: dbus::Message, cfg: &mut dbus::MessageDispatcher<Self>) { cfg.inner().txrx.send(msg).unwrap(); }
+    fn on_send(msg: dbus::Message, cfg: &mut MessageDispatcher<Self>) { cfg.inner().txrx.send(msg).unwrap(); }
 }
 
 

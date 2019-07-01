@@ -17,7 +17,7 @@ extern crate tokio;
 use std::time::Duration;
 use std::sync::Arc;
 use std::rc::Rc;
-use dbus::connection::{Connection, BusType, NameFlag};
+use dbus::ffidisp::{Connection, BusType, NameFlag};
 use dbus::tree::MethodErr;
 use dbus_tokio::tree::{AFactory, ATree, ATreeServer};
 use dbus_tokio::AConnection;
