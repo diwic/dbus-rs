@@ -1,6 +1,6 @@
 extern crate dbus;
 
-use dbus::{Connection, BusType, stdintf, arg};
+use dbus::{Connection, BusType, arg};
 use std::collections::HashMap;
 
 fn print_refarg(value: &arg::RefArg) {
@@ -16,7 +16,7 @@ fn main() {
     // in this case we'll use OrgFreedesktopDBusProperties, which allows us to call "get".
     let c = Connection::get_private(BusType::Session).unwrap();
     let p = c.with_path("org.mpris.MediaPlayer2.rhythmbox", "/org/mpris/MediaPlayer2", 5000);
-    use crate::stdintf::org_freedesktop_dbus::Properties;
+    use dbus::ffidisp::stdintf::org_freedesktop_dbus::Properties;
 
     // The Metadata property is a Dict<String, Variant>. 
 

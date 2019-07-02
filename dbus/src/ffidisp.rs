@@ -9,6 +9,8 @@ use crate::strings::{BusName, Path, Member, Interface};
 use crate::arg::{AppendAll, ReadAll, IterAppend};
 use crate::message::SignalArgs;
 
+pub mod stdintf;
+
 mod connection;
 
 pub use connection::{Connection, ConnMsgs};

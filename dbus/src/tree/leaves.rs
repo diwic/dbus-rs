@@ -5,7 +5,7 @@ use crate::strings::{Interface as IfaceName, Member, Signature, Path};
 use crate::{arg, Message};
 use std::fmt;
 use std::cell::RefCell;
-use crate::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged;
+use crate::ffidisp::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged;
 
 
 // Workaround for https://github.com/rust-lang/rust/issues/31518
