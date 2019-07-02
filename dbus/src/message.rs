@@ -1,13 +1,24 @@
 //! Contains structs and traits closely related to D-Bus messages.
 
-use std::{fmt, mem, ptr};
+use std::{fmt, ptr};
 use super::{ffi, Error, libc, to_c_str, c_str_to_slice, init_dbus};
 use crate::strings::{BusName, Path, Interface, Member, ErrorName};
 use std::ffi::CStr;
 
 use super::arg::{Append, AppendAll, IterAppend, Get, Iter, Arg, RefArg, TypeMismatchError};
 
-pub use crate::ffi::DBusMessageType as MessageType;
+#[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
+/// One of the four different message types.
+pub enum MessageType {
+    /// This is a method call D-Bus message
+    MethodCall = 1,
+    /// This is a method return Ok D-Bus message, used when the method call message was successfully processed
+    MethodReturn = 2,
+    /// This is a method return with error D-Bus message, used when the method call message could not be handled 
+    Error = 3,
+    /// This is a signal, usually sent to whoever wants to listen
+    Signal = 4,
+}
 
 mod signalargs;
 pub use self::signalargs::SignalArgs;
@@ -319,7 +330,13 @@ impl Message {
 
     /// Gets the MessageType of the Message.
     pub fn msg_type(&self) -> MessageType {
-        unsafe { mem::transmute(ffi::dbus_message_get_type(self.msg)) }
+        match unsafe { ffi::dbus_message_get_type(self.msg) } {
+            1 => MessageType::MethodCall,
+            2 => MessageType::MethodReturn,
+            3 => MessageType::Error,
+            4 => MessageType::Signal,
+            x => panic!("Invalid message type {}", x),
+        }
     }
 
     fn msg_internal_str<'a>(&'a self, c: *const libc::c_char) -> Option<&'a [u8]> {

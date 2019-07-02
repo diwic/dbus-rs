@@ -82,7 +82,6 @@ impl<C: MessageDispatcherConfig> MessageDispatcher<C> {
             MessageType::Signal => C::on_signal(msg, self),
             MessageType::MethodCall => C::on_method_call(msg, self),
             MessageType::Error | MessageType::MethodReturn => {},
-            MessageType::Invalid => unreachable!(),
         }
     }
 
