@@ -42,6 +42,7 @@ impl Connection {
 
     fn dispatch(&self, msg: Message) {
         if let Some(msg) = run_filters(&mut self.filters.borrow_mut(), msg, |cb, msg| { cb(msg) }) {
+            unimplemented!("{:?}", msg)
         }
     }
 
