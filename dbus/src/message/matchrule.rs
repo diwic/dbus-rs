@@ -27,7 +27,6 @@ fn msg_type_str(m: MessageType) -> &'static str {
         MethodCall => "method_call",
         MethodReturn => "method_return",
         Error => "error",
-        Invalid => unreachable!(),
     }
 }
 

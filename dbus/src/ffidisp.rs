@@ -126,7 +126,6 @@ impl From<Message> for ConnectionItem {
             MessageType::MethodReturn => ConnectionItem::MethodReturn(m),
             MessageType::Error => ConnectionItem::MethodReturn(m),
             MessageType::MethodCall => ConnectionItem::MethodCall(m),
-            _ => panic!("unknown message type {:?} received from D-Bus", mtype),
         }
     }
 }
