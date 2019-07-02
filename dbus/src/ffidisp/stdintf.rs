@@ -6,8 +6,8 @@
 //!
 //! # Example
 //! ```
-//! use dbus::{Connection, BusType};
-//! use dbus::stdintf::org_freedesktop_dbus::Introspectable;
+//! use dbus::ffidisp::{Connection, BusType};
+//! use dbus::ffidisp::stdintf::org_freedesktop_dbus::Introspectable;
 //! let c = Connection::get_private(BusType::Session).unwrap();
 //! let p = c.with_path("org.freedesktop.DBus", "/", 10000);
 //! println!("Introspection XML: {}", p.introspect().unwrap());

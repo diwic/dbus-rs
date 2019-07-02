@@ -12,7 +12,7 @@ use crate::strings::{BusName, Path, Interface, Member};
 /// ```rust,no_run
 /// use dbus::{Connection, BusType};
 /// use dbus::message::SignalArgs;
-/// use dbus::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
+/// use dbus::ffidisp::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
 ///
 /// let c = Connection::get_private(BusType::Session).unwrap();
 /// // Add a match for this signal
@@ -77,8 +77,8 @@ pub trait SignalArgs {
 
 #[test]
 fn intf_removed() {
-    use crate::{Connection, BusType};
-    use crate::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
+    use crate::ffidisp::{Connection, BusType};
+    use crate::ffidisp::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
     let c = Connection::get_private(BusType::Session).unwrap();
     let mstr = IR::match_str(Some(&c.unique_name().into()), Some(&"/hello".into()));
     println!("Match str: {}", mstr);

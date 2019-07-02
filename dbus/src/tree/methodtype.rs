@@ -1,7 +1,8 @@
 // Methods and method types. Glue to make stuff generic over MFn, MFnMut and MSync
 
 use std::fmt;
-use crate::{Message, stdintf};
+use crate::Message;
+use crate::ffidisp::stdintf;
 use crate::arg::{Iter, IterAppend, TypeMismatchError};
 use std::marker::PhantomData;
 use super::{Method, Interface, Property, ObjectPath, Tree};

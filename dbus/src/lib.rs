@@ -27,7 +27,6 @@ pub mod message;
 pub mod ffidisp;
 pub use crate::ffidisp::{Connection, ConnPath, BusType};
 
-
 mod error;
 pub use error::Error;
 
@@ -41,8 +40,6 @@ pub mod strings;
 pub use crate::strings::{Signature, Path};
 
 pub mod arg;
-
-pub mod stdintf;
 
 pub mod tree;
 

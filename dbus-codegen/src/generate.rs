@@ -404,7 +404,7 @@ fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box
         *s += "    }\n";
     }
 
-    let propintf = if opts.futures { "dbusf::stdintf::org_freedesktop::DBusProperties" } else { "dbus::stdintf::org_freedesktop_dbus::Properties" };
+    let propintf = if opts.futures { "dbusf::stdintf::org_freedesktop::DBusProperties" } else { "dbus::ffidisp::stdintf::org_freedesktop_dbus::Properties" };
 
     for p in i.props.iter().filter(|p| p.can_get()) {
         *s += "\n";

@@ -36,19 +36,19 @@ impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> Device for dbus::ConnPat
     }
 
     fn get_checking(&self) -> Result<bool, Self::Err> {
-        <Self as dbus::stdintf::org_freedesktop_dbus::Properties>::get(&self, "com.example.dbus.rs.device", "checking")
+        <Self as dbus::ffidisp::stdintf::org_freedesktop_dbus::Properties>::get(&self, "com.example.dbus.rs.device", "checking")
     }
 
     fn get_description(&self) -> Result<String, Self::Err> {
-        <Self as dbus::stdintf::org_freedesktop_dbus::Properties>::get(&self, "com.example.dbus.rs.device", "description")
+        <Self as dbus::ffidisp::stdintf::org_freedesktop_dbus::Properties>::get(&self, "com.example.dbus.rs.device", "description")
     }
 
     fn get_online(&self) -> Result<bool, Self::Err> {
-        <Self as dbus::stdintf::org_freedesktop_dbus::Properties>::get(&self, "com.example.dbus.rs.device", "online")
+        <Self as dbus::ffidisp::stdintf::org_freedesktop_dbus::Properties>::get(&self, "com.example.dbus.rs.device", "online")
     }
 
     fn set_online(&self, value: bool) -> Result<(), Self::Err> {
-        <Self as dbus::stdintf::org_freedesktop_dbus::Properties>::set(&self, "com.example.dbus.rs.device", "online", value)
+        <Self as dbus::ffidisp::stdintf::org_freedesktop_dbus::Properties>::set(&self, "com.example.dbus.rs.device", "online", value)
     }
 }
 
