@@ -219,7 +219,8 @@ mod test {
             if let Some(q) = new_fds { fds = q; new_fds = None };
 
             for f in fds.iter_mut() { f.revents = 0 };
-            assert!(unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::c_ulong, 1000) } > 0);
+
+            assert!(unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, 1000) } > 0);
 
             for f in fds.iter().filter(|pfd| pfd.revents != 0) {
                 let m = WatchEvent::from_revents(f.revents);
