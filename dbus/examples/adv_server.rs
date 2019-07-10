@@ -70,7 +70,7 @@ fn create_iface(check_complete_s: mpsc::Sender<i32>) -> (Interface<MTFn<TData>, 
             })
             .on_set(|i, m| {
                 let dev: &Arc<Device> = m.path.get_data();
-                let b: bool = try!(i.read());
+                let b: bool = i.read()?;
                 if b && dev.checking.get() {
                     return Err(MethodErr::failed(&"Device currently under check, cannot bring online"))
                 }
@@ -135,6 +135,9 @@ fn create_tree(devices: &[Arc<Device>], iface: &Arc<Interface<MTFn<TData>, TData
         tree = tree.add(f.object_path(dev.path.clone(), dev.clone())
             .introspectable()
             .add(iface.clone())
+            // We also make sure that any messages that don't specify an interface
+            // get sent to our interface
+            .default_interface(iface.get_name().clone())
         );
     }
     tree 
@@ -150,9 +153,9 @@ fn run() -> Result<(), Box<std::error::Error>> {
     let tree = create_tree(&devices, &Arc::new(iface));
 
     // Setup DBus connection
-    let c = try!(Connection::get_private(BusType::Session));
-    try!(c.register_name("com.example.dbus.rs.advancedserverexample", 0));
-    try!(tree.set_registered(&c, true));
+    let c = Connection::get_private(BusType::Session)?;
+    c.register_name("com.example.dbus.rs.advancedserverexample", 0)?;
+    tree.set_registered(&c, true)?;
 
     // ...and serve incoming requests.
     c.add_handler(tree);
@@ -165,7 +168,8 @@ fn run() -> Result<(), Box<std::error::Error>> {
         if let Ok(idx) = check_complete_r.try_recv() {
             let dev = &devices[idx as usize];
             dev.checking.set(false);
-            try!(c.send(sig.msg(&dev.path, &"com.example.dbus.rs.device".into())).map_err(|_| "Sending DBus signal failed"));
+            c.send(sig.msg(&dev.path, &"com.example.dbus.rs.device".into()))
+                .map_err(|_| "Sending DBus signal failed")?;
         }
     }
 }
