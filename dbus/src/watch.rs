@@ -83,7 +83,7 @@ impl Watch {
             if self.writable() { libc::POLLOUT } else { 0 },
         }
     }
-
+/*
     pub (crate) unsafe fn from_raw(watch: *mut ffi::DBusWatch) -> Self {
         let mut w = Watch { fd: ffi::dbus_watch_get_unix_fd(watch), read: false, write: false};
         let enabled = ffi::dbus_watch_get_enabled(watch) != 0;
@@ -94,7 +94,7 @@ impl Watch {
         }
         w
     }
-
+*/
 }
 
 impl AsRawFd for Watch {
