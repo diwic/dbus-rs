@@ -46,12 +46,6 @@ mod watch;
 mod connection;
 mod signalargs;
 
-mod connection2;
-mod dispatcher;
-pub use connection2::TxRx;
-pub use dispatcher::{MessageDispatcher, MessageDispatcherConfig};
-// pub mod crossroads;
-
 mod matchrule;
 pub use matchrule::MatchRule;
 
