@@ -14,7 +14,7 @@ readme = "../README.md"
 edition = "2018"
 
 [dependencies]
-libc = "0.2.7"
+libc = "0.2.60"
 libdbus-sys = { path = "../libdbus-sys", version = "0.2" }
 
 [dev-dependencies]
