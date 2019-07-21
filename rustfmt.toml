@@ -1,0 +1,8 @@
+max_width = 140
+fn_single_line = true
+where_single_line = true
+unstable_features = true
+
+"Please don't run rustfmt on this repository" = true
+# I will reconsider when rustfmt is mature enough, e g if this bug is fixed:
+# https://github.com/rust-lang/rustfmt/issues/3699
