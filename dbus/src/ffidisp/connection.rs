@@ -548,10 +548,10 @@ impl<'a> Iterator for ConnectionItems<'a> {
             }
 
             if let Some(t) = self.timeout_ms {
-		let r = unsafe { ffi::dbus_connection_read_write_dispatch(self.c.conn(), t as c_int) };
-		self.c.check_panic();
-		if !self.c.i.pending_items.borrow().is_empty() { continue };
-		if r == 0 { return None; }
+                let r = unsafe { ffi::dbus_connection_read_write_dispatch(self.c.conn(), t as c_int) };
+                self.c.check_panic();
+                if !self.c.i.pending_items.borrow().is_empty() { continue };
+                if r == 0 { return None; }
             }
 
             let r = unsafe { ffi::dbus_connection_dispatch(self.c.conn()) };
@@ -588,10 +588,10 @@ impl<C: ops::Deref<Target = Connection>> Iterator for ConnMsgs<C> {
             if let Some(ci) = i { return Some(ci); }
 
             if let Some(t) = self.timeout_ms {
-		let r = unsafe { ffi::dbus_connection_read_write_dispatch(self.conn.conn(), t as c_int) };
-		self.conn.check_panic();
-		if !iconn.pending_items.borrow().is_empty() { continue };
-		if r == 0 { return None; }
+                let r = unsafe { ffi::dbus_connection_read_write_dispatch(self.conn.conn(), t as c_int) };
+                self.conn.check_panic();
+                if !iconn.pending_items.borrow().is_empty() { continue };
+                if r == 0 { return None; }
             }
 
             let r = unsafe { ffi::dbus_connection_dispatch(self.conn.conn()) };

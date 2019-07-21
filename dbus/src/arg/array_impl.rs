@@ -15,7 +15,7 @@ use std::hash::Hash;
 const FIXED_ARRAY_ALIGNMENTS: [(ArgType, usize); 9] = [
     (ArgType::Byte, 1),
     (ArgType::Int16, 2),
-    (ArgType::UInt16, 2),	
+    (ArgType::UInt16, 2),
     (ArgType::UInt32, 4),
     (ArgType::Int32, 4),
     (ArgType::Boolean, 4),
@@ -447,12 +447,12 @@ pub fn get_array_refarg<'a>(i: &mut Iter<'a>) -> Box<RefArg> {
         ArgType::Int64 => get_fixed_array_refarg::<i64>(i),
         ArgType::UInt64 => get_fixed_array_refarg::<u64>(i),
         ArgType::Double => get_fixed_array_refarg::<f64>(i),
-	ArgType::String => get_var_array_refarg::<String, _>(i, |si| si.get()),
-	ArgType::ObjectPath => get_var_array_refarg::<Path<'static>, _>(i, |si| si.get::<Path>().map(|s| s.into_static())),
-	ArgType::Signature => get_var_array_refarg::<Signature<'static>, _>(i, |si| si.get::<Signature>().map(|s| s.into_static())),
-	ArgType::Variant => get_var_array_refarg::<Variant<Box<RefArg>>, _>(i, |si| Variant::new_refarg(si)),
-	ArgType::Boolean => get_var_array_refarg::<bool, _>(i, |si| si.get()),
-	ArgType::Invalid => panic!("Array with Invalid ArgType"),
+        ArgType::String => get_var_array_refarg::<String, _>(i, |si| si.get()),
+        ArgType::ObjectPath => get_var_array_refarg::<Path<'static>, _>(i, |si| si.get::<Path>().map(|s| s.into_static())),
+        ArgType::Signature => get_var_array_refarg::<Signature<'static>, _>(i, |si| si.get::<Signature>().map(|s| s.into_static())),
+        ArgType::Variant => get_var_array_refarg::<Variant<Box<RefArg>>, _>(i, |si| Variant::new_refarg(si)),
+        ArgType::Boolean => get_var_array_refarg::<bool, _>(i, |si| si.get()),
+        ArgType::Invalid => panic!("Array with Invalid ArgType"),
         ArgType::Array => get_internal_array(i),
         ArgType::DictEntry => {
             let key = ArgType::from_i32(i.signature().as_bytes()[2] as i32).unwrap(); // The third character, after "a{", is our key.
