@@ -15,7 +15,7 @@ pub struct MethodErr(ErrorName<'static>, String);
 
 impl MethodErr {
     /// Create an Invalid Args MethodErr.
-    pub fn invalid_arg<T: fmt::Debug>(a: &T) -> MethodErr {
+    pub fn invalid_arg<T: fmt::Debug + ?Sized>(a: &T) -> MethodErr {
         ("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a)).into()
     }
     /// Create a MethodErr that there are not enough arguments given.
@@ -23,23 +23,23 @@ impl MethodErr {
         ("org.freedesktop.DBus.Error.InvalidArgs", "Not enough arguments").into()
     }
     /// Create a MethodErr that the method failed in the way specified.
-    pub fn failed<T: fmt::Display>(a: &T) -> MethodErr {
+    pub fn failed<T: fmt::Display + ?Sized>(a: &T) -> MethodErr {
         ("org.freedesktop.DBus.Error.Failed", a.to_string()).into()
     }
     /// Create a MethodErr that the Interface was unknown.
-    pub fn no_interface<T: fmt::Display>(a: &T) -> MethodErr {
+    pub fn no_interface<T: fmt::Display + ?Sized>(a: &T) -> MethodErr {
         ("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", a)).into()
     }
     /// Create a MethodErr that the Method was unknown.
-    pub fn no_method<T: fmt::Display>(a: &T) -> MethodErr {
+    pub fn no_method<T: fmt::Display + ?Sized>(a: &T) -> MethodErr {
         ("org.freedesktop.DBus.Error.UnknownMethod", format!("Unknown method {}", a)).into()
     }
     /// Create a MethodErr that the Property was unknown.
-    pub fn no_property<T: fmt::Display>(a: &T) -> MethodErr {
+    pub fn no_property<T: fmt::Display + ?Sized>(a: &T) -> MethodErr {
         ("org.freedesktop.DBus.Error.UnknownProperty", format!("Unknown property {}", a)).into()
     }
     /// Create a MethodErr that the Property was read-only.
-    pub fn ro_property<T: fmt::Display>(a: &T) -> MethodErr {
+    pub fn ro_property<T: fmt::Display + ?Sized>(a: &T) -> MethodErr {
         ("org.freedesktop.DBus.Error.PropertyReadOnly", format!("Property {} is read only", a)).into()
     }
 
