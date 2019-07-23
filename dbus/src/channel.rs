@@ -3,11 +3,11 @@
 #![allow(dead_code)]
 
 use crate::{Error, Message, to_c_str};
-use crate::ffidisp::{BusType, Watch};
 use std::{ptr, str};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_int};
 use crate::message::MatchRule;
+use std::os::unix::io::RawFd;
 
 mod dispatcher;
 pub use self::dispatcher::{MessageDispatcher, MessageDispatcherConfig};
@@ -27,19 +27,51 @@ impl Drop for ConnHandle {
     }
 }
 
+/// Which bus to connect to
+pub enum BusType {
+    /// The Session bus - local to every logged in session
+    Session = ffi::DBusBusType::Session as isize,
+    /// The system wide bus
+    System = ffi::DBusBusType::System as isize,
+    /// The bus that started us, if any
+    Starter = ffi::DBusBusType::Starter as isize,
+}
 
-/// Experimental rewrite of Connection [unstable / experimental]
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+/// A file descriptor, and an indication whether it should be read from, written to, or both.
+pub struct Watch {
+    pub fd: RawFd,
+    pub read: bool,
+    pub write: bool,
+}
+
+impl Watch {
+    unsafe fn from_raw(watch: *mut ffi::DBusWatch) -> Self {
+        let mut w = Watch { fd: ffi::dbus_watch_get_unix_fd(watch), read: false, write: false};
+        let enabled = ffi::dbus_watch_get_enabled(watch) != 0;
+        if enabled {
+            let flags = ffi::dbus_watch_get_flags(watch);
+            use std::os::raw::c_uint;
+            w.read = (flags & ffi::DBUS_WATCH_READABLE as c_uint) != 0;
+            w.write = (flags & ffi::DBUS_WATCH_WRITABLE as c_uint) != 0;
+        }
+        w
+    }
+}
+
+/// Low-level connection - handles read/write to the socket
 ///
-/// Slightly lower level, with better support for async operations.
-/// Also, this struct is Send + Sync.
-///
-/// Blocking operations should be clearly marked as such, although if you
-/// try to access the connection from several threads at the same time,
-/// blocking might occur due to an internal mutex inside the dbus library.
+/// You probably do not need to worry about this as you would typically
+/// use the various blocking and non-blocking "Connection" structs instead.
 ///
 /// This version avoids dbus_connection_dispatch, and thus avoids
-/// callbacks from that function. Instead the same functionality needs to be
-/// implemented by these bindings somehow - this is not done yet.
+/// callbacks from that function. Instead the same functionality
+/// is implemented in the various blocking and non-blocking "Connection" components.
+///
+/// Blocking operations are clearly marked as such, although if you
+/// try to access the connection from several threads at the same time,
+/// blocking might occur due to an internal mutex inside the dbus library.
 #[derive(Debug)]
 pub struct Channel {
     handle: ConnHandle,
@@ -68,7 +100,12 @@ impl Channel {
     /// Blocking: until the connection is up and running. 
     pub fn get_private(bus: BusType) -> Result<Channel, Error> {
         let mut e = Error::empty();
-        let conn = unsafe { ffi::dbus_bus_get_private(bus, e.get_mut()) };
+        let b = match bus {
+            BusType::Session => ffi::DBusBusType::Session,
+            BusType::System => ffi::DBusBusType::System,
+            BusType::Starter => ffi::DBusBusType::Starter,
+        };
+        let conn = unsafe { ffi::dbus_bus_get_private(b, e.get_mut()) };
         if conn == ptr::null_mut() {
             return Err(e)
         }
@@ -195,12 +232,22 @@ impl Channel {
             }
             1
         }
-        let mut r = vec!();
+        let mut wlist: Vec<Watch> = vec!();
         if unsafe { ffi::dbus_connection_set_watch_functions(self.conn(),
-            Some(add_watch_cb), None, None, &mut r as *mut _ as *mut _, None) } == 0 { return Err(()) }
+            Some(add_watch_cb), None, None, &mut wlist as *mut _ as *mut _, None) } == 0 { return Err(()) }
         assert!(unsafe { ffi::dbus_connection_set_watch_functions(self.conn(),
             None, None, None, ptr::null_mut(), None) } != 0);
-        Ok(r)
+
+        if wlist.len() == 2 && wlist[0].fd == wlist[1].fd {
+            // This is always true in practice, see https://lists.freedesktop.org/archives/dbus/2019-July/017786.html
+            wlist = vec!(Watch {
+                fd: wlist[0].fd,
+                read: wlist[0].read || wlist[1].read,
+                write: wlist[0].write || wlist[1].write
+            });
+        }
+
+        Ok(wlist)
     }
 }
 
@@ -222,8 +269,6 @@ impl Sender for Channel {
     fn send(&self, msg: Message) -> Result<u32, ()> { Channel::send(self, msg) }
 }
 
-
-
 #[test]
 fn test_channel_send_sync() {
     fn is_send<T: Send>(_: &T) {}
@@ -239,7 +284,7 @@ fn channel_simple_test() {
     assert!(c.is_connected());
     let fds = c.watch_fds().unwrap();
     println!("{:?}", fds);
-    assert!(fds.len() > 0);
+    assert!(fds.len() == 1);
     let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
     let reply = c.send(m).unwrap();
     let my_name = c.unique_name().unwrap();

@@ -3,9 +3,9 @@
 
 use crate::strings::{BusName, Path, Interface, Member};
 use crate::arg::{AppendAll, ReadAll, IterAppend};
-use crate::{channel, Error, Message, BusType};
+use crate::{channel, Error, Message};
 use crate::message::{MatchRule, SignalArgs};
-use crate::channel::Channel;
+use crate::channel::{Channel, BusType};
 use std::cell::RefCell;
 
 struct Filter<F> {
