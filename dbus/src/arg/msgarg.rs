@@ -307,8 +307,6 @@ argbuilder_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, 
 
 #[cfg(test)]
 mod test {
-    extern crate tempdir;
-
     use crate::{Connection, ffidisp::ConnectionItem, Message, BusType, Path, Signature};
     use crate::arg::{Array, Variant, Dict, Iter, ArgType, TypeMismatchError, RefArg, cast};
 

@@ -18,7 +18,7 @@ libc = "0.2.60"
 libdbus-sys = { path = "../libdbus-sys", version = "0.2" }
 
 [dev-dependencies]
-tempdir = "0.3"
+tempfile = "3"
 
 [features]
 no-string-validation = []
