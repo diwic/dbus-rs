@@ -630,7 +630,7 @@ impl<'a> PropHandler<'a> {
 
 #[cfg(test)]
 mod test {
-    extern crate tempdir;
+    extern crate tempfile;
 
     use crate::{Connection, Message, MessageType, BusType, libc, Path};
     use crate::arg::messageitem::MessageItem;
@@ -646,7 +646,7 @@ mod test {
         let c = Connection::get_private(BusType::Session).unwrap();
         c.register_object_path("/hello").unwrap();
         let mut m = Message::new_method_call(&c.unique_name(), "/hello", "com.example.hello", "Hello").unwrap();
-        let tempdir = tempdir::TempDir::new("dbus-rs-test").unwrap();
+        let tempdir = tempfile::Builder::new().prefix("dbus-rs-test").tempdir().unwrap();
         let mut filename = tempdir.path().to_path_buf();
         filename.push("test");
         println!("Creating file {:?}", filename);
