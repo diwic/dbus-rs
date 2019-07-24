@@ -22,4 +22,6 @@ pub mod tree;
 
 mod adriver;
 
-pub use adriver::{AConnection, AMessageStream, AMethodCall};
+pub use crate::adriver::{AConnection, AMessageStream, AMethodCall};
+
+pub mod connection;

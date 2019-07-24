@@ -34,7 +34,7 @@ pub mod channel;
 // pub mod crossroads;
 
 pub mod blocking;
-
+pub mod nonblock;
 
 pub mod strings;
 pub use crate::strings::{Signature, Path};
