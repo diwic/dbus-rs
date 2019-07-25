@@ -323,7 +323,7 @@ fn make_result(success: &str, opts: &GenOpts) -> String {
     } else if opts.methodtype.is_some() {
         format!("Result<{}, tree::MethodErr>", success)
     } else if opts.connectiontype == ConnectionType::Nonblock {
-        format!("nonblock::MethodReply<{}, Arc<nonblock::Connection>>", success)
+        format!("nonblock::MethodReply<{}, Self::Connection>", success)
     } else {
         format!("Result<{}, dbus::Error>", success)
     }
@@ -341,9 +341,12 @@ fn write_prop_decl(s: &mut String, p: &Prop, opts: &GenOpts, set: bool) -> Resul
 }
 
 fn write_intf(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<error::Error>> {
-    
-    let iname = make_camel(&i.shortname);  
+
+    let iname = make_camel(&i.shortname);
     *s += &format!("\npub trait {} {{\n", iname);
+    if opts.connectiontype == ConnectionType::Nonblock {
+        *s += "    type Connection;\n";
+    }
     for m in &i.methods {
         write_method_decl(s, &m, opts)?;
         *s += ";\n";
@@ -373,8 +376,11 @@ fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box
         *s += &format!("\nimpl<'a> {} for dbusf::ConnPath<'a> {{\n",
             make_camel(&i.shortname));
     } else {
-        *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target={}::Connection>> {} for {}::{}<'a, C> {{\n",
-            module, make_camel(&i.shortname), module, proxy);
+        *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target={}::Connection>{}> {} for {}::{}<'a, C> {{\n",
+            module, if module == "nonblock" { " + Clone" } else { "" }, make_camel(&i.shortname), module, proxy);
+        if opts.connectiontype == ConnectionType::Nonblock {
+            *s += "    type Connection = C;\n";
+        }
     }
     for m in &i.methods {
         *s += "\n";
@@ -387,7 +393,7 @@ fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box
         }
         *s += "))\n";
         if m.oargs.len() == 1 {
-            *s += &format!("            .map(|r: ({},)| r.0)\n", m.oargs[0].typename(opts.genericvariant)?.0);
+            *s += &format!("            .and_then(|r: ({},)| Ok(r.0))\n", m.oargs[0].typename(opts.genericvariant)?.0);
         }
         *s += "    }\n";
     }

@@ -7,6 +7,8 @@ use std::sync::Mutex;
 use std::{future, task, pin, mem};
 use std::collections::HashMap;
 
+pub mod stdintf;
+
 enum PollReply<T, P> {
     Pending(P),
     Ready(T),
@@ -136,7 +138,7 @@ pub struct MethodReply<T, C>(PollReply<Result<(), Error>, (u32, C)>, Option<Read
 
 impl<T: 'static, C> MethodReply<T, C> {
     /// Convenience combinator in case you want to post-process the result after reading it
-    pub fn map<T2>(mut self, f: impl FnOnce(T) -> Result<T2, Error> + 'static) -> MethodReply<T2, C> {
+    pub fn and_then<T2>(mut self, f: impl FnOnce(T) -> Result<T2, Error> + 'static) -> MethodReply<T2, C> {
         let first = self.1.take().unwrap();
         MethodReply(self.0, Some(Box::new(|r| first(r).and_then(f))))
     }

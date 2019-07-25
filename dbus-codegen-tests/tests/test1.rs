@@ -11,6 +11,10 @@ mod policykit_client;
 #[deny(trivial_casts)]
 mod policykit_blocking;
 
+#[allow(dead_code)]
+#[deny(trivial_casts)]
+mod policykit_nonblock;
+
 
 use std::sync::atomic::*;
 
