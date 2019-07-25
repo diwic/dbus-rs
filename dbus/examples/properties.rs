@@ -1,6 +1,6 @@
 extern crate dbus;
 
-use dbus::{ffidisp::Connection, arg};
+use dbus::{blocking::Connection, arg};
 use std::collections::HashMap;
 
 fn print_refarg(value: &arg::RefArg) {
@@ -15,8 +15,8 @@ fn main() {
     // Connect to server and create a ConnPath. A ConnPath implements several interfaces,
     // in this case we'll use OrgFreedesktopDBusProperties, which allows us to call "get".
     let c = Connection::new_session().unwrap();
-    let p = c.with_path("org.mpris.MediaPlayer2.rhythmbox", "/org/mpris/MediaPlayer2", 5000);
-    use dbus::ffidisp::stdintf::org_freedesktop_dbus::Properties;
+    let p = c.with_proxy("org.mpris.MediaPlayer2.rhythmbox", "/org/mpris/MediaPlayer2", 5000);
+    use dbus::blocking::stdintf::org_freedesktop_dbus::Properties;
 
     // The Metadata property is a Dict<String, Variant>. 
 
