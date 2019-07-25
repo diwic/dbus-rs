@@ -6,7 +6,7 @@ mod generate;
 
 use dbus::ffidisp::Connection;
 
-use crate::generate::ServerAccess;
+use crate::generate::{ServerAccess, ConnectionType};
 
 // Copy-pasted from the output of this program :-)
 pub trait OrgFreedesktopDBusIntrospectable {
@@ -47,11 +47,13 @@ Defaults to 'RefClosure'."))
              .help("Name of dbus crate, defaults to 'dbus'."))
         .arg(clap::Arg::with_name("skipprefix").short("i").long("skipprefix").takes_value(true).value_name("PREFIX")
              .help("If present, skips a specific prefix for interface names, e g 'org.freedesktop.DBus.'."))
-        .arg(clap::Arg::with_name("futures").short("f").long("futures")
-             .help("Generates code to use with futures 0.3 (experimental)"))
+//        .arg(clap::Arg::with_name("futures").short("f").long("futures")
+//             .help("Generates code to use with futures 0.3 (experimental)"))
+        .arg(clap::Arg::with_name("client").short("c").long("client").takes_value(true).value_name("client")
+             .help("Type of client connection. Valid values are: 'blocking', 'nonblock', 'ffidisp'."))
         .arg(clap::Arg::with_name("output").short("o").long("output").takes_value(true).value_name("FILE")
              .help("Write output into the specified file"))
-        .arg(clap::Arg::with_name("file").required(false).help("D-Bus XML Introspection file"))
+        .arg(clap::Arg::with_name("file").long("file").required(false).help("D-Bus XML Introspection file"))
         .get_matches();
 
     if matches.is_present("destination") && matches.is_present("file") {
@@ -94,10 +96,19 @@ Defaults to 'RefClosure'."))
         _ => panic!("Invalid methodaccess specified"),
     };
 
+    let client = matches.value_of("client").map(|s| s.to_lowercase());
+    let client = match client.as_ref().map(|s| &**s) {
+        None | Some("blocking") => ConnectionType::Blocking,
+        Some("nonblock") => ConnectionType::Nonblock,
+        Some("ffidisp") => ConnectionType::Ffidisp,
+        _ => panic!("Invalid client connection type specified"),
+    };
+
     let opts = generate::GenOpts { methodtype: mtype.map(|x| x.into()), dbuscrate: dbuscrate.into(),
         skipprefix: matches.value_of("skipprefix").map(|x| x.into()), serveraccess: maccess,
         genericvariant: matches.is_present("genericvariant"),
-        futures: matches.is_present("futures"),
+        futures: false,
+        connectiontype: client,
         crhandler: crhandler.map(|x| x.to_string()),
     };
 

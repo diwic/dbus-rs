@@ -6,18 +6,21 @@ use std::sync::atomic::*;
 #[deny(trivial_casts)]
 mod policykit;
 
-impl policykit::OrgFreedesktopDBusProperties for () {
-    type Err = ::dbus::tree::MethodErr;
+#[allow(dead_code)]
+#[deny(trivial_casts)]
+mod policykit_client;
 
-    fn get(&self, interfacename: &str, propertyname: &str) -> Result<::dbus::arg::Variant<Box<::dbus::arg::RefArg>>, Self::Err> {
+
+impl policykit::OrgFreedesktopDBusProperties for () {
+    fn get(&self, interfacename: &str, propertyname: &str) -> Result<::dbus::arg::Variant<Box<::dbus::arg::RefArg>>, ::dbus::tree::MethodErr> {
         assert_eq!(interfacename, "Interface.Name");
         assert_eq!(propertyname, "Property.Name");
         Ok(::dbus::arg::Variant(Box::new(5u8)))
     }
 
-    fn get_all(&self, _interfacename: &str) -> Result<::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>, Self::Err> { unimplemented!() }
+    fn get_all(&self, _interfacename: &str) -> Result<::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>, ::dbus::tree::MethodErr> { unimplemented!() }
 
-    fn set(&self, _interfacename: &str, _propertyname: &str, value: ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>) -> Result<(), Self::Err> {
+    fn set(&self, _interfacename: &str, _propertyname: &str, value: ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>) -> Result<(), ::dbus::tree::MethodErr> {
         assert_eq!((&value as &dbus::arg::RefArg).as_str(), Some("Hello")); 
         Err(("A.B.C", "Error.Message").into())
     }
@@ -35,7 +38,7 @@ fn test2() {
     let quit = std::sync::Arc::new(AtomicBool::new(false));
     let quit2 = quit.clone();
     let _ = std::thread::spawn(move || {
-        use policykit::OrgFreedesktopDBusProperties;
+        use policykit_client::OrgFreedesktopDBusProperties;
         use dbus::arg::RefArg;
 
         let c2 = dbus::ffidisp::Connection::new_session().unwrap();

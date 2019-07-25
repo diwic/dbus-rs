@@ -50,6 +50,14 @@ pub enum ServerAccess {
     MethodInfo
 }
 
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum ConnectionType {
+    Ffidisp,
+    Blocking,
+    Nonblock,
+}
+
 /// Code generation options
 #[derive(Clone, Debug)]
 pub struct GenOpts {
@@ -67,13 +75,15 @@ pub struct GenOpts {
     pub genericvariant: bool,
     /// Generates code to work with async / futures 0.3
     pub futures: bool,
+    /// Type of connection, for client only
+    pub connectiontype: ConnectionType,
 }
 
 impl ::std::default::Default for GenOpts {
     fn default() -> Self { GenOpts { 
         dbuscrate: "dbus".into(), methodtype: Some("MTFn".into()), skipprefix: None,
         serveraccess: ServerAccess::RefClosure, genericvariant: false, futures: false,
-        crhandler: None,
+        crhandler: None, connectiontype: ConnectionType::Blocking,
     }}
 }
 
@@ -310,8 +320,12 @@ fn make_result(success: &str, opts: &GenOpts) -> String {
         format!("dbusf::MethodReply<{}>", success)
     } else if opts.crhandler.is_some() {
         format!("Result<{}, cr::MethodErr>", success)
+    } else if opts.methodtype.is_some() {
+        format!("Result<{}, tree::MethodErr>", success)
+    } else if opts.connectiontype == ConnectionType::Nonblock {
+        format!("nonblock::MethodReply<{}, Arc<nonblock::Connection>>", success)
     } else {
-        format!("Result<{}, Self::Err>", success)
+        format!("Result<{}, dbus::Error>", success)
     }
 }
 
@@ -330,9 +344,6 @@ fn write_intf(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<error:
     
     let iname = make_camel(&i.shortname);  
     *s += &format!("\npub trait {} {{\n", iname);
-    if !opts.futures && !opts.crhandler.is_some() {
-        *s += "    type Err;\n";
-    }
     for m in &i.methods {
         write_method_decl(s, &m, opts)?;
         *s += ";\n";
@@ -352,59 +363,36 @@ fn write_intf(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<error:
 }
 
 fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<error::Error>> {
+    let (module, proxy) = match opts.connectiontype {
+        ConnectionType::Ffidisp => ("ffidisp", "ConnPath"),
+        ConnectionType::Blocking => ("blocking", "Proxy"),
+        ConnectionType::Nonblock => ("nonblock", "Proxy"),
+    };
+
     if opts.futures {
         *s += &format!("\nimpl<'a> {} for dbusf::ConnPath<'a> {{\n",
             make_camel(&i.shortname));
     } else {
-        *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target=ffidisp::Connection>> {} for ffidisp::ConnPath<'a, C> {{\n",
-            make_camel(&i.shortname));
-        *s += "    type Err = dbus::Error;\n";
+        *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target={}::Connection>> {} for {}::{}<'a, C> {{\n",
+            module, make_camel(&i.shortname), module, proxy);
     }
     for m in &i.methods {
         *s += "\n";
         write_method_decl(s, &m, opts)?;
         *s += " {\n";
-        *s += &format!("        let {}m = self.method_call_with_args(&\"{}\".into(), &\"{}\".into(), |{}| {{\n",
-            if opts.futures { "" } else { "mut " }, i.origname, m.name, if m.iargs.len() > 0 { "msg" } else { "_" } );
-        if m.iargs.len() > 0 {
-                *s += "            let mut i = arg::IterAppend::new(msg);\n";
-        }
+        *s += &format!("        self.method_call(\"{}\", \"{}\", (", i.origname, m.name);
         for a in m.iargs.iter() {
-                *s += &format!("            i.append({});\n", a.varname());
+            *s += &a.varname();
+            *s += ", ";
         }
-        let indent;
-        if opts.futures {
-             *s += "        });\n";
-             *s += &format!("        dbusf::MethodReply::from_msg(m, |{}| {{\n", if m.oargs.len() == 0 { "_" } else { "m" });
-             indent = "            ";
-        } else {
-             *s += "        })?;\n";
-             *s += "        m.as_result()?;\n";
-             indent = "        ";
-        }
-        if m.oargs.len() == 0 {
-            *s += indent;
-            *s += "Ok(())\n";
-        } else {
-            *s += indent;
-            *s += "let mut i = m.iter_init();\n";
-            for a in m.oargs.iter() {
-                *s += &format!("{}let {}: {} = i.read()?;\n", indent, a.varname(), a.typename(opts.genericvariant)?.0);   
-            }
-            if m.oargs.len() == 1 {
-                *s += &format!("{}Ok({})\n", indent, m.oargs[0].varname());
-            } else {
-                let v: Vec<String> = m.oargs.iter().map(|z| z.varname()).collect();
-                *s += &format!("{}Ok(({}))\n", indent, v.join(", "));
-            }
-        }
-        if opts.futures {
-            *s += "        })\n";
+        *s += "))\n";
+        if m.oargs.len() == 1 {
+            *s += &format!("            .map(|r: ({},)| r.0)\n", m.oargs[0].typename(opts.genericvariant)?.0);
         }
         *s += "    }\n";
     }
 
-    let propintf = if opts.futures { "dbusf::stdintf::org_freedesktop::DBusProperties" } else { "dbus::ffidisp::stdintf::org_freedesktop_dbus::Properties" };
+    let propintf = format!("{}::stdintf::org_freedesktop_dbus::Properties", module);
 
     for p in i.props.iter().filter(|p| p.can_get()) {
         *s += "\n";
@@ -474,7 +462,7 @@ fn write_server_access(s: &mut String, i: &Intf, saccess: ServerAccess, minfo_is
             *s += "        let d = dd.as_ref();\n";
         },
         ServerAccess::RefClosure => *s += &format!("        let d = fclone({}minfo);\n", z),
-        ServerAccess::MethodInfo => *s += &format!("        let d: &{}<Err=tree::MethodErr> = {}minfo;\n", make_camel(&i.shortname), z),
+        ServerAccess::MethodInfo => *s += &format!("        let d: &{} = {}minfo;\n", make_camel(&i.shortname), z),
     }
 }
 
@@ -505,11 +493,11 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
     };
     match saccess {
         ServerAccess::RefClosure => {
-            wheres.push(format!("T: {}<Err=tree::MethodErr>", make_camel(&i.shortname)));
+            wheres.push(format!("T: {}", make_camel(&i.shortname)));
             wheres.push(format!("F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::{}<D>, D>) -> & 'z T", mtype));
         },
         ServerAccess::AsRefClosure => {
-            wheres.push(format!("T: AsRef<{}<Err=tree::MethodErr>>", make_camel(&i.shortname)));
+            wheres.push(format!("T: AsRef<{}>", make_camel(&i.shortname)));
             wheres.push(format!("F: 'static + Fn(&tree::MethodInfo<tree::{}<D>, D>) -> T", mtype));
         },
         ServerAccess::MethodInfo => {},
@@ -648,9 +636,14 @@ fn write_module_header(s: &mut String, opts: &GenOpts) {
     if opts.futures {
         *s += "use dbus_futures as dbusf;\n";
     }
-    if opts.methodtype.is_some() { *s += &format!("use {}::tree;\n", opts.dbuscrate) }
+    if opts.methodtype.is_some() { *s += &format!("use {}::tree;\n", opts.dbuscrate) } else {
+        *s += &format!("use {}::{};\n", opts.dbuscrate, match opts.connectiontype {
+            ConnectionType::Ffidisp => "ffidisp",
+            ConnectionType::Blocking => "blocking",
+            ConnectionType::Nonblock => "nonblock",
+        });
+    }
     if opts.crhandler.is_some() { *s += &format!("use {}::crossroads as cr;\n", opts.dbuscrate) }
-    *s += &format!("use {}::ffidisp;\n", opts.dbuscrate);
 }
 
 /// Generates Rust structs and traits from D-Bus XML introspection data.
@@ -685,11 +678,10 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<error::Erro
                 write_intf(&mut s, &intf, opts)?;
                 if opts.crhandler.is_some() {
                     write_intf_crossroads(&mut s, &intf, opts)?;
+                } else if let Some(ref mt) = opts.methodtype {
+                    write_intf_tree(&mut s, &intf, &mt, opts.serveraccess, opts.genericvariant)?;
                 } else {
                     write_intf_client(&mut s, &intf, opts)?;
-                    if let Some(ref mt) = opts.methodtype {
-                        write_intf_tree(&mut s, &intf, &mt, opts.serveraccess, opts.genericvariant)?;
-                    }
                 }
                 write_signals(&mut s, &intf)?;
             }

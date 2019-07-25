@@ -8,6 +8,8 @@ use crate::message::{MatchRule, SignalArgs};
 use crate::channel::{Channel, BusType};
 use std::cell::RefCell;
 
+pub mod stdintf;
+
 struct Filter<F> {
    id: u32,
    rule: MatchRule<'static>,

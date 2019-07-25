@@ -116,20 +116,33 @@ impl<'a, C: std::ops::Deref<Target=Connection> + Clone> Proxy<'a, C> {
         let mut msg = Message::method_call(&self.destination, &self.path, &i.into(), &m.into());
         args.append(&mut IterAppend::new(&mut msg));
 
-        MethodReply(match self.connection.send(msg) {
-            Err(_) => PollReply::Ready(Err(
-                Error::new_custom("org.freedesktop.DBus.Error.Failed", "Sending message failed")
-            )),
-            Ok(s) => PollReply::Pending((s, self.connection.clone())),
-        })
+        match self.connection.send(msg) {
+            Err(_) => MethodReply(
+                PollReply::Ready(Err(Error::new_custom("org.freedesktop.DBus.Error.Failed", "Sending message failed"))),
+                None
+            ),
+            Ok(s) => MethodReply(
+               PollReply::Pending((s, self.connection.clone())),
+               Some(Box::new(|r| Ok(R::read(&mut r.iter_init())?)))
+            ),
+        }
     }
 }
 
+type ReadFn<T> = Box<FnOnce(&mut Message) -> Result<T, Error>>;
 
+/// Future method reply, used while waiting for a method call reply from the server.
+pub struct MethodReply<T, C>(PollReply<Result<(), Error>, (u32, C)>, Option<ReadFn<T>>); 
 
-pub struct MethodReply<T, C>(PollReply<Result<T, Error>, (u32, C)>); 
+impl<T: 'static, C> MethodReply<T, C> {
+    /// Convenience combinator in case you want to post-process the result after reading it
+    pub fn map<T2>(mut self, f: impl FnOnce(T) -> Result<T2, Error> + 'static) -> MethodReply<T2, C> {
+        let first = self.1.take().unwrap();
+        MethodReply(self.0, Some(Box::new(|r| first(r).and_then(f))))
+    }
+}
 
-impl<T: Unpin + ReadAll, C: Unpin + std::ops::Deref<Target=Connection>> future::Future for MethodReply<T, C> {
+impl<T, C: Unpin + std::ops::Deref<Target=Connection>> future::Future for MethodReply<T, C> {
     type Output = Result<T, Error>;
     fn poll(mut self: pin::Pin<&mut Self>, ctx: &mut task::Context) -> task::Poll<Result<T, Error>> {
         let inner = &mut (*self).0;
@@ -138,7 +151,8 @@ impl<T: Unpin + ReadAll, C: Unpin + std::ops::Deref<Target=Connection>> future::
                 None => task::Poll::Pending,
                 Some(mut msg) => {
                     *inner = PollReply::Consumed;
-                    task::Poll::Ready(msg.as_result().and_then(|r| Ok(T::read(&mut r.iter_init())?)))
+                    let reader = (*self).1.take().unwrap();
+                    task::Poll::Ready(msg.as_result().and_then(|r| reader(r)))
                 }
             }
         } else { panic!("Polled MethodReply after having returned Poll::Ready") }

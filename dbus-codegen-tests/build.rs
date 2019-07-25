@@ -1,6 +1,6 @@
 extern crate dbus_codegen;
 
-use dbus_codegen::{generate, ServerAccess, GenOpts};
+use dbus_codegen::{generate, ServerAccess, GenOpts, ConnectionType};
 use std::env;
 use std::fs::File;
 use std::io::Write;
@@ -145,12 +145,35 @@ fn generate_code(xml: &str, opts: &GenOpts, outfile: &str) {
 }
 
 fn main() {
-    generate_code(POLICYKIT_XML, &Default::default(), "policykit.rs");
+    let ffidisp = GenOpts {
+        connectiontype: ConnectionType::Ffidisp,
+        ..Default::default()
+    };
+    generate_code(POLICYKIT_XML, &ffidisp, "policykit.rs");
 
-    let g = GenOpts {
+    let blocking_client = GenOpts {
+        connectiontype: ConnectionType::Blocking,
+        methodtype: None,
+        ..Default::default()
+    };
+    generate_code(POLICYKIT_XML, &blocking_client, "policykit_blocking.rs");
+
+    let nonblock_client = GenOpts {
+        connectiontype: ConnectionType::Nonblock,
+        methodtype: None,
+        ..Default::default()
+    };
+    generate_code(POLICYKIT_XML, &nonblock_client, "policykit_nonblock.rs");
+
+    let mut g = GenOpts {
         methodtype: Some("MTFnMut".into()),
         serveraccess: ServerAccess::AsRefClosure,
+        connectiontype: ConnectionType::Ffidisp,
         ..Default::default()
     };
     generate_code(POLICYKIT_XML, &g, "policykit_asref.rs");
+
+    g.methodtype = None;
+    generate_code(POLICYKIT_XML, &g, "policykit_client.rs");
+
 }
