@@ -307,14 +307,14 @@ argbuilder_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, 
 
 #[cfg(test)]
 mod test {
-    use crate::{Connection, ffidisp::ConnectionItem, Message, BusType, Path, Signature};
+    use crate::{ffidisp::Connection, ffidisp::ConnectionItem, Message, Path, Signature};
     use crate::arg::{Array, Variant, Dict, Iter, ArgType, TypeMismatchError, RefArg, cast};
 
     use std::collections::HashMap;
 
     #[test]
     fn refarg() {
-        let c = Connection::get_private(BusType::Session).unwrap();
+        let c = Connection::new_session().unwrap();
         c.register_object_path("/mooh").unwrap();
         let m = Message::new_method_call(&c.unique_name(), "/mooh", "com.example.hello", "Hello").unwrap();
 
@@ -372,7 +372,7 @@ mod test {
 
     #[test]
     fn message_types() {
-        let c = Connection::get_private(BusType::Session).unwrap();
+        let c = Connection::new_session().unwrap();
         c.register_object_path("/hello").unwrap();
         let m = Message::new_method_call(&c.unique_name(), "/hello", "com.example.hello", "Hello").unwrap();
         let m = m.append1(2000u16);

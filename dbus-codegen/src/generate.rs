@@ -356,7 +356,7 @@ fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box
         *s += &format!("\nimpl<'a> {} for dbusf::ConnPath<'a> {{\n",
             make_camel(&i.shortname));
     } else {
-        *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> {} for dbus::ConnPath<'a, C> {{\n",
+        *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target=ffidisp::Connection>> {} for ffidisp::ConnPath<'a, C> {{\n",
             make_camel(&i.shortname));
         *s += "    type Err = dbus::Error;\n";
     }
@@ -650,6 +650,7 @@ fn write_module_header(s: &mut String, opts: &GenOpts) {
     }
     if opts.methodtype.is_some() { *s += &format!("use {}::tree;\n", opts.dbuscrate) }
     if opts.crhandler.is_some() { *s += &format!("use {}::crossroads as cr;\n", opts.dbuscrate) }
+    *s += &format!("use {}::ffidisp;\n", opts.dbuscrate);
 }
 
 /// Generates Rust structs and traits from D-Bus XML introspection data.

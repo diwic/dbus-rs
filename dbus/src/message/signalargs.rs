@@ -10,11 +10,11 @@ use crate::strings::{BusName, Path, Interface, Member};
 /// Listen to InterfacesRemoved signal from org.bluez.obex.
 ///
 /// ```rust,no_run
-/// use dbus::{Connection, BusType};
+/// use dbus::ffidisp::Connection;
 /// use dbus::message::SignalArgs;
 /// use dbus::ffidisp::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
 ///
-/// let c = Connection::get_private(BusType::Session).unwrap();
+/// let c = Connection::new_session().unwrap();
 /// // Add a match for this signal
 /// let mstr = IR::match_str(Some(&"org.bluez.obex".into()), None);
 /// c.add_match(&mstr).unwrap();

@@ -11,7 +11,7 @@ extern crate tokio;
 extern crate tokio_timer;
 extern crate futures;
 
-use dbus::*;
+use dbus::{Message, ffidisp::Connection};
 
 use std::rc::Rc;
 use tokio::reactor::Handle;
@@ -24,7 +24,7 @@ use dbus_tokio::AConnection;
 fn main() {
     // Let's start by starting up a connection to the session bus. We do not register a name
     // because we do not intend to expose any objects on the bus.
-    let c = Rc::new(Connection::get_private(BusType::Session).unwrap());
+    let c = Rc::new(Connection::new_session().unwrap());
 
     // To receive D-Bus signals we need to add match that defines which signals should be forwarded
     // to our application.

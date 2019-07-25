@@ -4,6 +4,8 @@ extern crate clap;
 
 mod generate;
 
+use dbus::ffidisp::Connection;
+
 use crate::generate::ServerAccess;
 
 // Copy-pasted from the output of this program :-)
@@ -11,7 +13,7 @@ pub trait OrgFreedesktopDBusIntrospectable {
     fn introspect(&self) -> Result<String, ::dbus::Error>;
 }
 
-impl<'a, C: ::std::ops::Deref<Target=::dbus::Connection>> OrgFreedesktopDBusIntrospectable for ::dbus::ConnPath<'a, C> {
+impl<'a, C: ::std::ops::Deref<Target=::dbus::ffidisp::Connection>> OrgFreedesktopDBusIntrospectable for ::dbus::ffidisp::ConnPath<'a, C> {
 
     fn introspect(&self) -> Result<String, ::dbus::Error> {
         let mut m = self.method_call_with_args(&"org.freedesktop.DBus.Introspectable".into(), &"Introspect".into(), |_| {
@@ -55,12 +57,12 @@ Defaults to 'RefClosure'."))
     if matches.is_present("destination") && matches.is_present("file") {
         panic!("Expected either xml file path as argument or destination option. But both are provided.");
     }
-	
+
     let s = 
     if let Some(dest) = matches.value_of("destination") {
         let path = matches.value_of("path").unwrap_or("/");
-        let bus = if matches.is_present("systembus") { dbus::BusType::System } else { dbus::BusType::Session };
-        let c = dbus::Connection::get_private(bus).unwrap();
+        let c = if matches.is_present("systembus") { Connection::new_system() } else { Connection::new_session() };
+        let c = c.unwrap();
         let p = c.with_path(dest, path, 10000);
         p.introspect().unwrap()
     } else if let Some(file_path) = matches.value_of("file")  {

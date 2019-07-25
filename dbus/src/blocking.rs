@@ -63,6 +63,12 @@ impl Connection {
             Ok(true)
         } else { Ok(false) }
     }
+
+    /// Create a convenience struct for easier calling of many methods on the same destination and path.
+    pub fn with_proxy<'a, D: Into<BusName<'a>>, P: Into<Path<'a>>>(&'a self, dest: D, path: P, timeout_ms: i32) ->
+    Proxy<'a, &'a Connection> {
+        Proxy { connection: self, destination: dest.into(), path: path.into(), timeout_ms }
+    }
 }
 
 /// Abstraction over different connections

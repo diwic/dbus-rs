@@ -15,6 +15,7 @@ mod com_example_dbus_rs {
 use dbus as dbus;
 use dbus::arg;
 use dbus::tree;
+use dbus::ffidisp;
 
 pub trait Device {
     type Err;
@@ -25,7 +26,7 @@ pub trait Device {
     fn set_online(&self, value: bool) -> Result<(), Self::Err>;
 }
 
-impl<'a, C: ::std::ops::Deref<Target=dbus::Connection>> Device for dbus::ConnPath<'a, C> {
+impl<'a, C: ::std::ops::Deref<Target=ffidisp::Connection>> Device for ffidisp::ConnPath<'a, C> {
     type Err = dbus::Error;
 
     fn check(&self) -> Result<(), Self::Err> {
@@ -141,7 +142,7 @@ impl dbus::message::SignalArgs for DeviceCheckComplete {
 // === Imported code end ===
 }
 
-use dbus::{Connection, BusType, tree, Path};
+use dbus::{ffidisp::Connection, tree, Path};
 use dbus::tree::{Interface, MTFn, MethodErr};
 
 use std::sync::Arc;
@@ -273,7 +274,7 @@ fn run() -> Result<(), Box<std::error::Error>> {
     let tree = create_tree(&devices, &Arc::new(iface));
 
     // Setup DBus connection
-    let c = Connection::get_private(BusType::Session)?;
+    let c = Connection::new_session()?;
     c.register_name("com.example.dbus.rs.advancedserverexample", 0)?;
     tree.set_registered(&c, true)?;
 

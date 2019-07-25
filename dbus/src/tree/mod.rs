@@ -2,7 +2,7 @@
 //!
 //! # Example
 //! ```rust,no_run
-//! use dbus::{tree, Connection, BusType};
+//! use dbus::{tree, ffidisp::Connection};
 //! let f = tree::Factory::new_fn::<()>();
 //! /* Add a method returning "Thanks!" on interface "com.example.dbus.rs"
 //!    on object path "/example". */
@@ -13,7 +13,7 @@
 //!         ).out_arg("s"))
 //! ));
 //!
-//! let c = Connection::get_private(BusType::Session).unwrap();
+//! let c = Connection::new_session().unwrap();
 //! t.set_registered(&c, true).unwrap();
 //! c.add_handler(t);
 //! /* Run forever */

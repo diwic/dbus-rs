@@ -13,7 +13,7 @@ use crate::arg::{Iter, IterAppend, Arg, ArgType, OwnedFd};
 use std::ffi::CStr;
 use std::{ops, any};
 
-use crate::{Connection, Message, Error};
+use crate::{ffidisp::Connection, Message, Error};
 use std::collections::BTreeMap;
 
 #[derive(Debug,Copy,Clone)]
@@ -632,9 +632,11 @@ impl<'a> PropHandler<'a> {
 mod test {
     extern crate tempfile;
 
-    use crate::{Connection, Message, MessageType, BusType, libc, Path};
+    use crate::{Message, MessageType, Path};
+    use libc;
     use crate::arg::messageitem::MessageItem;
     use crate::arg::OwnedFd;
+    use crate::ffidisp::{Connection, BusType};
 
     #[test]
     fn unix_fd() {
@@ -779,10 +781,9 @@ mod test {
     /* Unfortunately org.freedesktop.DBus has no properties we can use for testing, but PolicyKit should be around on most distros. */
     #[test]
     fn test_get_policykit_version() {
-        use crate::BusType;
         use super::Props;
 
-        let c = Connection::get_private(BusType::System).unwrap();
+        let c = Connection::new_system().unwrap();
         let p = Props::new(&c, "org.freedesktop.PolicyKit1", "/org/freedesktop/PolicyKit1/Authority",
             "org.freedesktop.PolicyKit1.Authority", 10000);
 

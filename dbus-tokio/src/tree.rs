@@ -2,7 +2,7 @@
 
 use std::{ops, fmt, mem};
 use dbus::tree::{Factory, Tree, MethodType, DataType, MTFn, Method, MethodInfo, MethodErr};
-use dbus::{Message, Connection};
+use dbus::{Message, ffidisp::Connection};
 use dbus::strings::Member;
 use std::marker::PhantomData;
 use std::cell::RefCell;

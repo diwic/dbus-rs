@@ -4,7 +4,7 @@ extern crate dbus;
 // FocusedWindowChanged signal. The signal contains "window_id", "app_id" and "stage",
 // we print only "app_id". 
 
-use dbus::{Connection, BusType, Message, MessageType};
+use dbus::{ffidisp::Connection, Message, MessageType};
 
 fn focus_msg(msg: &Message) -> Option<&str> {
     if msg.msg_type() != MessageType::Signal { return None };
@@ -15,7 +15,7 @@ fn focus_msg(msg: &Message) -> Option<&str> {
 }
 
 fn main() {
-    let c = Connection::get_private(BusType::Session).unwrap();
+    let c = Connection::new_session().unwrap();
     c.add_match("interface='com.canonical.Unity.WindowStack',member='FocusedWindowChanged'").unwrap();
 
     loop {

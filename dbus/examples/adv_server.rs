@@ -12,8 +12,9 @@ use std::sync::mpsc;
 use std::cell::Cell;
 use std::thread;
 
-use dbus::{Connection, BusType, tree, Path};
+use dbus::{tree, Path};
 use dbus::tree::{Interface, Signal, MTFn, Access, MethodErr, EmitsChangedSignal};
+use dbus::ffidisp::Connection;
 
 // Our storage device
 #[derive(Debug)]
@@ -150,7 +151,7 @@ fn run() -> Result<(), Box<std::error::Error>> {
     let tree = create_tree(&devices, &Arc::new(iface));
 
     // Setup DBus connection
-    let c = Connection::get_private(BusType::Session)?;
+    let c = Connection::new_session()?;
     c.register_name("com.example.dbus.rs.advancedserverexample", 0)?;
     tree.set_registered(&c, true)?;
 

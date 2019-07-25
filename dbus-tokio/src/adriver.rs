@@ -294,7 +294,7 @@ impl Drop for AMessageStream {
 
 #[test]
 fn aconnection_test() {
-    let conn = Rc::new(Connection::get_private(::dbus::BusType::Session).unwrap());
+    let conn = Rc::new(Connection::new_session().unwrap());
     let mut rt = Runtime::new().unwrap();
     let aconn = AConnection::new(conn.clone(), CoreHandle::default(), &mut rt).unwrap();
 
@@ -307,7 +307,7 @@ fn aconnection_test() {
 
 #[test]
 fn astream_test() {
-    let conn = Rc::new(Connection::get_private(::dbus::BusType::Session).unwrap());
+    let conn = Rc::new(Connection::new_session().unwrap());
     let mut rt = Runtime::new().unwrap();
     let aconn = AConnection::new(conn.clone(), CoreHandle::default(), &mut rt).unwrap();
 

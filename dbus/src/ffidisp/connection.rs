@@ -1,6 +1,7 @@
 //! Contains structs and traits relevant to the connection itself, and dispatching incoming messages. 
 
-use crate::{Error, ffi, to_c_str, c_str_to_slice, Message, MessageType, ConnPath};
+use crate::{Error, ffi, to_c_str, c_str_to_slice, Message, MessageType};
+use crate::ffidisp::ConnPath;
 use std::{fmt, mem, ptr, thread, panic, ops};
 use std::collections::VecDeque;
 use std::cell::{Cell, RefCell};
@@ -106,6 +107,16 @@ impl Connection {
         Ok(c)
     }
 
+    /// Creates a new connection to the session bus.
+    ///
+    /// Just a shortcut for `get_private(BusType::Session)`.
+    pub fn new_session() -> Result<Connection, Error> { Self::get_private(BusType::Session) }
+
+    /// Creates a new connection to the system bus.
+    ///
+    /// Just a shortcut for `get_private(BusType::System)`.
+    pub fn new_system() -> Result<Connection, Error> { Self::get_private(BusType::System) }
+
     /// Creates a new D-Bus connection.
     pub fn get_private(bus: BusType) -> Result<Connection, Error> {
         let mut e = Error::empty();
@@ -182,9 +193,9 @@ impl Connection {
     ///
     /// ```
     /// use std::{cell, rc};
-    /// use dbus::{Connection, Message, BusType};
+    /// use dbus::{ffidisp::Connection, Message};
     ///
-    /// let c = Connection::get_private(BusType::Session).unwrap();
+    /// let c = Connection::new_session().unwrap();
     /// let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
     ///
     /// let done: rc::Rc<cell::Cell<bool>> = Default::default();
@@ -366,8 +377,8 @@ impl Connection {
     /// Replace the default callback with our own:
     ///
     /// ```ignore
-    /// use dbus::{Connection, BusType};
-    /// let c = Connection::get_private(BusType::Session).unwrap();
+    /// use dbus::ffidisp::Connection;
+    /// let c = Connection::new_session().unwrap();
     /// // Set our callback
     /// c.replace_message_callback(Some(Box::new(move |conn, msg| {
     ///     println!("Got message: {:?}", msg.get_items());
@@ -384,8 +395,8 @@ impl Connection {
     /// Chain our callback to filter out some messages before `iter().next()`:
     ///
     /// ```
-    /// use dbus::{Connection, BusType, MessageType};
-    /// let c = Connection::get_private(BusType::Session).unwrap();
+    /// use dbus::{ffidisp::Connection, MessageType};
+    /// let c = Connection::new_session().unwrap();
     /// // Take the previously set callback
     /// let mut old_cb = c.replace_message_callback(None).unwrap();
     /// // Set our callback

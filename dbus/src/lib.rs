@@ -25,7 +25,6 @@ pub use crate::message::{Message, MessageType};
 pub mod message;
 
 pub mod ffidisp;
-pub use crate::ffidisp::{Connection, ConnPath, BusType};
 
 mod error;
 pub use error::Error;

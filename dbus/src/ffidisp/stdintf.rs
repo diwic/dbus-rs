@@ -26,7 +26,7 @@ pub use self::org_freedesktop_dbus::ObjectManager as OrgFreedesktopDBusObjectMan
 
 pub mod org_freedesktop_dbus {
 
-use crate::{arg, message};
+use crate::{arg, message, ffidisp};
 
 /// Method of the [org.freedesktop.DBus.Introspectable](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-introspectable) interface.
 pub trait Introspectable {
@@ -34,7 +34,7 @@ pub trait Introspectable {
     fn introspect(&self) -> Result<String, Self::Err>;
 }
 
-impl<'a, C: ::std::ops::Deref<Target=crate::Connection>> Introspectable for crate::ConnPath<'a, C> {
+impl<'a, C: ::std::ops::Deref<Target=ffidisp::Connection>> Introspectable for ffidisp::ConnPath<'a, C> {
     type Err = crate::Error;
 
     fn introspect(&self) -> Result<String, Self::Err> {
@@ -55,7 +55,7 @@ pub trait Properties {
     fn set<I2: arg::Arg + arg::Append>(&self, interface_name: &str, property_name: &str, value: I2) -> Result<(), Self::Err>;
 }
 
-impl<'a, C: ::std::ops::Deref<Target=crate::Connection>> Properties for crate::ConnPath<'a, C> {
+impl<'a, C: ::std::ops::Deref<Target=ffidisp::Connection>> Properties for ffidisp::ConnPath<'a, C> {
     type Err = crate::Error;
 
     fn get<R0: for<'b> arg::Get<'b>>(&self, interface_name: &str, property_name: &str) -> Result<R0, Self::Err> {
@@ -131,7 +131,7 @@ pub trait ObjectManager {
     fn get_managed_objects(&self) -> Result<::std::collections::HashMap<crate::Path<'static>, ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>>>, Self::Err>;
 }
 
-impl<'a, C: ::std::ops::Deref<Target=crate::Connection>> ObjectManager for crate::ConnPath<'a, C> {
+impl<'a, C: ::std::ops::Deref<Target=ffidisp::Connection>> ObjectManager for ffidisp::ConnPath<'a, C> {
     type Err = crate::Error;
 
     fn get_managed_objects(&self) -> Result<::std::collections::HashMap<crate::Path<'static>, ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>>>, Self::Err> {
@@ -209,7 +209,7 @@ pub trait Peer {
     fn get_machine_id(&self) -> Result<String, Self::Err>;
 }
 
-impl<'a, C: ::std::ops::Deref<Target=crate::Connection>> Peer for crate::ConnPath<'a, C> {
+impl<'a, C: ::std::ops::Deref<Target=ffidisp::Connection>> Peer for ffidisp::ConnPath<'a, C> {
     type Err = crate::Error;
 
     fn ping(&self) -> Result<(), Self::Err> {

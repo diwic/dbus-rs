@@ -7,7 +7,7 @@ extern crate libc;
 
 use std::cmp;
 
-use dbus::{Connection, BusType, Message};
+use dbus::{ffidisp::Connection, Message};
 use dbus::arg::messageitem::{Props, MessageItem};
 
 fn item_as_i64(i: MessageItem) -> Result<i64, Box<std::error::Error>> {
@@ -27,7 +27,7 @@ fn rtkit_set_realtime(c: &Connection, thread: u64, prio: u32) -> Result<(), ::db
 }
 
 fn make_realtime(prio: u32) -> Result<u32, Box<std::error::Error>> {
-    let c = Connection::get_private(BusType::System)?;
+    let c = Connection::new_system()?;
 
     let p = Props::new(&c, "org.freedesktop.RealtimeKit1", "/org/freedesktop/RealtimeKit1",
         "org.freedesktop.RealtimeKit1", 10000);
