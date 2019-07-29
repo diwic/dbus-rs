@@ -13,8 +13,8 @@ pub mod org_freedesktop_dbus {
 #![allow(missing_docs)]
 
 use crate as dbus;
-use dbus::arg;
-use dbus::blocking;
+use crate::arg;
+use crate::blocking;
 
 pub trait Properties {
     fn get<R0: for<'b> arg::Get<'b>>(&self, interface_name: &str, property_name: &str) -> Result<R0, dbus::Error>;

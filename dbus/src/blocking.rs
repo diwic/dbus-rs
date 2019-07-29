@@ -44,7 +44,9 @@ impl Connection {
 
     fn dispatch(&self, msg: Message) {
         if let Some(msg) = run_filters(&mut self.filters.borrow_mut(), msg, |cb, msg| { cb(msg) }) {
-            unimplemented!("{:?}", msg)
+            if let Some(reply) = crate::channel::default_reply(&msg) {
+                let _ = self.channel.send(reply);
+            }
         }
     }
 

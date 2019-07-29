@@ -21,14 +21,16 @@ struct Dispatcher {
 }
 
 impl Dispatcher {
-    fn dispatch(&mut self, msg: Message) {
+    fn dispatch<S: Sender>(&mut self, msg: Message, sender: &S) {
         if let Some(serial) = msg.get_reply_serial() {
             let v = self.replies.entry(serial).or_insert(PollReply::Consumed);
             let w = mem::replace(v, PollReply::Ready(msg));
             if let PollReply::Pending(w) = w { w.wake() };
             return;
         }
-        // TODO: Default dispatch etc
+        if let Some(reply) = crate::channel::default_reply(&msg) {
+           let _ = sender.send(reply);
+        }
     }
 }
 
@@ -66,7 +68,7 @@ impl Connection {
     pub fn dispatch_all(&self) {
         let mut d = self.dispatcher.lock().unwrap();
         while let Some(msg) = self.channel.pop_message() {
-            d.dispatch(msg);
+            d.dispatch(msg, self);
         }
     }
 
@@ -113,6 +115,8 @@ impl<'a, C> Proxy<'a, C> {
 }
 
 impl<'a, C: std::ops::Deref<Target=Connection> + Clone> Proxy<'a, C> {
+
+    /// Make a method call using typed input argument, returns a future that resolves to the typed output arguments.
     pub fn method_call<'i, 'm, R: ReadAll, A: AppendAll, I: Into<Interface<'i>>, M: Into<Member<'m>>>(&self, i: I, m: M, args: A)
     -> MethodReply<R, C> {
         let mut msg = Message::method_call(&self.destination, &self.path, &i.into(), &m.into());
