@@ -1,7 +1,7 @@
 use super::utils::{ArcMap, Iter, IterE, Annotations, Introspect};
 use super::{Factory, MethodType, MethodInfo, MethodResult, MethodErr, DataType, Property, Method, Signal, methodtype};
 use std::sync::{Arc, Mutex};
-use crate::{Message, MessageType, Error, arg};
+use crate::{Message, MessageType, Error, arg, message, channel};
 use crate::strings::{Member, Path, Signature, Interface as IfaceName};
 use crate::ffidisp::{ConnectionItem, MsgHandler, Connection, MsgHandlerType, MsgHandlerResult};
 use std::fmt;
@@ -153,7 +153,7 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
 
     pub(super) fn introspect(&self, tree: &Tree<M, D>) -> String {
         let ifacestr = introspect_map(&self.ifaces, "  ");
-        let olen = self.name.len()+1;
+        let olen = if &**self.name == "/" { 1 } else { self.name.len()+1 };
         let childstr = tree.children(self, true).iter().fold("".to_string(), |na, n|
             format!("{}  <node name=\"{}\"/>\n", na, &n.name[olen..])
         );
@@ -371,7 +371,7 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
         self.paths.remove(p)
     }
 
-    /// Registers or unregisters all object paths in the tree.
+    /// Registers or unregisters all object paths in the tree to a ffidisp::Connection.
     pub fn set_registered(&self, c: &Connection, b: bool) -> Result<(), Error> {
         let mut regd_paths = Vec::new();
         for p in self.paths.keys() {
@@ -411,7 +411,7 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
 
     fn children(&self, o: &ObjectPath<M, D>, direct_only: bool) -> Vec<&ObjectPath<M, D>> {
         let parent: &str = &o.name;
-        let plen = parent.len()+1;
+        let plen = if parent == "/" { 1 } else { parent.len()+1 };
         self.paths.values().filter_map(|v| {
             let k: &str = &v.name;
             if !k.starts_with(parent) || k.len() <= plen || &k[plen-1..plen] != "/" {None} else {
@@ -423,6 +423,25 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
 
     /// Get associated data
     pub fn get_data(&self) -> &D::Tree { &self.data }
+}
+
+impl<M: MethodType<D> + 'static, D: DataType + 'static> Tree<M, D> {
+    /// Connects a Connection with a Tree so that incoming method calls are handled.
+    pub fn start_receive<CC, C>(self, connection: C)
+    where
+        C: std::ops::Deref<Target=CC> + Clone + 'static,
+        CC: channel::MatchingReceiver<F=Box<FnMut(Message) -> bool>> + channel::Sender
+    {
+        let mut rule = message::MatchRule::new();
+        rule.msg_type = Some(MessageType::MethodCall);
+        let c1 = connection.clone();
+        connection.start_receive(0, rule, Box::new(move |msg| {
+            if let Some(replies) = self.handle(&msg) {
+                for r in replies { let _ = c1.send(r); }
+            }
+            true
+        }));
+    }
 
 }
 

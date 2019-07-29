@@ -29,6 +29,8 @@ pub struct Connection {
     filters: RefCell<Vec<Filter<Box<FnMut(Message) -> bool>>>>
 }
 
+use crate::blocking::stdintf::org_freedesktop_dbus;
+
 impl Connection {
     /// Create a new connection to the session bus.
     pub fn new_session() -> Result<Self, Error> { Ok(Connection {
@@ -73,6 +75,20 @@ impl Connection {
     Proxy<'a, &'a Connection> {
         Proxy { connection: self, destination: dest.into(), path: path.into(), timeout_ms }
     }
+
+    /// Request a name on the D-Bus.
+    ///
+    /// For detailed information on the flags and return values, see the libdbus documentation.
+    pub fn request_name<'a, N: Into<BusName<'a>>>(&self, name: N, allow_replacement: bool, replace_existing: bool, do_not_queue: bool)
+    -> Result<org_freedesktop_dbus::RequestNameReply, Error> {
+        org_freedesktop_dbus::request_name(&self.channel, &name.into(), allow_replacement, replace_existing, do_not_queue)
+    }
+
+    /// Release a previously requested name on the D-Bus.
+    pub fn release_name<'a, N: Into<BusName<'a>>>(&self, name: N) -> Result<org_freedesktop_dbus::ReleaseNameReply, Error> {
+        org_freedesktop_dbus::release_name(&self.channel, &name.into())
+    }
+
 }
 
 /// Abstraction over different connections

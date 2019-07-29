@@ -11,13 +11,14 @@
 extern crate dbus;
 
 use std::sync::Arc;
-use dbus::ffidisp::{Connection, BusType, NameFlag};
+use dbus::blocking::Connection;
 use dbus::tree::Factory;
+use std::error::Error;
 
-fn main() {
-    // Let's start by starting up a connection to the session bus and register a name.
-    let c = Connection::get_private(BusType::Session).unwrap();
-    c.register_name("com.example.dbustest", NameFlag::ReplaceExisting as u32).unwrap();
+fn main() -> Result<(), Box<Error>> {
+    // Let's start by starting up a connection to the session bus and request a name.
+    let c = Arc::new(Connection::new_session()?);
+    c.request_name("com.example.dbustest", false, true, false)?;
 
     // The choice of factory tells us what type of tree we want,
     // and if we want any extra data inside. We pick the simplest variant.
@@ -58,15 +59,13 @@ fn main() {
 
         // We also add the signal to the interface. This is mainly for introspection.
         ).add_s(signal2)
-    ));
 
-    // We register all object paths in the tree.
-    tree.set_registered(&c, true).unwrap();
+    // Also add the root path, to help introspection from debugging tools.
+    )).add(f.object_path("/", ()).introspectable());
 
-    // We add the tree to the connection so that incoming method calls will be handled
-    // automatically during calls to "incoming".
-    c.add_handler(tree);
+    // We add the tree to the connection so that incoming method calls will be handled.
+    tree.start_receive(c.clone());
 
-    // Serve other peers forever.
-    loop { c.incoming(1000).next(); }
+    // Serve clients forever.
+    loop { c.process(1000)?; }
 }

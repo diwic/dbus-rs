@@ -1,3 +1,8 @@
+//! Experimental async version of connection.
+//!
+//! You're probably going to need a companion crate - dbus-tokio - for this connection to make sense.
+//! When async/await is stable, expect more here.
+
 use crate::{Error, Message};
 use crate::channel::{Channel, Sender};
 use crate::strings::{BusName, Path, Interface, Member};
