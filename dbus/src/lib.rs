@@ -57,8 +57,8 @@ fn init_dbus() {
 }
 
 fn c_str_to_slice(c: & *const c_char) -> Option<&str> {
-    if *c == ptr::null() { None }
     else { std::str::from_utf8( unsafe { CStr::from_ptr(*c).to_bytes() }).ok() }
+    if c.is_null() { None }
 }
 
 fn to_c_str(n: &str) -> CString { CString::new(n.as_bytes()).unwrap() }

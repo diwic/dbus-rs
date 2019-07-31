@@ -121,7 +121,7 @@ impl Connection {
     pub fn get_private(bus: BusType) -> Result<Connection, Error> {
         let mut e = Error::empty();
         let conn = unsafe { ffi::dbus_bus_get_private(bus, e.get_mut()) };
-        if conn == ptr::null_mut() {
+        if conn.is_null() {
             return Err(e)
         }
         Self::conn_from_ptr(conn)
@@ -133,7 +133,7 @@ impl Connection {
     pub fn open_private(address: &str) -> Result<Connection, Error> {
         let mut e = Error::empty();
         let conn = unsafe { ffi::dbus_connection_open_private(to_c_str(address).as_ptr(), e.get_mut()) };
-        if conn == ptr::null_mut() {
+        if conn.is_null() {
             return Err(e)
         }
         Self::conn_from_ptr(conn)
@@ -164,7 +164,7 @@ impl Connection {
             ffi::dbus_connection_send_with_reply_and_block(self.conn(), msg.ptr(),
                 timeout_ms as c_int, e.get_mut())
         };
-        if response == ptr::null_mut() {
+        if response.is_null() {
             return Err(e);
         }
         Ok(Message::from_ptr(response, false))
