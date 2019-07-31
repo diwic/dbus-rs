@@ -46,7 +46,6 @@ static INITDBUS: std::sync::Once = std::sync::ONCE_INIT;
 
 use std::ffi::{CString, CStr};
 use std::os::raw::c_char;
-use std::ptr;
 
 fn init_dbus() {
     INITDBUS.call_once(|| {
@@ -57,8 +56,8 @@ fn init_dbus() {
 }
 
 fn c_str_to_slice(c: & *const c_char) -> Option<&str> {
-    else { std::str::from_utf8( unsafe { CStr::from_ptr(*c).to_bytes() }).ok() }
     if c.is_null() { None }
+    else { std::str::from_utf8( unsafe { CStr::from_ptr(*c).to_bytes() }).ok() }
 }
 
 fn to_c_str(n: &str) -> CString { CString::new(n.as_bytes()).unwrap() }
