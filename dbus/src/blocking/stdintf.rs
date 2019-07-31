@@ -127,7 +127,7 @@ pub (crate) fn request_name<S: blocking::BlockingSender>(s: &S, name: &str, allo
     let r = proxy.request_name(name, flags)?;
     use RequestNameReply::*;
     let all = [PrimaryOwner, InQueue, Exists, AlreadyOwner];
-    all.into_iter().find(|x| **x as u32 == r).map(|x| *x).ok_or_else(||
+    all.iter().find(|x| **x as u32 == r).copied().ok_or_else(||
         dbus::Error::new_custom("org.freedesktop.DBus.failed", "Invalid reply from DBus server")
     )
 }
@@ -140,7 +140,7 @@ pub (crate) fn release_name<S: blocking::BlockingSender>(s: &S, name: &str)
     let r = proxy.release_name(name)?;
     use ReleaseNameReply::*;
     let all = [Released, NonExistent, NotOwner];
-    all.into_iter().find(|x| **x as u32 == r).map(|x| *x).ok_or_else(||
+    all.iter().find(|x| **x as u32 == r).copied().ok_or_else(||
         dbus::Error::new_custom("org.freedesktop.DBus.failed", "Invalid reply from DBus server")
     )
 }

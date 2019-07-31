@@ -58,8 +58,8 @@ pub trait SignalArgs {
     /// If sender and/or path is None, matches all senders and/or paths.
     fn match_rule<'a>(sender: Option<&'a BusName>, path: Option<&'a Path>) -> MatchRule<'a> {
         let mut m: MatchRule = Default::default();
-        m.sender = sender.map(|x| x.clone());
-        m.path = path.map(|x| x.clone());
+        m.sender = sender.cloned();
+        m.path = path.cloned();
         m.msg_type = Some(MessageType::Signal);
         m.interface = Some(Self::INTERFACE.into());
         m.member = Some(Self::NAME.into());

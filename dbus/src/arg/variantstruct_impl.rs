@@ -11,7 +11,7 @@ pub struct Variant<T>(pub T);
 impl Variant<Box<RefArg>> {
     /// Creates a new refarg from an Iter. Mainly for internal use.
     pub fn new_refarg<'a>(i: &mut Iter<'a>) -> Option<Self> {
-        i.recurse(ArgType::Variant).and_then(|mut si| si.get_refarg()).map(|v| Variant(v))
+        i.recurse(ArgType::Variant).and_then(|mut si| si.get_refarg()).map(Variant)
     }
 }
 
@@ -41,13 +41,13 @@ impl Append for Variant<Box<RefArg>> {
 
 impl<'a, T: Get<'a>> Get<'a> for Variant<T> {
     fn get(i: &mut Iter<'a>) -> Option<Variant<T>> {
-        i.recurse(ArgType::Variant).and_then(|mut si| si.get().map(|v| Variant(v)))
+        i.recurse(ArgType::Variant).and_then(|mut si| si.get().map(Variant))
     }
 }
 
 impl<'a> Get<'a> for Variant<Iter<'a>> {
     fn get(i: &mut Iter<'a>) -> Option<Variant<Iter<'a>>> {
-        i.recurse(ArgType::Variant).map(|v| Variant(v))
+        i.recurse(ArgType::Variant).map(Variant)
     }
 }
 /*

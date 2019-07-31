@@ -17,7 +17,7 @@ pub trait Arg {
     ///
     /// For backwards compatibility.
     #[deprecated(note = "Use associated constant ARG_TYPE instead")]
-    fn arg_type() -> ArgType { return Self::ARG_TYPE; }
+    fn arg_type() -> ArgType { Self::ARG_TYPE }
     /// The corresponding D-Bus type signature for this type. 
     fn signature() -> Signature<'static>;
 }
@@ -183,7 +183,7 @@ impl<T: RefArg + ?Sized> RefArg for $t<T> {
     #[inline]
     fn as_any(&self) -> &any::Any where T: 'static { (&**self).as_any() }
     #[inline]
-    fn as_any_mut<'a>(&'a mut $ss) -> &'a mut any::Any where T: 'static { $make_mut.as_any_mut() }
+    fn as_any_mut(&mut $ss) -> &mut any::Any where T: 'static { $make_mut.as_any_mut() }
     #[inline]
     fn as_i64(&self) -> Option<i64> { (&**self).as_i64() }
     #[inline]
@@ -204,7 +204,7 @@ impl<T: Arg> Arg for $t<T> {
     fn signature() -> Signature<'static> { T::signature() }
 }
 impl<'a, T: Get<'a>> Get<'a> for $t<T> {
-    fn get(i: &mut Iter<'a>) -> Option<Self> { T::get(i).map(|v| $t::new(v)) }
+    fn get(i: &mut Iter<'a>) -> Option<Self> { T::get(i).map($t::new) }
 }
 
     }

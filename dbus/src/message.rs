@@ -326,7 +326,7 @@ impl Message {
     }
 
     /// Returns a struct for retreiving the arguments from a message. Supersedes get_items().
-    pub fn iter_init<'a>(&'a self) -> Iter<'a> { Iter::new(&self) }
+    pub fn iter_init(&self) -> Iter { Iter::new(&self) }
 
     /// Gets the MessageType of the Message.
     pub fn msg_type(&self) -> MessageType {
@@ -345,7 +345,7 @@ impl Message {
     }
 
     /// Gets the name of the connection that originated this message.
-    pub fn sender<'a>(&'a self) -> Option<BusName<'a>> {
+    pub fn sender(&self) -> Option<BusName> {
         self.msg_internal_str(unsafe { ffi::dbus_message_get_sender(self.msg) })
             .map(|s| unsafe { BusName::from_slice_unchecked(s) })
     }
@@ -362,13 +362,13 @@ impl Message {
     }
 
     /// Gets the object path this Message is being sent to.
-    pub fn path<'a>(&'a self) -> Option<Path<'a>> {
+    pub fn path(&self) -> Option<Path> {
         self.msg_internal_str(unsafe { ffi::dbus_message_get_path(self.msg) })
             .map(|s| unsafe { Path::from_slice_unchecked(s) })
     }
 
     /// Gets the destination this Message is being sent to.
-    pub fn destination<'a>(&'a self) -> Option<BusName<'a>> {
+    pub fn destination(&self) -> Option<BusName> {
         self.msg_internal_str(unsafe { ffi::dbus_message_get_destination(self.msg) })
             .map(|s| unsafe { BusName::from_slice_unchecked(s) })
     }
@@ -382,13 +382,13 @@ impl Message {
     }
 
     /// Gets the interface this Message is being sent to.
-    pub fn interface<'a>(&'a self) -> Option<Interface<'a>> {
+    pub fn interface(&self) -> Option<Interface> {
         self.msg_internal_str(unsafe { ffi::dbus_message_get_interface(self.msg) })
             .map(|s| unsafe { Interface::from_slice_unchecked(s) })
     }
 
     /// Gets the interface member being called.
-    pub fn member<'a>(&'a self) -> Option<Member<'a>> {
+    pub fn member(&self) -> Option<Member> {
         self.msg_internal_str(unsafe { ffi::dbus_message_get_member(self.msg) })
             .map(|s| unsafe { Member::from_slice_unchecked(s) })
     }

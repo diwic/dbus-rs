@@ -187,7 +187,7 @@ impl MessageItem {
     /// Get the D-Bus Signature for this MessageItem.
     pub fn signature(&self) -> Signature<'static> {
         use crate::arg::Variant;
-        match *self {
+        match self {
             MessageItem::Str(_) => <String as Arg>::signature(),
             MessageItem::Bool(_) => <bool as Arg>::signature(),
             MessageItem::Byte(_) => <u8 as Arg>::signature(),
@@ -211,23 +211,23 @@ impl MessageItem {
     /// Get the arg type of this MessageItem.
     pub fn arg_type(&self) -> arg::ArgType {
         match self {
-            &MessageItem::Str(_) => ArgType::String,
-            &MessageItem::Bool(_) => ArgType::Boolean,
-            &MessageItem::Byte(_) => ArgType::Byte,
-            &MessageItem::Int16(_) => ArgType::Int16,
-            &MessageItem::Int32(_) => ArgType::Int32,
-            &MessageItem::Int64(_) => ArgType::Int64,
-            &MessageItem::UInt16(_) => ArgType::UInt16,
-            &MessageItem::UInt32(_) => ArgType::UInt32,
-            &MessageItem::UInt64(_) => ArgType::UInt64,
-            &MessageItem::Double(_) => ArgType::Double,
-            &MessageItem::Array(_) => ArgType::Array,
-            &MessageItem::Struct(_) => ArgType::Struct,
-            &MessageItem::Variant(_) => ArgType::Variant,
-            &MessageItem::Dict(_) => ArgType::Array,
-            &MessageItem::ObjectPath(_) => ArgType::ObjectPath,
-            &MessageItem::Signature(_) => ArgType::Signature,
-            &MessageItem::UnixFd(_) => ArgType::UnixFd,
+            MessageItem::Str(_) => ArgType::String,
+            MessageItem::Bool(_) => ArgType::Boolean,
+            MessageItem::Byte(_) => ArgType::Byte,
+            MessageItem::Int16(_) => ArgType::Int16,
+            MessageItem::Int32(_) => ArgType::Int32,
+            MessageItem::Int64(_) => ArgType::Int64,
+            MessageItem::UInt16(_) => ArgType::UInt16,
+            MessageItem::UInt32(_) => ArgType::UInt32,
+            MessageItem::UInt64(_) => ArgType::UInt64,
+            MessageItem::Double(_) => ArgType::Double,
+            MessageItem::Array(_) => ArgType::Array,
+            MessageItem::Struct(_) => ArgType::Struct,
+            MessageItem::Variant(_) => ArgType::Variant,
+            MessageItem::Dict(_) => ArgType::Array,
+            MessageItem::ObjectPath(_) => ArgType::ObjectPath,
+            MessageItem::Signature(_) => ArgType::Signature,
+            MessageItem::UnixFd(_) => ArgType::UnixFd,
         }
     }
 
@@ -236,7 +236,7 @@ impl MessageItem {
         let mut v = Vec::new();
         for r in i {
             let (s, vv) = r?;
-            v.push((s.into(), Box::new(vv).into()).into());
+            v.push((s.into(), Box::new(vv).into()));
         }
         Ok(MessageItem::Dict(MessageItemDict::new(v, Signature::new("s").unwrap(), Signature::new("v").unwrap()).unwrap()))
     }
@@ -246,7 +246,7 @@ impl MessageItem {
     /// Note: This requires `v` to be non-empty. See also
     /// `MessageItem::from(&[T])`, which can handle empty arrays as well.
     pub fn new_array(v: Vec<MessageItem>) -> Result<MessageItem, ArrayError> {
-        if v.len() == 0 {
+        if v.is_empty() {
             return Err(ArrayError::EmptyArray);
         }
         let s = MessageItemArray::make_sig(&v[0]);
@@ -258,7 +258,7 @@ impl MessageItem {
     /// Note: This requires `v` to be non-empty. See also
     /// `MessageItem::from(&[(T1, T2)])`, which can handle empty arrays as well.
     pub fn new_dict(v: Vec<(MessageItem, MessageItem)>) -> Result<MessageItem, ArrayError> {
-        if v.len() == 0 {
+        if v.is_empty() {
             return Err(ArrayError::EmptyArray);
         }
         let (s1, s2) = (v[0].0.signature(), v[0].1.signature());
@@ -283,7 +283,7 @@ impl MessageItem {
         let v: Vec<MessageItem> = i.map(|ii| ii.into()).collect();
         let s = {
             let d;
-            let t = if v.len() == 0 { d = D::default().into(); &d } else { &v[0] };
+            let t = if v.is_empty() { d = D::default().into(); &d } else { &v[0] };
             MessageItemArray::make_sig(t)
         };
         MessageItem::Array(MessageItemArray::new(v, s).unwrap())
@@ -292,7 +292,7 @@ impl MessageItem {
     fn new_dict2<K, V, I>(i: I) -> MessageItem
     where K: Into<MessageItem> + Default, V: Into<MessageItem> + Default, I: Iterator<Item=(K, V)> {
         let v: Vec<(MessageItem, MessageItem)> = i.map(|(k, v)| (k.into(), v.into())).collect();
-        let (kt, vt) = if v.len() == 0 {
+        let (kt, vt) = if v.is_empty() {
             let kd = K::default().into();
             let vd = V::default().into();
             (kd.signature(), vd.signature())
@@ -307,7 +307,7 @@ macro_rules! msgitem_convert {
 
         impl<'a> FromMessageItem<'a> for $t {
             fn from(i: &'a MessageItem) -> Result<$t,()> {
-                if let &MessageItem::$s(ref b) = i { Ok(*b) } else { Err(()) }
+                if let MessageItem::$s(ref b) = *i { Ok(*b) } else { Err(()) }
             }
         }
     }
@@ -329,7 +329,7 @@ msgitem_convert!(bool, Bool);
 impl<'a, T> From<&'a [T]> for MessageItem
 where T: Into<MessageItem> + Clone + Default {
     fn from(i: &'a [T]) -> MessageItem {
-        MessageItem::new_array2(i.iter().map(|ii| ii.clone()))
+        MessageItem::new_array2(i.iter().cloned())
     }
 }
 
@@ -337,7 +337,7 @@ where T: Into<MessageItem> + Clone + Default {
 impl<'a, T1, T2> From<&'a [(T1, T2)]> for MessageItem
 where T1: Into<MessageItem> + Clone + Default, T2: Into<MessageItem> + Clone + Default {
     fn from(i: &'a [(T1, T2)]) -> MessageItem {
-        MessageItem::new_dict2(i.iter().map(|ii| ii.clone()))
+        MessageItem::new_dict2(i.iter().cloned())
     }
 }
 
@@ -365,35 +365,35 @@ pub trait FromMessageItem<'a> :Sized {
 impl<'a> FromMessageItem<'a> for &'a str {
     fn from(i: &'a MessageItem) -> Result<&'a str,()> {
         match i {
-            &MessageItem::Str(ref b) => Ok(&b),
-            &MessageItem::ObjectPath(ref b) => Ok(&b),
-            &MessageItem::Signature(ref b) => Ok(&b),
+            MessageItem::Str(ref b) => Ok(&b),
+            MessageItem::ObjectPath(ref b) => Ok(&b),
+            MessageItem::Signature(ref b) => Ok(&b),
             _ => Err(()),
         }
     }
 }
 
 impl<'a> FromMessageItem<'a> for &'a String {
-    fn from(i: &'a MessageItem) -> Result<&'a String,()> { if let &MessageItem::Str(ref b) = i { Ok(&b) } else { Err(()) } }
+    fn from(i: &'a MessageItem) -> Result<&'a String,()> { if let MessageItem::Str(ref b) = i { Ok(&b) } else { Err(()) } }
 }
 
 impl<'a> FromMessageItem<'a> for &'a Path<'static> {
-    fn from(i: &'a MessageItem) -> Result<&'a Path<'static>,()> { if let &MessageItem::ObjectPath(ref b) = i { Ok(&b) } else { Err(()) } }
+    fn from(i: &'a MessageItem) -> Result<&'a Path<'static>,()> { if let MessageItem::ObjectPath(ref b) = i { Ok(&b) } else { Err(()) } }
 }
 
 impl<'a> FromMessageItem<'a> for &'a Signature<'static> {
-    fn from(i: &'a MessageItem) -> Result<&'a Signature<'static>,()> { if let &MessageItem::Signature(ref b) = i { Ok(&b) } else { Err(()) } }
+    fn from(i: &'a MessageItem) -> Result<&'a Signature<'static>,()> { if let MessageItem::Signature(ref b) = i { Ok(&b) } else { Err(()) } }
 }
 
 impl<'a> FromMessageItem<'a> for &'a MessageItem {
-    fn from(i: &'a MessageItem) -> Result<&'a MessageItem,()> { if let &MessageItem::Variant(ref b) = i { Ok(&**b) } else { Err(()) } }
+    fn from(i: &'a MessageItem) -> Result<&'a MessageItem,()> { if let MessageItem::Variant(ref b) = i { Ok(&**b) } else { Err(()) } }
 }
 
 impl<'a> FromMessageItem<'a> for &'a Vec<MessageItem> {
     fn from(i: &'a MessageItem) -> Result<&'a Vec<MessageItem>,()> {
         match i {
-            &MessageItem::Array(ref b) => Ok(&b.v),
-            &MessageItem::Struct(ref b) => Ok(&b),
+            MessageItem::Array(ref b) => Ok(&b.v),
+            MessageItem::Struct(ref b) => Ok(&b),
             _ => Err(()),
         }
     }
@@ -404,12 +404,12 @@ impl<'a> FromMessageItem<'a> for &'a [MessageItem] {
 }
 
 impl<'a> FromMessageItem<'a> for &'a OwnedFd {
-    fn from(i: &'a MessageItem) -> Result<&'a OwnedFd,()> { if let &MessageItem::UnixFd(ref b) = i { Ok(b) } else { Err(()) } }
+    fn from(i: &'a MessageItem) -> Result<&'a OwnedFd,()> { if let MessageItem::UnixFd(ref b) = i { Ok(b) } else { Err(()) } }
 }
 
 impl<'a> FromMessageItem<'a> for &'a [(MessageItem, MessageItem)] {
     fn from(i: &'a MessageItem) -> Result<&'a [(MessageItem, MessageItem)],()> {
-        if let &MessageItem::Dict(ref d) = i { Ok(&*d.v) } else { Err(()) }
+        if let MessageItem::Dict(ref d) = i { Ok(&*d.v) } else { Err(()) }
     }
 }
 
@@ -546,12 +546,12 @@ impl<'a> Props<'a> {
         let mut r = self.conn.send_with_reply_and_block(m, self.timeout_ms)?;
         let reply = r.as_result()?.get_items();
         if reply.len() == 1 {
-            if let &MessageItem::Variant(ref v) = &reply[0] {
+            if let MessageItem::Variant(ref v) = reply[0] {
                 return Ok((**v).clone())
             }
        }
        let f = format!("Invalid reply for property get {}: '{:?}'", propname, reply);
-       return Err(Error::new_custom("InvalidReply", &f));
+       Err(Error::new_custom("InvalidReply", &f))
     }
 
     /// Set a single property's value.
