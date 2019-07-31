@@ -3,7 +3,7 @@
 use crate::{Error, ffi, to_c_str, c_str_to_slice, Message, MessageType};
 use crate::ffidisp::ConnPath;
 use std::{fmt, mem, ptr, thread, panic, ops};
-use std::collections::VecDeque;
+use std::{collections::VecDeque, time::Duration};
 use std::cell::{Cell, RefCell};
 use std::os::unix::io::RawFd;
 use std::os::raw::{c_void, c_char, c_int, c_uint};
@@ -475,8 +475,8 @@ impl crate::channel::Sender for Connection {
 }
 
 impl crate::blocking::BlockingSender for Connection {
-    fn send_with_reply_and_block(&self, msg: Message, timeout_ms: i32) -> Result<Message, Error> {
-        Connection::send_with_reply_and_block(self, msg, timeout_ms)
+    fn send_with_reply_and_block(&self, msg: Message, timeout: Duration) -> Result<Message, Error> {
+        Connection::send_with_reply_and_block(self, msg, timeout.as_millis() as i32)
     }
 }
 
