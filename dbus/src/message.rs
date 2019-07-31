@@ -44,7 +44,7 @@ impl Message {
         let ptr = unsafe {
             ffi::dbus_message_new_method_call(d.as_ref().as_ptr(), p.as_ref().as_ptr(), i.as_ref().as_ptr(), m.as_ref().as_ptr())
         };
-        if ptr == ptr::null_mut() { Err("D-Bus error: dbus_message_new_method_call failed".into()) }
+        if ptr.is_null() { Err("D-Bus error: dbus_message_new_method_call failed".into()) }
         else { Ok(Message { msg: ptr}) }
     }
 
@@ -55,7 +55,7 @@ impl Message {
             ffi::dbus_message_new_method_call(destination.as_ref().as_ptr(), path.as_ref().as_ptr(),
                 iface.as_ref().as_ptr(), name.as_ref().as_ptr())
         };
-        if ptr == ptr::null_mut() { panic!("D-Bus error: dbus_message_new_method_call failed") }
+        if ptr.is_null() { panic!("D-Bus error: dbus_message_new_method_call failed") }
         Message { msg: ptr}
     }
 
@@ -80,7 +80,7 @@ impl Message {
         let ptr = unsafe {
             ffi::dbus_message_new_signal(p.as_ref().as_ptr(), i.as_ref().as_ptr(), m.as_ref().as_ptr())
         };
-        if ptr == ptr::null_mut() { Err("D-Bus error: dbus_message_new_signal failed".into()) }
+        if ptr.is_null() { Err("D-Bus error: dbus_message_new_signal failed".into()) }
         else { Ok(Message { msg: ptr}) }
     }
 
@@ -90,20 +90,20 @@ impl Message {
         let ptr = unsafe {
             ffi::dbus_message_new_signal(path.as_ref().as_ptr(), iface.as_ref().as_ptr(), name.as_ref().as_ptr())
         };
-        if ptr == ptr::null_mut() { panic!("D-Bus error: dbus_message_new_signal failed") }
+        if ptr.is_null() { panic!("D-Bus error: dbus_message_new_signal failed") }
         Message { msg: ptr}
     }
 
     /// Creates a method reply for this method call.
     pub fn new_method_return(m: &Message) -> Option<Message> {
         let ptr = unsafe { ffi::dbus_message_new_method_return(m.msg) };
-        if ptr == ptr::null_mut() { None } else { Some(Message { msg: ptr} ) }
+        if ptr.is_null() { None } else { Some(Message { msg: ptr} ) }
     }
 
     /// Creates a method return (reply) for this method call.
     pub fn method_return(&self) -> Message {
         let ptr = unsafe { ffi::dbus_message_new_method_return(self.msg) };
-        if ptr == ptr::null_mut() { panic!("D-Bus error: dbus_message_new_method_return failed") }
+        if ptr.is_null() { panic!("D-Bus error: dbus_message_new_method_return failed") }
         Message {msg: ptr}
     }
 
@@ -112,13 +112,13 @@ impl Message {
     pub fn new_error(m: &Message, error_name: &str, error_message: &str) -> Option<Message> {
         let (en, em) = (to_c_str(error_name), to_c_str(error_message));
         let ptr = unsafe { ffi::dbus_message_new_error(m.msg, en.as_ptr(), em.as_ptr()) };
-        if ptr == ptr::null_mut() { None } else { Some(Message { msg: ptr} ) }
+        if ptr.is_null() { None } else { Some(Message { msg: ptr} ) }
     }
 
     /// Creates a new error reply
     pub fn error(&self, error_name: &ErrorName, error_message: &CStr) -> Message {
         let ptr = unsafe { ffi::dbus_message_new_error(self.msg, error_name.as_ref().as_ptr(), error_message.as_ptr()) };
-        if ptr == ptr::null_mut() { panic!("D-Bus error: dbus_message_new_error failed") }
+        if ptr.is_null() { panic!("D-Bus error: dbus_message_new_error failed") }
         Message { msg: ptr}
     }
 
@@ -340,7 +340,7 @@ impl Message {
     }
 
     fn msg_internal_str<'a>(&'a self, c: *const libc::c_char) -> Option<&'a [u8]> {
-        if c == ptr::null() { None }
+        if c.is_null() { None }
         else { Some( unsafe { CStr::from_ptr(c) }.to_bytes_with_nul()) }
     }
 

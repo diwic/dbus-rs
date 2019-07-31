@@ -103,7 +103,7 @@ impl Channel {
             BusType::Starter => ffi::DBusBusType::Starter,
         };
         let conn = unsafe { ffi::dbus_bus_get_private(b, e.get_mut()) };
-        if conn == ptr::null_mut() {
+        if conn.is_null() {
             return Err(e)
         }
         Self::conn_from_ptr(conn)
@@ -117,7 +117,7 @@ impl Channel {
     pub fn open_private(address: &str) -> Result<Channel, Error> {
         let mut e = Error::empty();
         let conn = unsafe { ffi::dbus_connection_open_private(to_c_str(address).as_ptr(), e.get_mut()) };
-        if conn == ptr::null_mut() {
+        if conn.is_null() {
             return Err(e)
         }
         Self::conn_from_ptr(conn)
@@ -148,7 +148,7 @@ impl Channel {
     /// It's usually something like ":1.54"
     pub fn unique_name(&self) -> Option<&str> {
         let c = unsafe { ffi::dbus_bus_get_unique_name(self.conn()) };
-        if c == ptr::null_mut() { return None; }
+        if c.is_null() { return None; }
         let s = unsafe { CStr::from_ptr(c) };
         str::from_utf8(s.to_bytes()).ok()
     }
@@ -178,7 +178,7 @@ impl Channel {
             ffi::dbus_connection_send_with_reply_and_block(self.conn(), msg.ptr(),
                 timeout.as_millis() as c_int, e.get_mut())
         };
-        if response == ptr::null_mut() {
+        if response.is_null() {
             return Err(e);
         }
         Ok(Message::from_ptr(response, false))
@@ -211,7 +211,7 @@ impl Channel {
     /// default replies for method calls.
     pub fn pop_message(&self) -> Option<Message> {
         let mptr = unsafe { ffi::dbus_connection_pop_message(self.conn()) };
-        if mptr == ptr::null_mut() {
+        if mptr.is_null() {
             None
         } else {
             Some(Message::from_ptr(mptr, false))
@@ -286,7 +286,7 @@ fn peer(m: &Message) -> Option<Message> {
                 let mut e = Error::empty();
                 unsafe {
                     let id = ffi::dbus_try_get_local_machine_id(e.get_mut());
-                    if id != ptr::null_mut() {
+                    if !id.is_null() {
                         r = r.append1(c_str_to_slice(&(id as *const _)).unwrap());
                         ffi::dbus_free(id as *mut _);
                         return Some(r)

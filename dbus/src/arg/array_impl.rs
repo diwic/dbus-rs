@@ -98,10 +98,10 @@ impl<'a, T: FixedArray> Get<'a> for &'a [T] {
 
             if etype != T::ARG_TYPE as c_int { return None };
 
-            let mut v = ptr::null_mut();
+            let mut v: *mut T = ptr::null_mut();
             let mut i = 0;
             ffi::dbus_message_iter_get_fixed_array(&mut si.0, &mut v as *mut _ as *mut c_void, &mut i);
-            if v == ptr::null_mut() {
+            if v.is_null() {
                 assert_eq!(i, 0);
                 Some(&[][..])
             } else {
