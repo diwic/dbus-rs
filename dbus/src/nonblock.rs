@@ -64,7 +64,7 @@ impl Connection {
     ///
     /// This is usually called from the reactor when there is input on the file descriptor.
     pub fn read_write(&self) -> Result<(), Error> {
-        self.channel.read_write(Some(0)).map_err(|_| Error::new_custom("org.freedesktop.DBus.Error.Failed", "Read/write failed"))
+        self.channel.read_write(Some(Default::default())).map_err(|_| Error::new_custom("org.freedesktop.DBus.Error.Failed", "Read/write failed"))
     }
 
     /// Dispatches all pending messages, without blocking.

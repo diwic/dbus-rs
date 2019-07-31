@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 
 use crate::{Error, Message, to_c_str, c_str_to_slice, MessageType};
-use std::{ptr, str};
+use std::{ptr, str, time::Duration};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_int};
 use crate::message::MatchRule;
@@ -172,11 +172,11 @@ impl Channel {
     ///
     /// Note: In case pop_message and send_with_reply_and_block is called in parallel from different threads,
     /// they might race to retreive the reply message from the internal queue.
-    pub fn send_with_reply_and_block(&self, msg: Message, timeout_ms: i32) -> Result<Message, Error> {
+    pub fn send_with_reply_and_block(&self, msg: Message, timeout: Duration) -> Result<Message, Error> {
         let mut e = Error::empty();
         let response = unsafe {
             ffi::dbus_connection_send_with_reply_and_block(self.conn(), msg.ptr(),
-                timeout_ms as c_int, e.get_mut())
+                timeout.as_millis() as c_int, e.get_mut())
         };
         if response == ptr::null_mut() {
             return Err(e);
@@ -193,10 +193,10 @@ impl Channel {
     ///
     /// Incoming messages are put in the internal queue, outgoing messages are written.
     ///
-    /// Blocking: If there are no messages, for up to timeout_ms milliseconds, or forever if timeout_ms is None.
-    /// For non-blocking behaviour, set timeout_ms to Some(0).
-    pub fn read_write(&self, timeout_ms: Option<i32>) -> Result<(), ()> {
-        let t = timeout_ms.unwrap_or(-1);
+    /// Blocking: If there are no messages, for up to timeout, or forever if timeout is None.
+    /// For non-blocking behaviour, set timeout to Some(0).
+    pub fn read_write(&self, timeout: Option<Duration>) -> Result<(), ()> {
+        let t = timeout.map_or(-1, |t| t.as_millis() as c_int);
         if unsafe { ffi::dbus_connection_read_write(self.conn(), t) == 0 } {
             Err(())
         } else {
@@ -342,7 +342,7 @@ fn channel_simple_test() {
                 c.send(r).unwrap();
             }
         }
-        c.read_write(Some(100)).unwrap();
+        c.read_write(Some(std::time::Duration::from_millis(100))).unwrap();
     }
 }
 

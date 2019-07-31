@@ -52,7 +52,7 @@ fn test_main() {
         // New way
         {
             let c3 = dbus::blocking::Connection::new_session().unwrap();
-            let p = c3.with_proxy(cname, "/test", 1000);
+            let p = c3.with_proxy(cname, "/test", std::time::Duration::from_millis(1000));
             use policykit_blocking::OrgFreedesktopDBusIntrospectable;
             assert_eq!(p.introspect().unwrap(), "I feel so introspected right now");
         }

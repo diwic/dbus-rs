@@ -14,6 +14,7 @@ use std::sync::Arc;
 use dbus::blocking::Connection;
 use dbus::tree::Factory;
 use std::error::Error;
+use std::time::Duration;
 
 fn main() -> Result<(), Box<Error>> {
     // Let's start by starting up a connection to the session bus and request a name.
@@ -67,5 +68,5 @@ fn main() -> Result<(), Box<Error>> {
     tree.start_receive(c.clone());
 
     // Serve clients forever.
-    loop { c.process(1000)?; }
+    loop { c.process(Duration::from_millis(1000))?; }
 }
