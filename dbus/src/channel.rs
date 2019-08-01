@@ -25,6 +25,7 @@ impl Drop for ConnHandle {
 }
 
 /// Which bus to connect to
+#[derive(PartialEq, Eq, Hash)]
 pub enum BusType {
     /// The Session bus - local to every logged in session
     Session = ffi::DBusBusType::Session as isize,
@@ -346,3 +347,16 @@ fn channel_simple_test() {
     }
 }
 
+#[test]
+fn test_bus_type_is_compatible_with_set() {
+    use std::collections::HashSet;
+
+    let mut set: HashSet<BusType> = HashSet::new();
+    set.insert(BusType::Starter);
+    set.insert(BusType::Starter);
+
+    assert_eq!(set.len(), 1);
+    assert!(!set.contains(&BusType::Session));
+    assert!(!set.contains(&BusType::System));
+    assert!(set.contains(&BusType::Starter));
+}
