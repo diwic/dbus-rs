@@ -1,0 +1,15 @@
+language: rust
+dist: xenial
+
+cache: cargo
+
+before_install:
+  - sudo apt-get install -y libdbus-1-dev
+
+before_script:
+  - export DBUS_SESSION_BUS_ADDRESS=`dbus-daemon --session --print-address --fork`
+
+script:
+  - cargo update
+  - cargo check --all
+  - cargo test --all-features --all -- --nocapture --color always
