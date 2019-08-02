@@ -140,14 +140,14 @@ impl<'a, C: std::ops::Deref<Target=Connection> + Clone> Proxy<'a, C> {
     }
 }
 
-type ReadFn<T> = Box<FnOnce(&mut Message) -> Result<T, Error>>;
+type ReadFn<T> = Box<FnOnce(&mut Message) -> Result<T, Error> + Send + Sync + 'static>;
 
 /// Future method reply, used while waiting for a method call reply from the server.
 pub struct MethodReply<T, C>(PollReply<Result<(), Error>, (u32, C)>, Option<ReadFn<T>>); 
 
 impl<T: 'static, C> MethodReply<T, C> {
     /// Convenience combinator in case you want to post-process the result after reading it
-    pub fn and_then<T2>(mut self, f: impl FnOnce(T) -> Result<T2, Error> + 'static) -> MethodReply<T2, C> {
+    pub fn and_then<T2>(mut self, f: impl FnOnce(T) -> Result<T2, Error> + Send + Sync + 'static) -> MethodReply<T2, C> {
         let first = self.1.take().unwrap();
         MethodReply(self.0, Some(Box::new(|r| first(r).and_then(f))))
     }

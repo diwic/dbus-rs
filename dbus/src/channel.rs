@@ -25,7 +25,7 @@ impl Drop for ConnHandle {
 }
 
 /// Which bus to connect to
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub enum BusType {
     /// The Session bus - local to every logged in session
     Session = ffi::DBusBusType::Session as isize,

@@ -61,6 +61,7 @@ fn method_call() {
 
     let (res, conn) = new_session().unwrap();
 
+    #[allow(unreachable_code)] // Easier than trying to figure a good return type for the closure
     let res = res.then(|e| { panic!(e); ready(()) }).unit_error().boxed().compat();
     rt.spawn(res);
 
