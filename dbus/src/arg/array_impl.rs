@@ -7,7 +7,7 @@ use super::check;
 use std::ffi::{CString};
 use std::os::raw::{c_void, c_int};
 use std::collections::HashMap;
-use std::hash::Hash;
+use std::hash::{Hash, BuildHasher};
 
 // Map DBus-Type -> Alignment. Copied from _dbus_marshal_write_fixed_multi in
 // http://dbus.freedesktop.org/doc/api/html/dbus-marshal-basic_8c_source.html#l01020
@@ -169,26 +169,26 @@ impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Iterator for Dict<'a, K, V, Ite
     }
 }
 
-impl<K: DictKey, V: Arg> Arg for HashMap<K, V> {
+impl<K: DictKey, V: Arg, S: BuildHasher> Arg for HashMap<K, V, S> {
     const ARG_TYPE: ArgType = ArgType::Array;
     fn signature() -> Signature<'static> {
         Signature::from(format!("a{{{}{}}}", K::signature(), V::signature())) }
 }
 
-impl<K: DictKey + Append + Eq + Hash, V: Arg + Append> Append for HashMap<K, V> {
+impl<K: DictKey + Append + Eq + Hash, V: Arg + Append, S: BuildHasher> Append for HashMap<K, V, S> {
     fn append_by_ref(&self, i: &mut IterAppend) {
         Dict::new(self.iter()).append_by_ref(i);
     }
 }
 
-impl<'a, K: DictKey + Get<'a> + Eq + Hash, V: Arg + Get<'a>> Get<'a> for HashMap<K, V> {
+impl<'a, K: DictKey + Get<'a> + Eq + Hash, V: Arg + Get<'a>, S: BuildHasher + Default> Get<'a> for HashMap<K, V, S> {
     fn get(i: &mut Iter<'a>) -> Option<Self> {
         // TODO: Full element signature is not verified.
-        Dict::get(i).map(|d| d.into_iter().collect())
+        Dict::get(i).map(|d| d.collect())
     }
 }
 
-impl<K: DictKey + RefArg + Eq + Hash, V: RefArg + Arg> RefArg for HashMap<K, V> {
+impl<K: DictKey + RefArg + Eq + Hash, V: RefArg + Arg, S: BuildHasher> RefArg for HashMap<K, V, S> {
     fn arg_type(&self) -> ArgType { ArgType::Array }
     fn signature(&self) -> Signature<'static> { format!("a{{{}{}}}", <K as Arg>::signature(), <V as Arg>::signature()).into() }
     fn append(&self, i: &mut IterAppend) {
