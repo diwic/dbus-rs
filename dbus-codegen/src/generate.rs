@@ -3,7 +3,7 @@ use std::{io, error, iter};
 use dbus::arg::ArgType;
 use xml;
 
-fn find_attr<'a>(a: &'a Vec<xml::attribute::OwnedAttribute>, n: &str) -> Result<&'a str, Box<error::Error>> {
+fn find_attr<'a>(a: &'a Vec<xml::attribute::OwnedAttribute>, n: &str) -> Result<&'a str, Box<dyn error::Error>> {
     a.into_iter().find(|q| q.name.local_name == n).map(|f| &*f.value).ok_or_else(|| "attribute not found".into())    
 }
 
@@ -194,7 +194,7 @@ struct GenVars {
     gen: Vec<String>,
 }
 
-fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<error::Error>> {
+fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<dyn error::Error>> {
 
     let c = i.next().ok_or_else(|| "unexpected end of signature")?;
     let atype = ArgType::from_i32(c as i32);
@@ -231,8 +231,8 @@ fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool
                 g.gen.push(g.prefix.clone());
                 g.prefix = format!("{}X", g.prefix);
                 t
-            } else if out { "arg::Variant<Box<arg::RefArg + 'static>>".into() }
-            else { "arg::Variant<Box<arg::RefArg>>".into() }
+            } else if out { "arg::Variant<Box<dyn arg::RefArg + 'static>>".into() }
+            else { "arg::Variant<Box<dyn arg::RefArg>>".into() }
             (ArgType::Array, _) => if i.peek() == Some(&'{') {
                 i.next();
                 let n1 = xml_to_rust_type(i, out, &mut None)?;
@@ -250,7 +250,7 @@ fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool
     Ok(result)
 }
 
-fn make_type(s: &str, out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<error::Error>> {
+fn make_type(s: &str, out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<dyn error::Error>> {
     let mut i = s.chars().peekable();
     let r = xml_to_rust_type(&mut i, out, genvars)?;
     if i.next().is_some() { Err("Expected type to end".into()) }
@@ -263,7 +263,7 @@ impl Arg {
            make_snake(&self.name, true)
         } else { format!("arg{}", self.idx) }
     }
-    fn typename(&self, genvar: bool) -> Result<(String, Vec<String>), Box<error::Error>> {
+    fn typename(&self, genvar: bool) -> Result<(String, Vec<String>), Box<dyn error::Error>> {
         let mut g = if genvar { Some(GenVars {
             prefix: format!("{}{}", if self.is_out { 'R' } else { 'I' }, self.idx),
             gen: vec!(),
@@ -280,7 +280,7 @@ impl Prop {
     fn can_set(&self) -> bool { self.access == "write" || self.access == "readwrite" }
 }
 
-fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), Box<error::Error>> {
+fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), Box<dyn error::Error>> {
     let genvar = opts.genericvariant;
     let g: Vec<String> = if genvar {
         let mut g = vec!();
@@ -329,7 +329,7 @@ fn make_result(success: &str, opts: &GenOpts) -> String {
     }
 }
 
-fn write_prop_decl(s: &mut String, p: &Prop, opts: &GenOpts, set: bool) -> Result<(), Box<error::Error>> {
+fn write_prop_decl(s: &mut String, p: &Prop, opts: &GenOpts, set: bool) -> Result<(), Box<dyn error::Error>> {
     if set {
         *s += &format!("    fn set_{}(&self, value: {}) -> {}",
             make_snake(&p.name, false), make_type(&p.typ, true, &mut None)?, make_result("()", opts));
@@ -340,7 +340,7 @@ fn write_prop_decl(s: &mut String, p: &Prop, opts: &GenOpts, set: bool) -> Resul
     Ok(())
 }
 
-fn write_intf(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<error::Error>> {
+fn write_intf(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<dyn error::Error>> {
 
     let iname = make_camel(&i.shortname);
     *s += &format!("\npub trait {} {{\n", iname);
@@ -365,7 +365,7 @@ fn write_intf(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<error:
     Ok(())
 }
 
-fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<error::Error>> {
+fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<dyn error::Error>> {
     let (module, proxy) = match opts.connectiontype {
         ConnectionType::Ffidisp => ("ffidisp", "ConnPath"),
         ConnectionType::Blocking => ("blocking", "Proxy"),
@@ -421,7 +421,7 @@ fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box
 
 }
 
-fn write_signal(s: &mut String, i: &Intf, ss: &Signal) -> Result<(), Box<error::Error>> {
+fn write_signal(s: &mut String, i: &Intf, ss: &Signal) -> Result<(), Box<dyn error::Error>> {
     let structname = format!("{}{}", make_camel(&i.shortname), make_camel(&ss.name));
     *s += "\n#[derive(Debug)]\n";
     *s += &format!("pub struct {} {{\n", structname);
@@ -455,7 +455,7 @@ fn write_signal(s: &mut String, i: &Intf, ss: &Signal) -> Result<(), Box<error::
     Ok(())
 }
 
-fn write_signals(s: &mut String, i: &Intf) -> Result<(), Box<error::Error>> {
+fn write_signals(s: &mut String, i: &Intf) -> Result<(), Box<dyn error::Error>> {
     for ss in i.signals.iter() { write_signal(s, i, ss)?; }
     Ok(())
 }
@@ -478,7 +478,7 @@ fn write_server_access(s: &mut String, i: &Intf, saccess: ServerAccess, minfo_is
 // 3) A user supplied struct?
 // 4) Something reachable from minfo - ServerAccess::RefClosure
 
-fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess, genvar: bool) -> Result<(), Box<error::Error>> {
+fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess, genvar: bool) -> Result<(), Box<dyn error::Error>> {
     let hasf = saccess != ServerAccess::MethodInfo;
     let hasm = mtype == "MethodType";
 
@@ -595,7 +595,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
     Ok(())
 }
 
-fn write_intf_crossroads(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<error::Error>> {
+fn write_intf_crossroads(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<dyn error::Error>> {
     let crh = opts.crhandler.as_ref().unwrap();
     *s += &format!("\npub fn {}_ifaceinfo<I>() -> cr::IfaceInfo<'static, cr::{}>\n",
         make_snake(&i.shortname, false), crh);
@@ -653,7 +653,7 @@ fn write_module_header(s: &mut String, opts: &GenOpts) {
 }
 
 /// Generates Rust structs and traits from D-Bus XML introspection data.
-pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<error::Error>> {
+pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::Error>> {
     use xml::EventReader;
     use xml::reader::XmlEvent;
 

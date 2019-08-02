@@ -62,7 +62,7 @@ impl<'a, C: ::std::ops::Deref<Target=Connection>> ConnPath<'a, C> {
     /// let dest = conn.with_path("org.freedesktop.DBus", "/", 5000);
     /// let (has_owner,): (bool,) = dest.method_call("org.freedesktop.DBus", "NameHasOwner", ("dummy.name.without.owner",))?;
     /// assert_eq!(has_owner, false);
-    /// # Ok::<(), Box<std::error::Error>>(())
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn method_call<'i, 'm, R: ReadAll, A: AppendAll, I: Into<Interface<'i>>, M: Into<Member<'m>>>(&self, i: I, m: M, args: A) -> Result<R, Error> {
         let mut r = self.method_call_with_args(&i.into(), &m.into(), |mut msg| {
@@ -76,7 +76,7 @@ impl<'a, C: ::std::ops::Deref<Target=Connection>> ConnPath<'a, C> {
 /// The type of function to use for replacing the message callback.
 ///
 /// See the documentation for Connection::replace_message_callback for more information.
-pub type MessageCallback = Box<FnMut(&Connection, Message) -> bool + 'static>;
+pub type MessageCallback = Box<dyn FnMut(&Connection, Message) -> bool + 'static>;
 
 pub use crate::ffi::DBusRequestNameReply as RequestNameReply;
 pub use crate::ffi::DBusReleaseNameReply as ReleaseNameReply;
@@ -185,7 +185,7 @@ pub struct MsgHandlerResult {
 }
 
 
-type MsgHandlerList = Vec<Box<MsgHandler>>;
+type MsgHandlerList = Vec<Box<dyn MsgHandler>>;
 
 /// The struct returned from `Connection::send_and_reply`.
 ///

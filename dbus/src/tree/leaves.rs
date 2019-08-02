@@ -333,7 +333,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
     /// "v" is updated with the signal for this property. "new_value" is only called if self.emits is "true",
     /// it should return the value of the property.
     /// If no PropertiesChanged signal should be emitted for this property, "v" is left unchanged.
-    pub fn add_propertieschanged<F: FnOnce() -> Box<arg::RefArg>>(&self, v: &mut Vec<PropertiesPropertiesChanged>, iface: &IfaceName, new_value: F) {
+    pub fn add_propertieschanged<F: FnOnce() -> Box<dyn arg::RefArg>>(&self, v: &mut Vec<PropertiesPropertiesChanged>, iface: &IfaceName, new_value: F) {
 
         // Impl note: It is a bit silly that this function cannot be used from e g get_emits_changed_signal below,
         // but it is due to the fact that we cannot create a RefArg out of an IterAppend; which is what the 'on_get'
@@ -453,7 +453,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> where D::Property: arg::Appen
 impl<M: MethodType<D>, D: DataType> Property<M, D> where D::Property: arg::RefArg {
     /// Adds a "standard" get handler (for RefArgs).
     pub fn default_get_refarg(mut self) -> Self {
-        let g = |i: &mut arg::IterAppend, p: &PropInfo<M, D>| { (p.prop.get_data() as &arg::RefArg).append(i); Ok(()) };
+        let g = |i: &mut arg::IterAppend, p: &PropInfo<M, D>| { arg::RefArg::append(p.prop.get_data(),i); Ok(()) };
         self.get_cb = Some(DebugGetProp(M::make_getprop(g)));
         self
     }

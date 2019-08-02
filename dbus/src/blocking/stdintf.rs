@@ -33,7 +33,7 @@ use crate::blocking;
 
 pub trait Properties {
     fn get<R0: for<'b> arg::Get<'b>>(&self, interface_name: &str, property_name: &str) -> Result<R0, dbus::Error>;
-    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>, dbus::Error>;
+    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>, dbus::Error>;
     fn set<I2: arg::Arg + arg::Append>(&self, interface_name: &str, property_name: &str, value: arg::Variant<I2>) -> Result<(), dbus::Error>;
 }
 
@@ -44,9 +44,9 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target=T>> Properties
             .map(|r: (arg::Variant<R0>,)| (r.0).0)
     }
 
-    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>, dbus::Error> {
+    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>, dbus::Error> {
         self.method_call("org.freedesktop.DBus.Properties", "GetAll", (interface_name, ))
-            .map(|r: (::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>,)| r.0)
+            .map(|r: (::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>,)| r.0)
     }
 
     fn set<I2: arg::Arg + arg::Append>(&self, interface_name: &str, property_name: &str, value: arg::Variant<I2>) -> Result<(), dbus::Error> {
@@ -57,7 +57,7 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target=T>> Properties
 #[derive(Debug)]
 pub struct PropertiesPropertiesChanged {
     pub interface_name: String,
-    pub changed_properties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>,
+    pub changed_properties: ::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>,
     pub invalidated_properties: Vec<String>,
 }
 
@@ -182,7 +182,7 @@ pub trait DBus {
     fn get_connection_app_armor_security_context(&self, arg0: &str) -> Result<String, dbus::Error>;
     fn reload_config(&self) -> Result<(), dbus::Error>;
     fn get_id(&self) -> Result<String, dbus::Error>;
-    fn get_connection_credentials(&self, arg0: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>, dbus::Error>;
+    fn get_connection_credentials(&self, arg0: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>, dbus::Error>;
     fn get_features(&self) -> Result<Vec<String>, dbus::Error>;
     fn get_interfaces(&self) -> Result<Vec<String>, dbus::Error>;
 }
@@ -280,9 +280,9 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target=T>> DBus for b
             .and_then(|r: (String,)| Ok(r.0))
     }
 
-    fn get_connection_credentials(&self, arg0: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>, dbus::Error> {
+    fn get_connection_credentials(&self, arg0: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>, dbus::Error> {
         self.method_call("org.freedesktop.DBus", "GetConnectionCredentials", (arg0, ))
-            .and_then(|r: (::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>,)| Ok(r.0))
+            .and_then(|r: (::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>,)| Ok(r.0))
     }
 
     fn get_features(&self) -> Result<Vec<String>, dbus::Error> {

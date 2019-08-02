@@ -51,7 +51,7 @@ impl<'a, C: ::std::ops::Deref<Target=ffidisp::Connection>> Introspectable for ff
 pub trait Properties {
     type Err;
     fn get<R0: for<'b> arg::Get<'b>>(&self, interface_name: &str, property_name: &str) -> Result<R0, Self::Err>;
-    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>, Self::Err>;
+    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg>>>, Self::Err>;
     fn set<I2: arg::Arg + arg::Append>(&self, interface_name: &str, property_name: &str, value: I2) -> Result<(), Self::Err>;
 }
 
@@ -70,14 +70,14 @@ impl<'a, C: ::std::ops::Deref<Target=ffidisp::Connection>> Properties for ffidis
         Ok(value.0)
     }
 
-    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>, Self::Err> {
+    fn get_all(&self, interface_name: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg>>>, Self::Err> {
         let mut m = self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"GetAll".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
             i.append(interface_name);
         })?;
         m.as_result()?;
         let mut i = m.iter_init();
-        let properties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>> = i.read()?;
+        let properties: ::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg>>> = i.read()?;
         Ok(properties)
     }
 
@@ -98,15 +98,15 @@ impl<'a, C: ::std::ops::Deref<Target=ffidisp::Connection>> Properties for ffidis
 /// [org.freedesktop.DBus.Properties](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-properties) interface.
 pub struct PropertiesPropertiesChanged {
     pub interface_name: String,
-    pub changed_properties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>,
+    pub changed_properties: ::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg>>>,
     pub invalidated_properties: Vec<String>,
 }
 
 impl arg::AppendAll for PropertiesPropertiesChanged {
     fn append(&self, i: &mut arg::IterAppend) {
-        (&self.interface_name as &arg::RefArg).append(i);
-        (&self.changed_properties as &arg::RefArg).append(i);
-        (&self.invalidated_properties as &arg::RefArg).append(i);
+        arg::RefArg::append(&self.interface_name, i);
+        arg::RefArg::append(&self.changed_properties, i);
+        arg::RefArg::append(&self.invalidated_properties ,i);
     }
 }
 
@@ -128,18 +128,18 @@ impl message::SignalArgs for PropertiesPropertiesChanged {
 /// Method of the [org.freedesktop.DBus.ObjectManager](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-objectmanager) interface.
 pub trait ObjectManager {
     type Err;
-    fn get_managed_objects(&self) -> Result<::std::collections::HashMap<crate::Path<'static>, ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>>>, Self::Err>;
+    fn get_managed_objects(&self) -> Result<::std::collections::HashMap<crate::Path<'static>, ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg>>>>>, Self::Err>;
 }
 
 impl<'a, C: ::std::ops::Deref<Target=ffidisp::Connection>> ObjectManager for ffidisp::ConnPath<'a, C> {
     type Err = crate::Error;
 
-    fn get_managed_objects(&self) -> Result<::std::collections::HashMap<crate::Path<'static>, ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>>>, Self::Err> {
+    fn get_managed_objects(&self) -> Result<::std::collections::HashMap<crate::Path<'static>, ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg>>>>>, Self::Err> {
         let mut m = self.method_call_with_args(&"org.freedesktop.DBus.ObjectManager".into(), &"GetManagedObjects".into(), |_| {
         })?;
         m.as_result()?;
         let mut i = m.iter_init();
-        let objects: ::std::collections::HashMap<crate::Path<'static>, ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>>> = i.read()?;
+        let objects: ::std::collections::HashMap<crate::Path<'static>, ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg>>>>> = i.read()?;
         Ok(objects)
     }
 }
@@ -149,13 +149,13 @@ impl<'a, C: ::std::ops::Deref<Target=ffidisp::Connection>> ObjectManager for ffi
 /// [org.freedesktop.DBus.ObjectManager](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-objectmanager) interface.
 pub struct ObjectManagerInterfacesAdded {
     pub object: crate::Path<'static>,
-    pub interfaces: ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg>>>>,
+    pub interfaces: ::std::collections::HashMap<String, ::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg>>>>,
 }
 
 impl arg::AppendAll for ObjectManagerInterfacesAdded {
     fn append(&self, i: &mut arg::IterAppend) {
-        (&self.object as &arg::RefArg).append(i);
-        (&self.interfaces as &arg::RefArg).append(i);
+        arg::RefArg::append(&self.object, i);
+        arg::RefArg::append(&self.interfaces, i);
     }
 }
 
@@ -183,8 +183,8 @@ pub struct ObjectManagerInterfacesRemoved {
 
 impl arg::AppendAll for ObjectManagerInterfacesRemoved {
     fn append(&self, i: &mut arg::IterAppend) {
-        (&self.object as &arg::RefArg).append(i);
-        (&self.interfaces as &arg::RefArg).append(i);
+        arg::RefArg::append(&self.object, i);
+        arg::RefArg::append(&self.interfaces, i);
     }
 }
 

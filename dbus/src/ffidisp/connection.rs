@@ -219,7 +219,7 @@ impl Connection {
     /// There might be more methods added later on, which give better ways to deal
     /// with the list of MsgHandler currently on the connection. If this would help you,
     /// please [file an issue](https://github.com/diwic/dbus-rs/issues). 
-    pub fn extract_handler(&self) -> Option<Box<MsgHandler>> {
+    pub fn extract_handler(&self) -> Option<Box<dyn MsgHandler>> {
         self.i.handlers.borrow_mut().pop()
     }
 
@@ -434,7 +434,7 @@ impl Connection {
     ///
     /// (Previously, this was instead put in a ConnectionItem queue, but this was not working correctly.
     /// see https://github.com/diwic/dbus-rs/issues/99 for additional info.)
-    pub fn set_watch_callback(&self, f: Box<Fn(Watch) + Send>) { self.i.watches.as_ref().unwrap().set_on_update(f); }
+    pub fn set_watch_callback(&self, f: Box<dyn Fn(Watch) + Send>) { self.i.watches.as_ref().unwrap().set_on_update(f); }
 
     fn check_panic(&self) {
         let p = mem::replace(&mut *self.i.filter_cb_panic.borrow_mut(), Ok(()));
@@ -528,7 +528,7 @@ impl<'a> ConnectionItems<'a> {
     /// Access and modify message handlers 
     ///
     /// Note: Likely to changed/refactored/removed in next release
-    pub fn msg_handlers(&mut self) -> &mut Vec<Box<MsgHandler>> { &mut self.handlers }
+    pub fn msg_handlers(&mut self) -> &mut Vec<Box<dyn MsgHandler>> { &mut self.handlers }
 
     /// Creates a new ConnectionItems iterator
     ///

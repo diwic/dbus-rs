@@ -57,14 +57,14 @@ impl<'a, T: Arg + RefArg> RefArg for &'a [T] {
     fn arg_type(&self) -> ArgType { ArgType::Array }
     fn signature(&self) -> Signature<'static> { Signature::from(format!("a{}", <T as Arg>::signature())) }
     fn append(&self, i: &mut IterAppend) {
-        array_append(self, i, |arg, s| (arg as &RefArg).append(s));
+        array_append(self, i, |arg, s| RefArg::append(arg,s));
     }
     #[inline]
-    fn as_any(&self) -> &any::Any where Self: 'static { self }
+    fn as_any(&self) -> &dyn any::Any where Self: 'static { self }
     #[inline]
-    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
+    fn as_any_mut(&mut self) -> &mut dyn any::Any where Self: 'static { self }
 
-    fn box_clone(&self) -> Box<RefArg + 'static> {
+    fn box_clone(&self) -> Box<dyn RefArg + 'static> {
         Box::new(InternalArray {
             inner_sig: <T as Arg>::signature(),
             data: self.iter().map(|x| x.box_clone()).collect(),
@@ -76,17 +76,17 @@ impl<T: Arg + RefArg> RefArg for Vec<T> {
     fn arg_type(&self) -> ArgType { ArgType::Array }
     fn signature(&self) -> Signature<'static> { Signature::from(format!("a{}", <T as Arg>::signature())) }
     fn append(&self, i: &mut IterAppend) {
-        array_append(&self, i, |arg, s| (arg as &RefArg).append(s));
+        array_append(&self, i, |arg, s| RefArg::append(arg,s));
     }
     #[inline]
-    fn as_any(&self) -> &any::Any where Self: 'static { self }
+    fn as_any(&self) -> &dyn any::Any where Self: 'static { self }
     #[inline]
-    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
-    fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> {
-        Some(Box::new(self.iter().map(|b| b as &RefArg)))
+    fn as_any_mut(&mut self) -> &mut dyn any::Any where Self: 'static { self }
+    fn as_iter<'a>(&'a self) -> Option<Box<dyn Iterator<Item=&'a dyn RefArg> + 'a>> {
+        Some(Box::new(self.iter().map(|b| b as &dyn RefArg)))
     }
     #[inline]
-    fn box_clone(&self) -> Box<RefArg + 'static> { (&**self).box_clone() }
+    fn box_clone(&self) -> Box<dyn RefArg + 'static> { (&**self).box_clone() }
 }
 
 
@@ -201,14 +201,14 @@ impl<K: DictKey + RefArg + Eq + Hash, V: RefArg + Arg, S: BuildHasher> RefArg fo
         });
     }
     #[inline]
-    fn as_any(&self) -> &any::Any where Self: 'static { self }
+    fn as_any(&self) -> &dyn any::Any where Self: 'static { self }
     #[inline]
-    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
-    fn as_iter<'b>(&'b self) -> Option<Box<Iterator<Item=&'b RefArg> + 'b>> {
-        Some(Box::new(self.iter().flat_map(|(k, v)| vec![k as &RefArg, v as &RefArg].into_iter())))
+    fn as_any_mut(&mut self) -> &mut dyn any::Any where Self: 'static { self }
+    fn as_iter<'b>(&'b self) -> Option<Box<dyn Iterator<Item=&'b dyn RefArg> + 'b>> {
+        Some(Box::new(self.iter().flat_map(|(k, v)| vec![k as &dyn RefArg, v as &dyn RefArg].into_iter())))
     }
     #[inline]
-    fn box_clone(&self) -> Box<RefArg + 'static> {
+    fn box_clone(&self) -> Box<dyn RefArg + 'static> {
         Box::new(InternalDict {
             outer_sig: self.signature(),
             data: self.iter().map(|(k, v)| (k.box_clone(), v.box_clone())).collect(),
@@ -282,15 +282,15 @@ impl<'a, T: 'a + Arg + fmt::Debug + RefArg, I: fmt::Debug + Clone + Iterator<Ite
     fn append(&self, i: &mut IterAppend) {
         let z = self.0.clone();
         i.append_container(ArgType::Array, Some(<T as Arg>::signature().as_cstr()), |s|
-            for arg in z { (arg as &RefArg).append(s) }
+            for arg in z { RefArg::append(arg,s) }
         );
     }
     #[inline]
-    fn as_any(&self) -> &any::Any where Self: 'static { self }
+    fn as_any(&self) -> &dyn any::Any where Self: 'static { self }
     #[inline]
-    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
+    fn as_any_mut(&mut self) -> &mut dyn any::Any where Self: 'static { self }
 
-    fn box_clone(&self) -> Box<RefArg + 'static> {
+    fn box_clone(&self) -> Box<dyn RefArg + 'static> {
         Box::new(InternalArray {
             inner_sig: <T as Arg>::signature(),
             data: self.0.clone().map(|x| x.box_clone()).collect(),
@@ -298,13 +298,13 @@ impl<'a, T: 'a + Arg + fmt::Debug + RefArg, I: fmt::Debug + Clone + Iterator<Ite
     }
 }
 
-fn get_fixed_array_refarg<'a, T: FixedArray + Clone + RefArg>(i: &mut Iter<'a>) -> Box<RefArg> {
+fn get_fixed_array_refarg<T: FixedArray + Clone + RefArg>(i: &mut Iter) -> Box<dyn RefArg> {
     let s = <&[T]>::get(i).unwrap();
     Box::new(s.to_vec())
 }
 
 fn get_var_array_refarg<'a, T: 'static + RefArg + Arg, F: FnMut(&mut Iter<'a>) -> Option<T>>
-    (i: &mut Iter<'a>, mut f: F) -> Box<RefArg> {
+    (i: &mut Iter<'a>, mut f: F) -> Box<dyn RefArg> {
     let mut v: Vec<T> = vec!(); // dbus_message_iter_get_element_count might be O(n), better not use it
     let mut si = i.recurse(ArgType::Array).unwrap();
     while let Some(q) = f(&mut si) { v.push(q); si.next(); }
@@ -314,11 +314,11 @@ fn get_var_array_refarg<'a, T: 'static + RefArg + Arg, F: FnMut(&mut Iter<'a>) -
 
 #[derive(Debug)]
 struct InternalDict<K> {
-   data: Vec<(K, Box<RefArg>)>,
+   data: Vec<(K, Box<dyn RefArg>)>,
    outer_sig: Signature<'static>,
 }
 
-fn get_dict_refarg<'a, K, F: FnMut(&mut Iter<'a>) -> Option<K>>(i: &mut Iter<'a>, mut f: F) -> Box<RefArg>
+fn get_dict_refarg<'a, K, F: FnMut(&mut Iter<'a>) -> Option<K>>(i: &mut Iter<'a>, mut f: F) -> Box<dyn RefArg>
     where K: DictKey + 'static + RefArg + Clone
  {
     let mut data = vec!();
@@ -334,7 +334,7 @@ fn get_dict_refarg<'a, K, F: FnMut(&mut Iter<'a>) -> Option<K>>(i: &mut Iter<'a>
 }
 
 // This only happens from box_clone
-impl RefArg for InternalDict<Box<RefArg>> {
+impl RefArg for InternalDict<Box<dyn RefArg>> {
     fn arg_type(&self) -> ArgType { ArgType::Array }
     fn signature(&self) -> Signature<'static> { self.outer_sig.clone() }
     fn append(&self, i: &mut IterAppend) {
@@ -348,14 +348,14 @@ impl RefArg for InternalDict<Box<RefArg>> {
         });
     }
     #[inline]
-    fn as_any(&self) -> &any::Any where Self: 'static { self }
+    fn as_any(&self) -> &dyn any::Any where Self: 'static { self }
     #[inline]
-    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
-    fn as_iter<'b>(&'b self) -> Option<Box<Iterator<Item=&'b RefArg> + 'b>> {
-        Some(Box::new(self.data.iter().flat_map(|(k, v)| vec![k as &RefArg, v as &RefArg].into_iter())))
+    fn as_any_mut(&mut self) -> &mut dyn any::Any where Self: 'static { self }
+    fn as_iter<'b>(&'b self) -> Option<Box<dyn Iterator<Item=&'b dyn RefArg> + 'b>> {
+        Some(Box::new(self.data.iter().flat_map(|(k, v)| vec![k as &dyn RefArg, v as &dyn RefArg].into_iter())))
     }
     #[inline]
-    fn box_clone(&self) -> Box<RefArg + 'static> {
+    fn box_clone(&self) -> Box<dyn RefArg + 'static> {
         Box::new(InternalDict {
             data: self.data.iter().map(|(k, v)| (k.box_clone(), v.box_clone())).collect(),
             outer_sig: self.outer_sig.clone(),
@@ -378,14 +378,14 @@ impl<K: DictKey + RefArg + Clone + 'static> RefArg for InternalDict<K> {
         });
     }
     #[inline]
-    fn as_any(&self) -> &any::Any where Self: 'static { self }
+    fn as_any(&self) -> &dyn any::Any where Self: 'static { self }
     #[inline]
-    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
-    fn as_iter<'b>(&'b self) -> Option<Box<Iterator<Item=&'b RefArg> + 'b>> {
-        Some(Box::new(self.data.iter().flat_map(|(k, v)| vec![k as &RefArg, v as &RefArg].into_iter())))
+    fn as_any_mut(&mut self) -> &mut dyn any::Any where Self: 'static { self }
+    fn as_iter<'b>(&'b self) -> Option<Box<dyn Iterator<Item=&'b dyn RefArg> + 'b>> {
+        Some(Box::new(self.data.iter().flat_map(|(k, v)| vec![k as &dyn RefArg, v as &dyn RefArg].into_iter())))
     }
     #[inline]
-    fn box_clone(&self) -> Box<RefArg + 'static> {
+    fn box_clone(&self) -> Box<dyn RefArg + 'static> {
         Box::new(InternalDict {
             data: self.data.iter().map(|(k, v)| (k.clone(), v.box_clone())).collect(),
             outer_sig: self.outer_sig.clone(),
@@ -399,11 +399,11 @@ impl<K: DictKey + RefArg + Clone + 'static> RefArg for InternalDict<K> {
 // has that signature.
 #[derive(Debug)]
 struct InternalArray {
-   data: Vec<Box<RefArg>>,
+   data: Vec<Box<dyn RefArg>>,
    inner_sig: Signature<'static>,
 }
 
-fn get_internal_array<'a>(i: &mut Iter<'a>) -> Box<RefArg> {
+fn get_internal_array(i: &mut Iter) -> Box<dyn RefArg> {
     let mut si = i.recurse(ArgType::Array).unwrap();
     let inner_sig = si.signature();
     let data = si.collect::<Vec<_>>();
@@ -415,18 +415,18 @@ impl RefArg for InternalArray {
     fn signature(&self) -> Signature<'static> { Signature::from(format!("a{}", self.inner_sig)) }
     fn append(&self, i: &mut IterAppend) {
         i.append_container(ArgType::Array, Some(self.inner_sig.as_cstr()), |s|
-            for arg in &self.data { (arg as &RefArg).append(s) }
+            for arg in &self.data { RefArg::append(arg,s) }
         );
     }
     #[inline]
-    fn as_any(&self) -> &any::Any where Self: 'static { self }
+    fn as_any(&self) -> &dyn any::Any where Self: 'static { self }
     #[inline]
-    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
-    fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> {
-        Some(Box::new(self.data.iter().map(|b| b as &RefArg)))
+    fn as_any_mut(&mut self) -> &mut dyn any::Any where Self: 'static { self }
+    fn as_iter<'a>(&'a self) -> Option<Box<dyn Iterator<Item=&'a dyn RefArg> + 'a>> {
+        Some(Box::new(self.data.iter().map(|b| b as &dyn RefArg)))
     }
     #[inline]
-    fn box_clone(&self) -> Box<RefArg + 'static> {
+    fn box_clone(&self) -> Box<dyn RefArg + 'static> {
         Box::new(InternalArray {
             data: self.data.iter().map(|x| x.box_clone()).collect(),
             inner_sig: self.inner_sig.clone(),
@@ -434,7 +434,7 @@ impl RefArg for InternalArray {
     }
 }
 
-pub fn get_array_refarg<'a>(i: &mut Iter<'a>) -> Box<RefArg> {
+pub fn get_array_refarg(i: &mut Iter) -> Box<dyn RefArg> {
     debug_assert!(i.arg_type() == ArgType::Array);
     let etype = ArgType::from_i32(unsafe { ffi::dbus_message_iter_get_element_type(&mut i.0) } as i32).unwrap();
 
@@ -450,7 +450,7 @@ pub fn get_array_refarg<'a>(i: &mut Iter<'a>) -> Box<RefArg> {
         ArgType::String => get_var_array_refarg::<String, _>(i, |si| si.get()),
         ArgType::ObjectPath => get_var_array_refarg::<Path<'static>, _>(i, |si| si.get::<Path>().map(|s| s.into_static())),
         ArgType::Signature => get_var_array_refarg::<Signature<'static>, _>(i, |si| si.get::<Signature>().map(|s| s.into_static())),
-        ArgType::Variant => get_var_array_refarg::<Variant<Box<RefArg>>, _>(i, |si| Variant::new_refarg(si)),
+        ArgType::Variant => get_var_array_refarg::<Variant<Box<dyn RefArg>>, _>(i, |si| Variant::new_refarg(si)),
         ArgType::Boolean => get_var_array_refarg::<bool, _>(i, |si| si.get()),
         ArgType::Invalid => panic!("Array with Invalid ArgType"),
         ArgType::Array => get_internal_array(i),

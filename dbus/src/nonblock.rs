@@ -140,7 +140,7 @@ impl<'a, C: std::ops::Deref<Target=Connection> + Clone> Proxy<'a, C> {
     }
 }
 
-type ReadFn<T> = Box<FnOnce(&mut Message) -> Result<T, Error> + Send + Sync + 'static>;
+type ReadFn<T> = Box<dyn FnOnce(&mut Message) -> Result<T, Error> + Send + Sync + 'static>;
 
 /// Future method reply, used while waiting for a method call reply from the server.
 pub struct MethodReply<T, C>(PollReply<Result<(), Error>, (u32, C)>, Option<ReadFn<T>>); 

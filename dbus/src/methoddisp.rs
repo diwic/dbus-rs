@@ -106,11 +106,11 @@ impl<T: Into<ErrorName<'static>>, M: Into<String>> From<(T, M)> for MethodErr {
 pub type MethodResult = Result<Vec<Message>, MethodErr>;
 
 /// A MethodType that wraps an Fn function
-pub struct MethodFn<'a>(Box<Fn(&Message, &ObjectPath<MethodFn<'a>>, &Tree<MethodFn<'a>>) -> MethodResult + 'a>);
+pub struct MethodFn<'a>(Box<dyn Fn(&Message, &ObjectPath<MethodFn<'a>>, &Tree<MethodFn<'a>>) -> MethodResult + 'a>);
 /// A MethodType that wraps an FnMut function. Calling this recursively will cause a refcell panic.
 pub struct MethodFnMut<'a>(Box<RefCell<FnMut(&Message, &ObjectPath<MethodFnMut<'a>>, &Tree<MethodFnMut<'a>>) -> MethodResult + 'a>>);
 /// A MethodType that wraps an Fn+Send+Sync function, so it can be called from several threads in parallel.
-pub struct MethodSync(Box<Fn(&Message, &ObjectPath<MethodSync>, &Tree<MethodSync>) -> MethodResult + Send + Sync + 'static>);
+pub struct MethodSync(Box<dyn Fn(&Message, &ObjectPath<MethodSync>, &Tree<MethodSync>) -> MethodResult + Send + Sync + 'static>);
 
 impl<'a> fmt::Debug for MethodFn<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "<Fn>") }

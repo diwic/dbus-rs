@@ -139,9 +139,9 @@ pub trait MethodType<D: DataType>: Sized + Default {
 pub struct MTFn<D=()>(PhantomData<*const D>);
 
 impl<D: DataType> MethodType<D> for MTFn<D> {
-    type GetProp = Fn(&mut IterAppend, &PropInfo<Self, D>) -> Result<(), MethodErr>;
-    type SetProp = Fn(&mut Iter, &PropInfo<Self, D>) -> Result<(), MethodErr>;
-    type Method = Fn(&MethodInfo<Self, D>) -> MethodResult;
+    type GetProp = dyn Fn(&mut IterAppend, &PropInfo<Self, D>) -> Result<(), MethodErr>;
+    type SetProp = dyn Fn(&mut Iter, &PropInfo<Self, D>) -> Result<(), MethodErr>;
+    type Method = dyn Fn(&MethodInfo<Self, D>) -> MethodResult;
 
     fn call_getprop(p: &Self::GetProp, i: &mut IterAppend, pinfo: &PropInfo<Self, D>)
         -> Result<(), MethodErr> { p(i, pinfo) }
@@ -161,9 +161,9 @@ impl<D: DataType> MethodType<D> for MTFn<D> {
 pub struct MTFnMut<D=()>(PhantomData<*const D>);
 
 impl<D: DataType> MethodType<D> for MTFnMut<D> {
-    type GetProp = RefCell<FnMut(&mut IterAppend, &PropInfo<Self, D>) -> Result<(), MethodErr>>;
-    type SetProp = RefCell<FnMut(&mut Iter, &PropInfo<Self, D>) -> Result<(), MethodErr>>;
-    type Method = RefCell<FnMut(&MethodInfo<Self, D>) -> MethodResult>;
+    type GetProp = RefCell<dyn FnMut(&mut IterAppend, &PropInfo<Self, D>) -> Result<(), MethodErr>>;
+    type SetProp = RefCell<dyn FnMut(&mut Iter, &PropInfo<Self, D>) -> Result<(), MethodErr>>;
+    type Method = RefCell<dyn FnMut(&MethodInfo<Self, D>) -> MethodResult>;
 
     fn call_getprop(p: &Self::GetProp, i: &mut IterAppend, pinfo: &PropInfo<Self, D>)
         -> Result<(), MethodErr> { (&mut *p.borrow_mut())(i, pinfo) }
@@ -184,9 +184,9 @@ impl<D: DataType> MethodType<D> for MTFnMut<D> {
 pub struct MTSync<D=()>(PhantomData<*const D>);
 
 impl<D: DataType> MethodType<D> for MTSync<D> {
-    type GetProp = Fn(&mut IterAppend, &PropInfo<Self, D>) -> Result<(), MethodErr> + Send + Sync + 'static;
-    type SetProp = Fn(&mut Iter, &PropInfo<Self, D>) -> Result<(), MethodErr> + Send + Sync + 'static;
-    type Method = Fn(&MethodInfo<Self, D>) -> MethodResult + Send + Sync + 'static;
+    type GetProp = dyn Fn(&mut IterAppend, &PropInfo<Self, D>) -> Result<(), MethodErr> + Send + Sync + 'static;
+    type SetProp = dyn Fn(&mut Iter, &PropInfo<Self, D>) -> Result<(), MethodErr> + Send + Sync + 'static;
+    type Method = dyn Fn(&MethodInfo<Self, D>) -> MethodResult + Send + Sync + 'static;
 
     fn call_getprop(p: &Self::GetProp, i: &mut IterAppend, pinfo: &PropInfo<Self, D>)
         -> Result<(), MethodErr> { p(i, pinfo) }
@@ -240,7 +240,7 @@ where
 {
     let i = factory.interface("org.freedesktop.DBus.Introspectable", data);
     let h = move |minfo: &super::MethodInfo<M, D>| {
-        let d: &stdintf::OrgFreedesktopDBusIntrospectable<Err=super::MethodErr> = minfo;
+        let d: &dyn stdintf::OrgFreedesktopDBusIntrospectable<Err=super::MethodErr> = minfo;
         let arg0 = d.introspect()?;
         let rm = minfo.msg.method_return();
         let rm = rm.append1(arg0);

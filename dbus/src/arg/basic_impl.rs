@@ -68,9 +68,9 @@ impl RefArg for $t {
     #[inline]
     fn append(&self, i: &mut IterAppend) { arg_append_basic(&mut i.0, ArgType::$s, *self) }
     #[inline]
-    fn as_any(&self) -> &any::Any { self }
+    fn as_any(&self) -> &dyn any::Any { self }
     #[inline]
-    fn as_any_mut(&mut self) -> &mut any::Any { self }
+    fn as_any_mut(&mut self) -> &mut dyn any::Any { self }
     #[inline]
     fn as_i64(&self) -> Option<i64> { let $i = *self; $ii }
     #[inline]
@@ -78,7 +78,7 @@ impl RefArg for $t {
     #[inline]
     fn as_f64(&self) -> Option<f64> { let $fff = *self; $ff }
     #[inline]
-    fn box_clone(&self) -> Box<RefArg + 'static> { Box::new(self.clone()) }
+    fn box_clone(&self) -> Box<dyn RefArg + 'static> { Box::new(self.clone()) }
 }
 
 impl DictKey for $t {}
@@ -106,9 +106,9 @@ impl RefArg for $t {
     #[inline]
     fn append(&self, i: &mut IterAppend) { <$t as Append>::append(self.clone(), i) }
     #[inline]
-    fn as_any(&self) -> &any::Any { self }
+    fn as_any(&self) -> &dyn any::Any { self }
     #[inline]
-    fn as_any_mut(&mut self) -> &mut any::Any { self }
+    fn as_any_mut(&mut self) -> &mut dyn any::Any { self }
     #[inline]
     fn as_i64(&self) -> Option<i64> { let $i = self; $ii }
     #[inline]
@@ -118,7 +118,7 @@ impl RefArg for $t {
     #[inline]
     fn as_str(&self) -> Option<&str> { let $i = self; $ss }
     #[inline]
-    fn box_clone(&self) -> Box<RefArg + 'static> { Box::new(self.clone()) }
+    fn box_clone(&self) -> Box<dyn RefArg + 'static> { Box::new(self.clone()) }
 }
 
     }
@@ -252,13 +252,13 @@ impl RefArg for $t<'static> {
     fn signature(&self) -> Signature<'static> { unsafe { Signature::from_slice_unchecked($f) } }
     fn append(&self, i: &mut IterAppend) { arg_append_str(&mut i.0, ArgType::$s, self.as_cstr()) }
     #[inline]
-    fn as_any(&self) -> &any::Any { self }
+    fn as_any(&self) -> &dyn any::Any { self }
     #[inline]
-    fn as_any_mut(&mut self) -> &mut any::Any { self }
+    fn as_any_mut(&mut self) -> &mut dyn any::Any { self }
     #[inline]
     fn as_str(&self) -> Option<&str> { Some(self) }
     #[inline]
-    fn box_clone(&self) -> Box<RefArg + 'static> { Box::new(self.clone().into_static()) }
+    fn box_clone(&self) -> Box<dyn RefArg + 'static> { Box::new(self.clone().into_static()) }
 }
 
 impl<'a> DictKey for $t<'a> {}

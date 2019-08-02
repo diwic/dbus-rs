@@ -28,7 +28,7 @@ impl policykit_asref::OrgFreedesktopDBusProperties for Whatever {
     fn get_all(&self, _interfacename: &str) -> Result<::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>, ::dbus::tree::MethodErr> { unimplemented!() }
 
     fn set(&self, _interfacename: &str, _propertyname: &str, value: ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>) -> Result<(), ::dbus::tree::MethodErr> {
-        assert_eq!((&value as &dbus::arg::RefArg).as_str(), Some("Hello")); 
+        assert_eq!(dbus::arg::RefArg::as_str(&value), Some("Hello"));
         Err(("A.B.C", "Error.Message").into())
     }
 

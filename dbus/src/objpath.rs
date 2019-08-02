@@ -59,7 +59,7 @@ pub type PropertySetResult = Result<(), (&'static str, String)>;
 
 /// A boxed closure for dynamic dispatch. It is called when the method is 
 /// called by a remote application.
-pub type MethodHandler<'a> = Box<FnMut(&mut Message) -> MethodResult + 'a>;
+pub type MethodHandler<'a> = Box<dyn FnMut(&mut Message) -> MethodResult + 'a>;
 
 struct IMethod<'a> {
     in_args: Vec<Argument<'a>>,
