@@ -284,15 +284,15 @@ fn peer(m: &Message) -> Option<Message> {
             if &*method == "Ping" { return Some(m.method_return()) }
             if &*method == "GetMachineId" {
                 let mut r = m.method_return();
-                let mut e = Error::empty();
                 unsafe {
-                    let id = ffi::dbus_try_get_local_machine_id(e.get_mut());
+                    let id = ffi::dbus_get_local_machine_id();
                     if !id.is_null() {
                         r = r.append1(c_str_to_slice(&(id as *const _)).unwrap());
                         ffi::dbus_free(id as *mut _);
                         return Some(r)
                     }
                 }
+                return Some(m.error(&"org.freedesktop.DBus.Error.Failed".into(), &to_c_str("Failed to retreive UUID")))
             }
         }
         Some(m.error(&"org.freedesktop.DBus.Error.UnknownMethod".into(), &to_c_str("Method does not exist")))
