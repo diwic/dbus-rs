@@ -47,7 +47,7 @@ impl Argument {
     pub fn signature(&self) -> &Signature<'static> { &self.1 }
 
     fn introspect(&self, indent: &str, dir: &str) -> String { 
-        let n = self.0.as_ref().map(|n| format!("name=\"{}\" ", n)).unwrap_or("".into());
+        let n = self.0.as_ref().map(|n| format!("name=\"{}\" ", n)).unwrap_or_default();
         format!("{}<arg {}type=\"{}\"{}/>\n", indent, n, self.1, dir)
     }
 
@@ -72,7 +72,7 @@ impl Annotations {
     pub fn introspect(&self, indent: &str) -> String {
         self.0.as_ref().map(|s| s.iter().fold("".into(), |aa, (ak, av)| {
             format!("{}{}<annotation name=\"{}\" value=\"{}\"/>\n", aa, indent, ak, av)
-        })).unwrap_or(String::new())
+        })).unwrap_or_default()
     }
 }
 

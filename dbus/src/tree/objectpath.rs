@@ -14,10 +14,10 @@ fn introspect_map<I: fmt::Display, T: Introspect>
     h.iter().fold("".into(), |a, (k, v)| {
         let (name, params, contents) = (v.xml_name(), v.xml_params(), v.xml_contents());
         format!("{}{}<{} name=\"{}\"{}{}>\n",
-            a, indent, name, &*k, params, if contents.len() > 0 {
+            a, indent, name, &*k, params, if !contents.is_empty() {
                 format!(">\n{}{}</{}", contents, indent, name)
             }
-            else { format!("/") }
+            else { "/".to_string() }
         )
     })
 }
@@ -416,7 +416,7 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
             let k: &str = &v.name;
             if !k.starts_with(parent) || k.len() <= plen || &k[plen-1..plen] != "/" {None} else {
                 let child = &k[plen..];
-                if direct_only && child.contains("/") {None} else {Some(&**v)}
+                if direct_only && child.contains('/') {None} else {Some(&**v)}
             }
         }).collect()
     }
@@ -479,7 +479,7 @@ impl<'a, I: Iterator<Item=ConnectionItem>, M: 'a + MethodType<D>, D: DataType + 
     fn next(&mut self) -> Option<ConnectionItem> {
         loop {
             let n = self.iter.next();
-            if let &Some(ConnectionItem::MethodCall(ref msg)) = &n {
+            if let Some(ConnectionItem::MethodCall(ref msg)) = n {
                 if let Some(v) = self.tree.handle(&msg) {
                     // Probably the wisest is to ignore any send errors here -
                     // maybe the remote has disconnected during our processing.

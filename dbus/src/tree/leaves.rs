@@ -183,11 +183,11 @@ pub enum Access {
 }
 
 impl Access {
-    fn introspect(&self) -> &'static str {
+    fn introspect(self) -> &'static str {
         match self {
-            &Access::Read => "read",
-            &Access::ReadWrite => "readwrite",
-            &Access::Write => "write",
+            Access::Read => "read",
+            Access::ReadWrite => "readwrite",
+            Access::Write => "write",
         }
     }
 }
@@ -304,7 +304,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
         }
         if let Some(mut i) = i {
             let mut subiter = i.recurse(arg::Variant::<bool>::ARG_TYPE).ok_or_else(|| MethodErr::invalid_arg(&2))?;
-            if &*subiter.signature() != &*self.sig {
+            if *subiter.signature() != *self.sig {
                return Err(MethodErr::failed(&format!("Property {} cannot change type", &self.name)))
             }
         }
@@ -340,7 +340,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
         // handler currently receives.
 
         if self.emits == EmitsChangedSignal::Const || self.emits == EmitsChangedSignal::False { return; }
-        let vpos = v.iter().position(|vv| &*vv.interface_name == &**iface);
+        let vpos = v.iter().position(|vv| *vv.interface_name == **iface);
         let vpos = vpos.unwrap_or_else(|| {
             let mut z: PropertiesPropertiesChanged = Default::default();
             z.interface_name = (&**iface).into();

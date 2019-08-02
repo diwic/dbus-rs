@@ -248,8 +248,7 @@ where
     };
     let m = factory.method_sync("Introspect", Default::default(), h);
     let m = m.out_arg(("xml_data", "s"));
-    let i = i.add_m(m);
-    i
+    i.add_m(m)
 }
 
 #[derive(Debug, Copy, Clone)]

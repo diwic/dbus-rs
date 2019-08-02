@@ -397,7 +397,7 @@ pub enum ArgType {
     Signature = ffi::DBUS_TYPE_SIGNATURE as u8,
 }
 
-const ALL_ARG_TYPES: [(ArgType, &'static str); 18] =
+const ALL_ARG_TYPES: [(ArgType, &str); 18] =
     [(ArgType::Variant, "Variant"),
     (ArgType::Array, "Array/Dict"),
     (ArgType::Struct, "Struct"),

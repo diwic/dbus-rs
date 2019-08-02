@@ -164,7 +164,7 @@ impl<'a> Append for &'a str {
     fn append_by_ref(&self, i: &mut IterAppend) {
         use std::borrow::Cow;
         let b: &[u8] = self.as_bytes();
-        let v: Cow<[u8]> = if b.len() > 0 && b[b.len()-1] == 0 { Cow::Borrowed(b) }
+        let v: Cow<[u8]> = if !b.is_empty() && b[b.len()-1] == 0 { Cow::Borrowed(b) }
         else {
             let mut bb: Vec<u8> = b.into();
             bb.push(0);
@@ -196,7 +196,7 @@ impl<'a> Append for String {
 }
 impl<'a> DictKey for String {}
 impl<'a> Get<'a> for String {
-    fn get(i: &mut Iter<'a>) -> Option<String> { <&str>::get(i).map(|s| String::from(s)) }
+    fn get(i: &mut Iter<'a>) -> Option<String> { <&str>::get(i).map(String::from) }
 }
 
 refarg_impl!(String, _i, None, Some(&_i), None, None);
@@ -233,7 +233,7 @@ impl Append for OwnedFd {
 impl DictKey for OwnedFd {}
 impl<'a> Get<'a> for OwnedFd {
     fn get(i: &mut Iter) -> Option<Self> {
-        arg_get_basic(&mut i.0, ArgType::UnixFd).map(|q| OwnedFd::new(q)) 
+        arg_get_basic(&mut i.0, ArgType::UnixFd).map(OwnedFd::new)
     }
 }
 
