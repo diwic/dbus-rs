@@ -73,7 +73,7 @@ impl Connection {
             return Ok(true);
         }
         self.channel.read_write(Some(timeout)).map_err(|_|
-            Error::new_custom("org.freedesktop.dbus.error.failed", "Failed to read/write data, disconnected from D-Bus?")
+            Error::new_failed("Failed to read/write data, disconnected from D-Bus?")
         )?;
         if let Some(msg) = self.channel.pop_message() {
             self.dispatch(msg);
@@ -138,7 +138,7 @@ impl SyncConnection {
             return Ok(true);
         }
         self.channel.read_write(Some(timeout)).map_err(|_|
-            Error::new_custom("org.freedesktop.dbus.error.failed", "Failed to read/write data, disconnected from D-Bus?")
+            Error::new_failed("Failed to read/write data, disconnected from D-Bus?")
         )?;
         if let Some(msg) = self.channel.pop_message() {
             self.dispatch(msg);

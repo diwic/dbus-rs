@@ -27,6 +27,11 @@ impl Error {
         e
     }
 
+    /// Create a new generic D-Bus Error with "org.freedesktop.DBus.Error.Failed" as the Error name.
+    pub fn new_failed(message: &str) -> Error {
+        Error::new_custom("org.freedesktop.DBus.Error.Failed", message)
+    }
+
     pub (crate) fn empty() -> Error {
         init_dbus();
         let mut e = ffi::DBusError {

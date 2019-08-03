@@ -128,7 +128,7 @@ pub (crate) fn request_name<S: blocking::BlockingSender>(s: &S, name: &str, allo
     use RequestNameReply::*;
     let all = [PrimaryOwner, InQueue, Exists, AlreadyOwner];
     all.iter().find(|x| **x as u32 == r).copied().ok_or_else(||
-        dbus::Error::new_custom("org.freedesktop.DBus.failed", "Invalid reply from DBus server")
+        dbus::Error::new_failed("Invalid reply from DBus server")
     )
 }
 
@@ -141,7 +141,7 @@ pub (crate) fn release_name<S: blocking::BlockingSender>(s: &S, name: &str)
     use ReleaseNameReply::*;
     let all = [Released, NonExistent, NotOwner];
     all.iter().find(|x| **x as u32 == r).copied().ok_or_else(||
-        dbus::Error::new_custom("org.freedesktop.DBus.failed", "Invalid reply from DBus server")
+        dbus::Error::new_failed("Invalid reply from DBus server")
     )
 }
 

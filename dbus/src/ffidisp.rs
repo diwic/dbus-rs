@@ -42,13 +42,13 @@ impl<'a, C: ::std::ops::Deref<Target=Connection>> ConnPath<'a, C> {
     pub fn signal_with_args<F: FnOnce(&mut Message)>(&self, i: &Interface, m: &Member, f: F) -> Result<u32, Error> {
         let mut msg = Message::signal(&self.path, i, m);
         f(&mut msg);
-        self.conn.send(msg).map_err(|_| Error::new_custom("org.freedesktop.DBus.Error.Failed", "Sending signal failed"))
+        self.conn.send(msg).map_err(|_| Error::new_failed("Sending signal failed"))
     }
 
     /// Emit a D-Bus signal, where the arguments are in a struct.
     pub fn emit<S: SignalArgs + AppendAll>(&self, signal: &S) -> Result<u32, Error> {
         let msg = signal.to_emit_message(&self.path);
-        self.conn.send(msg).map_err(|_| Error::new_custom("org.freedesktop.DBus.Error.Failed", "Sending signal failed"))
+        self.conn.send(msg).map_err(|_| Error::new_failed("Sending signal failed"))
     }
 
     /// Make a method call using typed input and output arguments.
