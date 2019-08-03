@@ -15,6 +15,7 @@ use std::{ops, any};
 
 use crate::{ffidisp::Connection, Message, Error};
 use std::collections::BTreeMap;
+use std::convert::TryFrom;
 
 #[derive(Debug,Copy,Clone)]
 /// Errors that can happen when creating a MessageItem::Array.
@@ -274,8 +275,8 @@ impl MessageItem {
     /// let s: i64 = m.inner().unwrap();
     /// assert_eq!(s, 5i64);
     /// ```
-    pub fn inner<'a, T: FromMessageItem<'a>>(&'a self) -> Result<T, ()> {
-        T::from(self)
+    pub fn inner<'a, T: TryFrom<&'a MessageItem>>(&'a self) -> Result<T, T::Error> {
+        T::try_from(self)
     }
 
     fn new_array2<D, I>(i: I) -> MessageItem
@@ -305,9 +306,10 @@ macro_rules! msgitem_convert {
     ($t: ty, $s: ident) => {
         impl From<$t> for MessageItem { fn from(i: $t) -> MessageItem { MessageItem::$s(i) } }
 
-        impl<'a> FromMessageItem<'a> for $t {
-            fn from(i: &'a MessageItem) -> Result<$t,()> {
-                if let MessageItem::$s(ref b) = *i { Ok(*b) } else { Err(()) }
+        impl<'a> TryFrom<&'a MessageItem> for $t {
+            type Error = ();
+            fn try_from(i: &'a MessageItem) -> Result<$t,()> {
+                if let MessageItem::$s(b) = i { Ok(*b) } else { Err(()) }
             }
         }
     }
@@ -356,59 +358,62 @@ impl From<Box<MessageItem>> for MessageItem {
     fn from(i: Box<MessageItem>) -> MessageItem { MessageItem::Variant(i) }
 }
 
-/// Helper trait for `MessageItem::inner()`
-pub trait FromMessageItem<'a> :Sized {
-    /// Allows converting from a MessageItem into the type it contains.
-    fn from(i: &'a MessageItem) -> Result<Self, ()>;
-}
-
-impl<'a> FromMessageItem<'a> for &'a str {
-    fn from(i: &'a MessageItem) -> Result<&'a str,()> {
+impl<'a> TryFrom<&'a MessageItem> for &'a str {
+    type Error = ();
+    fn try_from(i: &'a MessageItem) -> Result<&'a str, Self::Error> {
         match i {
-            MessageItem::Str(ref b) => Ok(&b),
-            MessageItem::ObjectPath(ref b) => Ok(&b),
-            MessageItem::Signature(ref b) => Ok(&b),
+            MessageItem::Str(ref b) => Ok(b),
+            MessageItem::ObjectPath(ref b) => Ok(b),
+            MessageItem::Signature(ref b) => Ok(b),
             _ => Err(()),
         }
     }
 }
 
-impl<'a> FromMessageItem<'a> for &'a String {
-    fn from(i: &'a MessageItem) -> Result<&'a String,()> { if let MessageItem::Str(ref b) = i { Ok(&b) } else { Err(()) } }
+impl<'a> TryFrom<&'a MessageItem> for &'a String {
+    type Error = ();
+    fn try_from(i: &'a MessageItem) -> Result<&'a String,()> { if let MessageItem::Str(b) = i { Ok(b) } else { Err(()) } }
 }
 
-impl<'a> FromMessageItem<'a> for &'a Path<'static> {
-    fn from(i: &'a MessageItem) -> Result<&'a Path<'static>,()> { if let MessageItem::ObjectPath(ref b) = i { Ok(&b) } else { Err(()) } }
+impl<'a> TryFrom<&'a MessageItem> for &'a Path<'static> {
+    type Error = ();
+    fn try_from(i: &'a MessageItem) -> Result<&'a Path<'static>,()> { if let MessageItem::ObjectPath(b) = i { Ok(b) } else { Err(()) } }
 }
 
-impl<'a> FromMessageItem<'a> for &'a Signature<'static> {
-    fn from(i: &'a MessageItem) -> Result<&'a Signature<'static>,()> { if let MessageItem::Signature(ref b) = i { Ok(&b) } else { Err(()) } }
+impl<'a> TryFrom<&'a MessageItem> for &'a Signature<'static> {
+    type Error = ();
+    fn try_from(i: &'a MessageItem) -> Result<&'a Signature<'static>,()> { if let MessageItem::Signature(b) = i { Ok(b) } else { Err(()) } }
 }
 
-impl<'a> FromMessageItem<'a> for &'a MessageItem {
-    fn from(i: &'a MessageItem) -> Result<&'a MessageItem,()> { if let MessageItem::Variant(ref b) = i { Ok(&**b) } else { Err(()) } }
+impl<'a> TryFrom<&'a MessageItem> for &'a Box<MessageItem> {
+    type Error = ();
+    fn try_from(i: &'a MessageItem) -> Result<&'a Box<MessageItem>,()> { if let MessageItem::Variant(b) = i { Ok(b) } else { Err(()) } }
 }
 
-impl<'a> FromMessageItem<'a> for &'a Vec<MessageItem> {
-    fn from(i: &'a MessageItem) -> Result<&'a Vec<MessageItem>,()> {
+impl<'a> TryFrom<&'a MessageItem> for &'a Vec<MessageItem> {
+    type Error = ();
+    fn try_from(i: &'a MessageItem) -> Result<&'a Vec<MessageItem>,()> {
         match i {
-            MessageItem::Array(ref b) => Ok(&b.v),
-            MessageItem::Struct(ref b) => Ok(&b),
+            MessageItem::Array(b) => Ok(&b.v),
+            MessageItem::Struct(b) => Ok(b),
             _ => Err(()),
         }
     }
 }
 
-impl<'a> FromMessageItem<'a> for &'a [MessageItem] {
-    fn from(i: &'a MessageItem) -> Result<&'a [MessageItem],()> { i.inner::<&Vec<MessageItem>>().map(|s| &**s) }
+impl<'a> TryFrom<&'a MessageItem> for &'a [MessageItem] {
+    type Error = ();
+    fn try_from(i: &'a MessageItem) -> Result<&'a [MessageItem],()> { i.inner::<&Vec<MessageItem>>().map(|s| &**s) }
 }
 
-impl<'a> FromMessageItem<'a> for &'a OwnedFd {
-    fn from(i: &'a MessageItem) -> Result<&'a OwnedFd,()> { if let MessageItem::UnixFd(ref b) = i { Ok(b) } else { Err(()) } }
+impl<'a> TryFrom<&'a MessageItem> for &'a OwnedFd {
+    type Error = ();
+    fn try_from(i: &'a MessageItem) -> Result<&'a OwnedFd,()> { if let MessageItem::UnixFd(ref b) = i { Ok(b) } else { Err(()) } }
 }
 
-impl<'a> FromMessageItem<'a> for &'a [(MessageItem, MessageItem)] {
-    fn from(i: &'a MessageItem) -> Result<&'a [(MessageItem, MessageItem)],()> {
+impl<'a> TryFrom<&'a MessageItem> for &'a [(MessageItem, MessageItem)] {
+    type Error = ();
+    fn try_from(i: &'a MessageItem) -> Result<&'a [(MessageItem, MessageItem)],()> {
         if let MessageItem::Dict(ref d) = i { Ok(&*d.v) } else { Err(()) }
     }
 }
@@ -574,13 +579,13 @@ impl<'a> Props<'a> {
 
         (|| {
             if reply.len() != 1 { return Err(()) };
-            let mut t = BTreeMap::new();
+            let mut tree = BTreeMap::new();
             let a: &[(MessageItem, MessageItem)] = reply[0].inner()?;
             for (k, v) in a.iter() {
-                let (k, v): (&String, &MessageItem) = (k.inner()?, v.inner()?);
-                t.insert(k.clone(), v.clone());
+                let (k, v): (&String, &Box<MessageItem>) = (k.inner()?, v.inner()?);
+                tree.insert(k.clone(), *v.clone());
             }
-            Ok(t)
+            Ok(tree)
         })().map_err(|_| {
             let f = format!("Invalid reply for property GetAll: '{:?}'", reply);
             Error::new_custom("InvalidReply", &f)
@@ -632,7 +637,7 @@ impl<'a> PropHandler<'a> {
 mod test {
     extern crate tempfile;
 
-    use crate::{Message, MessageType, Path};
+    use crate::{Message, MessageType, Path, Signature};
     use libc;
     use crate::arg::messageitem::MessageItem;
     use crate::arg::OwnedFd;
@@ -818,6 +823,28 @@ mod test {
         let reply = r.get_items();
         println!("{:?}", reply);
         assert_eq!(reply, vec!(MessageItem::Bool(true)));
+    }
+
+    #[test]
+    fn message_inner_str() {
+        let ob = MessageItem::ObjectPath("/path".into());
+        assert_eq!("/path", ob.inner::<&str>().unwrap());
+
+        let ob = MessageItem::ObjectPath("/path".into());
+        assert_ne!("/path/another", ob.inner::<&str>().unwrap());
+
+        let ob = MessageItem::Str("String".into());
+        assert_eq!("String", ob.inner::<&str>().unwrap());
+
+        let ob = MessageItem::Str("String".into());
+        assert_ne!("StringDiff", ob.inner::<&str>().unwrap());
+
+        let ob = MessageItem::Signature(Signature::make::<i32>());
+        assert_eq!("i", ob.inner::<&str>().unwrap());
+
+        let ob = MessageItem::Signature(Signature::make::<u32>());
+        assert_ne!("i", ob.inner::<&str>().unwrap());
+
     }
 
 }
