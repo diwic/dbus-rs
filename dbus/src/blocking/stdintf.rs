@@ -122,7 +122,7 @@ pub (crate) fn request_name<S: blocking::BlockingSender>(s: &S, name: &str, allo
         if allow_replacement { 1 } else { 0 } +
         if replace_existing { 2 } else { 0 } +
         if do_not_queue { 4 } else { 0 };
-    let proxy = crate::blocking::Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", std::time::Duration::from_millis(5000), s);
+    let proxy = super::proxy(s);
     use super::org_freedesktop::DBus;
     let r = proxy.request_name(name, flags)?;
     use RequestNameReply::*;
@@ -135,7 +135,7 @@ pub (crate) fn request_name<S: blocking::BlockingSender>(s: &S, name: &str, allo
 pub (crate) fn release_name<S: blocking::BlockingSender>(s: &S, name: &str)
     -> Result<ReleaseNameReply, dbus::Error> {
 
-    let proxy = crate::blocking::Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", std::time::Duration::from_millis(5000), s);
+    let proxy = super::proxy(s);
     use super::org_freedesktop::DBus;
     let r = proxy.release_name(name)?;
     use ReleaseNameReply::*;
@@ -147,6 +147,9 @@ pub (crate) fn release_name<S: blocking::BlockingSender>(s: &S, name: &str)
 
 }
 
+pub (crate) fn proxy<C>(c: C) -> crate::blocking::Proxy<'static, C> {
+    crate::blocking::Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", std::time::Duration::from_millis(5000), c)
+}
 
 /// Not public yet, because of lack of named arguments
 pub (super) mod org_freedesktop {

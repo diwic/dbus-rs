@@ -31,10 +31,13 @@ pub struct Connection {
     filters: RefCell<Vec<Filter<Box<FnMut(Message) -> bool>>>>
 }
 
+type
+  SyncFilterCb = Box<FnMut(Message) -> bool + Send + Sync + 'static>;
+
 /// A connection to D-Bus, Send + Sync + non-async version
 pub struct SyncConnection {
     channel: Channel,
-    filters: Mutex<Vec<Filter<Box<FnMut(Message) -> bool + Send + Sync + 'static>>>>
+    filters: Mutex<Vec<Filter<SyncFilterCb>>>
 }
 
 use crate::blocking::stdintf::org_freedesktop_dbus;
@@ -193,6 +196,17 @@ impl channel::MatchingReceiver for Connection {
     }
 }
 
+impl channel::MatchingReceiver for SyncConnection {
+    type F = SyncFilterCb;
+    fn start_receive(&self, id: u32, m: MatchRule<'static>, f: Self::F) {
+        self.filters.lock().unwrap().push(Filter { id, rule: m, callback: f } )
+    }
+    fn stop_receive(&self, id: u32) -> Option<Self::F> {
+        let mut filters = self.filters.lock().unwrap(); 
+        if let Some(idx) = filters.iter().position(|f| f.id == id) { Some(filters.remove(idx).callback) }
+        else { None }
+    }
+}
 
 /// A struct that wraps a connection, destination and path.
 ///
@@ -241,26 +255,26 @@ impl<'a, T: BlockingSender, C: std::ops::Deref<Target=T>> Proxy<'a, C> {
     }
 }
 
-    /// Sets up a match, including calls to the D-Bus server to add and remove this match.
-    fn add_match<C, T, F>(conn: &C, mr: MatchRule<'static>, timeout: Duration, mut f: F) -> Result<u32, Error>
-    where 
-        T: BlockingSender + channel::MatchingReceiver<F=Box<FnMut(Message) -> bool>>,
-        C: 'static + std::ops::Deref<Target=T> + Clone,
-        F: 'static + FnMut(Message) -> bool {
+/// Sets up a match, including calls to the D-Bus server to add and remove this match.
+fn add_match<C, T, F>(conn: &C, mr: MatchRule<'static>, timeout: Duration, mut f: F) -> Result<u32, Error>
+where 
+    T: BlockingSender + channel::MatchingReceiver<F=Box<FnMut(Message) -> bool>>,
+    C: 'static + std::ops::Deref<Target=T> + Clone,
+    F: 'static + FnMut(Message) -> bool {
 
-        let mstr = mr.match_str();
-        let msg = Message::call_with_args("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "AddMatch", (&mstr,));
-        let r = conn.send_with_reply_and_block(msg, timeout)?;
-        let id = r.get_serial();
-        let conn2 = conn.clone();
-        conn.start_receive(id, mr, Box::new(move |msg: Message| {
-            if f(msg) { return true };
-            let msg = Message::call_with_args("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "RemoveMatch", (&mstr,));
-            let _ = conn2.send_with_reply_and_block(msg, timeout);
-            false
-        }));
-        Ok(id)
-    }
+    let mstr = mr.match_str();
+    let msg = Message::call_with_args("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "AddMatch", (&mstr,));
+    let r = conn.send_with_reply_and_block(msg, timeout)?;
+    let id = r.get_serial();
+    let conn2 = conn.clone();
+    conn.start_receive(id, mr, Box::new(move |msg: Message| {
+        if f(msg) { return true };
+        let msg = Message::call_with_args("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "RemoveMatch", (&mstr,));
+        let _ = conn2.send_with_reply_and_block(msg, timeout);
+        false
+    }));
+    Ok(id)
+}
 
 impl<'a, T, C> Proxy<'a, C> 
 where
@@ -279,8 +293,8 @@ where
             if let Ok(r) = S::read(&mut msg.iter_init()) { f(r) } else { true }
         })
     }
-
 }
+
 
 
 #[test]
@@ -318,7 +332,7 @@ fn test_peer() {
 
     let s2 = j.join().unwrap();
 
-    let proxy = c.with_proxy("org.freedesktop.DBus", "/", Duration::from_secs(5));
+    let proxy = c.with_proxy("org.freedesktop.systemd1", "/", Duration::from_secs(5));
     let (s1,): (String,) = proxy.method_call("org.freedesktop.DBus.Peer", "GetMachineId", ()).unwrap();
 
     assert_eq!(s1, s2);
