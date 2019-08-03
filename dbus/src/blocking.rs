@@ -6,7 +6,7 @@ use crate::arg::{AppendAll, ReadAll, IterAppend};
 use crate::{channel, Error, Message};
 use crate::message::{MatchRule, SignalArgs};
 use crate::channel::{Channel, BusType};
-use std::{cell::RefCell, time::Duration};
+use std::{cell::RefCell, time::Duration, sync::Mutex};
 
 pub mod stdintf;
 
@@ -23,10 +23,16 @@ fn run_filters<F, G: FnOnce(&mut F, Message) -> bool>(filters: &mut Vec<Filter<F
     } else { Some(msg) }
 }
 
-/// Experimental rewrite of Connection, thread local + non-async version
+/// A connection to D-Bus, thread local + non-async version
 pub struct Connection {
     channel: Channel,
     filters: RefCell<Vec<Filter<Box<FnMut(Message) -> bool>>>>
+}
+
+/// A connection to D-Bus, Send + Sync + non-async version
+pub struct SyncConnection {
+    channel: Channel,
+    filters: Mutex<Vec<Filter<Box<FnMut(Message) -> bool + Send + Sync + 'static>>>>
 }
 
 use crate::blocking::stdintf::org_freedesktop_dbus;
@@ -43,6 +49,11 @@ impl Connection {
         channel: Channel::get_private(BusType::System)?, 
         filters: Default::default(),
     })}
+
+    /// Get the connection's unique name.
+    ///
+    /// It's usually something like ":1.54"
+    pub fn unique_name(&self) -> BusName { self.channel.unique_name().unwrap().into() }
 
     fn dispatch(&self, msg: Message) {
         if let Some(msg) = run_filters(&mut self.filters.borrow_mut(), msg, |cb, msg| { cb(msg) }) {
@@ -91,6 +102,71 @@ impl Connection {
 
 }
 
+impl SyncConnection {
+    /// Create a new connection to the session bus.
+    pub fn new_session() -> Result<Self, Error> { Ok(SyncConnection {
+        channel: Channel::get_private(BusType::Session)?,
+        filters: Default::default(),
+    })}
+
+    /// Create a new connection to the system-wide bus.
+    pub fn new_system() -> Result<Self, Error> { Ok(SyncConnection { 
+        channel: Channel::get_private(BusType::System)?, 
+        filters: Default::default(),
+    })}
+
+    /// Get the connection's unique name.
+    ///
+    /// It's usually something like ":1.54"
+    pub fn unique_name(&self) -> BusName { self.channel.unique_name().unwrap().into() }
+
+    fn dispatch(&self, msg: Message) {
+        if let Some(msg) = run_filters(&mut self.filters.lock().unwrap(), msg, |cb, msg| { cb(msg) }) {
+            if let Some(reply) = crate::channel::default_reply(&msg) {
+                let _ = self.channel.send(reply);
+            }
+        }
+    }
+
+    /// Tries to handle an incoming message if there is one. If there isn't one,
+    /// it will wait up to timeout
+    ///
+    /// Note: Might deadlock if called recursively. 
+    pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
+        if let Some(msg) = self.channel.pop_message() {
+            self.dispatch(msg);
+            return Ok(true);
+        }
+        self.channel.read_write(Some(timeout)).map_err(|_|
+            Error::new_custom("org.freedesktop.dbus.error.failed", "Failed to read/write data, disconnected from D-Bus?")
+        )?;
+        if let Some(msg) = self.channel.pop_message() {
+            self.dispatch(msg);
+            Ok(true)
+        } else { Ok(false) }
+    }
+
+    /// Create a convenience struct for easier calling of many methods on the same destination and path.
+    pub fn with_proxy<'a, D: Into<BusName<'a>>, P: Into<Path<'a>>>(&'a self, dest: D, path: P, timeout: Duration) ->
+    Proxy<'a, &'a SyncConnection> {
+        Proxy { connection: self, destination: dest.into(), path: path.into(), timeout }
+    }
+
+    /// Request a name on the D-Bus.
+    ///
+    /// For detailed information on the flags and return values, see the libdbus documentation.
+    pub fn request_name<'a, N: Into<BusName<'a>>>(&self, name: N, allow_replacement: bool, replace_existing: bool, do_not_queue: bool)
+    -> Result<org_freedesktop_dbus::RequestNameReply, Error> {
+        org_freedesktop_dbus::request_name(&self.channel, &name.into(), allow_replacement, replace_existing, do_not_queue)
+    }
+
+    /// Release a previously requested name on the D-Bus.
+    pub fn release_name<'a, N: Into<BusName<'a>>>(&self, name: N) -> Result<org_freedesktop_dbus::ReleaseNameReply, Error> {
+        org_freedesktop_dbus::release_name(&self.channel, &name.into())
+    }
+
+}
+
 /// Abstraction over different connections
 pub trait BlockingSender {
     /// Sends a message over the D-Bus and blocks, waiting for a reply or a timeout. This is used for method calls.
@@ -111,7 +187,17 @@ impl BlockingSender for Connection {
     }
 }
 
+impl BlockingSender for SyncConnection {
+    fn send_with_reply_and_block(&self, msg: Message, timeout: Duration) -> Result<Message, Error> {
+        self.channel.send_with_reply_and_block(msg, timeout)
+    }
+}
+
 impl channel::Sender for Connection {
+    fn send(&self, msg: Message) -> Result<u32, ()> { self.channel.send(msg) }
+}
+
+impl channel::Sender for SyncConnection {
     fn send(&self, msg: Message) -> Result<u32, ()> { self.channel.send(msg) }
 }
 
@@ -216,3 +302,45 @@ where
 
 }
 
+
+#[test]
+fn test_conn_send_sync() {
+    fn is_send<T: Send>(_: &T) {}
+    fn is_sync<T: Sync>(_: &T) {}
+    let c = SyncConnection::new_session().unwrap();
+    is_send(&c);
+    is_sync(&c);
+}
+
+#[test]
+fn test_peer() {
+    let c = Connection::new_session().unwrap();
+
+    let c_name = c.unique_name().into_static();
+    use std::sync::Arc;
+    let done = Arc::new(false);
+    let d2 = done.clone();
+    let j = std::thread::spawn(move || {
+        let c2 = Connection::new_session().unwrap();
+
+        let proxy = c2.with_proxy(c_name, "/", Duration::from_secs(5));
+        let (s2,): (String,) = proxy.method_call("org.freedesktop.DBus.Peer", "GetMachineId", ()).unwrap();
+        println!("{}", s2);
+        assert_eq!(Arc::strong_count(&d2), 2);
+        s2
+    });
+    assert_eq!(Arc::strong_count(&done), 2);
+
+    for _ in 0..30 {
+        c.process(Duration::from_millis(100)).unwrap();
+        if Arc::strong_count(&done) < 2 { break; }
+    }
+
+    let s2 = j.join().unwrap();
+
+    let proxy = c.with_proxy("org.freedesktop.DBus", "/", Duration::from_secs(5));
+    let (s1,): (String,) = proxy.method_call("org.freedesktop.DBus.Peer", "GetMachineId", ()).unwrap();
+
+    assert_eq!(s1, s2);
+
+}
