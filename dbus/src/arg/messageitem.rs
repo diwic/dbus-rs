@@ -778,23 +778,23 @@ mod test {
         c.send(m).unwrap();
     }
 
-    /* Unfortunately org.freedesktop.DBus has no properties we can use for testing, but PolicyKit should be around on most distros. */
+    /* Unfortunately org.freedesktop.DBus has no properties we can use for testing, but hostname1 should be around on most distros. */
     #[test]
-    fn test_get_policykit_version() {
+    fn test_get_hostname1_prop() {
         use super::Props;
 
         let c = Connection::new_system().unwrap();
-        let p = Props::new(&c, "org.freedesktop.PolicyKit1", "/org/freedesktop/PolicyKit1/Authority",
-            "org.freedesktop.PolicyKit1.Authority", 10000);
+        let p = Props::new(&c, "org.freedesktop.hostname1", "/org/freedesktop/hostname1",
+            "org.freedesktop.hostname1", 10000);
 
         /* Let's use both the get and getall methods and see if we get the same result */
-        let v = p.get("BackendVersion").unwrap();
+        let v = p.get("StaticHostname").unwrap();
         let vall = p.get_all().unwrap();
-        let v2 = vall.get("BackendVersion").unwrap();
+        let v2 = vall.get("StaticHostname").unwrap();
 
         assert_eq!(&v, &*v2);
         match v {
-            MessageItem::Str(ref s) => { println!("Policykit Backend version is {}", s); }
+            MessageItem::Str(ref s) => { println!("StaticHostname is {}", s); }
             _ => { panic!("Invalid Get: {:?}", v); }
         };
     }
