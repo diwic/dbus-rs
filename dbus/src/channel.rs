@@ -219,6 +219,16 @@ impl Channel {
         }
     }
 
+    /// Removes a message from the incoming queue, or waits until timeout if the queue is empty.
+    ///
+    pub fn blocking_pop_message(&self, timeout: Duration) -> Result<Option<Message>, Error> {
+        if let Some(msg) = self.pop_message() { return Ok(Some(msg)) }
+        self.read_write(Some(timeout)).map_err(|_|
+            Error::new_failed("Failed to read/write data, disconnected from D-Bus?")
+        )?;
+        Ok(self.pop_message())
+    }
+
     /// Get an up-to-date list of file descriptors to watch.
     ///
     /// Might be changed into something that allows for callbacks when the watch list is changed.

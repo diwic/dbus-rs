@@ -16,11 +16,13 @@ struct Filter<F> {
    callback: F, // ,
 }
 
-fn run_filters<F, G: FnOnce(&mut F, Message) -> bool>(filters: &mut Vec<Filter<F>>, msg: Message, g: G) -> Option<Message> {
+fn dispatch<F, G: FnOnce(&mut F, Message) -> bool>(filters: &mut Vec<Filter<F>>, msg: Message, g: G) -> Option<Message> {
     if let Some(idx) = filters.iter().position(|f| f.rule.matches(&msg)) {
         if !g(&mut filters[idx].callback, msg) { filters.remove(idx); }
         None
-    } else { Some(msg) }
+    } else {
+        crate::channel::default_reply(&msg)
+    }
 }
 
 /// A connection to D-Bus, thread local + non-async version
@@ -55,30 +57,19 @@ impl Connection {
     /// It's usually something like ":1.54"
     pub fn unique_name(&self) -> BusName { self.channel.unique_name().unwrap().into() }
 
-    fn dispatch(&self, msg: Message) {
-        if let Some(msg) = run_filters(&mut self.filters.borrow_mut(), msg, |cb, msg| { cb(msg) }) {
-            if let Some(reply) = crate::channel::default_reply(&msg) {
-                let _ = self.channel.send(reply);
-            }
-        }
-    }
-
     /// Tries to handle an incoming message if there is one. If there isn't one,
     /// it will wait up to timeout
     ///
     /// Note: Might panic if called recursively.
     pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
-        if let Some(msg) = self.channel.pop_message() {
-            self.dispatch(msg);
-            return Ok(true);
-        }
-        self.channel.read_write(Some(timeout)).map_err(|_|
-            Error::new_failed("Failed to read/write data, disconnected from D-Bus?")
-        )?;
-        if let Some(msg) = self.channel.pop_message() {
-            self.dispatch(msg);
+        if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
+            if let Some(reply) = dispatch(&mut self.filters.borrow_mut(), msg, |cb, msg| { cb(msg) }) {
+                let _ = self.channel.send(reply);
+            }
             Ok(true)
-        } else { Ok(false) }
+        } else {
+            Ok(false)
+        }
     }
 
     /// Create a convenience struct for easier calling of many methods on the same destination and path.
@@ -120,30 +111,19 @@ impl SyncConnection {
     /// It's usually something like ":1.54"
     pub fn unique_name(&self) -> BusName { self.channel.unique_name().unwrap().into() }
 
-    fn dispatch(&self, msg: Message) {
-        if let Some(msg) = run_filters(&mut self.filters.lock().unwrap(), msg, |cb, msg| { cb(msg) }) {
-            if let Some(reply) = crate::channel::default_reply(&msg) {
-                let _ = self.channel.send(reply);
-            }
-        }
-    }
-
     /// Tries to handle an incoming message if there is one. If there isn't one,
     /// it will wait up to timeout
     ///
     /// Note: Might deadlock if called recursively. 
     pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
-        if let Some(msg) = self.channel.pop_message() {
-            self.dispatch(msg);
-            return Ok(true);
-        }
-        self.channel.read_write(Some(timeout)).map_err(|_|
-            Error::new_failed("Failed to read/write data, disconnected from D-Bus?")
-        )?;
-        if let Some(msg) = self.channel.pop_message() {
-            self.dispatch(msg);
+        if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
+            if let Some(reply) = dispatch(&mut self.filters.lock().unwrap(), msg, |cb, msg| { cb(msg) }) {
+                let _ = self.channel.send(reply);
+            }
             Ok(true)
-        } else { Ok(false) }
+        } else {
+            Ok(false)
+        }
     }
 
     /// Create a convenience struct for easier calling of many methods on the same destination and path.
