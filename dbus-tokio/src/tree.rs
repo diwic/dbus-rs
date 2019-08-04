@@ -78,7 +78,7 @@ impl<D: ADataType> AFactory<MTFn<ATree<D>>, ATree<D>> {
 /// A Future method result
 ///
 /// When method results cannot be returned right away, the AMethodResult holds it temporarily
-struct AMethodResult(Box<Future<Item=Vec<Message>, Error=MethodErr>>, Option<Message>);
+struct AMethodResult(Box<dyn Future<Item=Vec<Message>, Error=MethodErr>>, Option<Message>);
 
 impl fmt::Debug for AMethodResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "AMethodResult({:?})", self.1) }

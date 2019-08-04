@@ -119,8 +119,7 @@ impl<'m> ops::Deref for $t<'m> {
 
 impl<'m> fmt::Display for $t<'m> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let s: &str = &self;
-        (&s as &fmt::Display).fmt(f)
+        <str as fmt::Display>::fmt(self, f)
     }
 }
 

@@ -93,11 +93,11 @@ impl AsRawFd for Watch {
 pub struct WatchList {
     watches: RwLock<Vec<*mut ffi::DBusWatch>>,
     enabled_fds: Mutex<Vec<Watch>>,
-    on_update: Mutex<Box<Fn(Watch) + Send>>,
+    on_update: Mutex<Box<dyn Fn(Watch) + Send>>,
 }
 
 impl WatchList {
-    pub fn new(c: &Connection, on_update: Box<Fn(Watch) + Send>) -> Box<WatchList> {
+    pub fn new(c: &Connection, on_update: Box<dyn Fn(Watch) + Send>) -> Box<WatchList> {
         let w = Box::new(WatchList { on_update: Mutex::new(on_update), watches: RwLock::new(vec!()), enabled_fds: Mutex::new(vec!()) });
         if unsafe { ffi::dbus_connection_set_watch_functions(crate::ffidisp::connection::conn_handle(c),
             Some(add_watch_cb), Some(remove_watch_cb), Some(toggled_watch_cb), &*w as *const _ as *mut _, None) } == 0 {
@@ -106,7 +106,7 @@ impl WatchList {
         w
     }
 
-    pub fn set_on_update(&self, on_update: Box<Fn(Watch) + Send>) { *self.on_update.lock().unwrap() = on_update; }
+    pub fn set_on_update(&self, on_update: Box<dyn Fn(Watch) + Send>) { *self.on_update.lock().unwrap() = on_update; }
 
     pub fn watch_handle(&self, fd: RawFd, flags: c_uint) {
         // println!("watch_handle {} flags {}", fd, flags);

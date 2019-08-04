@@ -503,11 +503,11 @@ impl arg::RefArg for MessageItem {
     fn signature(&self) -> Signature<'static> { MessageItem::signature(&self) }
     fn append(&self, i: &mut IterAppend) { arg::Append::append_by_ref(self, i) }
     #[inline]
-    fn as_any(&self) -> &any::Any where Self: 'static { self }
+    fn as_any(&self) -> &dyn any::Any where Self: 'static { self }
     #[inline]
-    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static { self }
+    fn as_any_mut(&mut self) -> &mut dyn any::Any where Self: 'static { self }
     #[inline]
-    fn box_clone(&self) -> Box<arg::RefArg + 'static> { Box::new(self.clone()) }
+    fn box_clone(&self) -> Box<dyn arg::RefArg + 'static> { Box::new(self.clone()) }
 }
 
 

@@ -227,9 +227,9 @@ impl<'a> Iter<'a> {
     /// combinations thereof), their internal representations are still a bit in flux.
     /// Instead, use as_iter() to read the values of those.
     ///
-    /// The rest are unlikely to change - Variants are `Variant<Box<RefArg>>`, strings are `String`,
+    /// The rest are unlikely to change - Variants are `Variant<Box<dyn RefArg>>`, strings are `String`,
     /// paths are `Path<'static>`, signatures are `Signature<'static>`, Int32 are `i32s` and so on.
-    pub fn get_refarg(&mut self) -> Option<Box<RefArg + 'static>> {
+    pub fn get_refarg(&mut self) -> Option<Box<dyn RefArg + 'static>> {
         Some(match self.arg_type() {
             ArgType::Array => array_impl::get_array_refarg(self),
             ArgType::Variant => Box::new(Variant::new_refarg(self).unwrap()),
@@ -345,7 +345,7 @@ impl<'a> fmt::Debug for Iter<'a> {
 }
 
 impl<'a> Iterator for Iter<'a> {
-    type Item = Box<RefArg + 'static>;
+    type Item = Box<dyn RefArg + 'static>;
     fn next(&mut self) -> Option<Self::Item> {
         let r = self.get_refarg();
         if r.is_some() { self.next(); }
@@ -389,7 +389,7 @@ pub enum ArgType {
     Double = ffi::DBUS_TYPE_DOUBLE as u8,
     /// OwnedFd
     UnixFd = ffi::DBUS_TYPE_UNIX_FD as u8,
-    /// Use tuples or Vec<Box<RefArg>> to read/write structs.
+    /// Use tuples or Vec<Box<dyn RefArg>> to read/write structs.
     Struct = ffi::DBUS_TYPE_STRUCT as u8,
     /// Path
     ObjectPath = ffi::DBUS_TYPE_OBJECT_PATH as u8,
@@ -458,13 +458,13 @@ impl TypeMismatchError {
 
 impl error::Error for TypeMismatchError {
     fn description(&self) -> &str { "D-Bus argument type mismatch" }
-    fn cause(&self) -> Option<&error::Error> { None }
+    fn cause(&self) -> Option<&dyn error::Error> { None }
 }
 
 impl fmt::Display for TypeMismatchError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} at position {}: expected {}, found {}",
-            (self as &error::Error).description(),
+            error::Error::description(self),
             self.position, self.expected.as_str(),
             if self.expected == self.found { "same but still different somehow" } else { self.found.as_str() }
         )

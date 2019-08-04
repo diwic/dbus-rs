@@ -37,7 +37,7 @@ fn main() {
         .arg(clap::Arg::with_name("systembus").short("s").long("system-bus")
              .help("Connects to system bus, if not specified, the session bus will be used. (Ignored if destination is not specified.)"))
         .arg(clap::Arg::with_name("genericvariant").short("g").long("generic-variant")
-             .help("If present, will try to make variant arguments generic instead of Variant<Box<RefArg>>"))
+             .help("If present, will try to make variant arguments generic instead of Variant<Box<dyn RefArg>>"))
         .arg(clap::Arg::with_name("methodtype").short("m").long("methodtype").takes_value(true).value_name("Fn")
              .help("Type of server method; valid values are: 'Fn', 'FnMut', 'Sync', 'Generic', and 'None'. Defaults to 'Fn'."))
         .arg(clap::Arg::with_name("methodaccess").short("a").long("methodaccess").takes_value(true).value_name("RefClosure")
@@ -71,7 +71,7 @@ Defaults to 'RefClosure'."))
         std::fs::read_to_string(file_path.to_string()).unwrap()
     } else {
         let mut s = String::new();
-        (&mut std::io::stdin() as &mut std::io::Read).read_to_string(&mut s).unwrap();
+        std::io::Read::read_to_string(&mut std::io::stdin(),&mut s).unwrap();
         s
     };
 
@@ -112,7 +112,7 @@ Defaults to 'RefClosure'."))
         crhandler: crhandler.map(|x| x.to_string()),
     };
 
-    let mut h: Box<std::io::Write> = match matches.value_of("output") {
+    let mut h: Box<dyn std::io::Write> = match matches.value_of("output") {
         Some(file_path) => Box::new(std::fs::File::create(file_path)
             .unwrap_or_else(|e| {
                 panic!("Failed to open {}", e);

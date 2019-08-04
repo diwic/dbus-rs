@@ -62,7 +62,7 @@ pub trait RefArg: fmt::Debug {
     ///
     /// Note: The internal representation of complex types (Array, Dict, Struct) is unstable
     /// and as_any should not be relied upon for these types. Use as_iter instead.
-    fn as_any(&self) -> &any::Any where Self: 'static;
+    fn as_any(&self) -> &dyn any::Any where Self: 'static;
     /// Transforms this argument to Any (which can be downcasted to read the current value).
     ///
     /// Note: The internal representation of complex types (Array, Dict, Struct) is unstable
@@ -71,7 +71,7 @@ pub trait RefArg: fmt::Debug {
     /// # Panic
     /// Will panic if the interior cannot be made mutable, e g, if encapsulated
     /// inside a Rc with a reference count > 1.
-    fn as_any_mut(&mut self) -> &mut any::Any where Self: 'static;
+    fn as_any_mut(&mut self) -> &mut dyn any::Any where Self: 'static;
     /// Try to read the argument as an i64.
     ///
     /// Works for: Boolean, Byte, Int16, UInt16, Int32, UInt32, Int64, UnixFd.
@@ -96,23 +96,23 @@ pub trait RefArg: fmt::Debug {
     ///
     /// Works for: Array/Dict, Struct, Variant.
     #[inline]
-    fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> { None }
+    fn as_iter<'a>(&'a self) -> Option<Box<dyn Iterator<Item=&'a dyn RefArg> + 'a>> { None }
     /// Deep clone of the RefArg, causing the result to be 'static.
     ///
     /// Usable as an escape hatch in case of lifetime problems with RefArg.
     ///
     /// In case of complex types (Array, Dict, Struct), the clone is not guaranteed
     /// to have the same internal representation as the original.
-    fn box_clone(&self) -> Box<RefArg + 'static> { unimplemented!() /* Needed for backwards comp */ }
+    fn box_clone(&self) -> Box<dyn RefArg + 'static> { unimplemented!() /* Needed for backwards comp */ }
 }
 
-impl<'a> Get<'a> for Box<RefArg> {
+impl<'a> Get<'a> for Box<dyn RefArg> {
     fn get(i: &mut Iter<'a>) -> Option<Self> { i.get_refarg() }
 }
 
 /// Cast a RefArg as a specific type (shortcut for any + downcast)
 #[inline]
-pub fn cast<'a, T: 'static>(a: &'a (RefArg + 'static)) -> Option<&'a T> { a.as_any().downcast_ref() }
+pub fn cast<'a, T: 'static>(a: &'a (dyn RefArg + 'static)) -> Option<&'a T> { a.as_any().downcast_ref() }
 
 /// Cast a RefArg as a specific type (shortcut for any_mut + downcast_mut)
 ///
@@ -120,7 +120,7 @@ pub fn cast<'a, T: 'static>(a: &'a (RefArg + 'static)) -> Option<&'a T> { a.as_a
 /// Will panic if the interior cannot be made mutable, e g, if encapsulated
 /// inside a Rc with a reference count > 1.
 #[inline]
-pub fn cast_mut<'a, T: 'static>(a: &'a mut (RefArg + 'static)) -> Option<&'a mut T> { a.as_any_mut().downcast_mut() }
+pub fn cast_mut<'a, T: 'static>(a: &'a mut (dyn RefArg + 'static)) -> Option<&'a mut T> { a.as_any_mut().downcast_mut() }
 
 /// If a type implements this trait, it means the size and alignment is the same
 /// as in D-Bus. This means that you can quickly append and get slices of this type.
@@ -151,9 +151,9 @@ impl<'a, T: RefArg + ?Sized> RefArg for &'a T {
     #[inline]
     fn append(&self, i: &mut IterAppend) { (&**self).append(i) }
     #[inline]
-    fn as_any(&self) -> &any::Any where T: 'static { (&**self).as_any() }
+    fn as_any(&self) -> &dyn any::Any where T: 'static { (&**self).as_any() }
     #[inline]
-    fn as_any_mut(&mut self) -> &mut any::Any where T: 'static { unreachable!() }
+    fn as_any_mut(&mut self) -> &mut dyn any::Any where T: 'static { unreachable!() }
     #[inline]
     fn as_i64(&self) -> Option<i64> { (&**self).as_i64() }
     #[inline]
@@ -163,9 +163,9 @@ impl<'a, T: RefArg + ?Sized> RefArg for &'a T {
     #[inline]
     fn as_str(&self) -> Option<&str> { (&**self).as_str() }
     #[inline]
-    fn as_iter<'b>(&'b self) -> Option<Box<Iterator<Item=&'b RefArg> + 'b>> { (&**self).as_iter() }
+    fn as_iter<'b>(&'b self) -> Option<Box<dyn Iterator<Item=&'b dyn RefArg> + 'b>> { (&**self).as_iter() }
     #[inline]
-    fn box_clone(&self) -> Box<RefArg + 'static> { (&**self).box_clone() }
+    fn box_clone(&self) -> Box<dyn RefArg + 'static> { (&**self).box_clone() }
 }
 
 
@@ -181,9 +181,9 @@ impl<T: RefArg + ?Sized> RefArg for $t<T> {
     #[inline]
     fn append(&self, i: &mut IterAppend) { (&**self).append(i) }
     #[inline]
-    fn as_any(&self) -> &any::Any where T: 'static { (&**self).as_any() }
+    fn as_any(&self) -> &dyn any::Any where T: 'static { (&**self).as_any() }
     #[inline]
-    fn as_any_mut(&mut $ss) -> &mut any::Any where T: 'static { $make_mut.as_any_mut() }
+    fn as_any_mut(&mut $ss) -> &mut dyn any::Any where T: 'static { $make_mut.as_any_mut() }
     #[inline]
     fn as_i64(&self) -> Option<i64> { (&**self).as_i64() }
     #[inline]
@@ -193,9 +193,9 @@ impl<T: RefArg + ?Sized> RefArg for $t<T> {
     #[inline]
     fn as_str(&self) -> Option<&str> { (&**self).as_str() }
     #[inline]
-    fn as_iter<'a>(&'a self) -> Option<Box<Iterator<Item=&'a RefArg> + 'a>> { (&**self).as_iter() }
+    fn as_iter<'a>(&'a self) -> Option<Box<dyn Iterator<Item=&'a dyn RefArg> + 'a>> { (&**self).as_iter() }
     #[inline]
-    fn box_clone(&self) -> Box<RefArg + 'static> { (&**self).box_clone() }
+    fn box_clone(&self) -> Box<dyn RefArg + 'static> { (&**self).box_clone() }
 }
 impl<T: DictKey> DictKey for $t<T> {}
 
@@ -318,31 +318,31 @@ mod test {
         c.register_object_path("/mooh").unwrap();
         let m = Message::new_method_call(&c.unique_name(), "/mooh", "com.example.hello", "Hello").unwrap();
 
-        let mut vv: Vec<Variant<Box<RefArg>>> = vec!();
+        let mut vv: Vec<Variant<Box<dyn RefArg>>> = vec!();
         vv.push(Variant(Box::new(5i32)));
         vv.push(Variant(Box::new(String::from("Hello world"))));
         let m = m.append_ref(&vv);
 
         let (f1, f2) = (false, 7u64);
-        let mut v: Vec<&RefArg> = vec!();
+        let mut v: Vec<&dyn RefArg> = vec!();
         v.push(&f1);
         v.push(&f2);
         let m = m.append_ref(&v);
         let vi32 = vec![7i32, 9i32];
         let vstr: Vec<String> = ["This", "is", "dbus", "rs"].iter().map(|&s| s.into()).collect();
-        let m = m.append_ref(&[&vi32 as &RefArg, &vstr as &RefArg]);
+        let m = m.append_ref(&[&vi32 as &dyn RefArg, &vstr as &dyn RefArg]);
         let mut map = HashMap::new();
         map.insert(true, String::from("Yes"));
         map.insert(false, String::from("No"));
-        let m = m.append_ref(&[&map as &RefArg, &1.5f64 as &RefArg]);
+        let m = m.append_ref(&[&map as &dyn RefArg, &1.5f64 as &dyn RefArg]);
 
         c.send(m).unwrap();
 
         for n in c.iter(1000) {
             if let ConnectionItem::MethodCall(m) = n {
-                let rv: Vec<Box<RefArg + 'static>> = m.iter_init().collect();
+                let rv: Vec<Box<dyn RefArg + 'static>> = m.iter_init().collect();
                 println!("Receiving {:?}", rv);
-                let rv0: &Variant<Box<RefArg>> = cast(&rv[0]).unwrap(); 
+                let rv0: &Variant<Box<dyn RefArg>> = cast(&rv[0]).unwrap();
                 let rv00: &i32 = cast(&rv0.0).unwrap();
                 assert_eq!(rv00, &5i32);
                 assert_eq!(Some(&false), rv[2].as_any().downcast_ref::<bool>());

@@ -28,11 +28,11 @@ fn dispatch<F, G: FnOnce(&mut F, Message) -> bool>(filters: &mut Vec<Filter<F>>,
 /// A connection to D-Bus, thread local + non-async version
 pub struct Connection {
     channel: Channel,
-    filters: RefCell<Vec<Filter<Box<FnMut(Message) -> bool>>>>
+    filters: RefCell<Vec<Filter<Box<dyn FnMut(Message) -> bool>>>>
 }
 
 type
-  SyncFilterCb = Box<FnMut(Message) -> bool + Send + Sync + 'static>;
+  SyncFilterCb = Box<dyn FnMut(Message) -> bool + Send + Sync + 'static>;
 
 /// A connection to D-Bus, Send + Sync + non-async version
 pub struct SyncConnection {
@@ -185,7 +185,7 @@ impl channel::Sender for SyncConnection {
 }
 
 impl channel::MatchingReceiver for Connection {
-    type F = Box<FnMut(Message) -> bool>;
+    type F = Box<dyn FnMut(Message) -> bool>;
     fn start_receive(&self, id: u32, m: MatchRule<'static>, f: Self::F) {
         self.filters.borrow_mut().push(Filter { id, rule: m, callback: f } )
     }
@@ -245,7 +245,7 @@ impl<'a, T: BlockingSender, C: std::ops::Deref<Target=T>> Proxy<'a, C> {
     /// let proxy = Proxy::new("org.freedesktop.DBus", "/", std::time::Duration::from_millis(5000), &conn);
     /// let (has_owner,): (bool,) = proxy.method_call("org.freedesktop.DBus", "NameHasOwner", ("dummy.name.without.owner",))?;
     /// assert_eq!(has_owner, false);
-    /// # Ok::<(), Box<std::error::Error>>(())
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn method_call<'i, 'm, R: ReadAll, A: AppendAll, I: Into<Interface<'i>>, M: Into<Member<'m>>>(&self, i: I, m: M, args: A) -> Result<R, Error> {
         let mut msg = Message::method_call(&self.destination, &self.path, &i.into(), &m.into());
@@ -258,7 +258,7 @@ impl<'a, T: BlockingSender, C: std::ops::Deref<Target=T>> Proxy<'a, C> {
 /// Sets up a match, including calls to the D-Bus server to add and remove this match.
 fn add_match<C, T, F>(conn: &C, mr: MatchRule<'static>, timeout: Duration, mut f: F) -> Result<u32, Error>
 where 
-    T: BlockingSender + channel::MatchingReceiver<F=Box<FnMut(Message) -> bool>>,
+    T: BlockingSender + channel::MatchingReceiver<F=Box<dyn FnMut(Message) -> bool>>,
     C: 'static + std::ops::Deref<Target=T> + Clone,
     F: 'static + FnMut(Message) -> bool {
 
@@ -278,7 +278,7 @@ where
 
 impl<'a, T, C> Proxy<'a, C> 
 where
-    T: BlockingSender + channel::MatchingReceiver<F=Box<FnMut(Message) -> bool>>,
+    T: BlockingSender + channel::MatchingReceiver<F=Box<dyn FnMut(Message) -> bool>>,
     C: 'static + std::ops::Deref<Target=T> + Clone
 {
 

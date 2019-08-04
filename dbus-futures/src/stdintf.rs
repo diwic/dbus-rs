@@ -28,7 +28,7 @@ pub trait DBus {
     fn get_connection_app_armor_security_context(&self, arg0: &str) -> dbusf::MethodReply<String>;
     fn reload_config(&self) -> dbusf::MethodReply<()>;
     fn get_id(&self) -> dbusf::MethodReply<String>;
-    fn get_connection_credentials(&self, arg0: &str) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>>;
+    fn get_connection_credentials(&self, arg0: &str) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>>;
     fn get_features(&self) -> dbusf::MethodReply<Vec<String>>;
     fn get_interfaces(&self) -> dbusf::MethodReply<Vec<String>>;
 }
@@ -247,14 +247,14 @@ impl<'a> DBus for dbusf::ConnPath<'a> {
         })
     }
 
-    fn get_connection_credentials(&self, arg0: &str) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>> {
+    fn get_connection_credentials(&self, arg0: &str) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>> {
         let m = self.method_call_with_args(&"org.freedesktop.DBus".into(), &"GetConnectionCredentials".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
             i.append(arg0);
         });
         dbusf::MethodReply::from_msg(m, |m| {
             let mut i = m.iter_init();
-            let arg0: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>> = i.read()?;
+            let arg0: ::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>> = i.read()?;
             Ok(arg0)
         })
     }
@@ -327,7 +327,7 @@ impl dbus::message::SignalArgs for DBusNameAcquired {
 
 pub trait DBusProperties {
     fn get<R0: 'static + for<'b> arg::Get<'b>>(&self, arg0: &str, arg1: &str) -> dbusf::MethodReply<R0>;
-    fn get_all(&self, arg0: &str) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>>;
+    fn get_all(&self, arg0: &str) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>>;
     fn set<I2: arg::Arg + arg::Append>(&self, arg0: &str, arg1: &str, arg2: I2) -> dbusf::MethodReply<()>;
 }
 
@@ -346,14 +346,14 @@ impl<'a> DBusProperties for dbusf::ConnPath<'a> {
         })
     }
 
-    fn get_all(&self, arg0: &str) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>> {
+    fn get_all(&self, arg0: &str) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>> {
         let m = self.method_call_with_args(&"org.freedesktop.DBus.Properties".into(), &"GetAll".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
             i.append(arg0);
         });
         dbusf::MethodReply::from_msg(m, |m| {
             let mut i = m.iter_init();
-            let arg0: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>> = i.read()?;
+            let arg0: ::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>> = i.read()?;
             Ok(arg0)
         })
     }
@@ -374,7 +374,7 @@ impl<'a> DBusProperties for dbusf::ConnPath<'a> {
 #[derive(Debug, Default)]
 pub struct DBusPropertiesPropertiesChanged {
     pub interface_name: String,
-    pub changed_properties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>,
+    pub changed_properties: ::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>,
     pub invalidated_properties: Vec<String>,
 }
 
@@ -430,31 +430,31 @@ impl<'a> DBusMonitoring for dbusf::ConnPath<'a> {
 }
 
 pub trait DBusDebugStats {
-    fn get_stats(&self) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>>;
-    fn get_connection_stats(&self, arg0: &str) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>>;
+    fn get_stats(&self) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>>;
+    fn get_connection_stats(&self, arg0: &str) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>>;
     fn get_all_match_rules(&self) -> dbusf::MethodReply<::std::collections::HashMap<String, Vec<String>>>;
 }
 
 impl<'a> DBusDebugStats for dbusf::ConnPath<'a> {
 
-    fn get_stats(&self) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>> {
+    fn get_stats(&self) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>> {
         let m = self.method_call_with_args(&"org.freedesktop.DBus.Debug.Stats".into(), &"GetStats".into(), |_| {
         });
         dbusf::MethodReply::from_msg(m, |m| {
             let mut i = m.iter_init();
-            let arg0: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>> = i.read()?;
+            let arg0: ::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>> = i.read()?;
             Ok(arg0)
         })
     }
 
-    fn get_connection_stats(&self, arg0: &str) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>> {
+    fn get_connection_stats(&self, arg0: &str) -> dbusf::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>> {
         let m = self.method_call_with_args(&"org.freedesktop.DBus.Debug.Stats".into(), &"GetConnectionStats".into(), |msg| {
             let mut i = arg::IterAppend::new(msg);
             i.append(arg0);
         });
         dbusf::MethodReply::from_msg(m, |m| {
             let mut i = m.iter_init();
-            let arg0: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>> = i.read()?;
+            let arg0: ::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>> = i.read()?;
             Ok(arg0)
         })
     }

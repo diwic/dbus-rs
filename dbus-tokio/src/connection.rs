@@ -18,7 +18,7 @@ pub struct IOResource {
 }
 
 impl IOResource {
-    fn poll_internal(&self) -> Result<(), Box<std::error::Error + Send + Sync>> {
+    fn poll_internal(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         for (w, r) in &self.watches { 
             r.register(&mio::unix::EventedFd(&w.fd))?;
             if w.read { r.poll_read_ready()?; };
@@ -37,7 +37,7 @@ impl future::Future for IOResource {
             Err(e) => task::Poll::Ready(e),
         }
     }
-    type Output = Box<std::error::Error + Send + Sync>;
+    type Output = Box<dyn std::error::Error + Send + Sync>;
 }
 
 

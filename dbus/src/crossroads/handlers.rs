@@ -64,9 +64,9 @@ impl<'a> ParInfo<'a> {
 }
 
 impl Handlers for Par {
-    type Method = Box<Fn(&(dyn Any + Send + Sync), &ParInfo) -> Option<Message> + Send + Sync + 'static>;
-    type GetProp = Box<Fn(&(dyn Any + Send + Sync), &mut arg::IterAppend, &ParInfo) -> Result<(), MethodErr> + Send + Sync + 'static>;
-    type SetProp = Box<Fn(&(dyn Any + Send + Sync), &mut arg::Iter, &ParInfo) -> Result<(), MethodErr> + Send + Sync + 'static>;
+    type Method = Box<dyn Fn(&(dyn Any + Send + Sync), &ParInfo) -> Option<Message> + Send + Sync + 'static>;
+    type GetProp = Box<dyn Fn(&(dyn Any + Send + Sync), &mut arg::IterAppend, &ParInfo) -> Result<(), MethodErr> + Send + Sync + 'static>;
+    type SetProp = Box<dyn Fn(&(dyn Any + Send + Sync), &mut arg::Iter, &ParInfo) -> Result<(), MethodErr> + Send + Sync + 'static>;
     type Iface = Box<dyn Any + 'static + Send + Sync>;
 }
 
@@ -102,8 +102,8 @@ impl<'a> MutCtx<'a> {
 
 impl Handlers for Mut {
     type Method = MutMethod;
-    type GetProp = Box<FnMut(&mut (dyn Any), &mut arg::IterAppend, &MutCtx) -> Result<(), MethodErr> + 'static>;
-    type SetProp = Box<FnMut(&mut (dyn Any), &mut arg::Iter, &MutCtx) -> Result<(), MethodErr> + 'static>;
+    type GetProp = Box<dyn FnMut(&mut (dyn Any), &mut arg::IterAppend, &MutCtx) -> Result<(), MethodErr> + 'static>;
+    type SetProp = Box<dyn FnMut(&mut (dyn Any), &mut arg::Iter, &MutCtx) -> Result<(), MethodErr> + 'static>;
     type Iface = Box<dyn Any>;
 }
 
@@ -111,8 +111,8 @@ impl Handlers for Mut {
 pub struct MutMethod(pub (super) MutMethods);
 
 pub (super) enum MutMethods {
-    MutIface(Box<FnMut(&mut (dyn Any), &MutCtx) -> Option<Message> + 'static>),
-//    Info(Box<FnMut(&(dyn Any), &Message, &Path) -> Option<Message> + 'static>),
+    MutIface(Box<dyn FnMut(&mut (dyn Any), &MutCtx) -> Option<Message> + 'static>),
+//    Info(Box<dyn FnMut(&(dyn Any), &Message, &Path) -> Option<Message> + 'static>),
 //    MutCr(fn(&mut Crossroads<Mut>, &Message) -> Vec<Message>),
 }
 

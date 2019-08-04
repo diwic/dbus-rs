@@ -134,7 +134,7 @@ static POLICYKIT_XML: &'static str = r#"
 
 fn write_to_file(code: &str, path: &Path) {
     let mut f = File::create(path).unwrap();
-    (&mut f as &mut Write).write_all(code.as_bytes()).unwrap();
+    Write::write_all(&mut f,code.as_bytes()).unwrap();
 }
 
 fn generate_code(xml: &str, opts: &GenOpts, outfile: &str) {

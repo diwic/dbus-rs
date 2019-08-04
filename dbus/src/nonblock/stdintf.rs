@@ -21,7 +21,7 @@ use crate::nonblock;
 pub trait Properties {
     type Connection;
     fn get<R0: 'static + for<'b> arg::Get<'b>>(&self, interface_name: &str, property_name: &str) -> nonblock::MethodReply<R0, Self::Connection>;
-    fn get_all(&self, interface_name: &str) -> nonblock::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>, Self::Connection>;
+    fn get_all(&self, interface_name: &str) -> nonblock::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>, Self::Connection>;
     fn set<I2: arg::Arg + arg::Append>(&self, interface_name: &str, property_name: &str, value: arg::Variant<I2>) -> nonblock::MethodReply<(), Self::Connection>;
 }
 
@@ -33,9 +33,9 @@ impl<'a, C: ::std::ops::Deref<Target=nonblock::Connection> + Clone> Properties f
             .and_then(|r: (arg::Variant<R0>,)| Ok((r.0).0))
     }
 
-    fn get_all(&self, interface_name: &str) -> nonblock::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>, Self::Connection> {
+    fn get_all(&self, interface_name: &str) -> nonblock::MethodReply<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>, Self::Connection> {
         self.method_call("org.freedesktop.DBus.Properties", "GetAll", (interface_name, ))
-            .and_then(|r: (::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>,)| Ok(r.0))
+            .and_then(|r: (::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>,)| Ok(r.0))
     }
 
     fn set<I2: arg::Arg + arg::Append>(&self, interface_name: &str, property_name: &str, value: arg::Variant<I2>) -> nonblock::MethodReply<(), Self::Connection> {
@@ -46,7 +46,7 @@ impl<'a, C: ::std::ops::Deref<Target=nonblock::Connection> + Clone> Properties f
 #[derive(Debug)]
 pub struct PropertiesPropertiesChanged {
     pub interface_name: String,
-    pub changed_properties: ::std::collections::HashMap<String, arg::Variant<Box<arg::RefArg + 'static>>>,
+    pub changed_properties: ::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>,
     pub invalidated_properties: Vec<String>,
 }
 

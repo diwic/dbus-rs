@@ -23,7 +23,7 @@ fn main() {
 
     // Option 1: we can get the dict straight into a hashmap, like this:
 
-    let metadata: HashMap<String, arg::Variant<Box<arg::RefArg>>> = p.get("org.mpris.MediaPlayer2.Player", "Metadata").unwrap();
+    let metadata: HashMap<String, arg::Variant<Box<dyn arg::RefArg>>> = p.get("org.mpris.MediaPlayer2.Player", "Metadata").unwrap();
 
     println!("Option 1:");
 
@@ -36,7 +36,7 @@ fn main() {
 
     // Option 2: we can get the entire dict as a RefArg and get the values out by iterating over it.
 
-    let metadata: Box<arg::RefArg> = p.get("org.mpris.MediaPlayer2.Player", "Metadata").unwrap();
+    let metadata: Box<dyn arg::RefArg> = p.get("org.mpris.MediaPlayer2.Player", "Metadata").unwrap();
 
     // When using "as_iter()" for a dict, we'll get one key, it's value, next key, it's value, etc.
     let mut iter = metadata.as_iter().unwrap();

@@ -430,7 +430,7 @@ impl<M: MethodType<D> + 'static, D: DataType + 'static> Tree<M, D> {
     pub fn start_receive<CC, C>(self, connection: C)
     where
         C: std::ops::Deref<Target=CC> + Clone + 'static,
-        CC: channel::MatchingReceiver<F=Box<FnMut(Message) -> bool>> + channel::Sender
+        CC: channel::MatchingReceiver<F=Box<dyn FnMut(Message) -> bool>> + channel::Sender
     {
         let mut rule = message::MatchRule::new();
         rule.msg_type = Some(MessageType::MethodCall);
