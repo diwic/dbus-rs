@@ -269,7 +269,7 @@ pub trait Sender {
 
 pub trait MatchingReceiver {
     type F;
-    fn start_receive(&self, id: u32, m: MatchRule<'static>, f: Self::F);
+    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32;
     fn stop_receive(&self, id: u32) -> Option<Self::F>;
 }
 

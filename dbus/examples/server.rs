@@ -18,7 +18,7 @@ use std::time::Duration;
 
 fn main() -> Result<(), Box<Error>> {
     // Let's start by starting up a connection to the session bus and request a name.
-    let c = Arc::new(Connection::new_session()?);
+    let mut c = Connection::new_session()?;
     c.request_name("com.example.dbustest", false, true, false)?;
 
     // The choice of factory tells us what type of tree we want,
@@ -65,7 +65,7 @@ fn main() -> Result<(), Box<Error>> {
     )).add(f.object_path("/", ()).introspectable());
 
     // We add the tree to the connection so that incoming method calls will be handled.
-    tree.start_receive(c.clone());
+    tree.start_receive(&c);
 
     // Serve clients forever.
     loop { c.process(Duration::from_millis(1000))?; }

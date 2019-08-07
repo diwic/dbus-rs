@@ -427,17 +427,15 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
 
 impl<M: MethodType<D> + 'static, D: DataType + 'static> Tree<M, D> {
     /// Connects a Connection with a Tree so that incoming method calls are handled.
-    pub fn start_receive<CC, C>(self, connection: C)
+    pub fn start_receive<C>(self, connection: &C)
     where
-        C: std::ops::Deref<Target=CC> + Clone + 'static,
-        CC: channel::MatchingReceiver<F=Box<dyn FnMut(Message) -> bool>> + channel::Sender
+        C: channel::MatchingReceiver<F=Box<dyn FnMut(Message, &C) -> bool>> + channel::Sender
     {
         let mut rule = message::MatchRule::new();
         rule.msg_type = Some(MessageType::MethodCall);
-        let c1 = connection.clone();
-        connection.start_receive(0, rule, Box::new(move |msg| {
+        connection.start_receive(rule, Box::new(move |msg, c| {
             if let Some(replies) = self.handle(&msg) {
-                for r in replies { let _ = c1.send(r); }
+                for r in replies { let _ = c.send(r); }
             }
             true
         }));

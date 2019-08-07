@@ -6,7 +6,7 @@ use crate::arg::{AppendAll, ReadAll, IterAppend};
 use crate::{channel, Error, Message};
 use crate::message::{MatchRule, SignalArgs};
 use crate::channel::{Channel, BusType};
-use std::{cell::RefCell, time::Duration, sync::Mutex};
+use std::{cell::{RefCell, Cell}, time::Duration, sync::Mutex};
 
 pub mod stdintf;
 
@@ -28,16 +28,17 @@ fn dispatch<F, G: FnOnce(&mut F, Message) -> bool>(filters: &mut Vec<Filter<F>>,
 /// A connection to D-Bus, thread local + non-async version
 pub struct Connection {
     channel: Channel,
-    filters: RefCell<Vec<Filter<Box<dyn FnMut(Message) -> bool>>>>
+    filters: RefCell<Vec<Filter<Box<dyn FnMut(Message, &Connection) -> bool>>>>,
+    filter_nextid: Cell<u32>,
 }
 
 type
-  SyncFilterCb = Box<dyn FnMut(Message) -> bool + Send + Sync + 'static>;
+  SyncFilterCb = Box<dyn FnMut(Message, &SyncConnection) -> bool + Send + Sync + 'static>;
 
 /// A connection to D-Bus, Send + Sync + non-async version
 pub struct SyncConnection {
     channel: Channel,
-    filters: Mutex<Vec<Filter<SyncFilterCb>>>
+    filters: Mutex<(u32, Vec<Filter<SyncFilterCb>>)>
 }
 
 use crate::blocking::stdintf::org_freedesktop_dbus;
@@ -47,12 +48,14 @@ impl Connection {
     pub fn new_session() -> Result<Self, Error> { Ok(Connection {
         channel: Channel::get_private(BusType::Session)?,
         filters: Default::default(),
+        filter_nextid: Default::default()
     })}
 
     /// Create a new connection to the system-wide bus.
     pub fn new_system() -> Result<Self, Error> { Ok(Connection { 
         channel: Channel::get_private(BusType::System)?, 
         filters: Default::default(),
+        filter_nextid: Default::default()
     })}
 
     /// Get the connection's unique name.
@@ -62,11 +65,9 @@ impl Connection {
 
     /// Tries to handle an incoming message if there is one. If there isn't one,
     /// it will wait up to timeout
-    ///
-    /// Note: Might panic if called recursively.
-    pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
+    pub fn process(&mut self, timeout: Duration) -> Result<bool, Error> {
         if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
-            if let Some(reply) = dispatch(&mut self.filters.borrow_mut(), msg, |cb, msg| { cb(msg) }) {
+            if let Some(reply) = dispatch(&mut self.filters.borrow_mut(), msg, |cb, msg| { cb(msg, self) }) {
                 let _ = self.channel.send(reply);
             }
             Ok(true)
@@ -120,7 +121,7 @@ impl SyncConnection {
     /// Note: Might deadlock if called recursively. 
     pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
         if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
-            if let Some(reply) = dispatch(&mut self.filters.lock().unwrap(), msg, |cb, msg| { cb(msg) }) {
+            if let Some(reply) = dispatch(&mut self.filters.lock().unwrap().1, msg, |cb, msg| { cb(msg, self) }) {
                 let _ = self.channel.send(reply);
             }
             Ok(true)
@@ -185,9 +186,12 @@ impl channel::Sender for SyncConnection {
 }
 
 impl channel::MatchingReceiver for Connection {
-    type F = Box<dyn FnMut(Message) -> bool>;
-    fn start_receive(&self, id: u32, m: MatchRule<'static>, f: Self::F) {
-        self.filters.borrow_mut().push(Filter { id, rule: m, callback: f } )
+    type F = Box<dyn FnMut(Message, &Connection) -> bool>;
+    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
+        let id = self.filter_nextid.get();
+        self.filter_nextid.set(id+1);
+        self.filters.borrow_mut().push(Filter { id, rule: m, callback: f } );
+        id
     }
     fn stop_receive(&self, id: u32) -> Option<Self::F> {
         let mut filters = self.filters.borrow_mut(); 
@@ -198,12 +202,16 @@ impl channel::MatchingReceiver for Connection {
 
 impl channel::MatchingReceiver for SyncConnection {
     type F = SyncFilterCb;
-    fn start_receive(&self, id: u32, m: MatchRule<'static>, f: Self::F) {
-        self.filters.lock().unwrap().push(Filter { id, rule: m, callback: f } )
+    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
+        let mut filters = self.filters.lock().unwrap();
+        let id = filters.0 + 1;
+        filters.0 = id;
+        filters.1.push(Filter { id, rule: m, callback: f } );
+        id
     }
     fn stop_receive(&self, id: u32) -> Option<Self::F> {
         let mut filters = self.filters.lock().unwrap(); 
-        if let Some(idx) = filters.iter().position(|f| f.id == id) { Some(filters.remove(idx).callback) }
+        if let Some(idx) = filters.1.iter().position(|f| f.id == id) { Some(filters.1.remove(idx).callback) }
         else { None }
     }
 }
@@ -255,46 +263,64 @@ impl<'a, T: BlockingSender, C: std::ops::Deref<Target=T>> Proxy<'a, C> {
     }
 }
 
-/// Sets up a match, including calls to the D-Bus server to add and remove this match.
-fn add_match<C, T, F>(conn: &C, mr: MatchRule<'static>, timeout: Duration, mut f: F) -> Result<u32, Error>
-where 
-    T: BlockingSender + channel::MatchingReceiver<F=Box<dyn FnMut(Message) -> bool>>,
-    C: 'static + std::ops::Deref<Target=T> + Clone,
-    F: 'static + FnMut(Message) -> bool {
-
-    let mstr = mr.match_str();
-    let msg = Message::call_with_args("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "AddMatch", (&mstr,));
-    let r = conn.send_with_reply_and_block(msg, timeout)?;
-    let id = r.get_serial();
-    let conn2 = conn.clone();
-    conn.start_receive(id, mr, Box::new(move |msg: Message| {
-        if f(msg) { return true };
-        let msg = Message::call_with_args("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "RemoveMatch", (&mstr,));
-        let _ = conn2.send_with_reply_and_block(msg, timeout);
-        false
-    }));
-    Ok(id)
-}
-
 impl<'a, T, C> Proxy<'a, C> 
 where
-    T: BlockingSender + channel::MatchingReceiver<F=Box<dyn FnMut(Message) -> bool>>,
-    C: 'static + std::ops::Deref<Target=T> + Clone
+    T: BlockingSender + Send + Sync + channel::MatchingReceiver<F=Box<dyn FnMut(Message, &T) -> bool + 'static>>,
+    C: 'static + std::ops::Deref<Target=T>
 {
 
     /// Sets up an incoming signal match, that calls the supplied callback every time the signal is received.
     ///
     /// The returned value can be used to remove the match. The match is also removed if the callback
     /// returns "false".
-    pub fn match_signal<S: SignalArgs + ReadAll, F: 'static + FnMut(S) -> bool>(&self, mut f: F) -> Result<u32, Error> {
+    pub fn match_signal_local<S: SignalArgs + ReadAll, F>(&self, mut f: F) -> Result<u32, Error>
+    where F: FnMut(Message, &T) -> bool + Send + Sync + 'static
+    {
         let mr = S::match_rule(Some(&self.destination), Some(&self.path)).static_clone();
-        add_match(&self.connection, mr, self.timeout, move |msg| {
-            // We silently drop type mismatch errors here. Hopefully that's the right thing to do.
-            if let Ok(r) = S::read(&mut msg.iter_init()) { f(r) } else { true }
-        })
+        let mstr = mr.match_str();
+        use crate::blocking::stdintf::org_freedesktop::DBus;
+        let proxy = stdintf::proxy(&*self.connection);
+        proxy.add_match(&mstr)?;
+
+        let ff = Box::new(move |msg: Message, conn: &T| {
+            if f(msg, conn) { return true };
+            let proxy = stdintf::proxy(conn);
+            let _ = proxy.remove_match(&mstr);
+            false
+        });
+        Ok(self.connection.start_receive(mr, ff))
     }
 }
 
+
+impl<'a, T, C> Proxy<'a, C> 
+where
+    T: BlockingSender + Send + Sync + channel::MatchingReceiver<F=Box<dyn FnMut(Message, &T) -> bool + Send + Sync + 'static>>,
+    C: 'static + std::ops::Deref<Target=T>
+{
+
+    /// Sets up an incoming signal match, that calls the supplied callback every time the signal is received.
+    ///
+    /// The returned value can be used to remove the match. The match is also removed if the callback
+    /// returns "false".
+    pub fn match_signal_sync<S: SignalArgs + ReadAll, F>(&self, mut f: F) -> Result<u32, Error>
+    where F: FnMut(Message, &T) -> bool + Send + Sync + 'static
+    {
+        let mr = S::match_rule(Some(&self.destination), Some(&self.path)).static_clone();
+        let mstr = mr.match_str();
+        use crate::blocking::stdintf::org_freedesktop::DBus;
+        let proxy = stdintf::proxy(&*self.connection);
+        proxy.add_match(&mstr)?;
+
+        let ff = Box::new(move |msg: Message, conn: &T| {
+            if f(msg, conn) { return true };
+            let proxy = stdintf::proxy(conn);
+            let _ = proxy.remove_match(&mstr);
+            false
+        });
+        Ok(self.connection.start_receive(mr, ff))
+    }
+}
 
 
 #[test]
@@ -308,7 +334,7 @@ fn test_conn_send_sync() {
 
 #[test]
 fn test_peer() {
-    let c = Connection::new_session().unwrap();
+    let mut c = Connection::new_session().unwrap();
 
     let c_name = c.unique_name().into_static();
     use std::sync::Arc;
