@@ -1,7 +1,7 @@
 Cross compiling dbus
 ====================
 
-Disclaimer: I'm writing this because people ask me how to do it, not because I'm a subject matter expert. I hope that someone more knowledgable will submit a PR which fills in some of the blanks here as I haven't fully succeeded myself yet. 
+Disclaimer: I'm writing this because people ask me how to do it, not because I'm a subject matter expert. I hope that someone more knowledgable will submit a PR which fills in some of the blanks here as I haven't fully succeeded myself yet.
 
 (The examples below all assume you're trying to compile for Raspberry Pi 2 or 3 running Raspbian. Adjust target triples accordingly if your target is something else.) 
 
@@ -46,11 +46,13 @@ Getting an entire rootfs/image is probably the easiest option. The rootfs needs 
 When not cross compiling, finding the right library is done by a `build.rs` script which calls `pkg-config`. This will not work when cross compiling because it will point to the `libdbus-1.so` on the host, not the `libdbus-1.so` of the target.
 Maybe it is possible to teach `pkg-config` how to return the target library instead, but I have not tried this approach. Instead we can override build script altogether and provide the same info manually. This is possible because `libdbus-sys` has a `links = dbus` line.
 
-For the example below we assume that we have mounted a Raspbian rootfs on `/tmp/mnt`.
+For the example below we assume that we have mounted a Raspbian rootfs on `/tmp/mnt`, and that the cross linker came with some basic libraries (libc, libpthread etc) that are installed on `/usr/arm-linux-gnueabihf/lib`.
+
+And so we add the following to [.cargo/config](https://doc.rust-lang.org/cargo/reference/config.html):
 
 ```
 [target.armv7-unknown-linux-gnueabihf.dbus]
-rustc-link-search = ["/tmp/mnt/usr/lib/arm-linux-gnueabihf"]
+rustc-link-search = ["/usr/arm-linux-gnueabihf/lib", "/tmp/mnt/usr/lib/arm-linux-gnueabihf"]
 rustc-link-lib = ["dbus-1"]
 ```
 
@@ -62,12 +64,4 @@ If we are all set up, you should be able to successfully compile with:
 
 `cargo build --target=armv7-unknown-linux-gnueabihf`
 
-...but when I tried this, I got the following error:
-
-```
-cannot find /lib/arm-linux-gnueabihf/libpthread.so.0
-cannot find /usr/lib/arm-linux-gnueabihf/libpthread_nonshared.a
-```
-
-...which I, so far, have not been able to resolve. Let me know if you have any ideas!
 
