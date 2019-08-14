@@ -309,7 +309,7 @@ impl<'a, T: BlockingSender, C: std::ops::Deref<Target=T>> Proxy<'a, C> {
 impl<'a, T, C> Proxy<'a, C> 
 where
     T: BlockingSender + channel::MatchingReceiver<F=Box<dyn FnMut(Message, &T) -> bool + 'static>>,
-    C: 'static + std::ops::Deref<Target=T>
+    C: std::ops::Deref<Target=T>
 {
 
     /// Sets up an incoming signal match, that calls the supplied callback every time the signal is received.
@@ -338,7 +338,7 @@ where
 impl<'a, T, C> Proxy<'a, C> 
 where
     T: BlockingSender + Send + Sync + channel::MatchingReceiver<F=Box<dyn FnMut(Message, &T) -> bool + Send + Sync + 'static>>,
-    C: 'static + std::ops::Deref<Target=T>
+    C: std::ops::Deref<Target=T>
 {
 
     /// Sets up an incoming signal match, that calls the supplied callback every time the signal is received.
