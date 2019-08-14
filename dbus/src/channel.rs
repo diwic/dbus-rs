@@ -270,7 +270,7 @@ pub trait Sender {
 pub trait MatchingReceiver {
     type F;
     fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32;
-    fn stop_receive(&self, id: u32) -> Option<Self::F>;
+    fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)>;
 }
 
 impl Sender for Channel {

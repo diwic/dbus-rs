@@ -83,7 +83,7 @@ Requirements
 
 However, if you enable the feature `no-string-validation`, you might be able to build and run with older versions of the D-Bus library. This feature skips an extra check that a specific string (e g a Path, ErrorName etc) conforms to the D-Bus specification, which might also make things a tiny bit faster. But - if you do so, and then actually send invalid strings to the D-Bus library, you might get a panic instead of a proper error.
 
-Cross compiling libdbus might be tricky because it binds to a C library, there are some notes [here](https://github.com/diwic/dbus-rs/blob/master/libdbus-sys/cross_compile.md). If you have succeeded, please help out by updating that document.
+Cross compiling libdbus might be tricky because it binds to a C library, there are some notes [here](https://github.com/diwic/dbus-rs/blob/master/libdbus-sys/cross_compile.md).
 
 License
 =======

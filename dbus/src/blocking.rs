@@ -77,8 +77,8 @@ impl Connection {
     }
 
     /// Create a convenience struct for easier calling of many methods on the same destination and path.
-    pub fn with_proxy<'a, D: Into<BusName<'a>>, P: Into<Path<'a>>>(&'a self, dest: D, path: P, timeout: Duration) ->
-    Proxy<'a, &'a Connection> {
+    pub fn with_proxy<'a, 'b, D: Into<BusName<'a>>, P: Into<Path<'a>>>(&'b self, dest: D, path: P, timeout: Duration) ->
+    Proxy<'a, &'b Connection> {
         Proxy { connection: self, destination: dest.into(), path: path.into(), timeout }
     }
 
@@ -193,9 +193,12 @@ impl channel::MatchingReceiver for Connection {
         self.filters.borrow_mut().push(Filter { id, rule: m, callback: f } );
         id
     }
-    fn stop_receive(&self, id: u32) -> Option<Self::F> {
+    fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
         let mut filters = self.filters.borrow_mut(); 
-        if let Some(idx) = filters.iter().position(|f| f.id == id) { Some(filters.remove(idx).callback) }
+        if let Some(idx) = filters.iter().position(|f| f.id == id) {
+            let x = filters.remove(idx);
+            Some((x.rule, x.callback))
+        }
         else { None }
     }
 }
@@ -209,9 +212,12 @@ impl channel::MatchingReceiver for SyncConnection {
         filters.1.push(Filter { id, rule: m, callback: f } );
         id
     }
-    fn stop_receive(&self, id: u32) -> Option<Self::F> {
+    fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
         let mut filters = self.filters.lock().unwrap(); 
-        if let Some(idx) = filters.1.iter().position(|f| f.id == id) { Some(filters.1.remove(idx).callback) }
+        if let Some(idx) = filters.1.iter().position(|f| f.id == id) {
+            let x = filters.1.remove(idx);
+            Some((x.rule, x.callback))
+        }
         else { None }
     }
 }
@@ -261,11 +267,48 @@ impl<'a, T: BlockingSender, C: std::ops::Deref<Target=T>> Proxy<'a, C> {
         let r = self.connection.send_with_reply_and_block(msg, self.timeout)?;
         Ok(R::read(&mut r.iter_init())?)
     }
+
+    /// Starts matching incoming messages on this destination and path.
+    ///
+    /// For matching signals, match_signal_local or match_signal_sync might be more convenient.
+    ///
+    /// The match rule will be modified to include this destination and path only.
+    ///
+    /// If call_add_match is true, will notify the D-Bus server that matching should start.
+    pub fn match_start(&self, mut mr: MatchRule<'static>, call_add_match: bool, f: <T as channel::MatchingReceiver>::F) -> Result<u32, Error> 
+    where T: channel::MatchingReceiver {
+        mr.path = Some(self.path.clone().into_static());
+        mr.sender = Some(self.destination.clone().into_static());
+        if call_add_match {
+            use crate::blocking::stdintf::org_freedesktop::DBus;
+            let proxy = stdintf::proxy(&*self.connection);
+            proxy.add_match(&mr.match_str())?;
+        }
+
+        Ok(self.connection.start_receive(mr, f))
+    }
+
+    /// Stops matching a signal added with match_start, match_signal_local or match_signal_sync.
+    ///
+    /// If call_add_match is true, will notify the D-Bus server that matching should stop,
+    /// this should be true in case match_signal_local or match_signal_sync was used.
+    pub fn match_stop<F>(&self, id: u32, call_remove_match: bool) -> Result<(), Error> 
+    where T: channel::MatchingReceiver {
+        if let Some((mr, _)) = self.connection.stop_receive(id) {
+            if call_remove_match {
+                use crate::blocking::stdintf::org_freedesktop::DBus;
+                let proxy = stdintf::proxy(&*self.connection);
+                proxy.remove_match(&mr.match_str())?;
+            }
+        }
+        Ok(())
+    }
+
 }
 
 impl<'a, T, C> Proxy<'a, C> 
 where
-    T: BlockingSender + Send + Sync + channel::MatchingReceiver<F=Box<dyn FnMut(Message, &T) -> bool + 'static>>,
+    T: BlockingSender + channel::MatchingReceiver<F=Box<dyn FnMut(Message, &T) -> bool + 'static>>,
     C: 'static + std::ops::Deref<Target=T>
 {
 
@@ -274,21 +317,20 @@ where
     /// The returned value can be used to remove the match. The match is also removed if the callback
     /// returns "false".
     pub fn match_signal_local<S: SignalArgs + ReadAll, F>(&self, mut f: F) -> Result<u32, Error>
-    where F: FnMut(Message, &T) -> bool + Send + Sync + 'static
+    where F: for <'b> FnMut(S, &'b T) -> bool + 'static
     {
         let mr = S::match_rule(Some(&self.destination), Some(&self.path)).static_clone();
         let mstr = mr.match_str();
-        use crate::blocking::stdintf::org_freedesktop::DBus;
-        let proxy = stdintf::proxy(&*self.connection);
-        proxy.add_match(&mstr)?;
-
         let ff = Box::new(move |msg: Message, conn: &T| {
-            if f(msg, conn) { return true };
-            let proxy = stdintf::proxy(conn);
-            let _ = proxy.remove_match(&mstr);
-            false
+            if let Ok(s) = S::read(&mut msg.iter_init()) {
+                if f(s, conn) { return true };
+                let proxy = stdintf::proxy(conn);
+                use crate::blocking::stdintf::org_freedesktop::DBus;
+                let _ = proxy.remove_match(&mstr);
+                false
+            } else { true }
         });
-        Ok(self.connection.start_receive(mr, ff))
+        self.match_start(mr, true, ff)
     }
 }
 
@@ -304,21 +346,20 @@ where
     /// The returned value can be used to remove the match. The match is also removed if the callback
     /// returns "false".
     pub fn match_signal_sync<S: SignalArgs + ReadAll, F>(&self, mut f: F) -> Result<u32, Error>
-    where F: FnMut(Message, &T) -> bool + Send + Sync + 'static
+    where F: for <'b> FnMut(S, &'b T) -> bool + Send + Sync + 'static
     {
         let mr = S::match_rule(Some(&self.destination), Some(&self.path)).static_clone();
         let mstr = mr.match_str();
-        use crate::blocking::stdintf::org_freedesktop::DBus;
-        let proxy = stdintf::proxy(&*self.connection);
-        proxy.add_match(&mstr)?;
-
         let ff = Box::new(move |msg: Message, conn: &T| {
-            if f(msg, conn) { return true };
-            let proxy = stdintf::proxy(conn);
-            let _ = proxy.remove_match(&mstr);
-            false
+            if let Ok(s) = S::read(&mut msg.iter_init()) {
+                if f(s, conn) { return true };
+                let proxy = stdintf::proxy(conn);
+                use crate::blocking::stdintf::org_freedesktop::DBus;
+                let _ = proxy.remove_match(&mstr);
+                false
+            } else { true }
         });
-        Ok(self.connection.start_receive(mr, ff))
+        self.match_start(mr, true, ff)
     }
 }
 
