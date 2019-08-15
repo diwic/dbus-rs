@@ -4,5 +4,7 @@ where_single_line = true
 unstable_features = true
 
 "Please don't run rustfmt on this repository" = true
-# I will reconsider when rustfmt is mature enough, e g if this bug is fixed:
-# https://github.com/rust-lang/rustfmt/issues/3699
+# Basically rustfmt has a tendency to split things over way too many lines
+# despite the above attempts to configure it. E g, 
+# https://github.com/rust-lang/rustfmt/issues/3745
+
