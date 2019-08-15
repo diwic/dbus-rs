@@ -272,7 +272,7 @@ impl<'a, T: BlockingSender, C: std::ops::Deref<Target=T>> Proxy<'a, C> {
     ///
     /// For matching signals, match_signal_local or match_signal_sync might be more convenient.
     ///
-    /// The match rule will be modified to include this destination and path only.
+    /// The match rule will be modified to include this path and destination only.
     ///
     /// If call_add_match is true, will notify the D-Bus server that matching should start.
     pub fn match_start(&self, mut mr: MatchRule<'static>, call_add_match: bool, f: <T as channel::MatchingReceiver>::F) -> Result<u32, Error> 
@@ -292,7 +292,7 @@ impl<'a, T: BlockingSender, C: std::ops::Deref<Target=T>> Proxy<'a, C> {
     ///
     /// If call_add_match is true, will notify the D-Bus server that matching should stop,
     /// this should be true in case match_signal_local or match_signal_sync was used.
-    pub fn match_stop<F>(&self, id: u32, call_remove_match: bool) -> Result<(), Error> 
+    pub fn match_stop(&self, id: u32, call_remove_match: bool) -> Result<(), Error> 
     where T: channel::MatchingReceiver {
         if let Some((mr, _)) = self.connection.stop_receive(id) {
             if call_remove_match {

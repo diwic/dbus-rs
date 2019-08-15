@@ -11,6 +11,8 @@ pub struct MatchRule<'a> {
     pub msg_type: Option<MessageType>,
     /// Match on message sender
     pub sender: Option<BusName<'a>>,
+    /// If false (the default), match if sender could possibly match, due to mismatch between unique names and taken bus names
+    pub strict_sender: bool,
     /// Match on message object path
     pub path: Option<Path<'a>>,
     /// Match on message interface
@@ -52,7 +54,13 @@ impl<'a> MatchRule<'a> {
     /// Returns whether or not the message matches the rule.
     pub fn matches(&self, msg: &Message) -> bool {
         if let Some(x) = self.msg_type { if x != msg.msg_type() { return false; }};
-        if self.sender.is_some() && msg.sender() != self.sender { return false };
+
+        if let Some(ref x) = self.sender {
+            if let Some(s) = msg.sender() {
+                let check = self.strict_sender || (s.starts_with(":") == x.starts_with(":"));
+                if check && s != *x { return false }
+            } else if self.strict_sender { return false }
+        };
         if self.path.is_some() && msg.path() != self.path { return false };
         if self.interface.is_some() && msg.interface() != self.interface { return false };
         if self.member.is_some() && msg.member() != self.member { return false };
@@ -67,6 +75,7 @@ impl<'a> MatchRule<'a> {
         MatchRule {
             msg_type: self.msg_type,
             sender: self.sender.as_ref().map(|x| x.clone().into_static()),
+            strict_sender: self.strict_sender,
             path: self.path.as_ref().map(|x| x.clone().into_static()),
             interface: self.interface.as_ref().map(|x| x.clone().into_static()),
             member: self.member.as_ref().map(|x| x.clone().into_static()),

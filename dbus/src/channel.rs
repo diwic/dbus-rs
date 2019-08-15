@@ -215,7 +215,9 @@ impl Channel {
         if mptr.is_null() {
             None
         } else {
-            Some(Message::from_ptr(mptr, false))
+            let msg = Message::from_ptr(mptr, false);
+            // println!("Incoming: {:?}", msg);
+            Some(msg)
         }
     }
 
