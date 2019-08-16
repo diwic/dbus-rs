@@ -2,6 +2,8 @@ max_width = 140
 fn_single_line = true
 where_single_line = true
 unstable_features = true
+fn_args_layout = "Compressed"
+use_small_heuristics = "Max"
 
 "Please don't run rustfmt on this repository" = true
 # Basically rustfmt has a tendency to split things over way too many lines
