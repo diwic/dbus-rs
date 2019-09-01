@@ -1,7 +1,7 @@
 [package]
 
 name = "dbus"
-version = "0.6.5"
+version = "0.7.0"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 
 description = "Bindings to D-Bus, which is a bus commonly used on Linux for inter-process communication."
@@ -26,3 +26,5 @@ no-string-validation = []
 [badges]
 is-it-maintained-open-issues = { repository = "diwic/dbus-rs" }
 is-it-maintained-issue-resolution = { repository = "diwic/dbus-rs" }
+travis-ci = { repository = "diwic/dbus-rs" }
+maintenance = { status = "actively-developed" }
