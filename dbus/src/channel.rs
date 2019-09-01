@@ -1,6 +1,6 @@
-//! Experimental rewrite of Connection [unstable / experimental]
-#![allow(missing_docs)]
-#![allow(dead_code)]
+//! Connection base / building block.
+//!
+//! Contains some helper structs and traits common to all Connection types.-
 
 use crate::{Error, Message, to_c_str, c_str_to_slice, MessageType};
 use std::{ptr, str, time::Duration};
@@ -39,8 +39,11 @@ pub enum BusType {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 /// A file descriptor, and an indication whether it should be read from, written to, or both.
 pub struct Watch {
+    /// File descriptor 
     pub fd: RawFd,
+    /// True if wakeup should happen when the file descriptor is ready for reading
     pub read: bool,
+    /// True if wakeup should happen when the file descriptor is ready for writing
     pub write: bool,
 }
 
@@ -261,7 +264,7 @@ impl Channel {
     }
 }
 
-/// Abstraction over different connections
+/// Abstraction over different connections that send data
 pub trait Sender {
     /// Schedules a message for sending.
     ///
@@ -269,9 +272,15 @@ pub trait Sender {
     fn send(&self, msg: Message) -> Result<u32, ()>;
 }
 
+/// Abstraction over different connections that receive data
 pub trait MatchingReceiver {
+    /// Type of callback
     type F;
+    /// Add a callback to be called in case a message matches.
+    ///
+    /// Returns an id that can be used to remove the callback.
     fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32;
+    /// Remove a previously added callback.
     fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)>;
 }
 

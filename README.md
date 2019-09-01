@@ -48,22 +48,22 @@ This example grabs the `com.example.dbustest` bus name, registers the `/hello` p
 It then listens for incoming D-Bus events and handles them accordingly.
 
 ```rust
-let c = Connection::get_private(BusType::Session)?;
-c.register_name("com.example.dbustest", NameFlag::ReplaceExisting as u32)?;
+let c = Connection::new_session()?;
+c.request_name("com.example.dbustest", false, true, false)?;
 let f = Factory::new_fn::<()>();
-let tree = f.tree(()).add(f.object_path("/hello", ()).introspectable().add(
-    f.interface("com.example.dbustest", ()).add_m(
-        f.method("Hello", (), |m| {
-            let n: &str = m.msg.read1()?;
-            let s = format!("Hello {}!", n);
-            Ok(vec!(m.msg.method_return().append1(s)))
-        }).inarg::<&str,_>("name")
-          .outarg::<&str,_>("reply")
-    )
-));
-tree.set_registered(&c, true)?;
-c.add_handler(tree);
-loop { c.incoming(1000).next(); }
+let tree = f.tree(())
+    .add(f.object_path("/hello", ()).introspectable()
+        .add(f.interface("com.example.dbustest", ())
+            .add_m(f.method("Hello", (), |m| {
+                let n: &str = m.msg.read1()?;
+                let s = format!("Hello {}!", n);
+                Ok(vec!(m.msg.method_return().append1(s)))
+            }).inarg::<&str,_>("name")
+              .outarg::<&str,_>("reply")
+        )
+    ).add(f.object_path("/", ()).introspectable());
+tree.start_receive(&c);
+loop { c.process(Duration::from_millis(1000))?; }
 ```
 
 You can try a similar example (which has more comments) by running:

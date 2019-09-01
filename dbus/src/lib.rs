@@ -30,9 +30,14 @@ mod error;
 pub use error::Error;
 
 pub mod channel;
+
+// Not ready for release yet
 // pub mod crossroads;
 
 pub mod blocking;
+
+// Not ready for release yet
+#[doc(hidden)]
 pub mod nonblock;
 
 pub mod strings;
