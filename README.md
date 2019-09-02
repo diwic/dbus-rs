@@ -5,7 +5,7 @@ D-Bus bindings for Rust
 [![API documentation](https://docs.rs/dbus/badge.svg)](https://docs.rs/dbus)
 [![license](https://img.shields.io/crates/l/dbus.svg)](https://crates.io/crates/dbus)
 
-The main dbus crate is fairly mature and the features you need should be all there. [Breaking changes](https://github.com/diwic/dbus-rs/issues/185) can still happen, but not often.
+The main dbus crate is fairly mature and the features you need should be all there. Breaking changes can still happen, but not often. If you're currently using 0.6.x of dbus and want to upgrade to 0.7.x, you can read [changes in dbus-rs 0.7](dbus/changes-in-0.7.md).
 
  * Use `Connection` to connect to the system or session bus.
  * Use `Message` to send and receive messages. Get and append arguments of all types (including Unix Fd), see the [argument guide](dbus/examples/argument_guide.md) for details.
@@ -30,7 +30,7 @@ Client
 This example opens a connection to the session bus and asks for a list of all names currently present.
 
 ```rust
-let conn = Connection::get_private(BusType::Session)?;
+let conn = Connection::new_session()?;
 let obj = conn.with_path("org.freedesktop.DBus", "/", 5000);
 let (names,): (Vec<String>,) = obj.method_call("org.freedesktop.DBus", "ListNames", ())?;
 for name in names { println!("{}", name); }
