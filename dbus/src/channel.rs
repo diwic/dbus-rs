@@ -438,9 +438,6 @@ fn unknown_method(m: &Message) -> Option<Message> {
     Some(m.error(&"org.freedesktop.DBus.Error.UnknownMethod".into(), &to_c_str("Path, Interface, or Method does not exist")))
 }
 
-
-
-
 #[test]
 fn test_channel_send_sync() {
     fn is_send<T: Send>(_: &T) {}

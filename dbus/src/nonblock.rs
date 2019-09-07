@@ -4,58 +4,73 @@
 //! When async/await is stable, expect more here.
 
 use crate::{Error, Message};
-use crate::channel::{Channel, Sender};
+use crate::channel::{MatchingReceiver, Channel, Sender};
 use crate::strings::{BusName, Path, Interface, Member};
 use crate::arg::{AppendAll, ReadAll, IterAppend};
+use crate::message::MatchRule;
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::{future, task, pin, mem};
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
+use std::cell::{Cell, RefCell};
 
-pub mod stdintf;
-
-enum PollReply<T, P> {
-    Pending(P),
-    Ready(T),
-    Consumed,
-}
-
-#[derive(Default)]
-struct Dispatcher {
-    replies: HashMap<u32, PollReply<Message, task::Waker>>,
-}
-
-impl Dispatcher {
-    fn dispatch<S: Sender>(&mut self, msg: Message, sender: &S) {
-        if let Some(serial) = msg.get_reply_serial() {
-            let v = self.replies.entry(serial).or_insert(PollReply::Consumed);
-            let w = mem::replace(v, PollReply::Ready(msg));
-            if let PollReply::Pending(w) = w { w.wake() };
-            return;
-        }
-        if let Some(reply) = crate::channel::default_reply(&msg) {
-           let _ = sender.send(reply);
-        }
-    }
-}
+// pub mod stdintf;
 
 /// Thread local + async Connection 
 pub struct Connection {
     channel: Channel,
-    dispatcher: Mutex<Dispatcher>,
+    replies: RefCell<HashMap<u32, Box<dyn FnOnce(Message, &Connection)>>>,
+    filters: RefCell<BTreeMap<u32, (MatchRule<'static>, Box<dyn FnMut(Message, &Connection) -> bool>)>>,
+    filter_nextid: Cell<u32>,
+}
+
+impl AsRef<Channel> for Connection {
+    fn as_ref(&self) -> &Channel { &self.channel }
 }
 
 impl From<Channel> for Connection {
     fn from(x: Channel) -> Self {
         Connection {
             channel: x,
-            dispatcher: Default::default(),
+            replies: Default::default(),
+            filters: Default::default(),
+            filter_nextid: Default::default(),
         }
     }
 }
 
 impl Sender for Connection {
     fn send(&self, msg: Message) -> Result<u32, ()> { self.channel.send(msg) }
+}
+
+pub trait NonblockReply {
+    type F;
+    fn send_with_reply(&self, msg: Message, f: Self::F) -> Result<u32, ()>;
+    fn cancel_reply(&self, id: u32) -> Option<Self::F>;
+}
+
+impl NonblockReply for Connection {
+    type F = Box<dyn FnOnce(Message, &Connection)>;
+    fn send_with_reply(&self, msg: Message, f: Self::F) -> Result<u32, ()> {
+        self.channel.send(msg).map(|x| {
+            self.replies.borrow_mut().insert(x, f);
+            x
+        })
+    }
+    fn cancel_reply(&self, id: u32) -> Option<Self::F> { self.replies.borrow_mut().remove(&id) }
+}
+
+impl MatchingReceiver for Connection {
+    type F = Box<dyn FnMut(Message, &Connection) -> bool>;
+    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
+        let id = self.filter_nextid.get();
+        self.filter_nextid.set(id+1);
+        self.filters.borrow_mut().insert(id, (m, f));
+        id
+    }
+    fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
+        self.filters.borrow_mut().remove(&id)
+    }
 }
 
 
@@ -69,29 +84,31 @@ impl Connection {
 
     /// Dispatches all pending messages, without blocking.
     ///
-    /// This is usually called from the reactor, after read_write.
-    pub fn dispatch_all(&self) {
-        let mut d = self.dispatcher.lock().unwrap();
+    /// This is usually called from the reactor only, after read_write.
+    pub fn process_all(&self) {
         while let Some(msg) = self.channel.pop_message() {
-            d.dispatch(msg, self);
+            if let Some(serial) = msg.get_reply_serial() {
+                if let Some(f) = self.replies.borrow_mut().remove(&serial) {
+                    f(msg, self);
+                    continue;
+                }
+            }
+            let mut filters = self.filters.borrow_mut();
+            if let Some(k) = filters.iter_mut().find(|(_, v)| v.0.matches(&msg)).map(|(k, _)| *k) {
+                let mut v = filters.remove(&k).unwrap();
+                drop(filters);
+                if v.1(msg, &self) {
+                    let mut filters = self.filters.borrow_mut();
+                    filters.insert(k, v);
+                }
+                continue;
+            }
+            if let Some(reply) = crate::channel::default_reply(&msg) {
+                let _ = self.send(reply);
+            }
         }
     }
 
-    fn check_reply(&self, serial: u32, ctx: &mut task::Context) -> Option<Message> {
-        let mut d = self.dispatcher.lock().unwrap();
-        let mut result = None;
-        d.replies.entry(serial)
-            .and_modify(|v| {
-                let x = mem::replace(v, PollReply::Consumed);
-                if let PollReply::Ready(msg) = x {
-                    result = Some(msg)
-                } else {
-                    *v = PollReply::Pending(ctx.waker().clone());
-                }
-            })
-            .or_insert_with(|| PollReply::Pending(ctx.waker().clone()));
-        result
-    }
 }
 
 
@@ -119,53 +136,45 @@ impl<'a, C> Proxy<'a, C> {
     }
 }
 
-impl<'a, C: std::ops::Deref<Target=Connection> + Clone> Proxy<'a, C> {
+impl<'a, C: std::ops::Deref<Target=Connection>> Proxy<'a, C> {
 
     /// Make a method call using typed input argument, returns a future that resolves to the typed output arguments.
-    pub fn method_call<'i, 'm, R: ReadAll, A: AppendAll, I: Into<Interface<'i>>, M: Into<Member<'m>>>(&self, i: I, m: M, args: A)
-    -> MethodReply<R, C> {
+    pub fn method_call<'i, 'm, R: ReadAll + 'static, A: AppendAll, I: Into<Interface<'i>>, M: Into<Member<'m>>>(&self, i: I, m: M, args: A)
+    -> MethodReply<R> {
         let mut msg = Message::method_call(&self.destination, &self.path, &i.into(), &m.into());
         args.append(&mut IterAppend::new(&mut msg));
 
-        match self.connection.send(msg) {
-            Err(_) => MethodReply(
-                PollReply::Ready(Err(Error::new_custom("org.freedesktop.DBus.Error.Failed", "Sending message failed"))),
-                None
-            ),
-            Ok(s) => MethodReply(
-               PollReply::Pending((s, self.connection.clone())),
-               Some(Box::new(|r| Ok(R::read(&mut r.iter_init())?)))
-            ),
+        let mr = Arc::new(Mutex::new(MRInner::Neither));
+        let mr2 = mr.clone();
+        let f = Box::new(move |msg: Message, _: &Connection| {
+            let r: Result<R, Error> = msg.read_all();
+            let mut inner = mr2.lock().unwrap();
+            let old = mem::replace(&mut *inner, MRInner::Ready(r));
+            if let MRInner::Pending(waker) = old { waker.wake() }
+        });
+        if let Err(_) = self.connection.send_with_reply(msg, f) {
+            *mr.lock().unwrap() = MRInner::Ready(Err(Error::new_failed("Failed to send message")));
         }
+        MethodReply(mr)
     }
 }
 
-type ReadFn<T> = Box<dyn FnOnce(&mut Message) -> Result<T, Error> + Send + Sync + 'static>;
+enum MRInner<T> {
+    Ready(Result<T, Error>),
+    Pending(task::Waker),
+    Neither,
+}
 
 /// Future method reply, used while waiting for a method call reply from the server.
-pub struct MethodReply<T, C>(PollReply<Result<(), Error>, (u32, C)>, Option<ReadFn<T>>); 
+pub struct MethodReply<T>(Arc<Mutex<MRInner<T>>>); 
 
-impl<T: 'static, C> MethodReply<T, C> {
-    /// Convenience combinator in case you want to post-process the result after reading it
-    pub fn and_then<T2>(mut self, f: impl FnOnce(T) -> Result<T2, Error> + Send + Sync + 'static) -> MethodReply<T2, C> {
-        let first = self.1.take().unwrap();
-        MethodReply(self.0, Some(Box::new(|r| first(r).and_then(f))))
-    }
-}
-
-impl<T, C: Unpin + std::ops::Deref<Target=Connection>> future::Future for MethodReply<T, C> {
+impl<T> future::Future for MethodReply<T> {
     type Output = Result<T, Error>;
-    fn poll(mut self: pin::Pin<&mut Self>, ctx: &mut task::Context) -> task::Poll<Result<T, Error>> {
-        let inner = &mut (*self).0;
-        if let PollReply::Pending((serial, conn)) = inner {
-            match conn.check_reply(*serial, ctx) {
-                None => task::Poll::Pending,
-                Some(mut msg) => {
-                    *inner = PollReply::Consumed;
-                    let reader = (*self).1.take().unwrap();
-                    task::Poll::Ready(msg.as_result().and_then(|r| reader(r)))
-                }
-            }
-        } else { panic!("Polled MethodReply after having returned Poll::Ready") }
+    fn poll(self: pin::Pin<&mut Self>, ctx: &mut task::Context) -> task::Poll<Result<T, Error>> {
+        let mut inner = self.0.lock().unwrap();
+        let r = mem::replace(&mut *inner, MRInner::Neither);
+        if let MRInner::Ready(r) = r { return task::Poll::Ready(r); }
+        mem::replace(&mut *inner, MRInner::Pending(ctx.waker().clone()));
+        task::Poll::Pending
     }
 }

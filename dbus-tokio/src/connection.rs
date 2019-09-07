@@ -1,4 +1,4 @@
-use dbus::channel::{Channel, BusType, Watch};
+use dbus::channel::{Channel, BusType};
 use dbus::nonblock::Connection;
 use dbus::Error;
 
@@ -14,18 +14,21 @@ use tokio_reactor::Registration;
 /// contact with the D-Bus server.
 pub struct IOResource {
     connection: Arc<Connection>,
-    watches: Vec<(Watch, Registration)>,
+    registration: Registration,
 }
 
 impl IOResource {
     fn poll_internal(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        for (w, r) in &self.watches { 
-            r.register(&mio::unix::EventedFd(&w.fd))?;
-            if w.read { r.poll_read_ready()?; };
-            if w.write { r.poll_write_ready()?; };
-        }
+        let c: &Channel = (*self.connection).as_ref();
+        let w = c.watch();
+        let r = &self.registration;
+        r.register(&mio::unix::EventedFd(&w.fd))?;
+        r.take_read_ready()?;
+        r.take_write_ready()?;
+        if w.read { r.poll_read_ready()?; };
+        if w.write { r.poll_write_ready()?; };
         self.connection.read_write()?;
-        self.connection.dispatch_all();
+        self.connection.process_all();
         Ok(())
     }
 }
@@ -43,11 +46,10 @@ impl future::Future for IOResource {
 
 pub fn new_session() -> Result<(IOResource, Arc<Connection>), Error> {
     let mut channel = Channel::get_private(BusType::Session)?;
-    let watches = channel.watch_fds().unwrap(); // This is a just created channel, so this should never fail
-    let watches = watches.into_iter().map(|w| (w, Registration::new())).collect();
+    channel.set_watch_enabled(true);
 
     let conn = Arc::new(Connection::from(channel));
-    let res = IOResource { connection: conn.clone(), watches };
+    let res = IOResource { connection: conn.clone(), registration: Registration::new() };
     Ok((res, conn))
 }
 
@@ -55,14 +57,14 @@ pub fn new_session() -> Result<(IOResource, Arc<Connection>), Error> {
 #[test]
 fn method_call() {
     use fut03::future::{FutureExt, TryFutureExt, ready};
-    use tokio::runtime::Runtime;
+    use tokio::runtime::current_thread::Runtime;
 
     let mut rt = Runtime::new().unwrap();
 
     let (res, conn) = new_session().unwrap();
 
     #[allow(unreachable_code)] // Easier than trying to figure a good return type for the closure
-    let res = res.then(|e| { panic!(e); ready(()) }).unit_error().boxed().compat();
+    let res = res.then(|e| { panic!(e); ready(()) }).unit_error().boxed_local().compat();
     rt.spawn(res);
 
     let proxy = dbus::nonblock::Proxy::new("org.freedesktop.DBus", "/", conn);

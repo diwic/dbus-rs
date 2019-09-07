@@ -18,7 +18,7 @@ mio = "0.6.9"
 tokio = "0.1.22"
 tokio-reactor = "0.1.9"
 log = "0.3"
-fut03 = { version = "=0.3.0-alpha.17", package = "futures-preview", features=["compat"] }
+fut03 = { version = "=0.3.0-alpha.18", package = "futures-preview", features=["compat"] }
 
 [dev-dependencies]
 tokio-timer = "0.2.4"

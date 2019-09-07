@@ -5,7 +5,7 @@ use super::{ffi, Error, libc, to_c_str, c_str_to_slice, init_dbus};
 use crate::strings::{BusName, Path, Interface, Member, ErrorName};
 use std::ffi::CStr;
 
-use super::arg::{Append, AppendAll, IterAppend, Get, Iter, Arg, RefArg, TypeMismatchError};
+use super::arg::{Append, AppendAll, IterAppend, ReadAll, Get, Iter, Arg, RefArg, TypeMismatchError};
 
 #[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 /// One of the four different message types.
@@ -325,6 +325,14 @@ impl Message {
         Ok((i.read()?, i.read()?, i.read()?, i.read()?, i.read()?))
     }
 
+    /// Gets arguments from a message.
+    ///
+    /// If this was an error reply or if types mismatch, an error is returned.
+    pub fn read_all<R: ReadAll>(&self) -> Result<R, Error> {
+        self.set_error_from_msg()?;
+        Ok(R::read(&mut self.iter_init())?)
+    }
+
     /// Returns a struct for retreiving the arguments from a message. Supersedes get_items().
     pub fn iter_init(&self) -> Iter { Iter::new(&self) }
 
@@ -401,7 +409,7 @@ impl Message {
         self.set_error_from_msg().map(|_| self)
     }
 
-    pub (super) fn set_error_from_msg(&self) -> Result<(), Error> {
+    pub (crate) fn set_error_from_msg(&self) -> Result<(), Error> {
         let mut e = Error::empty();
         if unsafe { ffi::dbus_set_error_from_message(e.get_mut(), self.msg) } != 0 { Err(e) }
         else { Ok(()) }
