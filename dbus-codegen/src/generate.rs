@@ -323,7 +323,7 @@ fn make_result(success: &str, opts: &GenOpts) -> String {
     } else if opts.methodtype.is_some() {
         format!("Result<{}, tree::MethodErr>", success)
     } else if opts.connectiontype == ConnectionType::Nonblock {
-        format!("nonblock::MethodReply<{}, Self::Connection>", success)
+        format!("nonblock::MethodReply<{}>", success)
     } else {
         format!("Result<{}, dbus::Error>", success)
     }
@@ -344,9 +344,6 @@ fn write_intf(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<dyn er
 
     let iname = make_camel(&i.shortname);
     *s += &format!("\npub trait {} {{\n", iname);
-    if opts.connectiontype == ConnectionType::Nonblock {
-        *s += "    type Connection;\n";
-    }
     for m in &i.methods {
         write_method_decl(s, &m, opts)?;
         *s += ";\n";
@@ -378,9 +375,6 @@ fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box
     } else {
         *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target={}::Connection>{}> {} for {}::{}<'a, C> {{\n",
             module, if module == "nonblock" { " + Clone" } else { "" }, make_camel(&i.shortname), module, proxy);
-        if opts.connectiontype == ConnectionType::Nonblock {
-            *s += "    type Connection = C;\n";
-        }
     }
     for m in &i.methods {
         *s += "\n";

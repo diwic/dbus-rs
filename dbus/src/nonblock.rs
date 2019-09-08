@@ -14,7 +14,7 @@ use std::{future, task, pin, mem};
 use std::collections::{HashMap, BTreeMap};
 use std::cell::{Cell, RefCell};
 
-// pub mod stdintf;
+pub mod stdintf;
 
 /// Thread local + async Connection 
 pub struct Connection {
@@ -147,34 +147,51 @@ impl<'a, C: std::ops::Deref<Target=Connection>> Proxy<'a, C> {
         let mr = Arc::new(Mutex::new(MRInner::Neither));
         let mr2 = mr.clone();
         let f = Box::new(move |msg: Message, _: &Connection| {
-            let r: Result<R, Error> = msg.read_all();
             let mut inner = mr2.lock().unwrap();
-            let old = mem::replace(&mut *inner, MRInner::Ready(r));
+            let old = mem::replace(&mut *inner, MRInner::Ready(Ok(msg)));
             if let MRInner::Pending(waker) = old { waker.wake() }
         });
         if let Err(_) = self.connection.send_with_reply(msg, f) {
             *mr.lock().unwrap() = MRInner::Ready(Err(Error::new_failed("Failed to send message")));
         }
-        MethodReply(mr)
+        MethodReply(mr, Some(Box::new(|msg: Message| { msg.read_all() })))
     }
 }
 
-enum MRInner<T> {
-    Ready(Result<T, Error>),
+enum MRInner {
+    Ready(Result<Message, Error>),
     Pending(task::Waker),
     Neither,
 }
 
 /// Future method reply, used while waiting for a method call reply from the server.
-pub struct MethodReply<T>(Arc<Mutex<MRInner<T>>>); 
+pub struct MethodReply<T>(Arc<Mutex<MRInner>>, Option<Box<FnOnce(Message) -> Result<T, Error> + Send + Sync + 'static>>); 
 
 impl<T> future::Future for MethodReply<T> {
     type Output = Result<T, Error>;
-    fn poll(self: pin::Pin<&mut Self>, ctx: &mut task::Context) -> task::Poll<Result<T, Error>> {
-        let mut inner = self.0.lock().unwrap();
-        let r = mem::replace(&mut *inner, MRInner::Neither);
-        if let MRInner::Ready(r) = r { return task::Poll::Ready(r); }
-        mem::replace(&mut *inner, MRInner::Pending(ctx.waker().clone()));
-        task::Poll::Pending
+    fn poll(mut self: pin::Pin<&mut Self>, ctx: &mut task::Context) -> task::Poll<Result<T, Error>> {
+        let r = {
+            let mut inner = self.0.lock().unwrap();
+            let r = mem::replace(&mut *inner, MRInner::Neither);
+            if let MRInner::Ready(r) = r { r }
+            else {
+                mem::replace(&mut *inner, MRInner::Pending(ctx.waker().clone()));
+                return task::Poll::Pending
+            }
+        };
+        let readfn = self.1.take().expect("Polled MethodReply after Ready");
+        task::Poll::Ready(r.and_then(readfn))
     }
 }
+
+impl<T: 'static> MethodReply<T> {
+    /// Convenience combinator in case you want to post-process the result after reading it
+    pub fn and_then<T2>(self, f: impl FnOnce(T) -> Result<T2, Error> + Send + Sync + 'static) -> MethodReply<T2> {
+        let MethodReply(inner, first) = self;
+        MethodReply(inner, Some({
+            let first = first.unwrap();
+            Box::new(|r| first(r).and_then(f))
+        }))
+    }
+}
+
