@@ -31,9 +31,7 @@ fn main() -> Result<(), Box<Error>> {
     let signal2 = signal.clone();
 
     // We create a tree with one object path inside and make that path introspectable.
-    let tree = f.tree(())
-.add(f.object_path("/hello/world/how/are/you", ()).introspectable())
-.add(f.object_path("/hello/world", ()).introspectable().add(
+    let tree = f.tree(()).add(f.object_path("/hello", ()).introspectable().add(
 
         // We add an interface to the object path...
         f.interface("com.example.dbustest", ()).add_m(
