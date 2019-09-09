@@ -412,13 +412,22 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
     fn children(&self, o: &ObjectPath<M, D>, direct_only: bool) -> Vec<&ObjectPath<M, D>> {
         let parent: &str = &o.name;
         let plen = if parent == "/" { 1 } else { parent.len()+1 };
-        self.paths.values().filter_map(|v| {
+        let mut r: Vec<&ObjectPath<M, D>> = self.paths.values().filter_map(|v| {
             let k: &str = &v.name;
             if !k.starts_with(parent) || k.len() <= plen || &k[plen-1..plen] != "/" {None} else {
-                let child = &k[plen..];
-                if direct_only && child.contains('/') {None} else {Some(&**v)}
+                Some(&**v)
             }
-        }).collect()
+        }).collect();
+        if direct_only {
+            r.sort_by_key(|v| &**v.name);
+            let mut prev: Option<&ObjectPath<M, D>> = None;
+            r.retain(|v| {
+                let a = prev.map(|prev| !v.name.starts_with(&**prev.name)).unwrap_or(true);
+                prev = Some(v);
+                a
+            });
+        }
+        r
     }
 
     /// Get associated data
