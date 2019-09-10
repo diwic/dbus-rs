@@ -1,8 +1,9 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::any::{TypeId, Any};
 use std::ffi::{CString, CStr};
 use std::fmt;
-use crate::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature, Message, MessageType};
+use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
+use crate::{Message, MessageType};
 use super::info::{IfaceInfo, MethodInfo, PropInfo, IfaceInfoBuilder};
 use super::handlers::{Handlers, Par, ParInfo, Mut, MutCtx, MutMethods};
 use super::stdimpl::DBusProperties;
@@ -13,13 +14,13 @@ use super::stdimpl::DBusProperties;
 struct IfaceReg<H: Handlers>(BTreeMap<CString, (TypeId, IfaceInfo<'static, H>)>);
 
 #[derive(Default)]
-pub struct PathData<H: Handlers>(Vec<(TypeId, H::Iface)>);
+pub struct PathData<H: Handlers>(HashMap<TypeId, H::Iface>);
 
 impl PathData<Par> {
     pub fn insert_par<I: Any + 'static + Send + Sync>(&mut self, i: I) {
         let id = TypeId::of::<I>();
         let t = Box::new(i);
-        self.0.push((id, t));
+        self.0.insert(id, t);
     }
 }
 
@@ -27,7 +28,7 @@ impl PathData<Mut> {
     pub fn insert_mut<I: Any + 'static>(&mut self, i: I) {
         let id = TypeId::of::<I>();
         let t = Box::new(i);
-        self.0.push((id, t));
+        self.0.insert(id, t);
     }
 }
 
@@ -36,7 +37,7 @@ impl<H: Handlers> fmt::Debug for PathData<H> {
 }
 
 impl<H: Handlers> PathData<H> {
-    fn new() -> Self { PathData(vec!()) }
+    fn new() -> Self { PathData(Default::default()) }
 }
 
 #[derive(Debug)]
@@ -93,19 +94,19 @@ impl<H: Handlers> Crossroads<H> {
     }
 
     fn reg_lookup(&self, headers: &MsgHeaders) -> Option<(MLookup<H>, &MethodInfo<'static, H>)> {
-       let (typeid, iinfo) = self.reg.0.get(headers.i.as_cstr())?;
-       let minfo = iinfo.methods.iter().find(|x| x.name() == &headers.m)?;
-       let data = self.paths.0.get(headers.p.as_cstr())?;
-       let (_, iface) = data.0.iter().find(|x| x.0 == *typeid)?;
-       Some((MLookup { cr: self, data, iface, iinfo }, minfo))
+        let (typeid, iinfo) = self.reg.0.get(headers.i.as_cstr())?;
+        let minfo = iinfo.methods.iter().find(|x| x.name() == &headers.m)?;
+        let data = self.paths.0.get(headers.p.as_cstr())?;
+        let iface = data.0.get(typeid)?;
+        Some((MLookup { cr: self, data, iface, iinfo }, minfo))
     }
 
     pub (super) fn reg_prop_lookup<'a>(&'a self, data: &'a PathData<H>, iname: &CStr, propname: &CStr) ->
     Option<(MLookup<'a, H>, &PropInfo<'static, H>)> {
-       let (typeid, iinfo) = self.reg.0.get(iname)?;
-       let pinfo = iinfo.props.iter().find(|x| x.name.as_cstr() == propname)?;
-       let (_, iface) = data.0.iter().find(|x| x.0 == *typeid)?;
-       Some((MLookup { cr: self, data, iface, iinfo}, pinfo))       
+        let (typeid, iinfo) = self.reg.0.get(iname)?;
+        let pinfo = iinfo.props.iter().find(|x| x.name.as_cstr() == propname)?;
+        let iface = data.0.get(typeid)?;
+        Some((MLookup { cr: self, data, iface, iinfo}, pinfo))
     }
 }
 
@@ -139,7 +140,7 @@ impl Crossroads<Mut> {
         let r = match minfo.handler_mut().0 {
              MutMethods::MutIface(ref mut f) => {
                 let data = self.paths.0.get_mut(headers.p.as_cstr())?;
-                let (_, iface) = data.0.iter_mut().find(|x| x.0 == *typeid)?;
+                let iface = data.0.get_mut(typeid)?;
                 let iface = &mut **iface;
                 f(iface, &ctx)
             }

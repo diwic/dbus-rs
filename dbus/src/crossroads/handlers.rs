@@ -1,7 +1,7 @@
 use std::{fmt, cell};
 use std::any::Any;
-use crate::arg::ArgBuilder;
-use crate::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature, Message, arg};
+use crate::{arg, Message, arg::{ReadAll, AppendAll, IterAppend}};
+use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
 use super::crossroads::{Crossroads, PathData, MLookup};
 use super::info::{MethodInfo, PropInfo};
 use super::MethodErr;
@@ -117,11 +117,11 @@ pub (super) enum MutMethods {
 }
 
 impl Mut {
-    pub fn typed_method_iface<IA: ArgBuilder, OA: ArgBuilder, I: 'static, F>(mut f: F) -> <Mut as Handlers>::Method
+    pub fn typed_method_iface<IA: ReadAll, OA: AppendAll, I: 'static, F>(mut f: F) -> <Mut as Handlers>::Method
     where F: FnMut(&mut I, &MutCtx, IA) -> Result<OA, MethodErr> + 'static {
         MutMethod(MutMethods::MutIface(Box::new(move |data, info| {
             let iface: &mut I = data.downcast_mut().unwrap();
-            let ia = match IA::read(info.msg()) {
+            let ia = match IA::read(&mut info.msg().iter_init()) {
                 Err(e) => return Some(MethodErr::from(e).to_message(info.msg())),
                 Ok(ia) => ia,
             };
@@ -129,7 +129,7 @@ impl Mut {
                 Err(e) => Some(e.to_message(info.msg())),
                 Ok(r) => {
                     let mut m = info.msg().method_return();
-                    OA::append(r, &mut m);
+                    OA::append(&r, &mut IterAppend::new(&mut m));
                     Some(m)
                 },
             }

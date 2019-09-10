@@ -1,15 +1,16 @@
-use crate::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature, Message};
+use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
+use crate::Message;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::any::Any;
 use std::mem;
-use crate::arg::{Arg, Append, Get, ArgBuilder, TypeMismatchError, IterAppend};
+use crate::arg::{Arg, Append, AppendAll, ReadAll, ArgAll, Get, TypeMismatchError, IterAppend};
 use std::marker::PhantomData;
 use super::MethodErr;
 use super::handlers::{Handlers, DebugMethod, DebugProp, Par, ParInfo, Mut, MutCtx};
 use super::crossroads::{Crossroads, PathData};
 
-fn build_argvec<A: ArgBuilder>(a: A::strs) -> Vec<Argument<'static>> {
+fn build_argvec<A: ArgAll>(a: A::strs) -> Vec<Argument<'static>> {
     let mut v = vec!();
     A::strs_sig(a, |name, sig| {
         v.push(Argument { name: name.into(), sig })
@@ -105,7 +106,7 @@ impl<'a, I, H: Handlers> IfaceInfoBuilder<'a, I, H> {
         IfaceInfoBuilder { cr, _dummy: PhantomData, info: IfaceInfo::new_empty(name) }
     }
 
-    pub fn signal<A: ArgBuilder, N: Into<MemberName<'static>>>(mut self, name: N, args: A::strs) -> Self {
+    pub fn signal<A: ArgAll, N: Into<MemberName<'static>>>(mut self, name: N, args: A::strs) -> Self {
         let s = SignalInfo { name: name.into(), args: build_argvec::<A>(args), anns: Default::default() };
         self.info.signals.push(s);
         self
@@ -122,17 +123,17 @@ impl<'a, I: 'static, H: Handlers> Drop for IfaceInfoBuilder<'a, I, H> {
 }
 
 impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Par> {
-    pub fn method<IA: ArgBuilder, OA: ArgBuilder, N, F>(mut self, name: N, in_args: IA::strs, out_args: OA::strs, f: F) -> Self
+    pub fn method<IA: ReadAll + ArgAll, OA: AppendAll + ArgAll, N, F>(mut self, name: N, in_args: IA::strs, out_args: OA::strs, f: F) -> Self
     where N: Into<MemberName<'static>>, F: Fn(&I, &ParInfo, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
         let f: <Par as Handlers>::Method = Box::new(move |data, info| {
             let iface: &I = data.downcast_ref().unwrap();
-            let r = IA::read(info.msg()).map_err(From::from);
+            let r = IA::read(&mut info.msg().iter_init()).map_err(From::from);
             let r = r.and_then(|ia| f(iface, info, ia)); 
             match r {
                 Err(e) => Some(e.to_message(info.msg())),
                 Ok(r) => {
                     let mut m = info.msg().method_return();
-                    OA::append(r, &mut m);
+                    OA::append(&r, &mut IterAppend::new(&mut m));
                     Some(m)
                 },
             }
@@ -168,7 +169,7 @@ impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Par> {
 }
 
 impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Mut> {
-    pub fn method_iface<IA: ArgBuilder, OA: ArgBuilder, N, F>(mut self, name: N, in_args: IA::strs, out_args: OA::strs, f: F) -> Self
+    pub fn method_iface<IA: ReadAll + ArgAll, OA: AppendAll + ArgAll, N, F>(mut self, name: N, in_args: IA::strs, out_args: OA::strs, f: F) -> Self
     where N: Into<MemberName<'static>>, F: FnMut(&mut I, &MutCtx, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
         let m = MethodInfo { name: name.into(), handler: DebugMethod(Mut::typed_method_iface(f)), 
             i_args: build_argvec::<IA>(in_args), o_args: build_argvec::<OA>(out_args), anns: Default::default() };

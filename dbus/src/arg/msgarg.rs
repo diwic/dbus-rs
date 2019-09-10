@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::{Signature, Message, arg::TypeMismatchError};
+use crate::{Signature, arg::TypeMismatchError};
 use std::{fmt, any};
 use std::sync::Arc;
 use std::rc::Rc;
@@ -20,6 +20,14 @@ pub trait Arg {
     fn arg_type() -> ArgType { Self::ARG_TYPE }
     /// The corresponding D-Bus type signature for this type. 
     fn signature() -> Signature<'static>;
+}
+
+/// Helper trait to introspect many arguments.
+pub trait ArgAll {
+    /// A tuple of &static str. Used for introspection.
+    type strs;
+    /// Enumerates all arguments with their signatures (introspection helper method).
+    fn strs_sig<F: FnMut(&'static str, Signature<'static>)>(a: Self::strs, f: F);
 }
 
 /// Types that can be appended to a message as arguments implement this trait.
@@ -218,49 +226,14 @@ deref_impl!(Box, self, &mut **self );
 deref_impl!(Rc, self, Rc::get_mut(self).unwrap());
 deref_impl!(Arc, self, Arc::get_mut(self).unwrap());
 
-/// Internal trait to help generics. Implemented for (), (A1), (A1, A2) and so on (where A1: Arg, A2: Arg etc).
-///
-/// You would probably not use this trait directly, instead use generic functions which
-/// take ArgBuilder as an argument. It helps reading and appending multiple arguments
-/// to/from a message in one go.
-pub trait ArgBuilder: Sized {
-    /// A tuple of &static str. Used for introspection.
-    type strs;
-    /// Low-level introspection helper method.
-    fn strs_sig<F: FnMut(&'static str, Signature<'static>)>(a: Self::strs, f: F);
-    /// Low-level method to read arguments from a message.
-    fn read(msg: &Message) -> Result<Self, TypeMismatchError>;
-    /// Low-level method to append arguments to a message.
-    fn append(self, msg: &mut Message);
-}
-
-impl ArgBuilder for () {
-    type strs = ();
-    fn strs_sig<F: FnMut(&'static str, Signature<'static>)>(_: Self::strs, _: F) {}
-    fn read(_: &Message) -> Result<Self, TypeMismatchError> { Ok(()) }
-    fn append(self, _: &mut Message) {}
-}
-
-macro_rules! argbuilder_impl {
+macro_rules! argall_impl {
     ($($n: ident $t: ident $s: ty,)+) => {
 
-impl<$($t: Arg + Append + for<'z> Get<'z>),*> ArgBuilder for ($($t,)*) {
+impl<$($t: Arg),*> ArgAll for ($($t,)*) {
     type strs = ($(&'static $s,)*); 
     fn strs_sig<Q: FnMut(&'static str, Signature<'static>)>(z: Self::strs, mut q: Q) {
         let ( $($n,)*) = z;
         $( q($n, $t::signature()); )*
-    }
-
-    fn read(msg: &Message) -> Result<Self, TypeMismatchError> {
-        let mut ii = msg.iter_init();
-        $( let $n = ii.read()?; )*
-        Ok(($( $n, )* ))
-    }
-
-    fn append(self, msg: &mut Message) {
-        let ( $($n,)*) = self;
-        let mut ia = IterAppend::new(msg);
-        $( ia.append($n); )*
     }
 }
 
@@ -282,6 +255,11 @@ impl<$($t: Arg + for<'z> Get<'z>),*> ReadAll for ($($t,)*) {
     }
 }
 
+impl ArgAll for () {
+    type strs = ();
+    fn strs_sig<F: FnMut(&'static str, Signature<'static>)>(_: Self::strs, _: F) {}
+}
+
 impl AppendAll for () {
     fn append(&self, _: &mut IterAppend) {}
 }
@@ -292,16 +270,16 @@ impl ReadAll for () {
     }
 }
 
-argbuilder_impl!(a A str,);
-argbuilder_impl!(a A str, b B str,);
-argbuilder_impl!(a A str, b B str, c C str,);
-argbuilder_impl!(a A str, b B str, c C str, d D str,);
-argbuilder_impl!(a A str, b B str, c C str, d D str, e E str,);
-argbuilder_impl!(a A str, b B str, c C str, d D str, e E str, f F str,);
-argbuilder_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str,);
-argbuilder_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str,);
-argbuilder_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str,);
-argbuilder_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str,);
+argall_impl!(a A str,);
+argall_impl!(a A str, b B str,);
+argall_impl!(a A str, b B str, c C str,);
+argall_impl!(a A str, b B str, c C str, d D str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str,);
 
 
 

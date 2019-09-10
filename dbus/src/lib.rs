@@ -32,7 +32,8 @@ pub use error::Error;
 pub mod channel;
 
 // Not ready for release yet
-// pub mod crossroads;
+#[doc(hidden)]
+pub mod crossroads;
 
 pub mod blocking;
 
