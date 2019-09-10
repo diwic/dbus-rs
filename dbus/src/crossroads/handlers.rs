@@ -112,20 +112,46 @@ pub struct MutMethod(pub (super) MutMethods);
 
 pub (super) enum MutMethods {
     MutIface(Box<dyn FnMut(&mut (dyn Any), &MutCtx) -> Option<Message> + 'static>),
-//    Info(Box<dyn FnMut(&(dyn Any), &Message, &Path) -> Option<Message> + 'static>),
+//    Ref(Box<dyn FnMut(&(dyn Any), &Message, &Path) -> Option<Message> + 'static>),
 //    MutCr(fn(&mut Crossroads<Mut>, &Message) -> Vec<Message>),
 }
 
-impl Mut {
-    pub fn typed_method_iface<IA: ReadAll, OA: AppendAll, I: 'static, F>(mut f: F) -> <Mut as Handlers>::Method
-    where F: FnMut(&mut I, &MutCtx, IA) -> Result<OA, MethodErr> + 'static {
+/// Internal helper trait
+pub trait MakeHandler<T, I, IA, OA> {
+    /// Internal helper trait
+    fn make(self) -> T;
+}
+
+impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<Par as Handlers>::Method, I, IA, OA> for F
+where F: Fn(&I, &ParInfo, IA) -> Result<OA, MethodErr> + Send + Sync + 'static
+{
+    fn make(self) -> <Par as Handlers>::Method {
+        Box::new(move |data, info| {
+            let iface: &I = data.downcast_ref().unwrap();
+            let r = IA::read(&mut info.msg().iter_init()).map_err(From::from);
+            let r = r.and_then(|ia| self(iface, info, ia)); 
+            match r {
+                Err(e) => Some(e.to_message(info.msg())),
+                Ok(r) => {
+                    let mut m = info.msg().method_return();
+                    OA::append(&r, &mut IterAppend::new(&mut m));
+                    Some(m)
+                },
+            }
+        })
+    }
+}
+
+
+impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<Mut as Handlers>::Method, I, IA, OA> for F
+where F: FnMut(&mut I, &MutCtx, IA) -> Result<OA, MethodErr> + 'static
+{
+    fn make(mut self) -> <Mut as Handlers>::Method {
         MutMethod(MutMethods::MutIface(Box::new(move |data, info| {
             let iface: &mut I = data.downcast_mut().unwrap();
-            let ia = match IA::read(&mut info.msg().iter_init()) {
-                Err(e) => return Some(MethodErr::from(e).to_message(info.msg())),
-                Ok(ia) => ia,
-            };
-            match f(iface, info, ia) {
+            let r = IA::read(&mut info.msg().iter_init()).map_err(From::from);
+            let r = r.and_then(|ia| self(iface, info, ia)); 
+            match r {
                 Err(e) => Some(e.to_message(info.msg())),
                 Ok(r) => {
                     let mut m = info.msg().method_return();
@@ -136,3 +162,4 @@ impl Mut {
         })))
     }
 }
+

@@ -181,7 +181,7 @@ mod test {
 
         let mut call_times = 0u32;
         cr.register::<Score,_>("com.example.dbusrs.crossroads.score")
-            .method_iface("UpdateScore", ("change",), ("new_score", "call_times"), move |score, _, (change,): (u16,)| {
+            .method("UpdateScore", ("change",), ("new_score", "call_times"), move |score: &mut Score, _: &MutCtx, (change,): (u16,)| {
                 score.0 += change;
                 call_times += 1;
                 Ok((score.0, call_times))
@@ -210,7 +210,7 @@ mod test {
         struct Score(u16);
 
         cr.register::<Score,_>("com.example.dbusrs.crossroads.score")
-            .method("Hello", ("sender",), ("reply",), |score, _, (sender,): (String,)| {
+            .method("Hello", ("sender",), ("reply",), |score: &Score, _: &ParInfo, (sender,): (String,)| {
                 assert_eq!(score.0, 7u16);
                 Ok((format!("Hello {}, my score is {}!", sender, score.0),))
             })
