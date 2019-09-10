@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<Error>> {
         let proxy = c.with_proxy("com.example.dbustest", "/hello", Duration::from_millis(5000));
 
         // Let's start listening to signals.
-        let _id = proxy.match_signal_local(|h: ComExampleDbustestHelloHappened, _| {
+        let _id = proxy.match_signal(|h: ComExampleDbustestHelloHappened, _: &Connection| {
             println!("Hello happened from sender: {}", h.sender);
             true
         });

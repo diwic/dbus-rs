@@ -28,12 +28,14 @@ fn dispatch<F, G: FnOnce(&mut F, Message) -> bool>(filters: &mut Vec<Filter<F>>,
 /// A connection to D-Bus, thread local + non-async version
 pub struct Connection {
     channel: Channel,
-    filters: RefCell<Vec<Filter<Box<dyn FnMut(Message, &Connection) -> bool>>>>,
+    filters: RefCell<Vec<Filter<LocalFilterCb>>>,
     filter_nextid: Cell<u32>,
 }
 
 type
   SyncFilterCb = Box<dyn FnMut(Message, &SyncConnection) -> bool + Send + Sync + 'static>;
+type
+  LocalFilterCb = Box<dyn FnMut(Message, &Connection) -> bool + 'static>;
 
 /// A connection to D-Bus, Send + Sync + non-async version
 pub struct SyncConnection {
@@ -186,7 +188,7 @@ impl channel::Sender for SyncConnection {
 }
 
 impl channel::MatchingReceiver for Connection {
-    type F = Box<dyn FnMut(Message, &Connection) -> bool>;
+    type F = LocalFilterCb;
     fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
         let id = self.filter_nextid.get();
         self.filter_nextid.set(id+1);
@@ -304,7 +306,54 @@ impl<'a, T: BlockingSender, C: std::ops::Deref<Target=T>> Proxy<'a, C> {
         Ok(())
     }
 
+    /// Sets up an incoming signal match, that calls the supplied callback every time the signal is received.
+    ///
+    /// The returned value can be used to remove the match. The match is also removed if the callback
+    /// returns "false".
+    pub fn match_signal<S: SignalArgs + ReadAll, F>(&self, f: F) -> Result<u32, Error>
+    where T: channel::MatchingReceiver,
+          F: MakeSignal<<T as channel::MatchingReceiver>::F, S, T>
+    {
+        let mr = S::match_rule(Some(&self.destination), Some(&self.path)).static_clone();
+        let ff = f.make(mr.match_str());
+        self.match_start(mr, true, ff)
+    }
 }
+
+/// Internal helper trait
+pub trait MakeSignal<G, S, T> {
+    /// Internal helper trait
+    fn make(self, mstr: String) -> G;
+}
+
+impl<S: ReadAll, F: FnMut(S, &SyncConnection) -> bool + Send + Sync + 'static> MakeSignal<SyncFilterCb, S, SyncConnection> for F {
+    fn make(mut self, mstr: String) -> SyncFilterCb {
+        Box::new(move |msg: Message, conn: &SyncConnection| {
+            if let Ok(s) = S::read(&mut msg.iter_init()) {
+                if self(s, conn) { return true };
+                let proxy = stdintf::proxy(conn);
+                use crate::blocking::stdintf::org_freedesktop::DBus;
+                let _ = proxy.remove_match(&mstr);
+                false
+            } else { true }
+        })
+    }
+}
+
+impl<S: ReadAll, F: FnMut(S, &Connection) -> bool + 'static> MakeSignal<LocalFilterCb, S, Connection> for F {
+    fn make(mut self, mstr: String) -> LocalFilterCb {
+        Box::new(move |msg: Message, conn: &Connection| {
+            if let Ok(s) = S::read(&mut msg.iter_init()) {
+                if self(s, conn) { return true };
+                let proxy = stdintf::proxy(conn);
+                use crate::blocking::stdintf::org_freedesktop::DBus;
+                let _ = proxy.remove_match(&mstr);
+                false
+            } else { true }
+        })
+    }
+}
+
 
 impl<'a, T, C> Proxy<'a, C> 
 where
@@ -316,6 +365,7 @@ where
     ///
     /// The returned value can be used to remove the match. The match is also removed if the callback
     /// returns "false".
+    #[deprecated(note="use match_signal instead")]
     pub fn match_signal_local<S: SignalArgs + ReadAll, F>(&self, mut f: F) -> Result<u32, Error>
     where F: for <'b> FnMut(S, &'b T) -> bool + 'static
     {
@@ -345,6 +395,7 @@ where
     ///
     /// The returned value can be used to remove the match. The match is also removed if the callback
     /// returns "false".
+    #[deprecated(note="use match_signal instead")]
     pub fn match_signal_sync<S: SignalArgs + ReadAll, F>(&self, mut f: F) -> Result<u32, Error>
     where F: for <'b> FnMut(S, &'b T) -> bool + Send + Sync + 'static
     {
