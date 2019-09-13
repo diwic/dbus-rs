@@ -70,6 +70,16 @@ impl<'a> MatchRule<'a> {
     /// Create a new struct which matches every message.
     pub fn new() -> Self { Default::default() }
 
+    /// Create a new struct which matches signals on the interface and member name.
+    pub fn new_signal<I: Into<Interface<'a>>, N: Into<Member<'a>>>(intf: I, name: N) -> Self {
+        let mut m = Self::new();
+        m.msg_type = Some(MessageType::Signal);
+        m.interface = Some(intf.into());
+        m.member = Some(name.into());
+        m
+    }
+
+
     /// Returns a clone with no borrowed references
     pub fn static_clone(&self) -> MatchRule<'static> {
         MatchRule {

@@ -47,7 +47,7 @@ impl Sender for LocalConnection {
 pub struct SyncConnection {
     channel: Channel,
     replies: Mutex<HashMap<u32, <Self as NonblockReply>::F>>,
-    filters: Mutex<(BTreeMap<u32, (MatchRule<'static>, Box<dyn FnMut(Message, &Self) -> bool + Send>)>, u32)>,
+    filters: Mutex<(u32, BTreeMap<u32, (MatchRule<'static>, <Self as MatchingReceiver>::F)>)>,
 }
 
 impl AsRef<Channel> for SyncConnection {
@@ -114,10 +114,28 @@ impl NonblockReply for SyncConnection {
     fn make_f<G: FnOnce(Message, &Self) + Send + 'static>(g: G) -> Self::F { Box::new(g) }
 }
 
+impl MatchingReceiver for SyncConnection {
+    type F = Box<dyn FnMut(Message, &Self) -> bool + Send>;
+    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
+        let mut filters = self.filters.lock().unwrap();
+        let id = filters.0 + 1;
+        filters.0 = id;
+        filters.1.insert(id, (m, f));
+        id
+    }
+    fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
+        let mut filters = self.filters.lock().unwrap();
+        filters.1.remove(&id)
+    }
+}
+
+
 pub trait Process: Sender + AsRef<Channel> {
     /// Dispatches all pending messages, without blocking.
     ///
     /// This is usually called from the reactor only, after read_write.
+    /// Despite this taking &self and not "&mut self", it is a logic error to call this
+    /// recursively or from more than one thread at a time.
     fn process_all(&self) {
         let c: &Channel = self.as_ref();
         while let Some(msg) = c.pop_message() {
@@ -161,16 +179,16 @@ impl Process for SyncConnection {
                 return;
             }
         }
-/*        let mut filters = self.filters.lock().unwrap();
-        if let Some(k) = filters.iter_mut().find(|(_, v)| v.0.matches(&msg)).map(|(k, _)| *k) {
-            let mut v = filters.remove(&k).unwrap();
+        let mut filters = self.filters.lock().unwrap();
+        if let Some(k) = filters.1.iter_mut().find(|(_, v)| v.0.matches(&msg)).map(|(k, _)| *k) {
+            let mut v = filters.1.remove(&k).unwrap();
             drop(filters);
             if v.1(msg, &self) {
-                let mut filters = self.filters.borrow_mut();
-                filters.insert(k, v);
+                let mut filters = self.filters.lock().unwrap();
+                filters.1.insert(k, v);
             }
             return;
-        } */
+        }
         if let Some(reply) = crate::channel::default_reply(&msg) {
             let _ = self.send(reply);
         }
