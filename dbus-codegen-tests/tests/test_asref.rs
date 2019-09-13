@@ -14,20 +14,23 @@ mod policykit_client;
 
 struct Whatever {}
 
+use dbus::arg;
+
 impl AsRef<policykit_asref::OrgFreedesktopDBusProperties + 'static> for Rc<Whatever> {
     fn as_ref(&self) -> &(policykit_asref::OrgFreedesktopDBusProperties + 'static) { &**self }
 }
 
 impl policykit_asref::OrgFreedesktopDBusProperties for Whatever {
-    fn get(&self, interfacename: &str, propertyname: &str) -> Result<::dbus::arg::Variant<Box<::dbus::arg::RefArg>>, ::dbus::tree::MethodErr> {
+    fn get(&self, interfacename: &str, propertyname: &str) -> Result<::dbus::arg::Variant<Box<dyn arg::RefArg>>, ::dbus::tree::MethodErr> {
         assert_eq!(interfacename, "Interface.Name");
         assert_eq!(propertyname, "Property.Name");
         Ok(::dbus::arg::Variant(Box::new(5u8)))
     }
 
-    fn get_all(&self, _interfacename: &str) -> Result<::std::collections::HashMap<String, ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>>, ::dbus::tree::MethodErr> { unimplemented!() }
+    fn get_all(&self, _interfacename: &str) ->
+    Result<::std::collections::HashMap<String, ::dbus::arg::Variant<Box<dyn arg::RefArg>>>, ::dbus::tree::MethodErr> { unimplemented!() }
 
-    fn set(&self, _interfacename: &str, _propertyname: &str, value: ::dbus::arg::Variant<Box<::dbus::arg::RefArg>>) -> Result<(), ::dbus::tree::MethodErr> {
+    fn set(&self, _interfacename: &str, _propertyname: &str, value: ::dbus::arg::Variant<Box<dyn arg::RefArg>>) -> Result<(), ::dbus::tree::MethodErr> {
         assert_eq!(dbus::arg::RefArg::as_str(&value), Some("Hello"));
         Err(("A.B.C", "Error.Message").into())
     }
