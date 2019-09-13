@@ -1,5 +1,5 @@
 use dbus::channel::{Channel, BusType};
-use dbus::nonblock::Connection;
+use dbus::nonblock::{LocalConnection, SyncConnection, Process};
 use dbus::Error;
 
 use std::{future, task, pin};
@@ -12,12 +12,12 @@ use tokio_reactor::Registration;
 /// If you need to ever cancel this resource (i e disconnect from D-Bus),
 /// you need to make this future abortable. If it finishes, you probably lost
 /// contact with the D-Bus server.
-pub struct IOResource {
-    connection: Arc<Connection>,
+pub struct IOResource<C> {
+    connection: Arc<C>,
     registration: Registration,
 }
 
-impl IOResource {
+impl<C: AsRef<Channel> + Process> IOResource<C> {
     fn poll_internal(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let c: &Channel = (*self.connection).as_ref();
         let w = c.watch();
@@ -27,16 +27,18 @@ impl IOResource {
         r.take_write_ready()?;
         if w.read { r.poll_read_ready()?; };
         if w.write { r.poll_write_ready()?; };
-        self.connection.read_write()?;
+        c.read_write(Some(Default::default())).map_err(|_| Error::new_failed("Read/write failed"))?;
         self.connection.process_all();
         Ok(())
     }
 }
 
-impl future::Future for IOResource {
+impl<C: AsRef<Channel> + Process> future::Future for IOResource<C> {
     fn poll(self: pin::Pin<&mut Self>, _ctx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
         match self.poll_internal() {
-            Ok(_) => task::Poll::Pending,
+            Ok(_) => {
+                task::Poll::Pending
+            },
             Err(e) => task::Poll::Ready(e),
         }
     }
@@ -44,15 +46,20 @@ impl future::Future for IOResource {
 }
 
 
-pub fn new_session() -> Result<(IOResource, Arc<Connection>), Error> {
-    let mut channel = Channel::get_private(BusType::Session)?;
+/// Generic connection creator, you might want to use e g `new_session_local`, `new_system_sync` etc for convenience. 
+pub fn new<C: From<Channel>>(b: BusType) -> Result<(IOResource<C>, Arc<C>), Error> {
+    let mut channel = Channel::get_private(b)?;
     channel.set_watch_enabled(true);
 
-    let conn = Arc::new(Connection::from(channel));
+    let conn = Arc::new(C::from(channel));
     let res = IOResource { connection: conn.clone(), registration: Registration::new() };
     Ok((res, conn))
 }
 
+pub fn new_session_local() -> Result<(IOResource<LocalConnection>, Arc<LocalConnection>), Error> { new(BusType::Session) }
+pub fn new_system_local() -> Result<(IOResource<LocalConnection>, Arc<LocalConnection>), Error> { new(BusType::System) }
+pub fn new_session_sync() -> Result<(IOResource<SyncConnection>, Arc<SyncConnection>), Error> { new(BusType::Session) }
+pub fn new_system_sync() -> Result<(IOResource<SyncConnection>, Arc<SyncConnection>), Error> { new(BusType::System) }
 
 #[test]
 fn method_call() {
@@ -61,7 +68,7 @@ fn method_call() {
 
     let mut rt = Runtime::new().unwrap();
 
-    let (res, conn) = new_session().unwrap();
+    let (res, conn) = new_session_local().unwrap();
 
     #[allow(unreachable_code)] // Easier than trying to figure a good return type for the closure
     let res = res.then(|e| { panic!(e); ready(()) }).unit_error().boxed_local().compat();

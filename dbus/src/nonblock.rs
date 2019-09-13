@@ -17,20 +17,20 @@ use std::cell::{Cell, RefCell};
 pub mod stdintf;
 
 /// Thread local + async Connection 
-pub struct Connection {
+pub struct LocalConnection {
     channel: Channel,
-    replies: RefCell<HashMap<u32, Box<dyn FnOnce(Message, &Connection)>>>,
-    filters: RefCell<BTreeMap<u32, (MatchRule<'static>, Box<dyn FnMut(Message, &Connection) -> bool>)>>,
+    replies: RefCell<HashMap<u32, Box<dyn FnOnce(Message, &LocalConnection)>>>,
+    filters: RefCell<BTreeMap<u32, (MatchRule<'static>, Box<dyn FnMut(Message, &LocalConnection) -> bool>)>>,
     filter_nextid: Cell<u32>,
 }
 
-impl AsRef<Channel> for Connection {
+impl AsRef<Channel> for LocalConnection {
     fn as_ref(&self) -> &Channel { &self.channel }
 }
 
-impl From<Channel> for Connection {
+impl From<Channel> for LocalConnection {
     fn from(x: Channel) -> Self {
-        Connection {
+        LocalConnection {
             channel: x,
             replies: Default::default(),
             filters: Default::default(),
@@ -39,18 +39,46 @@ impl From<Channel> for Connection {
     }
 }
 
-impl Sender for Connection {
+impl Sender for LocalConnection {
     fn send(&self, msg: Message) -> Result<u32, ()> { self.channel.send(msg) }
 }
+
+/// async Connection where handlers are Send + Sync 
+pub struct SyncConnection {
+    channel: Channel,
+    replies: Mutex<HashMap<u32, <Self as NonblockReply>::F>>,
+    filters: Mutex<(BTreeMap<u32, (MatchRule<'static>, Box<dyn FnMut(Message, &Self) -> bool + Send>)>, u32)>,
+}
+
+impl AsRef<Channel> for SyncConnection {
+    fn as_ref(&self) -> &Channel { &self.channel }
+}
+
+impl From<Channel> for SyncConnection {
+    fn from(x: Channel) -> Self {
+        SyncConnection {
+            channel: x,
+            replies: Default::default(),
+            filters: Default::default(),
+        }
+    }
+}
+
+impl Sender for SyncConnection {
+    fn send(&self, msg: Message) -> Result<u32, ()> { self.channel.send(msg) }
+}
+
+
 
 pub trait NonblockReply {
     type F;
     fn send_with_reply(&self, msg: Message, f: Self::F) -> Result<u32, ()>;
     fn cancel_reply(&self, id: u32) -> Option<Self::F>;
+    fn make_f<G: FnOnce(Message, &Self) + Send + 'static>(g: G) -> Self::F where Self: Sized;
 }
 
-impl NonblockReply for Connection {
-    type F = Box<dyn FnOnce(Message, &Connection)>;
+impl NonblockReply for LocalConnection {
+    type F = Box<dyn FnOnce(Message, &LocalConnection)>;
     fn send_with_reply(&self, msg: Message, f: Self::F) -> Result<u32, ()> {
         self.channel.send(msg).map(|x| {
             self.replies.borrow_mut().insert(x, f);
@@ -58,10 +86,11 @@ impl NonblockReply for Connection {
         })
     }
     fn cancel_reply(&self, id: u32) -> Option<Self::F> { self.replies.borrow_mut().remove(&id) }
+    fn make_f<G: FnOnce(Message, &Self) + Send + 'static>(g: G) -> Self::F { Box::new(g) }
 }
 
-impl MatchingReceiver for Connection {
-    type F = Box<dyn FnMut(Message, &Connection) -> bool>;
+impl MatchingReceiver for LocalConnection {
+    type F = Box<dyn FnMut(Message, &LocalConnection) -> bool>;
     fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
         let id = self.filter_nextid.get();
         self.filter_nextid.set(id+1);
@@ -73,45 +102,80 @@ impl MatchingReceiver for Connection {
     }
 }
 
-
-impl Connection {
-    /// Reads/writes data to the connection, without blocking.
-    ///
-    /// This is usually called from the reactor when there is input on the file descriptor.
-    pub fn read_write(&self) -> Result<(), Error> {
-        self.channel.read_write(Some(Default::default())).map_err(|_| Error::new_failed("Read/write failed"))
+impl NonblockReply for SyncConnection {
+    type F = Box<dyn FnOnce(Message, &SyncConnection) + Send>;
+    fn send_with_reply(&self, msg: Message, f: Self::F) -> Result<u32, ()> {
+        self.channel.send(msg).map(|x| {
+            self.replies.lock().unwrap().insert(x, f);
+            x
+        })
     }
+    fn cancel_reply(&self, id: u32) -> Option<Self::F> { self.replies.lock().unwrap().remove(&id) }
+    fn make_f<G: FnOnce(Message, &Self) + Send + 'static>(g: G) -> Self::F { Box::new(g) }
+}
 
+pub trait Process: Sender + AsRef<Channel> {
     /// Dispatches all pending messages, without blocking.
     ///
     /// This is usually called from the reactor only, after read_write.
-    pub fn process_all(&self) {
-        while let Some(msg) = self.channel.pop_message() {
-            if let Some(serial) = msg.get_reply_serial() {
-                if let Some(f) = self.replies.borrow_mut().remove(&serial) {
-                    f(msg, self);
-                    continue;
-                }
-            }
-            let mut filters = self.filters.borrow_mut();
-            if let Some(k) = filters.iter_mut().find(|(_, v)| v.0.matches(&msg)).map(|(k, _)| *k) {
-                let mut v = filters.remove(&k).unwrap();
-                drop(filters);
-                if v.1(msg, &self) {
-                    let mut filters = self.filters.borrow_mut();
-                    filters.insert(k, v);
-                }
-                continue;
-            }
-            if let Some(reply) = crate::channel::default_reply(&msg) {
-                let _ = self.send(reply);
-            }
+    fn process_all(&self) {
+        let c: &Channel = self.as_ref();
+        while let Some(msg) = c.pop_message() {
+            self.process_one(msg);
         }
     }
 
+    /// Dispatches a message.
+    fn process_one(&self, msg: Message);
 }
 
+impl Process for LocalConnection {
+    fn process_one(&self, msg: Message) {
+        if let Some(serial) = msg.get_reply_serial() {
+            if let Some(f) = self.replies.borrow_mut().remove(&serial) {
+                f(msg, self);
+                return;
+            }
+        }
+        let mut filters = self.filters.borrow_mut();
+        if let Some(k) = filters.iter_mut().find(|(_, v)| v.0.matches(&msg)).map(|(k, _)| *k) {
+            let mut v = filters.remove(&k).unwrap();
+            drop(filters);
+            if v.1(msg, &self) {
+                let mut filters = self.filters.borrow_mut();
+                filters.insert(k, v);
+            }
+            return;
+        }
+        if let Some(reply) = crate::channel::default_reply(&msg) {
+            let _ = self.send(reply);
+        }
+    }
+}
 
+impl Process for SyncConnection {
+    fn process_one(&self, msg: Message) {
+        if let Some(serial) = msg.get_reply_serial() {
+            if let Some(f) = self.replies.lock().unwrap().remove(&serial) {
+                f(msg, self);
+                return;
+            }
+        }
+/*        let mut filters = self.filters.lock().unwrap();
+        if let Some(k) = filters.iter_mut().find(|(_, v)| v.0.matches(&msg)).map(|(k, _)| *k) {
+            let mut v = filters.remove(&k).unwrap();
+            drop(filters);
+            if v.1(msg, &self) {
+                let mut filters = self.filters.borrow_mut();
+                filters.insert(k, v);
+            }
+            return;
+        } */
+        if let Some(reply) = crate::channel::default_reply(&msg) {
+            let _ = self.send(reply);
+        }
+    }
+}
 
 /// A struct that wraps a connection, destination and path.
 ///
@@ -136,7 +200,11 @@ impl<'a, C> Proxy<'a, C> {
     }
 }
 
-impl<'a, C: std::ops::Deref<Target=Connection>> Proxy<'a, C> {
+impl<'a, T, C> Proxy<'a, C>
+where
+    T: NonblockReply, 
+    C: std::ops::Deref<Target=T>
+{
 
     /// Make a method call using typed input argument, returns a future that resolves to the typed output arguments.
     pub fn method_call<'i, 'm, R: ReadAll + 'static, A: AppendAll, I: Into<Interface<'i>>, M: Into<Member<'m>>>(&self, i: I, m: M, args: A)
@@ -146,7 +214,7 @@ impl<'a, C: std::ops::Deref<Target=Connection>> Proxy<'a, C> {
 
         let mr = Arc::new(Mutex::new(MRInner::Neither));
         let mr2 = mr.clone();
-        let f = Box::new(move |msg: Message, _: &Connection| {
+        let f = T::make_f(move |msg: Message, _: &T| {
             let mut inner = mr2.lock().unwrap();
             let old = mem::replace(&mut *inner, MRInner::Ready(Ok(msg)));
             if let MRInner::Pending(waker) = old { waker.wake() }

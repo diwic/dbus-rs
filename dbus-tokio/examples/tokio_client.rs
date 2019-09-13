@@ -45,7 +45,7 @@ fn main() {
         println!("Calling Hello...");
         //TODO: try to handle error when calling on "/"
         let m = Message::new_method_call("com.example.dbustest", "/hello", "com.example.dbustest", "Hello")
-            .unwrap().append1(500u32);
+            .unwrap().append1("Tokio 0.1");
         aconn.method_call(m).unwrap().then(|reply| {
             let m = reply.unwrap();
             let msg: &str = m.get1().unwrap();

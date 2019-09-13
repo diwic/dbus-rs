@@ -369,7 +369,10 @@ fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box
         ConnectionType::Nonblock => ("nonblock", "Proxy"),
     };
 
-    if opts.futures {
+    if module == "nonblock" {
+        *s += &format!("\nimpl<'a, T: nonblock::NonblockReply, C: ::std::ops::Deref<Target=T>> {} for {}::{}<'a, C> {{\n",
+            make_camel(&i.shortname), module, proxy);
+    } else if opts.futures {
         *s += &format!("\nimpl<'a> {} for dbusf::ConnPath<'a> {{\n",
             make_camel(&i.shortname));
     } else {

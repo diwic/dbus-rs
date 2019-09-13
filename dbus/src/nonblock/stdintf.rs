@@ -24,7 +24,7 @@ pub trait Properties {
     fn set<I2: arg::Arg + arg::Append>(&self, interface_name: &str, property_name: &str, value: I2) -> nonblock::MethodReply<()>;
 }
 
-impl<'a, C: ::std::ops::Deref<Target=nonblock::Connection> + Clone> Properties for nonblock::Proxy<'a, C> {
+impl<'a, T: nonblock::NonblockReply, C: ::std::ops::Deref<Target=T>> Properties for nonblock::Proxy<'a, C> {
 
     fn get<R0: 'static + for<'b> arg::Get<'b>>(&self, interface_name: &str, property_name: &str) -> nonblock::MethodReply<R0> {
         self.method_call("org.freedesktop.DBus.Properties", "Get", (interface_name, property_name, ))
@@ -75,7 +75,7 @@ pub trait Introspectable {
     fn introspect(&self) -> nonblock::MethodReply<String>;
 }
 
-impl<'a, C: ::std::ops::Deref<Target=nonblock::Connection> + Clone> Introspectable for nonblock::Proxy<'a, C> {
+impl<'a, T: nonblock::NonblockReply, C: ::std::ops::Deref<Target=T>> Introspectable for nonblock::Proxy<'a, C> {
 
     fn introspect(&self) -> nonblock::MethodReply<String> {
         self.method_call("org.freedesktop.DBus.Introspectable", "Introspect", ())
@@ -88,7 +88,7 @@ pub trait Peer {
     fn get_machine_id(&self) -> nonblock::MethodReply<String>;
 }
 
-impl<'a, C: ::std::ops::Deref<Target=nonblock::Connection> + Clone> Peer for nonblock::Proxy<'a, C> {
+impl<'a, T: nonblock::NonblockReply, C: ::std::ops::Deref<Target=T>> Peer for nonblock::Proxy<'a, C> {
 
     fn ping(&self) -> nonblock::MethodReply<()> {
         self.method_call("org.freedesktop.DBus.Peer", "Ping", ())
