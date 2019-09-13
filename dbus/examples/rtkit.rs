@@ -8,7 +8,7 @@ extern crate libc;
 use std::cmp;
 use std::time::Duration;
 
-fn make_realtime(prio: u32) -> Result<u32, Box<std::error::Error>> {
+fn make_realtime(prio: u32) -> Result<u32, Box<dyn std::error::Error>> {
     let c = dbus::blocking::Connection::new_system()?;
 
     let proxy = c.with_proxy("org.freedesktop.RealtimeKit1", "/org/freedesktop/RealtimeKit1",

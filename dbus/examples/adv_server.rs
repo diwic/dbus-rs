@@ -141,7 +141,7 @@ fn create_tree(devices: &[Arc<Device>], iface: &Arc<Interface<MTFn<TData>, TData
     tree 
 }
 
-fn run() -> Result<(), Box<std::error::Error>> {
+fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Create our bogus devices
     let devices: Vec<Arc<Device>> = (0..10).map(|i| Arc::new(Device::new_bogus(i))).collect();
 

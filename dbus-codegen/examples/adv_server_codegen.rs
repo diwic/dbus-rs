@@ -261,7 +261,7 @@ fn create_tree(devices: &[Arc<Device>], iface: &Arc<Interface<MTFn<TData>, TData
     tree 
 }
 
-fn run() -> Result<(), Box<std::error::Error>> {
+fn run() -> Result<(), Box<dyn std::error::Error>> {
     let (check_complete_s, check_complete_r) = mpsc::channel::<i32>(); 
 
     // Create our bogus devices

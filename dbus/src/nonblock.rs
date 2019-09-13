@@ -165,7 +165,7 @@ enum MRInner {
 }
 
 /// Future method reply, used while waiting for a method call reply from the server.
-pub struct MethodReply<T>(Arc<Mutex<MRInner>>, Option<Box<FnOnce(Message) -> Result<T, Error> + Send + Sync + 'static>>); 
+pub struct MethodReply<T>(Arc<Mutex<MRInner>>, Option<Box<dyn FnOnce(Message) -> Result<T, Error> + Send + Sync + 'static>>); 
 
 impl<T> future::Future for MethodReply<T> {
     type Output = Result<T, Error>;

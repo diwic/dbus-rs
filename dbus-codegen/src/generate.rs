@@ -152,7 +152,7 @@ const RUST_KEYWORDS: [&str; 57] = [
 fn make_camel(s: &str) -> String {
     let mut ucase = true;
     let mut r: String = s.chars().filter_map(|c| match c {
-        'a'...'z' | 'A'...'Z' | '0'...'9' => {
+        'a'..='z' | 'A'..='Z' | '0'..='9' => {
             let cc = if ucase { c.to_uppercase().next() } else { Some(c) };
             ucase = false;
             cc
@@ -169,11 +169,11 @@ fn make_snake(s: &str, keyword_check: bool) -> String {
     let mut r = String::new();
     for c in s.chars() {
         match c {
-             'a'...'z' | '0'...'9' => {
+             'a'..='z' | '0'..='9' => {
                   r.push(c);
                   lcase = true;
              }
-             'A'...'Z' => {
+             'A'..='Z' => {
                   if lcase { r.push('_'); }
                   lcase = false;
                   r.push(c.to_lowercase().next().unwrap());

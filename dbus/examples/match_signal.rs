@@ -39,7 +39,7 @@ use std::error::Error;
 use std::time::Duration;
 
 
-fn main() -> Result<(), Box<Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     // Let's start by starting up a connection to the session bus.
     let mut c = Connection::new_session()?;
 

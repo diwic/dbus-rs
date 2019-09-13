@@ -4,7 +4,7 @@ use dbus::{blocking::Connection, arg};
 use std::collections::HashMap;
 use std::time::Duration;
 
-fn print_refarg(value: &arg::RefArg) {
+fn print_refarg(value: &dyn arg::RefArg) {
     // We don't know what type the value is. We'll try a few and fall back to
     // debug printing if the value is more complex than that.
     if let Some(s) = value.as_str() { println!("{}", s); }
@@ -12,10 +12,10 @@ fn print_refarg(value: &arg::RefArg) {
     else { println!("{:?}", value); }
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Connect to server and create a ConnPath. A ConnPath implements several interfaces,
     // in this case we'll use OrgFreedesktopDBusProperties, which allows us to call "get".
-    let c = Connection::new_session().unwrap();
+    let c = Connection::new_session()?;
     let p = c.with_proxy("org.mpris.MediaPlayer2.rhythmbox", "/org/mpris/MediaPlayer2", Duration::from_millis(5000));
     use dbus::blocking::stdintf::org_freedesktop_dbus::Properties;
 
@@ -23,7 +23,7 @@ fn main() {
 
     // Option 1: we can get the dict straight into a hashmap, like this:
 
-    let metadata: HashMap<String, arg::Variant<Box<dyn arg::RefArg>>> = p.get("org.mpris.MediaPlayer2.Player", "Metadata").unwrap();
+    let metadata: HashMap<String, arg::Variant<Box<dyn arg::RefArg>>> = p.get("org.mpris.MediaPlayer2.Player", "Metadata")?;
 
     println!("Option 1:");
 
@@ -36,7 +36,7 @@ fn main() {
 
     // Option 2: we can get the entire dict as a RefArg and get the values out by iterating over it.
 
-    let metadata: Box<dyn arg::RefArg> = p.get("org.mpris.MediaPlayer2.Player", "Metadata").unwrap();
+    let metadata: Box<dyn arg::RefArg> = p.get("org.mpris.MediaPlayer2.Player", "Metadata")?;
 
     // When using "as_iter()" for a dict, we'll get one key, it's value, next key, it's value, etc.
     let mut iter = metadata.as_iter().unwrap();
@@ -48,4 +48,5 @@ fn main() {
         let value = iter.next().unwrap();
         print_refarg(&value);
     }
+    Ok(())
 }

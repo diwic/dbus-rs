@@ -16,7 +16,7 @@ use dbus::tree::Factory;
 use std::error::Error;
 use std::time::Duration;
 
-fn main() -> Result<(), Box<Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     // Let's start by starting up a connection to the session bus and request a name.
     let mut c = Connection::new_session()?;
     c.request_name("com.example.dbustest", false, true, false)?;
