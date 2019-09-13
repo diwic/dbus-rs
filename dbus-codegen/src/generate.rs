@@ -500,7 +500,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
             wheres.push(format!("F: 'static + for <'z> Fn(& 'z tree::MethodInfo<tree::{}<D>, D>) -> & 'z T", mtype));
         },
         ServerAccess::AsRefClosure => {
-            wheres.push(format!("T: AsRef<{}>", make_camel(&i.shortname)));
+            wheres.push(format!("T: AsRef<dyn {}>", make_camel(&i.shortname)));
             wheres.push(format!("F: 'static + Fn(&tree::MethodInfo<tree::{}<D>, D>) -> T", mtype));
         },
         ServerAccess::MethodInfo => {},

@@ -16,8 +16,8 @@ struct Whatever {}
 
 use dbus::arg;
 
-impl AsRef<policykit_asref::OrgFreedesktopDBusProperties + 'static> for Rc<Whatever> {
-    fn as_ref(&self) -> &(policykit_asref::OrgFreedesktopDBusProperties + 'static) { &**self }
+impl AsRef<dyn policykit_asref::OrgFreedesktopDBusProperties + 'static> for Rc<Whatever> {
+    fn as_ref(&self) -> &(dyn policykit_asref::OrgFreedesktopDBusProperties + 'static) { &**self }
 }
 
 impl policykit_asref::OrgFreedesktopDBusProperties for Whatever {
