@@ -123,8 +123,8 @@ impl<'a, I: 'static, H: Handlers> Drop for IfaceInfoBuilder<'a, I, H> {
 }
 
 impl<'a, I: 'static, H: Handlers> IfaceInfoBuilder<'a, I, H> {
-    pub fn method<IA: ReadAll + ArgAll, OA: AppendAll + ArgAll, N, F>(mut self, name: N, in_args: IA::strs, out_args: OA::strs, f: F) -> Self
-    where N: Into<MemberName<'static>>, F: MakeHandler<<H as Handlers>::Method, I, IA, OA> {
+    pub fn method<IA: ReadAll + ArgAll, OA: AppendAll + ArgAll, N, F, D>(mut self, name: N, in_args: IA::strs, out_args: OA::strs, f: F) -> Self
+    where N: Into<MemberName<'static>>, F: MakeHandler<<H as Handlers>::Method, IA, OA, D> {
         let f = f.make();
 
         let m = MethodInfo { name: name.into(), handler: DebugMethod(f), 

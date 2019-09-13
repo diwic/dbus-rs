@@ -31,7 +31,14 @@ impl PathData<Mut> {
         self.0.insert(id, t);
     }
 }
-
+/*
+impl<H: Handlers> PathData<H> {
+    pub fn get_mut<I: Any + 'static>(&mut self) -> Option<&mut I> {
+        let id = TypeId::of::<I>();
+        self.0.get_mut(&id).and_then(|x| (&mut x as &mut dyn Any).downcast_mut())
+    }
+}
+*/
 impl<H: Handlers> fmt::Debug for PathData<H> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "...") }
 }

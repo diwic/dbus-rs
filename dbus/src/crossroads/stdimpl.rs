@@ -1,7 +1,7 @@
-use super::crossroads::Crossroads;
-use super::handlers::{ParInfo, Par};
+use super::crossroads::{Crossroads, PathData};
+use super::handlers::{ParInfo, Par, Handlers, MakeHandler};
 use super::info::{IfaceInfo, MethodInfo, PropInfo};
-use crate::arg;
+use crate::{arg, Message};
 use super::MethodErr;
 
 pub struct DBusProperties;
@@ -26,28 +26,26 @@ impl DBusProperties {
             })),
             vec!(), vec!()
         ));
-
     }
 }
 
 pub struct DBusIntrospectable;
 
-use crate::crossroads as cr;
-
-pub trait Introspectable {
-    fn introspect(&self, info: &cr::ParInfo) -> Result<String, cr::MethodErr>;
+fn introspect<H: Handlers>(_cr: &Crossroads<H>, _path: &PathData<H>) -> String {
+    unimplemented!()
 }
 
-pub fn introspectable_ifaceinfo<I>() -> cr::IfaceInfo<'static, cr::Par>
-where I: Introspectable + Send + Sync + 'static {
-    cr::IfaceInfo::new("org.freedesktop.DBus.Introspectable", vec!(
-        MethodInfo::new_par("Introspect", |intf: &I, info| {
-            let xml_data = intf.introspect(info)?;
-            let rm = info.msg().method_return();
-            let rm = rm.append1(xml_data);
-            Ok(Some(rm))
-       }),
-    ), vec!(), vec!())
+impl DBusIntrospectable {
+    pub fn register<H: Handlers>(cr: &mut Crossroads<H>) {
+        cr.register::<Self,_>("org.freedesktop.DBus.Introspectable")
+            .method("Introspect", (), ("xml_data",), |cr: &Crossroads<H>, path: &PathData<H>, _: &Message, _: ()| {
+                Ok((introspect(cr, path),))
+               // let path = msg.path().unwrap();
+               // let path = cr.get(path);
+               // Ok(introspect(cr, path))
+            });
+    }
 }
+
 
 
