@@ -20,6 +20,7 @@ tokio-reactor = "0.1.9"
 log = "0.3"
 fut03 = { version = "=0.3.0-alpha.18", package = "futures-preview", features = ["compat"] }
 tokio02 = { optional = true, version = "=0.2.0-alpha.4", package = "tokio" }
+tokio02net = { optional = true, version = "=0.2.0-alpha.4", package = "tokio-net" }
 
 [dev-dependencies]
 tokio-timer = "0.2.4"
@@ -32,4 +33,4 @@ travis-ci = { repository = "diwic/dbus-rs" }
 
 [features]
 # Temporary - will be removed when async/await is stable
-nightly = ["tokio02"]
+nightly = ["tokio02", "tokio02net"]
