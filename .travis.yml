@@ -12,4 +12,4 @@ before_script:
 script:
   - cargo update
   - cargo check --all
-  - cargo test --all-features --all -- --nocapture --color always
+  - cargo test --all -- --nocapture --color always
