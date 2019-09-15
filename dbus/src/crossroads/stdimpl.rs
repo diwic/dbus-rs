@@ -1,7 +1,7 @@
 use super::crossroads::{Crossroads, PathData};
 use super::handlers::{ParInfo, Par, Handlers, MakeHandler};
 use super::info::{IfaceInfo, MethodInfo, PropInfo};
-use crate::{arg, Message};
+use crate::{arg, Message, Path as PathName};
 use super::MethodErr;
 
 pub struct DBusProperties;
@@ -31,18 +31,37 @@ impl DBusProperties {
 
 pub struct DBusIntrospectable;
 
-fn introspect<H: Handlers>(_cr: &Crossroads<H>, _path: &PathData<H>) -> String {
-    unimplemented!()
+fn introspect<H: Handlers>(cr: &Crossroads<H>, data: &PathData<H>, path: PathName) -> String {
+    use std::ffi::{CStr, CString};
+    use std::collections::Bound;
+    let mut p = Vec::<u8>::from(&*path);
+    p.push(b'/');
+    let mut children = cr.paths.range::<CStr,_>((Bound::Excluded(path.as_cstr()), Bound::Unbounded));
+    let mut childstr = String::new();
+    while let Some((c, _)) = children.next() {
+        if !c.as_bytes().starts_with(&p) { break; }
+        let csub: &str = &c.to_str().unwrap()[p.len()..];
+        childstr = format!("{}  <node name=\"{}\"/>\n", childstr, csub);
+    }
+
+    let mut ifacestr = String::new();
+    for (iname, (typeid, _info)) in &cr.reg {
+        if data.contains_key(*typeid) {
+            ifacestr = format!("{}  <interface name=\"{}\">\n  </interface>\n", ifacestr, iname.to_str().unwrap());
+        }
+    }
+
+    let nodestr = format!(r##"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node name="{}">
+{}{}</node>"##, path, ifacestr, childstr);
+    nodestr
 }
 
 impl DBusIntrospectable {
     pub fn register<H: Handlers>(cr: &mut Crossroads<H>) {
         cr.register::<Self,_>("org.freedesktop.DBus.Introspectable")
-            .method("Introspect", (), ("xml_data",), |cr: &Crossroads<H>, path: &PathData<H>, _: &Message, _: ()| {
-                Ok((introspect(cr, path),))
-               // let path = msg.path().unwrap();
-               // let path = cr.get(path);
-               // Ok(introspect(cr, path))
+            .method("Introspect", (), ("xml_data",), |cr: &Crossroads<H>, data: &PathData<H>, msg: &Message, _: ()| {
+                Ok((introspect(cr, data, msg.path().unwrap()),))
             });
     }
 }

@@ -118,8 +118,14 @@ impl Handlers for Mut {
     type SetProp = Box<dyn FnMut(&mut (dyn Any), &mut arg::Iter, &MutCtx) -> Result<(), MethodErr> + 'static>;
     type Iface = Box<dyn Any>;
 
-    fn make_method<IA: ReadAll, OA: AppendAll, F>(_f: F) -> Self::Method
-    where F: Fn(&Crossroads<Self>, &PathData<Self>, &Message, IA) -> Result<OA, MethodErr> + Send + Sync + 'static { unimplemented!() }
+    fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
+    where F: Fn(&Crossroads<Self>, &PathData<Self>, &Message, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
+        MutMethod(MutMethods::AllRef(Box::new(move |cr, path, ctx| {
+            let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
+            let r = r.and_then(|ia| f(cr, path, ctx.message, ia)); 
+            Some(posthandler(ctx.message, r))
+        })))
+    }
 }
 
 
@@ -127,6 +133,8 @@ pub struct MutMethod(pub (super) MutMethods);
 
 pub (super) enum MutMethods {
     MutIface(Box<dyn FnMut(&mut (dyn Any), &MutCtx) -> Option<Message> + 'static>),
+    AllRef(Box<dyn Fn(&Crossroads<Mut>, &PathData<Mut>, &MutCtx) -> Option<Message> + 'static>),
+
 //    Ref(Box<dyn FnMut(&(dyn Any), &Message, &Path) -> Option<Message> + 'static>),
 //    MutCr(fn(&mut Crossroads<Mut>, &Message) -> Vec<Message>),
 }

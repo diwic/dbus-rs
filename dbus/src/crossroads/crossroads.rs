@@ -6,12 +6,12 @@ use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberN
 use crate::{Message, MessageType};
 use super::info::{IfaceInfo, MethodInfo, PropInfo, IfaceInfoBuilder};
 use super::handlers::{Handlers, Par, ParInfo, Mut, MutCtx, MutMethods};
-use super::stdimpl::DBusProperties;
+use super::stdimpl::{DBusProperties, DBusIntrospectable};
 
 // The key is an IfaceName, but if we have that we bump into https://github.com/rust-lang/rust/issues/59732
 // so we use CString as a workaround.
-#[derive(Default, Debug)]
-struct IfaceReg<H: Handlers>(BTreeMap<CString, (TypeId, IfaceInfo<'static, H>)>);
+//#[derive(Default, Debug)]
+//struct IfaceReg<H: Handlers>(BTreeMap<CString, (TypeId, IfaceInfo<'static, H>)>);
 
 #[derive(Default)]
 pub struct PathData<H: Handlers>(HashMap<TypeId, H::Iface>);
@@ -31,6 +31,11 @@ impl PathData<Mut> {
         self.0.insert(id, t);
     }
 }
+
+impl<H: Handlers> PathData<H> {
+    pub (super) fn contains_key(&self, x: TypeId) -> bool { self.0.contains_key(&x) }
+}
+
 /*
 impl<H: Handlers> PathData<H> {
     pub fn get_mut<I: Any + 'static>(&mut self) -> Option<&mut I> {
@@ -47,12 +52,12 @@ impl<H: Handlers> PathData<H> {
     fn new() -> Self { PathData(Default::default()) }
 }
 
-#[derive(Debug)]
-struct IfacePaths<H: Handlers>(BTreeMap<CString, PathData<H>>);
+//#[derive(Debug)]
+//struct IfacePaths<H: Handlers>(BTreeMap<CString, PathData<H>>);
 
-impl<H: Handlers> Default for IfacePaths<H> {
-    fn default() -> Self { IfacePaths(BTreeMap::new()) }
-}
+//impl<H: Handlers> Default for IfacePaths<H> {
+//    fn default() -> Self { IfacePaths(BTreeMap::new()) }
+//}
 
 struct MsgHeaders<'a> {
     m: MemberName<'a>,
@@ -80,20 +85,20 @@ pub (super) struct MLookup<'a, H: Handlers> {
 
 #[derive(Debug)]
 pub struct Crossroads<H: Handlers> {
-    reg: IfaceReg<H>,
-    paths: IfacePaths<H>,
+    pub (super) reg: BTreeMap<CString, (TypeId, IfaceInfo<'static, H>)>,
+    pub (super) paths: BTreeMap<CString, PathData<H>>,
 }
 
 impl<H: Handlers> Crossroads<H> {
 
     pub fn register_custom<I: 'static>(&mut self, info: IfaceInfo<'static, H>) -> Option<IfaceInfo<'static, H>> {
-        self.reg.0.insert(info.name.clone().into_cstring(), (TypeId::of::<I>(), info)).map(|x| x.1)
+        self.reg.insert(info.name.clone().into_cstring(), (TypeId::of::<I>(), info)).map(|x| x.1)
     }
     pub fn insert<N: Into<PathName<'static>>>(&mut self, name: N, data: PathData<H>) {
-        self.paths.0.insert(name.into().into_cstring(), data);
+        self.paths.insert(name.into().into_cstring(), data);
     }
     pub fn get_data<N: Into<PathName<'static>>>(&self, name: N) -> Option<&PathData<H>> {
-        self.paths.0.get(name.into().as_cstr())
+        self.paths.get(name.into().as_cstr())
     }
 
     pub fn register<'a, I: 'static, N: Into<IfaceName<'static>>>(&'a mut self, name: N) -> IfaceInfoBuilder<'a, I, H> {
@@ -101,16 +106,16 @@ impl<H: Handlers> Crossroads<H> {
     }
 
     fn reg_lookup(&self, headers: &MsgHeaders) -> Option<(MLookup<H>, &MethodInfo<'static, H>)> {
-        let (typeid, iinfo) = self.reg.0.get(headers.i.as_cstr())?;
+        let (typeid, iinfo) = self.reg.get(headers.i.as_cstr())?;
         let minfo = iinfo.methods.iter().find(|x| x.name() == &headers.m)?;
-        let data = self.paths.0.get(headers.p.as_cstr())?;
+        let data = self.paths.get(headers.p.as_cstr())?;
         let iface = data.0.get(typeid)?;
         Some((MLookup { cr: self, data, iface, iinfo }, minfo))
     }
 
     pub (super) fn reg_prop_lookup<'a>(&'a self, data: &'a PathData<H>, iname: &CStr, propname: &CStr) ->
     Option<(MLookup<'a, H>, &PropInfo<'static, H>)> {
-        let (typeid, iinfo) = self.reg.0.get(iname)?;
+        let (typeid, iinfo) = self.reg.get(iname)?;
         let pinfo = iinfo.props.iter().find(|x| x.name.as_cstr() == propname)?;
         let iface = data.0.get(typeid)?;
         Some((MLookup { cr: self, data, iface, iinfo}, pinfo))
@@ -130,36 +135,57 @@ impl Crossroads<Par> {
 
     pub fn new_par() -> Self { 
         let mut cr = Crossroads {
-            reg: IfaceReg(BTreeMap::new()),
-            paths: IfacePaths(BTreeMap::new()),
+            reg: BTreeMap::new(),
+            paths: BTreeMap::new(),
         };
         DBusProperties::register(&mut cr);
+        DBusIntrospectable::register(&mut cr);
         cr
     }
 }
 
 impl Crossroads<Mut> {
-    pub fn dispatch_mut(&mut self, msg: &Message) -> Option<Vec<Message>> {
-        let headers = msg_headers(msg)?;
-        let (typeid, iinfo) = self.reg.0.get_mut(headers.i.as_cstr())?;
-        let minfo = iinfo.methods.iter_mut().find(|x| x.name() == &headers.m)?;
+    fn dispatch_ref(&self, msg: &Message, headers: MsgHeaders) -> Option<Vec<Message>> {
+        let (_, iinfo) = self.reg.get(headers.i.as_cstr())?;
+        let minfo = iinfo.methods.iter().find(|x| x.name() == &headers.m)?;
         let ctx = MutCtx::new(msg);
-        let r = match minfo.handler_mut().0 {
-             MutMethods::MutIface(ref mut f) => {
-                let data = self.paths.0.get_mut(headers.p.as_cstr())?;
-                let iface = data.0.get_mut(typeid)?;
-                let iface = &mut **iface;
-                f(iface, &ctx)
-            }
+        let r = match minfo.handler().0 {
+            MutMethods::MutIface(_) => unreachable!(),
+            MutMethods::AllRef(ref f) => {
+                let data = self.paths.get(headers.p.as_cstr())?;
+                f(self, data, &ctx)
+            },
         };
         Some(r.into_iter().collect())
     }
 
-    pub fn new_mut() -> Self { 
-        let cr = Crossroads {
-            reg: IfaceReg(BTreeMap::new()),
-            paths: IfacePaths(BTreeMap::new()),
+    pub fn dispatch_mut(&mut self, msg: &Message) -> Option<Vec<Message>> {
+        let headers = msg_headers(msg)?;
+        let mut try_ref = false;
+        let r = {
+            let (typeid, iinfo) = self.reg.get_mut(headers.i.as_cstr())?;
+            let minfo = iinfo.methods.iter_mut().find(|x| x.name() == &headers.m)?;
+            let ctx = MutCtx::new(msg);
+            match minfo.handler_mut().0 {
+                MutMethods::MutIface(ref mut f) => {
+                    let data = self.paths.get_mut(headers.p.as_cstr())?;
+                    let iface = data.0.get_mut(typeid)?;
+                    let iface = &mut **iface;
+                    f(iface, &ctx)
+                },
+                MutMethods::AllRef(_) => { try_ref = true; None } 
+            }
         };
+        if try_ref { self.dispatch_ref(msg, headers) }
+        else { Some(r.into_iter().collect()) }
+    }
+
+    pub fn new_mut() -> Self { 
+        let mut cr = Crossroads {
+            reg: BTreeMap::new(),
+            paths: BTreeMap::new(),
+        };
+        DBusIntrospectable::register(&mut cr);
         // DBusProperties::register(&mut cr);
         cr
     }
@@ -196,6 +222,7 @@ mod test {
 
         let mut pdata = PathData::new();
         pdata.insert_mut(Score(7u16));
+        pdata.insert_mut(DBusIntrospectable);
         cr.insert("/", pdata);
 
         let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "com.example.dbusrs.crossroads.score", "UpdateScore").unwrap();
@@ -207,6 +234,15 @@ mod test {
         let (new_score, call_times): (u16, u32) = r[0].read2().unwrap();
         assert_eq!(new_score, 12);
         assert_eq!(call_times, 1);
+
+        let mut msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "org.freedesktop.DBus.Introspectable", "Introspect").unwrap();
+        crate::message::message_set_serial(&mut msg, 57);
+        let mut r = cr.dispatch_mut(&msg).unwrap();
+        assert_eq!(r.len(), 1);
+        r[0].as_result().unwrap();
+        let xml_data: &str = r[0].read1().unwrap();
+        println!("{}", xml_data);
+        // assert_eq!(xml_data, "mooh");
     }
 
 
