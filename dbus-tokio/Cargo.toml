@@ -10,9 +10,10 @@ keywords = ["D-Bus", "DBus"]
 license = "Apache-2.0/MIT"
 categories = ["os::unix-apis", "api-bindings", "asynchronous"]
 edition = "2018"
+readme = "README.md"
 
 [dependencies]
-dbus = { path = "../dbus", version = "0.7" }
+dbus = { path = "../dbus", version = "0.7.1" }
 futures = "0.1.12"
 mio = "0.6.9"
 tokio = "0.1.22"

@@ -1,24 +1,16 @@
 Tokio integration for D-Bus
 ===========================
 
-This stuff is currently alpha, i e, just up and working. And the design might not be perfect yet, so breaking changes are to be expected.
-But unless you try it out and report some feedback on what's great and what could work better, not much will happen at all, so get started!
+This is an intermediate version:
 
-Client
-------
+The `connection` module uses the `futures-preview` crate, `std::future`, and can bind to both Tokio 0.1 and 0.2.
+Run it with the `nightly` feature to have the `connection` module bind to Tokio 0.2, and without this feature
+to bind to Tokio 0.1.
+The Tokio 0.2 connection is what will be supported in future versions.
+At the moment, this is a WIP, and only client side code is up and working.
 
-```rust
-let conn = Rc::new(Connection::get_private(BusType::Session).unwrap());
-let mut core = Core::new().unwrap();
-let aconn = AConnection::new(conn.clone(), core.handle()).unwrap();
+The other structs (`ADriver`, `AMethodCall`, `tree` module) will bind to Tokio 0.1 and the old `futures` 0.1.
+They will be removed when Tokio 0.2 is stable.
 
-let m = Message::new_method_call("org.freedesktop.DBus", "/", "org.freedesktop.DBus", "ListNames").unwrap();
-let reply = core.run(aconn.method_call(m).unwrap()).unwrap();
-let z: Vec<&str> = reply.get1().unwrap();
-println!("got reply: {:?}", z);
-```
+See the [examples](https://github.com/diwic/dbus-rs/tree/master/dbus-tokio/examples) for how to get started.
 
-Server
-------
-
-See the tokio_server for an example of how to add asynchronous methods to a tree and run them.
