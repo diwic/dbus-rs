@@ -1,6 +1,8 @@
-//! Experimental async version of connection.
+//! Async version of connection.
 //!
-//! You're probably going to need a companion crate - dbus-tokio - for this connection to make sense.
+//! You're probably going to need a companion crate - dbus-tokio - for this connection to make sense,
+//! (although you can also just call read_write and process_all at regular intervals).
+//! 
 //! When async/await is stable, expect more here.
 
 use crate::{Error, Message};
@@ -43,7 +45,7 @@ impl Sender for LocalConnection {
     fn send(&self, msg: Message) -> Result<u32, ()> { self.channel.send(msg) }
 }
 
-/// async Connection where handlers are Send + Sync 
+/// Async Connection which is Send + Sync.
 pub struct SyncConnection {
     channel: Channel,
     replies: Mutex<HashMap<u32, <Self as NonblockReply>::F>>,
@@ -69,11 +71,15 @@ impl Sender for SyncConnection {
 }
 
 
-
+/// Internal helper trait for async method replies.
 pub trait NonblockReply {
+    /// Callback type
     type F;
+    /// Sends a message and calls the callback when a reply is received.
     fn send_with_reply(&self, msg: Message, f: Self::F) -> Result<u32, ()>;
+    /// Cancels a pending reply.
     fn cancel_reply(&self, id: u32) -> Option<Self::F>;
+    /// Internal helper function that creates a callback.
     fn make_f<G: FnOnce(Message, &Self) + Send + 'static>(g: G) -> Self::F where Self: Sized;
 }
 
@@ -130,6 +136,7 @@ impl MatchingReceiver for SyncConnection {
 }
 
 
+/// Internal helper trait, implemented for connections that process incoming messages.
 pub trait Process: Sender + AsRef<Channel> {
     /// Dispatches all pending messages, without blocking.
     ///
@@ -210,7 +217,6 @@ pub struct Proxy<'a, C> {
     pub connection: C,
 }
 
-
 impl<'a, C> Proxy<'a, C> {
     /// Creates a new proxy struct.
     pub fn new<D: Into<BusName<'a>>, P: Into<Path<'a>>>(dest: D, path: P, connection: C) -> Self {
@@ -279,5 +285,15 @@ impl<T: 'static> MethodReply<T> {
             Box::new(|r| first(r).and_then(f))
         }))
     }
+}
+
+
+#[test]
+fn test_conn_send_sync() {
+    fn is_send<T: Send>(_: &T) {}
+    fn is_sync<T: Sync>(_: &T) {}
+    let c = SyncConnection::from(Channel::get_private(crate::channel::BusType::Session).unwrap());
+    is_send(&c);
+    is_sync(&c);
 }
 

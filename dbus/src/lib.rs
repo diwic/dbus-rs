@@ -37,8 +37,6 @@ pub mod crossroads;
 
 pub mod blocking;
 
-// Not ready for release yet
-#[doc(hidden)]
 pub mod nonblock;
 
 pub mod strings;
