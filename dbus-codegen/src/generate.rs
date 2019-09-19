@@ -306,8 +306,8 @@ fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), B
         0 => "()".to_string(),
         1 => m.oargs[0].typename(genvar)?.0,
         _ => {
-            let v: Vec<String> = m.oargs.iter().map(|z| z.varname()).collect();
-            format!("({})", v.join(", "))
+            let v: Result<Vec<String>, _> = m.oargs.iter().map(|z| z.typename(genvar).map(|t| t.0)).collect();
+            format!("({})", v?.join(", "))
         }
     };
     *s += &format!(") -> {}", make_result(&r, opts));
