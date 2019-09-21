@@ -1,6 +1,6 @@
 use super::crossroads::{Crossroads, PathData};
 use super::handlers::{ParInfo, Par, Handlers, MakeHandler};
-use super::info::{IfaceInfo, MethodInfo, PropInfo};
+use super::info::{IfaceInfo, MethodInfo, PropInfo, Annotations};
 use crate::{arg, Message, Path as PathName};
 use super::MethodErr;
 
@@ -31,6 +31,14 @@ impl DBusProperties {
 
 pub struct DBusIntrospectable;
 
+fn introspect_anns(anns: &Annotations, prefix: &str) -> String {
+    let mut r = String::new();
+    for (k, v) in anns.iter() {
+        r += &format!("{}<annotation name=\"{}\" value=\"{}\"/>\n", prefix, k, v);
+    }
+    r
+}
+
 fn introspect<H: Handlers>(cr: &Crossroads<H>, data: &PathData<H>, path: PathName) -> String {
     use std::ffi::{CStr, CString};
     use std::collections::Bound;
@@ -45,9 +53,10 @@ fn introspect<H: Handlers>(cr: &Crossroads<H>, data: &PathData<H>, path: PathNam
     }
 
     let mut ifacestr = String::new();
-    for (iname, (typeid, _info)) in &cr.reg {
+    for (iname, (typeid, info)) in &cr.reg {
         if data.contains_key(*typeid) {
-            ifacestr = format!("{}  <interface name=\"{}\">\n  </interface>\n", ifacestr, iname.to_str().unwrap());
+            ifacestr = format!("{}  <interface name=\"{}\">\n{}  </interface>\n", ifacestr,
+              iname.to_str().unwrap(), introspect_anns(&info.anns, "    "));
         }
     }
 

@@ -214,11 +214,12 @@ mod test {
 
         let mut call_times = 0u32;
         cr.register::<Score,_>("com.example.dbusrs.crossroads.score")
+            .annotate("com.example.dbusrs.whatever", "Funny annotation")
             .method("UpdateScore", ("change",), ("new_score", "call_times"), move |score: &mut Score, _: &MutCtx, (change,): (u16,)| {
                 score.0 += change;
                 call_times += 1;
                 Ok((score.0, call_times))
-            });
+            }).deprecated();
 
         let mut pdata = PathData::new();
         pdata.insert_mut(Score(7u16));

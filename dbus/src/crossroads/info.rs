@@ -1,7 +1,7 @@
 use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
 use crate::Message;
 use std::borrow::Cow;
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::any::Any;
 use std::mem;
 use crate::arg::{Arg, Append, AppendAll, ReadAll, ArgAll, Get, TypeMismatchError, IterAppend};
@@ -13,19 +13,18 @@ use super::crossroads::{Crossroads, PathData};
 fn build_argvec<A: ArgAll>(a: A::strs) -> Vec<Argument<'static>> {
     let mut v = vec!();
     A::strs_sig(a, |name, sig| {
-        v.push(Argument { name: name.into(), sig })
+        v.push(Argument { name: name.into(), sig, anns: Default::default() })
     });
     v
 }
 
-
-#[derive(Default, Debug, Clone)]
-struct Annotations(Option<BTreeMap<String, String>>);
+pub (super) type Annotations = HashMap<String, String>;
 
 #[derive(Debug, Clone)]
 pub struct Argument<'a> {
     name: Cow<'a, str>,
     sig: Signature<'a>,
+    anns: Annotations,
 }
 
 #[derive(Debug)]
@@ -34,6 +33,7 @@ pub struct IfaceInfo<'a, H: Handlers> {
     pub (crate) methods: Vec<MethodInfo<'a, H>>,
     pub (crate) props: Vec<PropInfo<'a, H>>,
     pub (crate) signals: Vec<SignalInfo<'a>>,
+    pub (super) anns: Annotations,
 }
 
 #[derive(Debug)]
@@ -42,7 +42,7 @@ pub struct MethodInfo<'a, H: Handlers> {
     handler: DebugMethod<H>,
     i_args: Vec<Argument<'a>>,
     o_args: Vec<Argument<'a>>,
-    anns: Annotations,
+    pub (super) anns: Annotations,
 }
 
 impl<'a, H: Handlers> MethodInfo<'a, H> {
@@ -91,26 +91,46 @@ pub struct PropInfo<'a, H: Handlers> {
 pub struct SignalInfo<'a> {
     name: MemberName<'a>,
     args: Vec<Argument<'a>>,
-    anns: Annotations,
+    pub (super) anns: Annotations,
 }
+
+#[derive(Debug, Clone, Copy)]
+enum MetSigProp { Method, Signal, Prop }
 
 #[derive(Debug)]
 pub struct IfaceInfoBuilder<'a, I: 'static, H: Handlers> {
     cr: Option<&'a mut Crossroads<H>>,
     info: IfaceInfo<'static, H>,
+    last: Option<MetSigProp>,
     _dummy: PhantomData<*const I>,
 }
 
 impl<'a, I, H: Handlers> IfaceInfoBuilder<'a, I, H> {
     pub fn new(cr: Option<&'a mut Crossroads<H>>, name: IfaceName<'static>) -> Self {
-        IfaceInfoBuilder { cr, _dummy: PhantomData, info: IfaceInfo::new_empty(name) }
+        IfaceInfoBuilder { cr, _dummy: PhantomData, info: IfaceInfo::new_empty(name), last: None }
     }
 
     pub fn signal<A: ArgAll, N: Into<MemberName<'static>>>(mut self, name: N, args: A::strs) -> Self {
         let s = SignalInfo { name: name.into(), args: build_argvec::<A>(args), anns: Default::default() };
         self.info.signals.push(s);
+        self.last = Some(MetSigProp::Signal);
         self
     }
+
+    /// Annotates the last added method, signal or property, or the interface itself if nothing is added.
+    pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
+         let x: &mut Annotations = match self.last {
+             None => &mut self.info.anns,
+             Some(MetSigProp::Method) => &mut self.info.methods.last_mut().unwrap().anns,
+             Some(MetSigProp::Signal) => &mut self.info.signals.last_mut().unwrap().anns,
+             Some(MetSigProp::Prop) => &mut self.info.props.last_mut().unwrap().anns,
+         };
+         x.insert(name.into(), value.into());
+         self
+    }
+
+    /// Adds a deprecated annotation to the last added method/signal/property.
+    pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
 }
 
 impl<'a, I: 'static, H: Handlers> Drop for IfaceInfoBuilder<'a, I, H> {
@@ -130,8 +150,10 @@ impl<'a, I: 'static, H: Handlers> IfaceInfoBuilder<'a, I, H> {
         let m = MethodInfo { name: name.into(), handler: DebugMethod(f), 
             i_args: build_argvec::<IA>(in_args), o_args: build_argvec::<OA>(out_args), anns: Default::default() };
         self.info.methods.push(m);
+        self.last = Some(MetSigProp::Method);
         self
     }
+
 }
 
 impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Par> {
@@ -143,6 +165,7 @@ impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Par> {
     {
         let p = PropInfo::new(name.into(), T::signature(), Some(Par::typed_getprop(getf)), Some(Par::typed_setprop(setf)));
         self.info.props.push(p);
+        self.last = Some(MetSigProp::Prop);
         self
     }
 
@@ -153,6 +176,7 @@ impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Par> {
     {
         let p = PropInfo::new(name.into(), T::signature(), Some(Par::typed_getprop(getf)), None);
         self.info.props.push(p);
+        self.last = Some(MetSigProp::Prop);
         self
     }
 
@@ -181,7 +205,7 @@ impl<H: Handlers> PropInfo<'_, H> {
 
 impl<'a, H: Handlers> IfaceInfo<'a, H> {
     pub fn new_empty(name: IfaceName<'static>) -> Self {
-        IfaceInfo { name, methods: vec!(), props: vec!(), signals: vec!() }
+        IfaceInfo { name, methods: vec!(), props: vec!(), signals: vec!(), anns: Default::default(), }
     }
 
     pub fn new<N, M, P, S>(name: N, methods: M, properties: P, signals: S) -> Self where
@@ -194,7 +218,8 @@ impl<'a, H: Handlers> IfaceInfo<'a, H> {
             name: name.into(),
             methods: methods.into_iter().collect(),
             props: properties.into_iter().collect(),
-            signals: signals.into_iter().collect()
+            signals: signals.into_iter().collect(),
+            anns: Default::default(),
         }
     }
 }
