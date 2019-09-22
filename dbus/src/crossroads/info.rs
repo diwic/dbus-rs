@@ -166,11 +166,17 @@ impl<'a, I: 'static, H: Handlers> Drop for IfaceInfoBuilder<'a, I, H> {
 }
 
 impl<'a, I: 'static, H: Handlers> IfaceInfoBuilder<'a, I, H> {
-    pub fn method<IA: ReadAll + ArgAll, OA: AppendAll + ArgAll, N, F, D>(mut self, name: N, in_args: IA::strs, out_args: OA::strs, f: F) -> Self
-    where N: Into<MemberName<'static>>, F: MakeHandler<<H as Handlers>::Method, IA, OA, D> {
-        let f = f.make();
+    /// Add a method to this interface. Input and output argument types will automatically be converted.
+    pub fn method<IA: ReadAll + ArgAll, OA: AppendAll + ArgAll, N, F, D>(self, name: N, in_args: IA::strs, out_args: OA::strs, f: F) -> Self
+    where N: Into<MemberName<'static>>, F: MakeHandler<<H as Handlers>::Method, ((), IA, OA), D> {
+        self.method_custom::<IA, OA>(name.into(), in_args, out_args, f.make())
+    }
 
-        let m = MethodInfo { name: name.into(), handler: DebugMethod(f), 
+    /// Adds a method to this interface. Input and output arguments are used for introspection, callback
+    /// needs to convert arguments.
+    pub fn method_custom<IA: ArgAll, OA: ArgAll>(mut self, name: MemberName<'static>, in_args: IA::strs, out_args: OA::strs, f: H::Method) -> Self {
+
+        let m = MethodInfo { name, handler: DebugMethod(f), 
             i_args: build_argvec::<IA>(in_args), o_args: build_argvec::<OA>(out_args), anns: Default::default() };
         self.info.methods.push(m);
         self.last = Some(MetSigProp::Method);

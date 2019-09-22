@@ -16,7 +16,7 @@ impl<H: Handlers> fmt::Debug for DebugProp<H> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "...") }
 }
 
-pub trait Handlers {
+pub trait Handlers: Sized {
     type Method;
     type GetProp;
     type SetProp;
@@ -24,6 +24,10 @@ pub trait Handlers {
 
     fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
     where F: Fn(&Crossroads<Self>, &PathData<Self>, &Message, IA) -> Result<OA, MethodErr> + Send + Sync + 'static;
+
+    fn custom_method_helper(mutfn: Option<fn(&mut Crossroads<Self>, &Message) -> Result<Message, MethodErr>>) -> Self::Method { unimplemented!() }
+    fn call_setprop_mut(handler: &mut Self::SetProp, pathdata: &mut PathData<Self>, iter: &mut arg::Iter, msg: &Message) 
+        -> Result<bool, MethodErr> { unimplemented!() }
 }
 
 /// Parallel tree - Par
@@ -72,6 +76,7 @@ impl Handlers for Par {
     type SetProp = Box<dyn Fn(&(dyn Any + Send + Sync), &mut arg::Iter, &ParInfo) -> Result<(), MethodErr> + Send + Sync + 'static>;
     type Iface = Box<dyn Any + 'static + Send + Sync>;
 
+
     fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
     where F: Fn(&Crossroads<Self>, &PathData<Self>, &Message, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
         Box::new(move |_, info| {
@@ -80,6 +85,7 @@ impl Handlers for Par {
             Some(posthandler(info.msg(), r))
         })
     }
+
 }
 
 impl MethodInfo<'_, Par> {
@@ -115,7 +121,7 @@ impl<'a> MutCtx<'a> {
 impl Handlers for Mut {
     type Method = MutMethod;
     type GetProp = Box<dyn FnMut(&mut (dyn Any), &mut arg::IterAppend, &MutCtx) -> Result<(), MethodErr> + 'static>;
-    type SetProp = Box<dyn FnMut(&mut (dyn Any), &mut arg::Iter, &MutCtx) -> Result<(), MethodErr> + 'static>;
+    type SetProp = Box<dyn FnMut(&mut PathData<Self>, &mut arg::Iter, &MutCtx) -> Result<bool, MethodErr> + 'static>;
     type Iface = Box<dyn Any>;
 
     fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
@@ -126,6 +132,12 @@ impl Handlers for Mut {
             Some(posthandler(ctx.message, r))
         })))
     }
+
+    fn call_setprop_mut(handler: &mut Self::SetProp, pathdata: &mut PathData<Self>, iter: &mut arg::Iter, msg: &Message) 
+        -> Result<bool, MethodErr> { handler(pathdata, iter, &MutCtx::new(msg)) }
+    fn custom_method_helper(mutfn: Option<fn(&mut Crossroads<Self>, &Message) -> Result<Message, MethodErr>>) -> Self::Method {
+        unimplemented!()
+    }
 }
 
 
@@ -134,13 +146,13 @@ pub struct MutMethod(pub (super) MutMethods);
 pub (super) enum MutMethods {
     MutIface(Box<dyn FnMut(&mut (dyn Any), &MutCtx) -> Option<Message> + 'static>),
     AllRef(Box<dyn Fn(&Crossroads<Mut>, &PathData<Mut>, &MutCtx) -> Option<Message> + 'static>),
+//    MutCr(fn(&mut Crossroads<Mut>, &Message) -> Vec<Message>),
 
 //    Ref(Box<dyn FnMut(&(dyn Any), &Message, &Path) -> Option<Message> + 'static>),
-//    MutCr(fn(&mut Crossroads<Mut>, &Message) -> Vec<Message>),
 }
 
 /// Internal helper trait
-pub trait MakeHandler<T, IA, OA, Dummy> {
+pub trait MakeHandler<T, A, Dummy> {
     /// Internal helper trait
     fn make(self) -> T;
 }
@@ -156,7 +168,7 @@ fn posthandler<OA: AppendAll>(msg: &Message, r: Result<OA, MethodErr>) -> Messag
     }
 }
 
-impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<Par as Handlers>::Method, IA, OA, (Par, I)> for F
+impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<Par as Handlers>::Method, ((), IA, OA), (Par, I)> for F
 where F: Fn(&I, &ParInfo, IA) -> Result<OA, MethodErr> + Send + Sync + 'static
 {
     fn make(self) -> <Par as Handlers>::Method {
@@ -170,7 +182,7 @@ where F: Fn(&I, &ParInfo, IA) -> Result<OA, MethodErr> + Send + Sync + 'static
 }
 
 
-impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<Mut as Handlers>::Method, IA, OA, (Mut, I)> for F
+impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<Mut as Handlers>::Method, ((), IA, OA), (Mut, I)> for F
 where F: FnMut(&mut I, &MutCtx, IA) -> Result<OA, MethodErr> + 'static
 {
     fn make(mut self) -> <Mut as Handlers>::Method {
@@ -185,7 +197,7 @@ where F: FnMut(&mut I, &MutCtx, IA) -> Result<OA, MethodErr> + 'static
 
 // For introspection
 
-impl<IA: ReadAll, OA: AppendAll, H: Handlers, F> MakeHandler<H::Method, IA, OA, (bool, H)> for F
+impl<IA: ReadAll, OA: AppendAll, H: Handlers, F> MakeHandler<H::Method, ((), IA, OA), (bool, H)> for F
 where F: Fn(&Crossroads<H>, &PathData<H>, &Message, IA) -> Result<OA, MethodErr> + Send + Sync + 'static
 {
     fn make(self) -> <H as Handlers>::Method { H::make_method(self) }

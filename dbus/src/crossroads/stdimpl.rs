@@ -1,13 +1,47 @@
 use super::crossroads::{Crossroads, PathData};
 use super::handlers::{ParInfo, Par, Handlers, MakeHandler};
-use super::info::{IfaceInfo, MethodInfo, PropInfo, Annotations, Argument};
+use super::info::{IfaceInfo, MethodInfo, PropInfo, Annotations, Argument, Access};
 use crate::{arg, Message, Path as PathName};
 use super::MethodErr;
+use crate::arg::Variant;
+use std::collections::HashMap;
 
 pub struct DBusProperties;
 
+pub fn set_mut<H: Handlers>(cr: &mut Crossroads<H>, msg: &Message) -> Result<Message, MethodErr> {
+    let mut iter = msg.iter_init();
+    let (iname, propname) = (iter.read()?, iter.read()?);
+    let path = msg.path().ok_or_else(|| { MethodErr::no_property(&"Message has no path") })?;
+    let (propinfo, pathdata) = cr.prop_lookup_mut(path.as_cstr(), iname, propname)
+        .ok_or_else(|| { MethodErr::no_property(&"Property not found") })?;
+    if propinfo.access == Access::Read { Err(MethodErr::no_property(&"Property is read only"))? };
+    let handler = propinfo.handlers.1.as_mut()
+        .ok_or_else(|| { MethodErr::no_property(&"Property can not written to") })?;
+
+    // Now descend into the variant.
+    use arg::Arg;
+    let mut subiter = iter.recurse(Variant::<bool>::ARG_TYPE).ok_or_else(|| MethodErr::invalid_arg(&2))?;
+    if *subiter.signature() != *propinfo.sig {
+        Err(MethodErr::failed(&format!("Property {} cannot change type", propinfo.name)))?;
+    }
+    if H::call_setprop_mut(handler, pathdata, &mut subiter, msg)? {
+        unimplemented!("Emits signal here");
+    }
+    Ok(msg.method_return())
+}
+
 impl DBusProperties {
-    pub fn register(cr: &mut Crossroads<Par>) {
+    pub fn register<H: Handlers>(cr: &mut Crossroads<H>) {
+        cr.register::<Self,_>("org.freedesktop.DBus.Properties")
+            .method_custom::<(String, String), (Variant<u8>,)>("Get".into(), ("interface_name", "property_name"), ("value",),
+                H::custom_method_helper(None))
+            .method_custom::<(String,), (HashMap<String, Variant<u8>>,)>("GetAll".into(), ("interface_name",), ("props",),
+                H::custom_method_helper(None))
+            .method_custom::<(String, String, Variant<u8>), ()>("Set".into(), ("interface_name", "property_name", "value"), (), 
+                H::custom_method_helper(Some(set_mut)));
+    }
+
+    pub fn register_par(cr: &mut Crossroads<Par>) {
         cr.register_custom::<Self>(IfaceInfo::new("org.freedesktop.DBus.Properties",
             vec!(MethodInfo::new_par("Get", |_: &DBusProperties, info| {
                 let (iname, propname) = info.msg().read2()?; 

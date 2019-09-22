@@ -120,6 +120,14 @@ impl<H: Handlers> Crossroads<H> {
         let iface = data.0.get(typeid)?;
         Some((MLookup { cr: self, data, iface, iinfo}, pinfo))
     }
+
+    pub (super) fn prop_lookup_mut<'a>(&'a mut self, path: &CStr, iname: &CStr, propname: &CStr) ->
+    Option<(&'a mut PropInfo<'static, H>, &'a mut PathData<H>)> {
+        let (typeid, iinfo) = self.reg.get_mut(iname)?;
+        let propinfo = iinfo.props.iter_mut().find(|x| x.name.as_cstr() == propname)?;
+        let path = self.paths.get_mut(path)?;
+        Some((propinfo, path))
+    }
 }
 
 impl Crossroads<Par> {
@@ -138,7 +146,7 @@ impl Crossroads<Par> {
             reg: BTreeMap::new(),
             paths: BTreeMap::new(),
         };
-        DBusProperties::register(&mut cr);
+        DBusProperties::register_par(&mut cr);
         DBusIntrospectable::register(&mut cr);
         cr
     }
