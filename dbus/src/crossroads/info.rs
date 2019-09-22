@@ -22,26 +22,26 @@ pub (super) type Annotations = HashMap<String, String>;
 
 #[derive(Debug, Clone)]
 pub struct Argument<'a> {
-    name: Cow<'a, str>,
-    sig: Signature<'a>,
-    anns: Annotations,
+    pub (super) name: Cow<'a, str>,
+    pub (super) sig: Signature<'a>,
+    pub (super) anns: Annotations,
 }
 
 #[derive(Debug)]
 pub struct IfaceInfo<'a, H: Handlers> {
-    pub (crate) name: IfaceName<'a>,
-    pub (crate) methods: Vec<MethodInfo<'a, H>>,
-    pub (crate) props: Vec<PropInfo<'a, H>>,
-    pub (crate) signals: Vec<SignalInfo<'a>>,
+    pub (super) name: IfaceName<'a>,
+    pub (super) methods: Vec<MethodInfo<'a, H>>,
+    pub (super) props: Vec<PropInfo<'a, H>>,
+    pub (super) signals: Vec<SignalInfo<'a>>,
     pub (super) anns: Annotations,
 }
 
 #[derive(Debug)]
 pub struct MethodInfo<'a, H: Handlers> {
-    name: MemberName<'a>,
+    pub (super) name: MemberName<'a>,
     handler: DebugMethod<H>,
-    i_args: Vec<Argument<'a>>,
-    o_args: Vec<Argument<'a>>,
+    pub (super) i_args: Vec<Argument<'a>>,
+    pub (super) o_args: Vec<Argument<'a>>,
     pub (super) anns: Annotations,
 }
 
@@ -78,23 +78,21 @@ pub enum Access {
 
 #[derive(Debug)]
 pub struct PropInfo<'a, H: Handlers> {
-    pub (crate) name: MemberName<'a>,
-    pub (crate) handlers: DebugProp<H>,
-    anns: Annotations,
-    sig: Signature<'a>,
-    emits: EmitsChangedSignal,
-    auto_emit: bool,
-    rw: Access,
+    pub (super) name: MemberName<'a>,
+    pub (super) handlers: DebugProp<H>,
+    pub (super) anns: Annotations,
+    pub (super) sig: Signature<'a>,
+    pub (super) access: Access,
 }
 
 #[derive(Debug)]
 pub struct SignalInfo<'a> {
-    name: MemberName<'a>,
-    args: Vec<Argument<'a>>,
+    pub (super) name: MemberName<'a>,
+    pub (super) args: Vec<Argument<'a>>,
     pub (super) anns: Annotations,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 enum MetSigProp { Method, Signal, Prop }
 
 #[derive(Debug)]
@@ -131,6 +129,31 @@ impl<'a, I, H: Handlers> IfaceInfoBuilder<'a, I, H> {
 
     /// Adds a deprecated annotation to the last added method/signal/property.
     pub fn deprecated(self) -> Self { self.annotate("org.freedesktop.DBus.Deprecated", "true") }
+
+    /// Adds an EmitChangedSignal annotation to the last added property, or the interface itself if nothing is added.
+    ///
+    /// Panics if the last added thing was a method or a signal.
+    pub fn emits_changed(self, e: EmitsChangedSignal) -> Self {
+        let c = match e {
+            EmitsChangedSignal::True => "true",
+            EmitsChangedSignal::False => "false",
+            EmitsChangedSignal::Invalidates => "invalidates",
+            EmitsChangedSignal::Const => "const",
+        };
+        match self.last {
+            None | Some(MetSigProp::Prop) => self.annotate("org.freedesktop.DBus.Property.EmitsChangedSignal", c),
+            _ => panic!("Cannot add EmitsChangedSignal to a method or signal"),
+        }
+    }
+
+    /// Modifies the "Access" attribute for a property.
+    ///
+    /// Panics if the last added thing was not a property.
+    pub fn access(mut self, a: Access) -> Self {
+        if self.last != Some(MetSigProp::Prop) { panic!("Cannot modify access on a non property") }
+        self.info.props.last_mut().unwrap().access = a;
+        self
+    }
 }
 
 impl<'a, I: 'static, H: Handlers> Drop for IfaceInfoBuilder<'a, I, H> {
@@ -198,8 +221,7 @@ impl<H: Handlers> PropInfo<'_, H> {
             (None, Some(_)) => Access::Write,
             _ => unimplemented!(),
         };
-        PropInfo { name, handlers: DebugProp(get, set), sig, auto_emit: true, rw: a, 
-            emits: EmitsChangedSignal::True, anns: Default::default() }
+        PropInfo { name, handlers: DebugProp(get, set), sig, access: a, anns: Default::default() }
     }
 }
 

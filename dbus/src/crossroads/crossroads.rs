@@ -261,12 +261,13 @@ mod test {
             .prop_ro("Score", |score, _| {
                 assert_eq!(score.0, 7u16);
                 Ok(score.0)
-            })
+            }).emits_changed(super::super::info::EmitsChangedSignal::False)
             .signal::<(u16,),_>("ScoreChanged", ("NewScore",));
 
         let mut pdata = PathData::new();
         pdata.insert_par(Score(7u16));
         pdata.insert_par(DBusProperties);
+        pdata.insert_par(DBusIntrospectable);
         cr.insert("/", pdata);
 
         let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "com.example.dbusrs.crossroads.score", "Hello").unwrap();
@@ -286,5 +287,13 @@ mod test {
         r[0].as_result().unwrap();
         let z: u16 = r[0].read1().unwrap();
         assert_eq!(z, 7u16);
+
+        let mut msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "org.freedesktop.DBus.Introspectable", "Introspect").unwrap();
+        crate::message::message_set_serial(&mut msg, 57);
+        let mut r = cr.dispatch_par(&msg).unwrap();
+        assert_eq!(r.len(), 1);
+        r[0].as_result().unwrap();
+        let xml_data: &str = r[0].read1().unwrap();
+        println!("{}", xml_data);
     }
 }
