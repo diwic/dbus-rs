@@ -4,7 +4,7 @@ use dbus::arg::ArgType;
 use xml;
 
 fn find_attr<'a>(a: &'a Vec<xml::attribute::OwnedAttribute>, n: &str) -> Result<&'a str, Box<dyn error::Error>> {
-    a.into_iter().find(|q| q.name.local_name == n).map(|f| &*f.value).ok_or_else(|| "attribute not found".into())    
+    a.into_iter().find(|q| q.name.local_name == n).map(|f| &*f.value).ok_or_else(|| format!("attribute not found: {:?}", n).into())    
 }
 
 struct Arg {
