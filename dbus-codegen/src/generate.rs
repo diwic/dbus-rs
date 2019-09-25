@@ -16,12 +16,15 @@ struct Arg {
 
 struct Method {
     name: String,
+    fn_name: String,
     iargs: Vec<Arg>,
     oargs: Vec<Arg>,
 }
 
 struct Prop {
     name: String,
+    get_fn_name: String,
+    set_fn_name: String,
     typ: String,
     access: String,
 }
@@ -189,6 +192,16 @@ fn make_snake(s: &str, keyword_check: bool) -> String {
     r
 }
 
+fn make_fn_name(intf: &Intf, name: &str) -> String {
+    let mut r = make_snake(name, true);
+    loop {
+        if intf.methods.iter().any(|x| x.fn_name == r) ||
+            intf.props.iter().any(|x| x.get_fn_name == r || x.set_fn_name == r) {
+            r.push('_');
+        } else { return r };
+    }
+}
+
 struct GenVars {
     prefix: String,
     gen: Vec<String>,
@@ -290,9 +303,9 @@ fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), B
         }
         g
     } else { vec!() };
- 
 
-    *s += &format!("    fn {}{}(&self", make_snake(&m.name, true), 
+
+    *s += &format!("    fn {}{}(&self", m.fn_name, 
         if g.len() > 0 { format!("<{}>", g.join(",")) } else { "".into() }
     );
 
@@ -331,11 +344,11 @@ fn make_result(success: &str, opts: &GenOpts) -> String {
 
 fn write_prop_decl(s: &mut String, p: &Prop, opts: &GenOpts, set: bool) -> Result<(), Box<dyn error::Error>> {
     if set {
-        *s += &format!("    fn set_{}(&self, value: {}) -> {}",
-            make_snake(&p.name, false), make_type(&p.typ, true, &mut None)?, make_result("()", opts));
+        *s += &format!("    fn {}(&self, value: {}) -> {}",
+            p.set_fn_name, make_type(&p.typ, true, &mut None)?, make_result("()", opts));
     } else {
-        *s += &format!("    fn get_{}(&self) -> {}",
-            make_snake(&p.name, false), make_result(&make_type(&p.typ, true, &mut None)?, opts));
+        *s += &format!("    fn {}(&self) -> {}",
+            p.get_fn_name, make_result(&make_type(&p.typ, true, &mut None)?, opts));
     };
     Ok(())
 }
@@ -532,7 +545,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
             _ => format!("let ({}) = ", m.oargs.iter().map(|q| q.varname()).collect::<Vec<String>>().join(", ")),
         };
         *s += &format!("        {}d.{}({})?;\n",
-            retargs, make_snake(&m.name, true), argsvar);
+            retargs, m.fn_name, argsvar);
         *s += "        let rm = minfo.msg.method_return();\n";
         for r in &m.oargs {
             *s += &format!("        let rm = rm.append1({});\n", r.varname());
@@ -563,7 +576,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
             *s += "    let p = p.on_get(move |a, pinfo| {\n";
             *s += "        let minfo = pinfo.to_method_info();\n";
             write_server_access(s, i, saccess, false);
-            *s += &format!("        a.append(d.get_{}()?);\n", make_snake(&p.name, false));
+            *s += &format!("        a.append(d.{}()?);\n", &p.get_fn_name);
             *s += "        Ok(())\n";
             *s += "    });\n";
         }
@@ -574,7 +587,7 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
             *s += "    let p = p.on_set(move |iter, pinfo| {\n";
             *s += "        let minfo = pinfo.to_method_info();\n";
             write_server_access(s, i, saccess, false);
-            *s += &format!("        d.set_{}(iter.read()?)?;\n", make_snake(&p.name, false));
+            *s += &format!("        d.{}(iter.read()?)?;\n", &p.set_fn_name);
             *s += "        Ok(())\n";
             *s += "    });\n";
         }
@@ -617,7 +630,7 @@ fn write_intf_crossroads(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(),
             _ => format!("let ({}) = ", m.oargs.iter().map(|q| q.varname()).collect::<Vec<String>>().join(", ")),
         };
         *s += &format!("            {}intf.{}({})?;\n",
-            retargs, make_snake(&m.name, true), argsvar);
+            retargs, m.fn_name, argsvar);
         *s += "            let rm = info.msg().method_return();\n";
         for r in &m.oargs {
             *s += &format!("            let rm = rm.append1({});\n", r.varname());
@@ -692,7 +705,8 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "method" => {
                 if curm.is_some() { Err("Start of method inside method")? };
                 if curintf.is_none() { Err("Start of method outside interface")? };
-                curm = Some(Method { name: find_attr(attributes, "name")?.into(),
+                let name = find_attr(attributes, "name")?;
+                curm = Some(Method { name: name.into(), fn_name: make_fn_name(curintf.as_ref().unwrap(), name),
                     iargs: Vec::new(), oargs: Vec::new() });
             }
             XmlEvent::EndElement { ref name } if &name.local_name == "method" => {
@@ -715,10 +729,15 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "property" => {
                 if curprop.is_some() { Err("Start of property inside property")? };
                 if curintf.is_none() { Err("Start of property outside interface")? };
+                let name = find_attr(attributes, "name")?;
+                let get_fn_name = make_fn_name(curintf.as_ref().unwrap(), name);
+                let set_fn_name = make_fn_name(curintf.as_ref().unwrap(), &format!("Set{}", name));
                 curprop = Some(Prop {
-                    name: find_attr(attributes, "name")?.into(), 
-                    typ: find_attr(attributes, "type")?.into(), 
-                    access: find_attr(attributes, "access")?.into(), 
+                    name: name.into(), 
+                    typ: find_attr(attributes, "type")?.into(),
+                    access: find_attr(attributes, "access")?.into(),
+                    get_fn_name: get_fn_name,
+                    set_fn_name: set_fn_name,
                 });
             }
             XmlEvent::EndElement { ref name } if &name.local_name == "property" => {
