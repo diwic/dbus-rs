@@ -37,7 +37,8 @@ fn main() {
         .arg(clap::Arg::with_name("systembus").short("s").long("system-bus")
              .help("Connects to system bus, if not specified, the session bus will be used. (Ignored if destination is not specified.)"))
         .arg(clap::Arg::with_name("genericvariant").short("g").long("generic-variant")
-             .help("If present, will try to make variant arguments generic instead of Variant<Box<dyn RefArg>>"))
+             .help("If present, will try to make variant arguments generic instead of Variant<Box<dyn RefArg>>. \
+Experimental, does not work with server methods (other than None)."))
         .arg(clap::Arg::with_name("methodtype").short("m").long("methodtype").takes_value(true).value_name("Fn")
              .help("Type of server method; valid values are: 'Fn', 'FnMut', 'Sync', 'Generic', and 'None'. Defaults to 'Fn'."))
         .arg(clap::Arg::with_name("methodaccess").short("a").long("methodaccess").takes_value(true).value_name("RefClosure")
