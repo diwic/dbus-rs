@@ -159,6 +159,7 @@ impl Crossroads<Mut> {
         let ctx = MutCtx::new(msg);
         let r = match minfo.handler().0 {
             MutMethods::MutIface(_) => unreachable!(),
+            MutMethods::MutCr(_) => unreachable!(),
             MutMethods::AllRef(ref f) => {
                 let data = self.paths.get(headers.p.as_cstr())?;
                 f(self, data, &ctx)
@@ -182,6 +183,7 @@ impl Crossroads<Mut> {
                     f(iface, &ctx)
                 },
                 MutMethods::AllRef(_) => { try_ref = true; None } 
+                MutMethods::MutCr(f) => { return Some(f(self, msg)) },
             }
         };
         if try_ref { self.dispatch_ref(msg, headers) }

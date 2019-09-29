@@ -26,8 +26,9 @@ pub trait Handlers: Sized {
     where F: Fn(&Crossroads<Self>, &PathData<Self>, &Message, IA) -> Result<OA, MethodErr> + Send + Sync + 'static;
 
     fn custom_method_helper(mutfn: Option<fn(&mut Crossroads<Self>, &Message) -> Result<Message, MethodErr>>) -> Self::Method { unimplemented!() }
-    fn call_setprop_mut(handler: &mut Self::SetProp, pathdata: &mut PathData<Self>, iter: &mut arg::Iter, msg: &Message) 
+/*    fn call_setprop_mut(handler: &mut Self::SetProp, pathdata: &mut PathData<Self>, iter: &mut arg::Iter, msg: &Message) 
         -> Result<bool, MethodErr> { unimplemented!() }
+ */
 }
 
 /// Parallel tree - Par
@@ -101,7 +102,6 @@ impl MethodInfo<'_, Par> {
     }
 }
 
-
 /// Mutable, non-Send tree
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Mut;
@@ -133,8 +133,8 @@ impl Handlers for Mut {
         })))
     }
 
-    fn call_setprop_mut(handler: &mut Self::SetProp, pathdata: &mut PathData<Self>, iter: &mut arg::Iter, msg: &Message) 
-        -> Result<bool, MethodErr> { handler(pathdata, iter, &MutCtx::new(msg)) }
+/*    fn call_setprop_mut(handler: &mut Self::SetProp, pathdata: &mut PathData<Self>, iter: &mut arg::Iter, msg: &Message) 
+        -> Result<bool, MethodErr> { handler(pathdata, iter, &MutCtx::new(msg)) }*/
     fn custom_method_helper(mutfn: Option<fn(&mut Crossroads<Self>, &Message) -> Result<Message, MethodErr>>) -> Self::Method {
         unimplemented!()
     }
@@ -146,7 +146,7 @@ pub struct MutMethod(pub (super) MutMethods);
 pub (super) enum MutMethods {
     MutIface(Box<dyn FnMut(&mut (dyn Any), &MutCtx) -> Option<Message> + 'static>),
     AllRef(Box<dyn Fn(&Crossroads<Mut>, &PathData<Mut>, &MutCtx) -> Option<Message> + 'static>),
-//    MutCr(fn(&mut Crossroads<Mut>, &Message) -> Vec<Message>),
+    MutCr(fn(&mut Crossroads<Mut>, &Message) -> Vec<Message>),
 
 //    Ref(Box<dyn FnMut(&(dyn Any), &Message, &Path) -> Option<Message> + 'static>),
 }

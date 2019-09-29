@@ -8,7 +8,9 @@ use std::collections::HashMap;
 
 pub struct DBusProperties;
 
-pub fn set_mut<H: Handlers>(cr: &mut Crossroads<H>, msg: &Message) -> Result<Message, MethodErr> {
+fn setprop_mut<H: Handlers, F>(cr: &mut Crossroads<H>, msg: &Message, f: F) -> Result<Message, MethodErr> 
+where F: FnOnce(&mut H::SetProp, &mut PathData<H>, &mut arg::Iter, &Message) -> Result<bool, MethodErr>
+{
     let mut iter = msg.iter_init();
     let (iname, propname) = (iter.read()?, iter.read()?);
     let path = msg.path().ok_or_else(|| { MethodErr::no_property(&"Message has no path") })?;
@@ -24,21 +26,45 @@ pub fn set_mut<H: Handlers>(cr: &mut Crossroads<H>, msg: &Message) -> Result<Mes
     if *subiter.signature() != *propinfo.sig {
         Err(MethodErr::failed(&format!("Property {} cannot change type", propinfo.name)))?;
     }
-    if H::call_setprop_mut(handler, pathdata, &mut subiter, msg)? {
+    if f(handler, pathdata, &mut subiter, msg)? {
         unimplemented!("Emits signal here");
     }
     Ok(msg.method_return())
+}
+
+fn getprop_mut<H: Handlers, F>(cr: &mut Crossroads<H>, msg: &Message, f: F) -> Result<Message, MethodErr>
+where F: FnOnce(&mut H::GetProp, &mut arg::IterAppend, &Message) -> Result<(), MethodErr>
+{
+    let mut iter = msg.iter_init();
+    let (iname, propname) = (iter.read()?, iter.read()?);
+    let path = msg.path().ok_or_else(|| { MethodErr::no_property(&"Message has no path") })?;
+    let (propinfo, pathdata) = cr.prop_lookup_mut(path.as_cstr(), iname, propname)
+        .ok_or_else(|| { MethodErr::no_property(&"Property not found") })?;
+    if propinfo.access == Access::Write { Err(MethodErr::no_property(&"Property is write only"))? };
+    let handler = propinfo.handlers.0.as_mut()
+        .ok_or_else(|| { MethodErr::no_property(&"Property can not read from") })?;
+
+    let mut mret = msg.method_return();
+    {
+        let mut iter = arg::IterAppend::new(&mut mret);
+        let mut z = None;
+        iter.append_variant(&propinfo.sig, |subi| {
+            z = Some(f(handler, subi, msg));
+        });
+        z.unwrap()?;
+    }
+    Ok(mret)
 }
 
 impl DBusProperties {
     pub fn register<H: Handlers>(cr: &mut Crossroads<H>) {
         cr.register::<Self,_>("org.freedesktop.DBus.Properties")
             .method_custom::<(String, String), (Variant<u8>,)>("Get".into(), ("interface_name", "property_name"), ("value",),
-                H::custom_method_helper(None))
+                H::custom_method_helper(Some(|cr, msg| { getprop_mut(cr, msg, |_,_,_| unimplemented!()) })))
             .method_custom::<(String,), (HashMap<String, Variant<u8>>,)>("GetAll".into(), ("interface_name",), ("props",),
                 H::custom_method_helper(None))
             .method_custom::<(String, String, Variant<u8>), ()>("Set".into(), ("interface_name", "property_name", "value"), (), 
-                H::custom_method_helper(Some(set_mut)));
+                H::custom_method_helper(Some(|cr, msg| { setprop_mut(cr, msg,  |_,_,_,_| unimplemented!()) })));
     }
 
     pub fn register_par(cr: &mut Crossroads<Par>) {
