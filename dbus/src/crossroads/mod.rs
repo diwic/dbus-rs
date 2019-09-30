@@ -10,12 +10,12 @@ mod context;
 
 pub use crate::tree::MethodErr as MethodErr;
 
-pub use self::info::{IfaceInfo, MethodInfo, PropInfo};
+// pub use self::info::{IfaceInfo, MethodInfo, PropInfo};
 
 pub use self::crossroads::{Crossroads};
 
 pub use self::path::{Path, PathData};
 
-pub use self::handlers::{Handlers, Par, ParInfo};
+pub use self::handlers::{Handlers, Par, Mut};
 
-pub use self::context::MsgCtx;
+pub use self::context::{MsgCtx, RefCtx};

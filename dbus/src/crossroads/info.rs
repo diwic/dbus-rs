@@ -7,7 +7,7 @@ use std::mem;
 use crate::arg::{Arg, Append, AppendAll, ReadAll, ArgAll, Get, TypeMismatchError, IterAppend};
 use std::marker::PhantomData;
 use super::MethodErr;
-use super::handlers::{Handlers, MakeHandler, DebugMethod, DebugProp, Par, ParInfo, Mut};
+use super::handlers::{Handlers, MakeHandler, DebugMethod, DebugProp, Par, Mut};
 use super::crossroads::Crossroads;
 
 fn build_argvec<A: ArgAll>(a: A::strs) -> Vec<Argument<'static>> {
@@ -175,7 +175,6 @@ impl<'a, I: 'static, H: Handlers> IfaceInfoBuilder<'a, I, H> {
     /// Adds a method to this interface. Input and output arguments are used for introspection, callback
     /// needs to convert arguments.
     pub fn method_custom<IA: ArgAll, OA: ArgAll>(mut self, name: MemberName<'static>, in_args: IA::strs, out_args: OA::strs, f: H::Method) -> Self {
-
         let m = MethodInfo { name, handler: DebugMethod(f), 
             i_args: build_argvec::<IA>(in_args), o_args: build_argvec::<OA>(out_args), anns: Default::default() };
         self.info.methods.push(m);
@@ -183,14 +182,28 @@ impl<'a, I: 'static, H: Handlers> IfaceInfoBuilder<'a, I, H> {
         self
     }
 
+    /// Adds a property to this interface.
+    pub fn prop_custom(mut self, name: MemberName<'static>, sig: Signature<'static>, get: Option<H::GetProp>, set: Option<H::SetProp>) -> Self {
+        let p = PropInfo::new(name, sig, get, set);
+        self.info.props.push(p);
+        self.last = Some(MetSigProp::Prop);
+        self
+    }
+
+    pub fn prop_ro<T: Arg, N: Into<MemberName<'static>>, G, D>(self, name: N, getf: G) -> Self
+    where G: MakeHandler<<H as Handlers>::GetProp, (i64, T), D> {
+        self.prop_custom(name.into(), T::signature(), Some(getf.make()), None)
+    }
+
 }
 
+/*
 impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Par> {
     pub fn prop_rw<T, N, G, S>(mut self, name: N, getf: G, setf: S) -> Self
     where T: Arg + Append + for<'z> Get<'z> + Send + Sync + 'static,
     N: Into<MemberName<'static>>,
-    G: Fn(&I, &ParInfo) -> Result<T, MethodErr> + Send + Sync + 'static,
-    S: Fn(&I, &ParInfo, T) -> Result<(), MethodErr> + Send + Sync + 'static
+    G: Fn(&I, &mut MsgCtx, &RefCtx) -> Result<T, MethodErr> + Send + Sync + 'static,
+    S: Fn(&I, &mut MsgCtx, &RefCtx, T) -> Result<(), MethodErr> + Send + Sync + 'static
     {
         let p = PropInfo::new(name.into(), T::signature(), Some(Par::typed_getprop(getf)), Some(Par::typed_setprop(setf)));
         self.info.props.push(p);
@@ -201,7 +214,7 @@ impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Par> {
     pub fn prop_ro<T, N, G>(mut self, name: N, getf: G) -> Self
     where T: Arg + Append + Send + Sync + 'static,
     N: Into<MemberName<'static>>,
-    G: Fn(&I, &ParInfo) -> Result<T, MethodErr> + Send + Sync + 'static,
+    G: Fn(&I, &mut MsgCtx, &RefCtx) -> Result<T, MethodErr> + Send + Sync + 'static,
     {
         let p = PropInfo::new(name.into(), T::signature(), Some(Par::typed_getprop(getf)), None);
         self.info.props.push(p);
@@ -210,6 +223,7 @@ impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Par> {
     }
 
 }
+*/
 
 impl<H: Handlers> MethodInfo<'_, H> {
     pub fn new(name: MemberName<'static>, f: H::Method) -> Self {

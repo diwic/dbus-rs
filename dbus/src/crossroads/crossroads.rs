@@ -5,10 +5,10 @@ use std::fmt;
 use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
 use crate::{Message, MessageType};
 use super::info::{IfaceInfo, MethodInfo, PropInfo, IfaceInfoBuilder};
-use super::handlers::{Handlers, Par, ParInfo, Mut, MutMethods};
+use super::handlers::{Handlers, Par, Mut, MutMethods};
 use super::stdimpl::{DBusProperties, DBusIntrospectable};
 use super::path::Path;
-use super::context::MsgCtx;
+use super::context::{MsgCtx, RefCtx};
 
 // The key is an IfaceName, but if we have that we bump into https://github.com/rust-lang/rust/issues/59732
 // so we use CString as a workaround.
@@ -23,16 +23,6 @@ use super::context::MsgCtx;
 //}
 
 #[derive(Debug)]
-pub (super) struct MLookup<'a, H: Handlers> {
-    pub (super) cr: &'a Crossroads<H>,
-    pub (super) data: &'a Path<H>,
-    pub (super) iface: &'a H::Iface,
-    pub (super) iinfo: &'a IfaceInfo<'static, H>,
-//    pub (super) minfo: Option<&'a MethodInfo<'static, H>>,
-//    pub (super) pinfo: Option<&'a PropInfo<'static, H>>,
-}
-
-#[derive(Debug)]
 pub struct Crossroads<H: Handlers> {
     pub (super) reg: BTreeMap<CString, (TypeId, IfaceInfo<'static, H>)>,
     pub (super) paths: BTreeMap<CString, Path<H>>,
@@ -43,6 +33,7 @@ impl<H: Handlers> Crossroads<H> {
     pub fn register_custom<I: 'static>(&mut self, info: IfaceInfo<'static, H>) -> Option<IfaceInfo<'static, H>> {
         self.reg.insert(info.name.clone().into_cstring(), (TypeId::of::<I>(), info)).map(|x| x.1)
     }
+
     pub fn insert(&mut self, path: Path<H>) {
         let c = path.name().clone().into_cstring();
         self.paths.insert(c, path);
@@ -60,22 +51,19 @@ impl<H: Handlers> Crossroads<H> {
         IfaceInfoBuilder::new(Some(self), name.into())
     }
 
-    fn reg_lookup(&self, ctx: &MsgCtx) -> Option<(MLookup<H>, &MethodInfo<'static, H>)> {
-        let (typeid, iinfo) = self.reg.get(ctx.iface.as_cstr())?;
-        let minfo = iinfo.methods.iter().find(|x| x.name() == &ctx.member)?;
-        let data = self.paths.get(ctx.path.as_cstr())?;
-        let iface = data.get_from_typeid(*typeid)?;
-        Some((MLookup { cr: self, data, iface, iinfo }, minfo))
+    fn reg_lookup(&self, ctx: &MsgCtx) -> Option<(RefCtx<H>, &MethodInfo<'static, H>)> {
+        let refctx = RefCtx::new(self, ctx)?;
+        let minfo = refctx.iinfo.methods.iter().find(|x| x.name() == &ctx.member)?;
+        Some((refctx, minfo))
     }
-
+/*
     pub (super) fn reg_prop_lookup<'a>(&'a self, data: &'a Path<H>, iname: &CStr, propname: &CStr) ->
-    Option<(MLookup<'a, H>, &PropInfo<'static, H>)> {
-        let (typeid, iinfo) = self.reg.get(iname)?;
-        let pinfo = iinfo.props.iter().find(|x| x.name.as_cstr() == propname)?;
-        let iface = data.get_from_typeid(*typeid)?;
-        Some((MLookup { cr: self, data, iface, iinfo}, pinfo))
+    Option<(RefCtx<'a, H>, &PropInfo<'static, H>)> {
+        let refctx = RefCtx::new(self, ctx)?;
+        let pinfo = refctx.iinfo.props.iter().find(|x| x.name.as_cstr() == propname)?;
+        Some((refctx, pinfo))
     }
-
+*/
     pub (super) fn prop_lookup_mut<'a>(&'a mut self, path: &CStr, iname: &CStr, propname: &CStr) ->
     Option<(&'a mut PropInfo<'static, H>, &'a mut Path<H>)> {
         let (typeid, iinfo) = self.reg.get_mut(iname)?;
@@ -87,12 +75,10 @@ impl<H: Handlers> Crossroads<H> {
 
 impl Crossroads<Par> {
     pub fn dispatch_par(&self, msg: &Message) -> Option<Vec<Message>> {
-        let ctx = MsgCtx::new(msg)?;
-        let (lookup, minfo) = self.reg_lookup(&ctx)?;
+        let mut ctx = MsgCtx::new(msg)?;
+        let (refctx, minfo) = self.reg_lookup(&ctx)?;
         let handler = minfo.handler();
-        let iface = &**lookup.iface;
-        let mut info = ParInfo::new(msg, lookup);
-        let r = (handler)(iface, &mut info);
+        let r = (handler)(&mut ctx, &refctx);
         Some(r.into_iter().collect())
     }
 
@@ -109,14 +95,14 @@ impl Crossroads<Par> {
 
 impl Crossroads<Mut> {
     fn dispatch_ref(&self, ctx: &mut MsgCtx) -> Option<Vec<Message>> {
+        let refctx = RefCtx::new(self, ctx)?;
         let (_, iinfo) = self.reg.get(ctx.iface.as_cstr())?;
         let minfo = iinfo.methods.iter().find(|x| x.name() == &ctx.member)?;
         let r = match minfo.handler().0 {
             MutMethods::MutIface(_) => unreachable!(),
             MutMethods::MutCr(_) => unreachable!(),
             MutMethods::AllRef(ref f) => {
-                let data = self.paths.get(ctx.path.as_cstr())?;
-                f(self, data, ctx)
+                f(ctx, &refctx)
             },
         };
         Some(r.into_iter().collect())
@@ -149,7 +135,7 @@ impl Crossroads<Mut> {
             paths: BTreeMap::new(),
         };
         DBusIntrospectable::register(&mut cr);
-        // DBusProperties::register(&mut cr);
+        DBusProperties::register_mut(&mut cr);
         cr
     }
 }
@@ -217,11 +203,11 @@ mod test {
         struct Score(u16);
 
         cr.register::<Score,_>("com.example.dbusrs.crossroads.score")
-            .method("Hello", ("sender",), ("reply",), |score: &Score, _: &ParInfo, (sender,): (String,)| {
+            .method("Hello", ("sender",), ("reply",), |score: &Score, _: &mut MsgCtx, _: &RefCtx<_>, (sender,): (String,)| {
                 assert_eq!(score.0, 7u16);
                 Ok((format!("Hello {}, my score is {}!", sender, score.0),))
             })
-            .prop_ro("Score", |score, _| {
+            .prop_ro("Score", |score: &Score, _: &mut MsgCtx, _: &RefCtx<_>| {
                 assert_eq!(score.0, 7u16);
                 Ok(score.0)
             }).emits_changed(super::super::info::EmitsChangedSignal::False)
@@ -248,8 +234,8 @@ mod test {
         let mut r = cr.dispatch_par(&msg).unwrap();
         assert_eq!(r.len(), 1);
         r[0].as_result().unwrap();
-        let z: u16 = r[0].read1().unwrap();
-        assert_eq!(z, 7u16);
+        let z: crate::arg::Variant<u16> = r[0].read1().unwrap();
+        assert_eq!(z.0, 7u16);
 
         let mut msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "org.freedesktop.DBus.Introspectable", "Introspect").unwrap();
         crate::message::message_set_serial(&mut msg, 57);

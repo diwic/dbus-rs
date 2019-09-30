@@ -1,11 +1,13 @@
 use super::crossroads::Crossroads;
-use super::handlers::{ParInfo, Par, Handlers, MakeHandler};
+use super::handlers::{Par, Mut, Handlers, MakeHandler};
 use super::info::{IfaceInfo, MethodInfo, PropInfo, Annotations, Argument, Access};
 use crate::{arg, Message, Path as PathName};
 use super::MethodErr;
 use crate::arg::Variant;
 use std::collections::HashMap;
 use super::path::Path;
+use super::context::{MsgCtx, RefCtx};
+use std::ffi::CStr;
 
 pub struct DBusProperties;
 
@@ -57,7 +59,51 @@ where F: FnOnce(&mut H::GetProp, &mut arg::IterAppend, &Message) -> Result<(), M
     Ok(mret)
 }
 
+fn getprop_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, f: F) -> Result<Message, MethodErr> 
+where F: FnOnce(&H::GetProp, &mut arg::IterAppend, &mut MsgCtx, &RefCtx<H>) -> Result<(), MethodErr> {
+    let mut iter = ctx.message.iter_init();
+    let (iname, propname): (&CStr, &CStr) = (iter.read()?, iter.read()?);
+    let refctx = refctx.with_iface(iname)
+        .ok_or_else(|| { MethodErr::no_property(&"Interface not found") })?;
+    let propinfo = refctx.iinfo.props.iter().find(|x| x.name.as_cstr() == propname)
+        .ok_or_else(|| { MethodErr::no_property(&"Property not found") })?;
+
+    if propinfo.access == Access::Write { Err(MethodErr::no_property(&"Property is write only"))? };
+    let handler = propinfo.handlers.0.as_ref()
+        .ok_or_else(|| { MethodErr::no_property(&"Property can not read from") })?;
+
+    let mut mret = ctx.message.method_return();
+    {
+        let mut iter = arg::IterAppend::new(&mut mret);
+        let mut z = None;
+        iter.append_variant(&propinfo.sig, |subi| {
+            z = Some(f(handler, subi, ctx, &refctx));
+        });
+        z.unwrap()?;
+    }
+    Ok(mret)
+}
+
 impl DBusProperties {
+    fn register<H: Handlers>(cr: &mut Crossroads<H>, get: H::Method, getall: H::Method, set: H::Method) {
+        cr.register::<Self,_>("org.freedesktop.DBus.Properties")
+            .method_custom::<(String, String), (Variant<u8>,)>("Get".into(), ("interface_name", "property_name"), ("value",), get)
+            .method_custom::<(String,), (HashMap<String, Variant<u8>>,)>("GetAll".into(), ("interface_name",), ("props",), getall)
+            .method_custom::<(String, String, Variant<u8>), ()>("Set".into(), ("interface_name", "property_name", "value"), (), set);
+    }
+
+    pub fn register_par(cr: &mut Crossroads<Par>) {
+        Self::register(cr, Box::new(|ctx, refctx| {
+            Some(getprop_ref(ctx, refctx, |h, i, ctx, refctx| h(i, ctx, refctx)).unwrap_or_else(|e| e.to_message(ctx.message)))
+        }),
+            Box::new(|_,_| unimplemented!()), Box::new(|_,_| unimplemented!()));
+    }
+
+    pub fn register_mut(cr: &mut Crossroads<Mut>) {
+//        Self::register(cr, unimplemented!(), unimplemented!(), unimplemented!());
+    }
+
+/*
     pub fn register<H: Handlers>(cr: &mut Crossroads<H>) {
         cr.register::<Self,_>("org.freedesktop.DBus.Properties")
             .method_custom::<(String, String), (Variant<u8>,)>("Get".into(), ("interface_name", "property_name"), ("value",),
@@ -87,7 +133,7 @@ impl DBusProperties {
             })),
             vec!(), vec!()
         ));
-    }
+    }*/
 }
 
 pub struct DBusIntrospectable;
@@ -182,8 +228,8 @@ fn introspect<H: Handlers>(cr: &Crossroads<H>, path: &Path<H>) -> String {
 impl DBusIntrospectable {
     pub fn register<H: Handlers>(cr: &mut Crossroads<H>) {
         cr.register::<Self,_>("org.freedesktop.DBus.Introspectable")
-            .method("Introspect", (), ("xml_data",), |cr: &Crossroads<H>, path: &Path<H>, _: &Message, _: ()| {
-                Ok((introspect(cr, path),))
+            .method("Introspect", (), ("xml_data",), |_: &mut MsgCtx, c: &RefCtx<H>, _: ()| {
+                Ok((introspect(c.crossroads, c.path),))
             });
     }
 }
