@@ -8,7 +8,7 @@ use crate::arg::{Arg, Append, AppendAll, ReadAll, ArgAll, Get, TypeMismatchError
 use std::marker::PhantomData;
 use super::MethodErr;
 use super::handlers::{Handlers, MakeHandler, DebugMethod, DebugProp, Par, ParInfo, Mut, MutCtx};
-use super::crossroads::{Crossroads, PathData};
+use super::crossroads::Crossroads;
 
 fn build_argvec<A: ArgAll>(a: A::strs) -> Vec<Argument<'static>> {
     let mut v = vec!();

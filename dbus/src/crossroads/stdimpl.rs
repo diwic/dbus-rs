@@ -1,15 +1,16 @@
-use super::crossroads::{Crossroads, PathData};
+use super::crossroads::Crossroads;
 use super::handlers::{ParInfo, Par, Handlers, MakeHandler};
 use super::info::{IfaceInfo, MethodInfo, PropInfo, Annotations, Argument, Access};
 use crate::{arg, Message, Path as PathName};
 use super::MethodErr;
 use crate::arg::Variant;
 use std::collections::HashMap;
+use super::path::Path;
 
 pub struct DBusProperties;
 
 fn setprop_mut<H: Handlers, F>(cr: &mut Crossroads<H>, msg: &Message, f: F) -> Result<Message, MethodErr> 
-where F: FnOnce(&mut H::SetProp, &mut PathData<H>, &mut arg::Iter, &Message) -> Result<bool, MethodErr>
+where F: FnOnce(&mut H::SetProp, &mut Path<H>, &mut arg::Iter, &Message) -> Result<bool, MethodErr>
 {
     let mut iter = msg.iter_init();
     let (iname, propname) = (iter.read()?, iter.read()?);
@@ -71,7 +72,7 @@ impl DBusProperties {
         cr.register_custom::<Self>(IfaceInfo::new("org.freedesktop.DBus.Properties",
             vec!(MethodInfo::new_par("Get", |_: &DBusProperties, info| {
                 let (iname, propname) = info.msg().read2()?; 
-                let (lookup, pinfo) = info.crossroads().reg_prop_lookup(info.path_data(), iname, propname)
+                let (lookup, pinfo) = info.crossroads().reg_prop_lookup(info.path(), iname, propname)
                     .ok_or_else(|| { MethodErr::no_property(&"Could not find property") })?;
                 let handler = &pinfo.handlers.0.as_ref()
                     .ok_or_else(|| { MethodErr::no_property(&"Property can not be read") })?;
@@ -151,12 +152,13 @@ fn introspect_iface<H: Handlers>(iface: &IfaceInfo<H>) -> String {
     r
 }
 
-fn introspect<H: Handlers>(cr: &Crossroads<H>, data: &PathData<H>, path: PathName) -> String {
+fn introspect<H: Handlers>(cr: &Crossroads<H>, path: &Path<H>) -> String {
     use std::ffi::{CStr, CString};
     use std::collections::Bound;
-    let mut p = Vec::<u8>::from(&*path);
+    let name = path.name();
+    let mut p = Vec::<u8>::from(name.as_bytes());
     p.push(b'/');
-    let mut children = cr.paths.range::<CStr,_>((Bound::Excluded(path.as_cstr()), Bound::Unbounded));
+    let mut children = cr.paths.range::<CStr,_>((Bound::Excluded(name.as_cstr()), Bound::Unbounded));
     let mut childstr = String::new();
     while let Some((c, _)) = children.next() {
         if !c.as_bytes().starts_with(&p) { break; }
@@ -166,22 +168,22 @@ fn introspect<H: Handlers>(cr: &Crossroads<H>, data: &PathData<H>, path: PathNam
 
     let mut ifacestr = String::new();
     for (_, (typeid, info)) in &cr.reg {
-        if data.contains_key(*typeid) {
+        if path.get_from_typeid(*typeid).is_some() {
             ifacestr += &introspect_iface(info);
         }
     }
 
     let nodestr = format!(r##"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node name="{}">
-{}{}</node>"##, path, ifacestr, childstr);
+{}{}</node>"##, name, ifacestr, childstr);
     nodestr
 }
 
 impl DBusIntrospectable {
     pub fn register<H: Handlers>(cr: &mut Crossroads<H>) {
         cr.register::<Self,_>("org.freedesktop.DBus.Introspectable")
-            .method("Introspect", (), ("xml_data",), |cr: &Crossroads<H>, data: &PathData<H>, msg: &Message, _: ()| {
-                Ok((introspect(cr, data, msg.path().unwrap()),))
+            .method("Introspect", (), ("xml_data",), |cr: &Crossroads<H>, path: &Path<H>, _: &Message, _: ()| {
+                Ok((introspect(cr, path),))
             });
     }
 }

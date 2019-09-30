@@ -1,9 +1,10 @@
-use std::{fmt, cell};
+use std::{fmt, cell, ops};
 use std::any::Any;
 use crate::{arg, Message, arg::{ReadAll, AppendAll, IterAppend}};
 use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
-use super::crossroads::{Crossroads, PathData, MLookup};
+use super::crossroads::{Crossroads, MLookup};
 use super::info::{MethodInfo, PropInfo};
+use super::path::Path;
 use super::MethodErr;
 
 pub struct DebugMethod<H: Handlers>(pub H::Method);
@@ -20,10 +21,10 @@ pub trait Handlers: Sized {
     type Method;
     type GetProp;
     type SetProp;
-    type Iface;
+    type Iface: ops::Deref + 'static;
 
     fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
-    where F: Fn(&Crossroads<Self>, &PathData<Self>, &Message, IA) -> Result<OA, MethodErr> + Send + Sync + 'static;
+    where F: Fn(&Crossroads<Self>, &Path<Self>, &Message, IA) -> Result<OA, MethodErr> + Send + Sync + 'static;
 
     fn custom_method_helper(mutfn: Option<fn(&mut Crossroads<Self>, &Message) -> Result<Message, MethodErr>>) -> Self::Method { unimplemented!() }
 /*    fn call_setprop_mut(handler: &mut Self::SetProp, pathdata: &mut PathData<Self>, iter: &mut arg::Iter, msg: &Message) 
@@ -67,7 +68,7 @@ impl<'a> ParInfo<'a> {
     pub (super) fn new(msg: &'a Message, lookup: MLookup<'a, Par>) -> Self {
         ParInfo { lookup, message: msg }
     }
-    pub fn path_data(&self) -> &PathData<Par> { self.lookup.data }
+    pub fn path(&self) -> &Path<Par> { self.lookup.data }
     pub fn crossroads(&self) -> &Crossroads<Par> { self.lookup.cr }
 }
 
@@ -79,7 +80,7 @@ impl Handlers for Par {
 
 
     fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
-    where F: Fn(&Crossroads<Self>, &PathData<Self>, &Message, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
+    where F: Fn(&Crossroads<Self>, &Path<Self>, &Message, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
         Box::new(move |_, info| {
             let r = IA::read(&mut info.msg().iter_init()).map_err(From::from);
             let r = r.and_then(|ia| f(info.lookup.cr, info.lookup.data, info.msg(), ia)); 
@@ -121,11 +122,11 @@ impl<'a> MutCtx<'a> {
 impl Handlers for Mut {
     type Method = MutMethod;
     type GetProp = Box<dyn FnMut(&mut (dyn Any), &mut arg::IterAppend, &MutCtx) -> Result<(), MethodErr> + 'static>;
-    type SetProp = Box<dyn FnMut(&mut PathData<Self>, &mut arg::Iter, &MutCtx) -> Result<bool, MethodErr> + 'static>;
+    type SetProp = Box<dyn FnMut(&mut Path<Self>, &mut arg::Iter, &MutCtx) -> Result<bool, MethodErr> + 'static>;
     type Iface = Box<dyn Any>;
 
     fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
-    where F: Fn(&Crossroads<Self>, &PathData<Self>, &Message, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
+    where F: Fn(&Crossroads<Self>, &Path<Self>, &Message, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
         MutMethod(MutMethods::AllRef(Box::new(move |cr, path, ctx| {
             let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
             let r = r.and_then(|ia| f(cr, path, ctx.message, ia)); 
@@ -145,7 +146,7 @@ pub struct MutMethod(pub (super) MutMethods);
 
 pub (super) enum MutMethods {
     MutIface(Box<dyn FnMut(&mut (dyn Any), &MutCtx) -> Option<Message> + 'static>),
-    AllRef(Box<dyn Fn(&Crossroads<Mut>, &PathData<Mut>, &MutCtx) -> Option<Message> + 'static>),
+    AllRef(Box<dyn Fn(&Crossroads<Mut>, &Path<Mut>, &MutCtx) -> Option<Message> + 'static>),
     MutCr(fn(&mut Crossroads<Mut>, &Message) -> Vec<Message>),
 
 //    Ref(Box<dyn FnMut(&(dyn Any), &Message, &Path) -> Option<Message> + 'static>),
@@ -198,7 +199,7 @@ where F: FnMut(&mut I, &MutCtx, IA) -> Result<OA, MethodErr> + 'static
 // For introspection
 
 impl<IA: ReadAll, OA: AppendAll, H: Handlers, F> MakeHandler<H::Method, ((), IA, OA), (bool, H)> for F
-where F: Fn(&Crossroads<H>, &PathData<H>, &Message, IA) -> Result<OA, MethodErr> + Send + Sync + 'static
+where F: Fn(&Crossroads<H>, &Path<H>, &Message, IA) -> Result<OA, MethodErr> + Send + Sync + 'static
 {
     fn make(self) -> <H as Handlers>::Method { H::make_method(self) }
 }
