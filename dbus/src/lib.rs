@@ -46,7 +46,7 @@ pub mod arg;
 
 pub mod tree;
 
-static INITDBUS: std::sync::Once = std::sync::ONCE_INIT;
+static INITDBUS: std::sync::Once = std::sync::Once::new();
 
 use std::ffi::{CString, CStr};
 use std::os::raw::c_char;
