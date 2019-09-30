@@ -200,7 +200,7 @@ mod test {
     fn cr_par() {
         let mut cr = Crossroads::new_par();
         use std::sync::Mutex;
-        use crate::arg; 
+        use crate::arg;
         use crate::arg::Variant;
 
         struct Score(u16, Mutex<u32>);

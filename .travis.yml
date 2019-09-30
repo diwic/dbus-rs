@@ -1,7 +1,9 @@
 language: rust
 dist: xenial
 
-cache: cargo
+cache:
+  cargo: true
+  timeout: 1000
 
 before_install:
   - sudo apt-get install --no-install-recommends -y libdbus-1-dev dbus at-spi2-core
