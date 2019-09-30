@@ -6,6 +6,7 @@ use super::crossroads::{Crossroads, MLookup};
 use super::info::{MethodInfo, PropInfo};
 use super::path::Path;
 use super::MethodErr;
+use super::context::MsgCtx;
 
 pub struct DebugMethod<H: Handlers>(pub H::Method);
 impl<H: Handlers> fmt::Debug for DebugMethod<H> {
@@ -107,6 +108,7 @@ impl MethodInfo<'_, Par> {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Mut;
 
+/*
 #[derive(Debug)]
 pub struct MutCtx<'a> {
     message: &'a Message,
@@ -118,11 +120,11 @@ impl<'a> MutCtx<'a> {
     pub fn send(&self, msg: Message) { self.send_extra.borrow_mut().push(msg); }
     pub (super) fn new(msg: &'a Message) -> Self { MutCtx { message: msg, send_extra: Default::default() } }
 }
-
+*/
 impl Handlers for Mut {
     type Method = MutMethod;
-    type GetProp = Box<dyn FnMut(&mut (dyn Any), &mut arg::IterAppend, &MutCtx) -> Result<(), MethodErr> + 'static>;
-    type SetProp = Box<dyn FnMut(&mut Path<Self>, &mut arg::Iter, &MutCtx) -> Result<bool, MethodErr> + 'static>;
+    type GetProp = Box<dyn FnMut(&mut (dyn Any), &mut arg::IterAppend, &mut MsgCtx) -> Result<(), MethodErr> + 'static>;
+    type SetProp = Box<dyn FnMut(&mut Path<Self>, &mut arg::Iter, &mut MsgCtx) -> Result<bool, MethodErr> + 'static>;
     type Iface = Box<dyn Any>;
 
     fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
@@ -145,8 +147,8 @@ impl Handlers for Mut {
 pub struct MutMethod(pub (super) MutMethods);
 
 pub (super) enum MutMethods {
-    MutIface(Box<dyn FnMut(&mut (dyn Any), &MutCtx) -> Option<Message> + 'static>),
-    AllRef(Box<dyn Fn(&Crossroads<Mut>, &Path<Mut>, &MutCtx) -> Option<Message> + 'static>),
+    MutIface(Box<dyn FnMut(&mut (dyn Any), &mut MsgCtx) -> Option<Message> + 'static>),
+    AllRef(Box<dyn Fn(&Crossroads<Mut>, &Path<Mut>, &mut MsgCtx) -> Option<Message> + 'static>),
     MutCr(fn(&mut Crossroads<Mut>, &Message) -> Vec<Message>),
 
 //    Ref(Box<dyn FnMut(&(dyn Any), &Message, &Path) -> Option<Message> + 'static>),
@@ -184,14 +186,14 @@ where F: Fn(&I, &ParInfo, IA) -> Result<OA, MethodErr> + Send + Sync + 'static
 
 
 impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<Mut as Handlers>::Method, ((), IA, OA), (Mut, I)> for F
-where F: FnMut(&mut I, &MutCtx, IA) -> Result<OA, MethodErr> + 'static
+where F: FnMut(&mut I, &mut MsgCtx, IA) -> Result<OA, MethodErr> + 'static
 {
     fn make(mut self) -> <Mut as Handlers>::Method {
         MutMethod(MutMethods::MutIface(Box::new(move |data, info| {
             let iface: &mut I = data.downcast_mut().unwrap();
-            let r = IA::read(&mut info.msg().iter_init()).map_err(From::from);
+            let r = IA::read(&mut info.message.iter_init()).map_err(From::from);
             let r = r.and_then(|ia| self(iface, info, ia)); 
-            Some(posthandler(info.msg(), r))
+            Some(posthandler(info.message, r))
         })))
     }
 }

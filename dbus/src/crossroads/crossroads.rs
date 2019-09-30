@@ -5,9 +5,10 @@ use std::fmt;
 use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
 use crate::{Message, MessageType};
 use super::info::{IfaceInfo, MethodInfo, PropInfo, IfaceInfoBuilder};
-use super::handlers::{Handlers, Par, ParInfo, Mut, MutCtx, MutMethods};
+use super::handlers::{Handlers, Par, ParInfo, Mut, MutMethods};
 use super::stdimpl::{DBusProperties, DBusIntrospectable};
 use super::path::Path;
+use super::context::MsgCtx;
 
 // The key is an IfaceName, but if we have that we bump into https://github.com/rust-lang/rust/issues/59732
 // so we use CString as a workaround.
@@ -20,20 +21,6 @@ use super::path::Path;
 //impl<H: Handlers> Default for IfacePaths<H> {
 //    fn default() -> Self { IfacePaths(BTreeMap::new()) }
 //}
-
-struct MsgHeaders<'a> {
-    m: MemberName<'a>,
-    i: IfaceName<'a>,
-    p: PathName<'a>,
-}
-
-fn msg_headers(msg: &Message) -> Option<MsgHeaders> {
-    if msg.msg_type() != MessageType::MethodCall { return None };
-    let p = msg.path()?;
-    let i = msg.interface()?;
-    let m = msg.member()?;
-    Some(MsgHeaders { m, i, p })
-}
 
 #[derive(Debug)]
 pub (super) struct MLookup<'a, H: Handlers> {
@@ -73,10 +60,10 @@ impl<H: Handlers> Crossroads<H> {
         IfaceInfoBuilder::new(Some(self), name.into())
     }
 
-    fn reg_lookup(&self, headers: &MsgHeaders) -> Option<(MLookup<H>, &MethodInfo<'static, H>)> {
-        let (typeid, iinfo) = self.reg.get(headers.i.as_cstr())?;
-        let minfo = iinfo.methods.iter().find(|x| x.name() == &headers.m)?;
-        let data = self.paths.get(headers.p.as_cstr())?;
+    fn reg_lookup(&self, ctx: &MsgCtx) -> Option<(MLookup<H>, &MethodInfo<'static, H>)> {
+        let (typeid, iinfo) = self.reg.get(ctx.iface.as_cstr())?;
+        let minfo = iinfo.methods.iter().find(|x| x.name() == &ctx.member)?;
+        let data = self.paths.get(ctx.path.as_cstr())?;
         let iface = data.get_from_typeid(*typeid)?;
         Some((MLookup { cr: self, data, iface, iinfo }, minfo))
     }
@@ -100,8 +87,8 @@ impl<H: Handlers> Crossroads<H> {
 
 impl Crossroads<Par> {
     pub fn dispatch_par(&self, msg: &Message) -> Option<Vec<Message>> {
-        let headers = msg_headers(msg)?;
-        let (lookup, minfo) = self.reg_lookup(&headers)?;
+        let ctx = MsgCtx::new(msg)?;
+        let (lookup, minfo) = self.reg_lookup(&ctx)?;
         let handler = minfo.handler();
         let iface = &**lookup.iface;
         let mut info = ParInfo::new(msg, lookup);
@@ -121,40 +108,38 @@ impl Crossroads<Par> {
 }
 
 impl Crossroads<Mut> {
-    fn dispatch_ref(&self, msg: &Message, headers: MsgHeaders) -> Option<Vec<Message>> {
-        let (_, iinfo) = self.reg.get(headers.i.as_cstr())?;
-        let minfo = iinfo.methods.iter().find(|x| x.name() == &headers.m)?;
-        let ctx = MutCtx::new(msg);
+    fn dispatch_ref(&self, ctx: &mut MsgCtx) -> Option<Vec<Message>> {
+        let (_, iinfo) = self.reg.get(ctx.iface.as_cstr())?;
+        let minfo = iinfo.methods.iter().find(|x| x.name() == &ctx.member)?;
         let r = match minfo.handler().0 {
             MutMethods::MutIface(_) => unreachable!(),
             MutMethods::MutCr(_) => unreachable!(),
             MutMethods::AllRef(ref f) => {
-                let data = self.paths.get(headers.p.as_cstr())?;
-                f(self, data, &ctx)
+                let data = self.paths.get(ctx.path.as_cstr())?;
+                f(self, data, ctx)
             },
         };
         Some(r.into_iter().collect())
     }
 
     pub fn dispatch_mut(&mut self, msg: &Message) -> Option<Vec<Message>> {
-        let headers = msg_headers(msg)?;
+        let mut ctx = MsgCtx::new(msg)?;
         let mut try_ref = false;
         let r = {
-            let (typeid, iinfo) = self.reg.get_mut(headers.i.as_cstr())?;
-            let minfo = iinfo.methods.iter_mut().find(|x| x.name() == &headers.m)?;
-            let ctx = MutCtx::new(msg);
+            let (typeid, iinfo) = self.reg.get_mut(ctx.iface.as_cstr())?;
+            let minfo = iinfo.methods.iter_mut().find(|x| x.name() == &ctx.member)?;
             match minfo.handler_mut().0 {
                 MutMethods::MutIface(ref mut f) => {
-                    let data = self.paths.get_mut(headers.p.as_cstr())?;
+                    let data = self.paths.get_mut(ctx.path.as_cstr())?;
                     let iface = data.get_from_typeid_mut(*typeid)?;
                     let iface = &mut **iface;
-                    f(iface, &ctx)
+                    f(iface, &mut ctx)
                 },
                 MutMethods::AllRef(_) => { try_ref = true; None } 
                 MutMethods::MutCr(f) => { return Some(f(self, msg)) },
             }
         };
-        if try_ref { self.dispatch_ref(msg, headers) }
+        if try_ref { self.dispatch_ref(&mut ctx) }
         else { Some(r.into_iter().collect()) }
     }
 
@@ -193,7 +178,7 @@ mod test {
         let mut call_times = 0u32;
         cr.register::<Score,_>("com.example.dbusrs.crossroads.score")
             .annotate("com.example.dbusrs.whatever", "Funny annotation")
-            .method("UpdateScore", ("change",), ("new_score", "call_times"), move |score: &mut Score, _: &MutCtx, (change,): (u16,)| {
+            .method("UpdateScore", ("change",), ("new_score", "call_times"), move |score: &mut Score, _: &mut MsgCtx, (change,): (u16,)| {
                 score.0 += change;
                 call_times += 1;
                 Ok((score.0, call_times))

@@ -7,7 +7,7 @@ use std::mem;
 use crate::arg::{Arg, Append, AppendAll, ReadAll, ArgAll, Get, TypeMismatchError, IterAppend};
 use std::marker::PhantomData;
 use super::MethodErr;
-use super::handlers::{Handlers, MakeHandler, DebugMethod, DebugProp, Par, ParInfo, Mut, MutCtx};
+use super::handlers::{Handlers, MakeHandler, DebugMethod, DebugProp, Par, ParInfo, Mut};
 use super::crossroads::Crossroads;
 
 fn build_argvec<A: ArgAll>(a: A::strs) -> Vec<Argument<'static>> {
