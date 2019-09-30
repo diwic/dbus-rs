@@ -3,7 +3,7 @@ use super::handlers::{Par, Mut, Handlers, MakeHandler};
 use super::info::{IfaceInfo, MethodInfo, PropInfo, Annotations, Argument, Access};
 use crate::{arg, Message, Path as PathName};
 use super::MethodErr;
-use crate::arg::Variant;
+use crate::arg::{Arg, Variant, Append};
 use std::collections::HashMap;
 use super::path::Path;
 use super::context::{MsgCtx, RefCtx};
@@ -34,6 +34,33 @@ where F: FnOnce(&mut H::SetProp, &mut Path<H>, &mut arg::Iter, &Message) -> Resu
     }
     Ok(msg.method_return())
 }
+
+fn setprop_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, f: F) -> Result<Message, MethodErr> 
+where F: FnOnce(&H::SetProp, &mut arg::Iter, &mut MsgCtx, &RefCtx<H>) -> Result<bool, MethodErr>
+{
+    let mut iter = ctx.message.iter_init();
+    let (iname, propname): (&CStr, &CStr) = (iter.read()?, iter.read()?);
+    let refctx = refctx.with_iface(iname)
+        .ok_or_else(|| { MethodErr::no_property(&"Interface not found") })?;
+    let propinfo = refctx.iinfo.props.iter().find(|x| x.name.as_cstr() == propname)
+        .ok_or_else(|| { MethodErr::no_property(&"Property not found") })?;
+
+    if propinfo.access == Access::Read { Err(MethodErr::no_property(&"Property is read only"))? };
+    let handler = propinfo.handlers.1.as_ref()
+        .ok_or_else(|| { MethodErr::no_property(&"Property can not written to") })?;
+
+    // Now descend into the variant.
+    use arg::Arg;
+    let mut subiter = iter.recurse(Variant::<bool>::ARG_TYPE).ok_or_else(|| MethodErr::invalid_arg(&2))?;
+    if *subiter.signature() != *propinfo.sig {
+        Err(MethodErr::failed(&format!("Property {} cannot change type", propinfo.name)))?;
+    }
+    if f(handler, &mut subiter, ctx, &refctx)? {
+        unimplemented!("Emits signal here");
+    }
+    Ok(ctx.message.method_return())
+}
+
 
 fn getprop_mut<H: Handlers, F>(cr: &mut Crossroads<H>, msg: &Message, f: F) -> Result<Message, MethodErr>
 where F: FnOnce(&mut H::GetProp, &mut arg::IterAppend, &Message) -> Result<(), MethodErr>
@@ -84,6 +111,38 @@ where F: FnOnce(&H::GetProp, &mut arg::IterAppend, &mut MsgCtx, &RefCtx<H>) -> R
     Ok(mret)
 }
 
+fn getallprops_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, mut f: F) -> Result<Message, MethodErr> 
+where F: FnMut(&H::GetProp, &mut arg::IterAppend, &mut MsgCtx, &RefCtx<H>) -> Result<(), MethodErr> {
+    let mut iter = ctx.message.iter_init();
+    let iname: &CStr = iter.read()?;
+    let refctx = refctx.with_iface(iname)
+        .ok_or_else(|| { MethodErr::no_property(&"Interface not found") })?;
+
+    let mut ret = Ok(());
+    let mut mret = ctx.message.method_return();
+    {
+        let mut iter1 = arg::IterAppend::new(&mut mret);
+        iter1.append_dict(&String::signature(), &Variant::<u8>::signature(), |iter2| {
+            for propinfo in refctx.iinfo.props.iter() {
+                let mut z = None;
+                if propinfo.access == Access::Write { continue; }
+                if let Some(handler) = propinfo.handlers.0.as_ref() {
+                    iter2.append_dict_entry(|mut iter3| {
+                        (&*propinfo.name).append_by_ref(&mut iter3);
+                        iter3.append_variant(&propinfo.sig, |iter4| {
+                            z = Some(f(handler, iter4, ctx, &refctx));
+                        });
+                    });
+                }
+                if let Err(e) = z.unwrap() { ret = Err(e); return; }
+            }
+        });
+    }
+    ret.map(|_| { mret })
+
+}
+
+
 impl DBusProperties {
     fn register<H: Handlers>(cr: &mut Crossroads<H>, get: H::Method, getall: H::Method, set: H::Method) {
         cr.register::<Self,_>("org.freedesktop.DBus.Properties")
@@ -93,47 +152,23 @@ impl DBusProperties {
     }
 
     pub fn register_par(cr: &mut Crossroads<Par>) {
-        Self::register(cr, Box::new(|ctx, refctx| {
-            Some(getprop_ref(ctx, refctx, |h, i, ctx, refctx| h(i, ctx, refctx)).unwrap_or_else(|e| e.to_message(ctx.message)))
-        }),
-            Box::new(|_,_| unimplemented!()), Box::new(|_,_| unimplemented!()));
+        Self::register(cr,
+            Box::new(|ctx, refctx| {
+                Some(getprop_ref(ctx, refctx, |h, i, ctx, refctx| h(i, ctx, refctx)).unwrap_or_else(|e| e.to_message(ctx.message)))
+            }),
+            Box::new(|ctx, refctx| {
+                Some(getallprops_ref(ctx, refctx, |h, i, ctx, refctx| h(i, ctx, refctx)).unwrap_or_else(|e| e.to_message(ctx.message)))
+            }),
+            Box::new(|ctx, refctx| {
+                Some(setprop_ref(ctx, refctx, |h, i, ctx, refctx| h(i, ctx, refctx)).unwrap_or_else(|e| e.to_message(ctx.message)))
+            })
+        );
     }
 
     pub fn register_mut(cr: &mut Crossroads<Mut>) {
 //        Self::register(cr, unimplemented!(), unimplemented!(), unimplemented!());
     }
 
-/*
-    pub fn register<H: Handlers>(cr: &mut Crossroads<H>) {
-        cr.register::<Self,_>("org.freedesktop.DBus.Properties")
-            .method_custom::<(String, String), (Variant<u8>,)>("Get".into(), ("interface_name", "property_name"), ("value",),
-                H::custom_method_helper(Some(|cr, msg| { getprop_mut(cr, msg, |_,_,_| unimplemented!()) })))
-            .method_custom::<(String,), (HashMap<String, Variant<u8>>,)>("GetAll".into(), ("interface_name",), ("props",),
-                H::custom_method_helper(None))
-            .method_custom::<(String, String, Variant<u8>), ()>("Set".into(), ("interface_name", "property_name", "value"), (), 
-                H::custom_method_helper(Some(|cr, msg| { setprop_mut(cr, msg,  |_,_,_,_| unimplemented!()) })));
-    }
-
-    pub fn register_par(cr: &mut Crossroads<Par>) {
-        cr.register_custom::<Self>(IfaceInfo::new("org.freedesktop.DBus.Properties",
-            vec!(MethodInfo::new_par("Get", |_: &DBusProperties, info| {
-                let (iname, propname) = info.msg().read2()?; 
-                let (lookup, pinfo) = info.crossroads().reg_prop_lookup(info.path(), iname, propname)
-                    .ok_or_else(|| { MethodErr::no_property(&"Could not find property") })?;
-                let handler = &pinfo.handlers.0.as_ref()
-                    .ok_or_else(|| { MethodErr::no_property(&"Property can not be read") })?;
-                let iface = &**lookup.iface;
-                let mut pinfo = ParInfo::new(info.msg(), lookup);
-                let mut mret = info.msg().method_return();
-                {
-                    let mut ia = arg::IterAppend::new(&mut mret);
-                    (handler)(iface, &mut ia, &mut pinfo)?;
-                }
-                Ok(Some(mret))
-            })),
-            vec!(), vec!()
-        ));
-    }*/
 }
 
 pub struct DBusIntrospectable;

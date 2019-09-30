@@ -1,6 +1,7 @@
 use std::{fmt, cell, ops};
 use std::any::Any;
-use crate::{arg, Message, arg::{ReadAll, AppendAll, Append, IterAppend}};
+use crate::{arg, Message};
+use crate::arg::{ReadAll, AppendAll, Append, IterAppend, Get, Arg};
 use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
 use super::crossroads::Crossroads;
 use super::info::{MethodInfo, PropInfo};
@@ -36,8 +37,8 @@ impl Handlers for Par {
     type Method = Box<dyn Fn(&mut MsgCtx, &RefCtx<Par>) -> Option<Message> + Send + Sync + 'static>;
     type GetProp = Box<dyn Fn(&mut arg::IterAppend, &mut MsgCtx, &RefCtx<Par>)
         -> Result<(), MethodErr> + Send + Sync + 'static>;
-    type SetProp = Box<dyn Fn(&(dyn Any + Send + Sync), &mut arg::Iter, &mut MsgCtx, &RefCtx<Par>)
-        -> Result<(), MethodErr> + Send + Sync + 'static>;
+    type SetProp = Box<dyn Fn(&mut arg::Iter, &mut MsgCtx, &RefCtx<Par>)
+        -> Result<bool, MethodErr> + Send + Sync + 'static>;
     type Iface = Box<dyn Any + 'static + Send + Sync>;
 
     fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
@@ -57,7 +58,7 @@ pub struct Mut;
 
 impl Handlers for Mut {
     type Method = MutMethod;
-    type GetProp = Box<dyn FnMut(&mut (dyn Any), &mut arg::IterAppend, &mut MsgCtx) -> Result<(), MethodErr> + 'static>;
+    type GetProp = Box<dyn FnMut(&mut Path<Self>, &mut arg::IterAppend, &mut MsgCtx) -> Result<(), MethodErr> + 'static>;
     type SetProp = Box<dyn FnMut(&mut Path<Self>, &mut arg::Iter, &mut MsgCtx) -> Result<bool, MethodErr> + 'static>;
     type Iface = Box<dyn Any>;
 
@@ -97,7 +98,9 @@ fn posthandler<OA: AppendAll>(msg: &Message, r: Result<OA, MethodErr>) -> Messag
     }
 }
 
-impl<F, I: 'static + Send + Sync, IA: ReadAll, OA: AppendAll> MakeHandler<<Par as Handlers>::Method, ((), IA, OA), (Par, I)> for F
+// Methods
+
+impl<F, I: 'static + Send + Sync, IA: ReadAll, OA: AppendAll> MakeHandler<<Par as Handlers>::Method, ((), IA, OA, I), ((), Par)> for F
 where F: Fn(&I, &mut MsgCtx, &RefCtx<Par>, IA) -> Result<OA, MethodErr> + Send + Sync + 'static
 {
     fn make(self) -> <Par as Handlers>::Method {
@@ -111,7 +114,7 @@ where F: Fn(&I, &mut MsgCtx, &RefCtx<Par>, IA) -> Result<OA, MethodErr> + Send +
 }
 
 
-impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<Mut as Handlers>::Method, ((), IA, OA), (Mut, I)> for F
+impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<Mut as Handlers>::Method, ((), IA, OA, I), ((), Mut)> for F
 where F: FnMut(&mut I, &mut MsgCtx, IA) -> Result<OA, MethodErr> + 'static
 {
     fn make(mut self) -> <Mut as Handlers>::Method {
@@ -125,7 +128,17 @@ where F: FnMut(&mut I, &mut MsgCtx, IA) -> Result<OA, MethodErr> + 'static
 }
 
 
-impl<F, I: 'static + Send + Sync, T: Append> MakeHandler<<Par as Handlers>::GetProp, (i64, T), (Par, I)> for F
+// For introspection
+
+impl<IA: ReadAll, OA: AppendAll, H: Handlers, F, I> MakeHandler<H::Method, ((), IA, OA, I), (bool, H)> for F
+where F: Fn(&mut MsgCtx, &RefCtx<H>, IA) -> Result<OA, MethodErr> + Send + Sync + 'static
+{
+    fn make(self) -> <H as Handlers>::Method { H::make_method(self) }
+}
+
+// For getprop
+
+impl<F, I: 'static + Send + Sync, T: Append> MakeHandler<<Par as Handlers>::GetProp, (i64, T, I), ((), Par)> for F
 where F: Fn(&I, &mut MsgCtx, &RefCtx<Par>) -> Result<T, MethodErr> + Send + Sync + 'static
 {
     fn make(self) -> <Par as Handlers>::GetProp {
@@ -136,12 +149,29 @@ where F: Fn(&I, &mut MsgCtx, &RefCtx<Par>) -> Result<T, MethodErr> + Send + Sync
     }
 }
 
-// For introspection
-
-impl<IA: ReadAll, OA: AppendAll, H: Handlers, F> MakeHandler<H::Method, ((), IA, OA), (bool, H)> for F
-where F: Fn(&mut MsgCtx, &RefCtx<H>, IA) -> Result<OA, MethodErr> + Send + Sync + 'static
+impl<F, I: 'static + Send + Sync, T: Append> MakeHandler<<Par as Handlers>::GetProp, (i64, T, I), ((), (Par, Par))> for F
+where F: Fn(&I) -> Result<T, MethodErr> + Send + Sync + 'static
 {
-    fn make(self) -> <H as Handlers>::Method { H::make_method(self) }
+    fn make(self) -> <Par as Handlers>::GetProp {
+        Box::new(move |a, _, refctx| {
+            let iface: &I = refctx.path.get().unwrap();
+            self(iface).map(|r| { a.append(r); })
+        })
+    }
+}
+
+// For setprop
+
+
+impl<F, I: 'static + Send + Sync, T: Arg + for<'b> Get<'b>> MakeHandler<<Par as Handlers>::SetProp, (u64, T, I), ((), Par)> for F
+where F: Fn(&I, T, &mut MsgCtx, &RefCtx<Par>) -> Result<bool, MethodErr> + Send + Sync + 'static
+{
+    fn make(self) -> <Par as Handlers>::SetProp {
+        Box::new(move |iter, ctx, refctx| {
+            let iface: &I = refctx.path.get().unwrap();
+            self(iface, iter.read()?, ctx, refctx)
+        })
+    }
 }
 
 

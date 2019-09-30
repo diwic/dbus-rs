@@ -108,6 +108,7 @@ impl<'a, I, H: Handlers> IfaceInfoBuilder<'a, I, H> {
         IfaceInfoBuilder { cr, _dummy: PhantomData, info: IfaceInfo::new_empty(name), last: None }
     }
 
+    /// Adds a signal to this interface.
     pub fn signal<A: ArgAll, N: Into<MemberName<'static>>>(mut self, name: N, args: A::strs) -> Self {
         let s = SignalInfo { name: name.into(), args: build_argvec::<A>(args), anns: Default::default() };
         self.info.signals.push(s);
@@ -154,21 +155,10 @@ impl<'a, I, H: Handlers> IfaceInfoBuilder<'a, I, H> {
         self.info.props.last_mut().unwrap().access = a;
         self
     }
-}
 
-impl<'a, I: 'static, H: Handlers> Drop for IfaceInfoBuilder<'a, I, H> {
-    fn drop(&mut self) {
-        if let Some(ref mut cr) = self.cr {
-            let info = IfaceInfo::new_empty(self.info.name.clone()); // workaround for not being able to consume self.info
-            cr.register_custom::<I>(mem::replace(&mut self.info, info));
-        }
-    }
-}
-
-impl<'a, I: 'static, H: Handlers> IfaceInfoBuilder<'a, I, H> {
     /// Add a method to this interface. Input and output argument types will automatically be converted.
     pub fn method<IA: ReadAll + ArgAll, OA: AppendAll + ArgAll, N, F, D>(self, name: N, in_args: IA::strs, out_args: OA::strs, f: F) -> Self
-    where N: Into<MemberName<'static>>, F: MakeHandler<<H as Handlers>::Method, ((), IA, OA), D> {
+    where N: Into<MemberName<'static>>, F: MakeHandler<<H as Handlers>::Method, ((), IA, OA, I), D> {
         self.method_custom::<IA, OA>(name.into(), in_args, out_args, f.make())
     }
 
@@ -190,40 +180,30 @@ impl<'a, I: 'static, H: Handlers> IfaceInfoBuilder<'a, I, H> {
         self
     }
 
+    /// Adds a read-only property to this interface.
     pub fn prop_ro<T: Arg, N: Into<MemberName<'static>>, G, D>(self, name: N, getf: G) -> Self
-    where G: MakeHandler<<H as Handlers>::GetProp, (i64, T), D> {
+    where G: MakeHandler<<H as Handlers>::GetProp, (i64, T, I), D> {
         self.prop_custom(name.into(), T::signature(), Some(getf.make()), None)
     }
 
-}
-
-/*
-impl<'a, I: 'static> IfaceInfoBuilder<'a, I, Par> {
-    pub fn prop_rw<T, N, G, S>(mut self, name: N, getf: G, setf: S) -> Self
-    where T: Arg + Append + for<'z> Get<'z> + Send + Sync + 'static,
-    N: Into<MemberName<'static>>,
-    G: Fn(&I, &mut MsgCtx, &RefCtx) -> Result<T, MethodErr> + Send + Sync + 'static,
-    S: Fn(&I, &mut MsgCtx, &RefCtx, T) -> Result<(), MethodErr> + Send + Sync + 'static
-    {
-        let p = PropInfo::new(name.into(), T::signature(), Some(Par::typed_getprop(getf)), Some(Par::typed_setprop(setf)));
-        self.info.props.push(p);
-        self.last = Some(MetSigProp::Prop);
-        self
-    }
-
-    pub fn prop_ro<T, N, G>(mut self, name: N, getf: G) -> Self
-    where T: Arg + Append + Send + Sync + 'static,
-    N: Into<MemberName<'static>>,
-    G: Fn(&I, &mut MsgCtx, &RefCtx) -> Result<T, MethodErr> + Send + Sync + 'static,
-    {
-        let p = PropInfo::new(name.into(), T::signature(), Some(Par::typed_getprop(getf)), None);
-        self.info.props.push(p);
-        self.last = Some(MetSigProp::Prop);
-        self
+    /// Adds a read-write property to this interface.
+    pub fn prop_rw<T: Arg, N: Into<MemberName<'static>>, G, S, D>(self, name: N, getf: G, setf: S) -> Self
+    where G: MakeHandler<<H as Handlers>::GetProp, (i64, T, I), D>,
+        S: MakeHandler<<H as Handlers>::SetProp, (u64, T, I), D> {
+        self.prop_custom(name.into(), T::signature(), Some(getf.make()), Some(setf.make()))
     }
 
 }
-*/
+
+impl<'a, I: 'static, H: Handlers> Drop for IfaceInfoBuilder<'a, I, H> {
+    fn drop(&mut self) {
+        if let Some(ref mut cr) = self.cr {
+            let info = IfaceInfo::new_empty(self.info.name.clone()); // workaround for not being able to consume self.info
+            cr.register_custom::<I>(mem::replace(&mut self.info, info));
+        }
+    }
+}
+
 
 impl<H: Handlers> MethodInfo<'_, H> {
     pub fn new(name: MemberName<'static>, f: H::Method) -> Self {
@@ -239,7 +219,7 @@ impl<H: Handlers> PropInfo<'_, H> {
             (Some(_), Some(_)) => Access::ReadWrite,
             (Some(_), None) => Access::Read,
             (None, Some(_)) => Access::Write,
-            _ => unimplemented!(),
+            _ => Access::Read,
         };
         PropInfo { name, handlers: DebugProp(get, set), sig, access: a, anns: Default::default() }
     }

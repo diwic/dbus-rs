@@ -199,22 +199,28 @@ mod test {
     #[test]
     fn cr_par() {
         let mut cr = Crossroads::new_par();
+        use std::sync::Mutex;
+        use crate::arg; 
+        use crate::arg::Variant;
 
-        struct Score(u16);
+        struct Score(u16, Mutex<u32>);
 
         cr.register::<Score,_>("com.example.dbusrs.crossroads.score")
             .method("Hello", ("sender",), ("reply",), |score: &Score, _: &mut MsgCtx, _: &RefCtx<_>, (sender,): (String,)| {
                 assert_eq!(score.0, 7u16);
                 Ok((format!("Hello {}, my score is {}!", sender, score.0),))
             })
-            .prop_ro("Score", |score: &Score, _: &mut MsgCtx, _: &RefCtx<_>| {
+            .prop_ro("Score", |score: &Score| {
                 assert_eq!(score.0, 7u16);
                 Ok(score.0)
             }).emits_changed(super::super::info::EmitsChangedSignal::False)
+            .prop_rw("Dummy",
+                |score: &Score, _: &mut MsgCtx, _: &RefCtx<_>| { Ok(*score.1.lock().unwrap()) },
+                |score: &Score, val: u32, _: &mut MsgCtx, _: &RefCtx<_>| { *score.1.lock().unwrap() = val; Ok(false) })
             .signal::<(u16,),_>("ScoreChanged", ("NewScore",));
 
         let mut pdata = Path::new("/");
-        pdata.insert(Score(7u16));
+        pdata.insert(Score(7u16, Mutex::new(37u32)));
         pdata.insert(DBusProperties);
         pdata.insert(DBusIntrospectable);
         cr.insert(pdata);
@@ -234,8 +240,25 @@ mod test {
         let mut r = cr.dispatch_par(&msg).unwrap();
         assert_eq!(r.len(), 1);
         r[0].as_result().unwrap();
-        let z: crate::arg::Variant<u16> = r[0].read1().unwrap();
+        let z: Variant<u16> = r[0].read1().unwrap();
         assert_eq!(z.0, 7u16);
+
+        let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "org.freedesktop.DBus.Properties", "Set").unwrap();
+        let mut msg = msg.append3("com.example.dbusrs.crossroads.score", "Dummy", Variant(987u32));
+        crate::message::message_set_serial(&mut msg, 57);
+        let mut r = cr.dispatch_par(&msg).unwrap();
+        assert_eq!(r.len(), 1);
+        r[0].as_result().unwrap();
+
+        let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "org.freedesktop.DBus.Properties", "GetAll").unwrap();
+        let mut msg = msg.append1("com.example.dbusrs.crossroads.score");
+        crate::message::message_set_serial(&mut msg, 57);
+        let mut r = cr.dispatch_par(&msg).unwrap();
+        assert_eq!(r.len(), 1);
+        r[0].as_result().unwrap();
+        let z: HashMap<String, Variant<Box<dyn arg::RefArg>>> = r[0].read1().unwrap();
+        println!("{:?}", z);
+        assert_eq!(z.get("Dummy").unwrap().0.as_i64().unwrap(), 987);
 
         let mut msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "org.freedesktop.DBus.Introspectable", "Introspect").unwrap();
         crate::message::message_set_serial(&mut msg, 57);
