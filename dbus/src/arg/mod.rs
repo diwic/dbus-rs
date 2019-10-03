@@ -77,7 +77,10 @@ use std::os::unix::io::{RawFd, AsRawFd};
 
 fn check(f: &str, i: u32) { if i == 0 { panic!("D-Bus error: '{}' failed", f) }} 
 
-fn ffi_iter() -> ffi::DBusMessageIter { unsafe { mem::zeroed() }} 
+fn ffi_iter() -> ffi::DBusMessageIter {
+    // Safe because DBusMessageIter contains only fields that are allowed to be zeroed (i e no references or similar)
+    unsafe { mem::zeroed() }
+}
 
 /// An RAII wrapper around Fd to ensure that file descriptor is closed
 /// when the scope ends.

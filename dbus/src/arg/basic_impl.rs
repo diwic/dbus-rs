@@ -16,10 +16,10 @@ fn arg_append_basic<T>(i: *mut ffi::DBusMessageIter, arg_type: ArgType, v: T) {
 
 fn arg_get_basic<T>(i: *mut ffi::DBusMessageIter, arg_type: ArgType) -> Option<T> {
     unsafe {
-        let mut c: T = mem::zeroed();
         if ffi::dbus_message_iter_get_arg_type(i) != arg_type as c_int { return None };
+        let mut c = mem::MaybeUninit::uninit();
         ffi::dbus_message_iter_get_basic(i, &mut c as *mut _ as *mut c_void);
-        Some(c)
+        Some(c.assume_init())
     }
 }
 
