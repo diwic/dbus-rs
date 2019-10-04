@@ -97,6 +97,38 @@ impl Connection {
         org_freedesktop_dbus::release_name(&self.channel, &name.into())
     }
 
+    /// Adds a new match to the connection, without setting up a callback when this message arrives.
+    pub fn add_match_no_cb(&self, match_str: &str) -> Result<(), Error> {
+        use crate::blocking::stdintf::org_freedesktop::DBus;
+        let proxy = stdintf::proxy(self);
+        proxy.add_match(match_str)
+    }
+
+    /// Removes a match from the connection, without removing any callbacks.
+    pub fn remove_match_no_cb(&self, match_str: &str) -> Result<(), Error> {
+        use crate::blocking::stdintf::org_freedesktop::DBus;
+        let proxy = stdintf::proxy(self);
+        proxy.remove_match(match_str)
+    }
+
+    /// Adds a new match to the connection, and sets up a callback when this message arrives.
+    ///
+    /// The returned value can be used to remove the match. The match is also removed if the callback
+    /// returns "false".
+    pub fn add_match<S: ReadAll, F>(&self, match_rule: MatchRule<'static>, f: F) -> Result<u32, Error> 
+    where F: FnMut(S, &Self) -> bool + 'static {
+        let m = match_rule.match_str();
+        self.add_match_no_cb(&m)?;
+        use channel::MatchingReceiver;
+        Ok(self.start_receive(match_rule, MakeSignal::make(f, m)))
+    }
+
+    /// Removes a previously added match and callback from the connection.
+    pub fn remove_match(&self, id: u32) -> Result<(), Error> {
+        use channel::MatchingReceiver;
+        let (mr, _) = self.stop_receive(id).ok_or_else(|| Error::new_failed("No match with that id found"))?;
+        self.remove_match_no_cb(&mr.match_str())
+    }
 }
 
 impl SyncConnection {
@@ -150,6 +182,40 @@ impl SyncConnection {
     pub fn release_name<'a, N: Into<BusName<'a>>>(&self, name: N) -> Result<org_freedesktop_dbus::ReleaseNameReply, Error> {
         org_freedesktop_dbus::release_name(&self.channel, &name.into())
     }
+
+    /// Adds a new match to the connection, without setting up a callback when this message arrives.
+    pub fn add_match_no_cb(&self, match_str: &str) -> Result<(), Error> {
+        use crate::blocking::stdintf::org_freedesktop::DBus;
+        let proxy = stdintf::proxy(self);
+        proxy.add_match(match_str)
+    }
+
+    /// Removes a match from the connection, without removing any callbacks.
+    pub fn remove_match_no_cb(&self, match_str: &str) -> Result<(), Error> {
+        use crate::blocking::stdintf::org_freedesktop::DBus;
+        let proxy = stdintf::proxy(self);
+        proxy.remove_match(match_str)
+    }
+
+    /// Adds a new match to the connection, and sets up a callback when this message arrives.
+    ///
+    /// The returned value can be used to remove the match. The match is also removed if the callback
+    /// returns "false".
+    pub fn add_match<S: ReadAll, F>(&self, match_rule: MatchRule<'static>, f: F) -> Result<u32, Error> 
+    where F: FnMut(S, &Self) -> bool + Send + Sync + 'static {
+        let m = match_rule.match_str();
+        self.add_match_no_cb(&m)?;
+        use channel::MatchingReceiver;
+        Ok(self.start_receive(match_rule, MakeSignal::make(f, m)))
+    }
+
+    /// Removes a previously added match and callback from the connection.
+    pub fn remove_match(&self, id: u32) -> Result<(), Error> {
+        use channel::MatchingReceiver;
+        let (mr, _) = self.stop_receive(id).ok_or_else(|| Error::new_failed("No match with that id found"))?;
+        self.remove_match_no_cb(&mr.match_str())
+    } 
+
 
 }
 
@@ -414,6 +480,13 @@ where
     }
 }
 
+#[test]
+fn test_add_match() {
+    use self::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged as Ppc;
+    let c = Connection::new_session().unwrap();
+    let x = c.add_match(Ppc::match_rule(None, None), |_: Ppc, _| { true }).unwrap();
+    c.remove_match(x).unwrap();
+}
 
 #[test]
 fn test_conn_send_sync() {
