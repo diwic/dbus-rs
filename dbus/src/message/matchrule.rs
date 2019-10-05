@@ -15,6 +15,8 @@ pub struct MatchRule<'a> {
     pub strict_sender: bool,
     /// Match on message object path
     pub path: Option<Path<'a>>,
+    /// If true, will match all subpaths to the path as well as the path itself. Defaults to false.
+    pub path_is_namespace: bool,
     /// Match on message interface
     pub interface: Option<Interface<'a>>,
     /// Match on message member (signal or method name)
@@ -41,7 +43,8 @@ impl<'a> MatchRule<'a> {
         let mut v = vec!();
         if let Some(x) = self.msg_type { v.push(("type", msg_type_str(x))) };
         if let Some(ref x) = self.sender { v.push(("sender", &x)) };
-        if let Some(ref x) = self.path { v.push(("path", &x)) };
+        let pn = if self.path_is_namespace { "path_namespace" } else { "path" };
+        if let Some(ref x) = self.path { v.push((pn, &x)) };
         if let Some(ref x) = self.interface { v.push(("interface", &x)) };
         if let Some(ref x) = self.member { v.push(("member", &x)) };
 
@@ -49,6 +52,18 @@ impl<'a> MatchRule<'a> {
         // If we start matching against arguments, we need to worry.
         let v: Vec<_> = v.into_iter().map(|(k, v)| format!("{}='{}'", k, v)).collect();
         v.join(",")
+    }
+
+    fn path_match(&self, msg: &Message) -> bool {
+        if let Some(ref x) = self.path {
+            if let Some(ref p) = msg.path() {
+                if x != p {
+                    if self.path_is_namespace {
+                        p.starts_with(&**x) && &p[x.len()..x.len()+1] == "/"
+                    } else { false }
+                } else { true }
+            } else { false }
+        } else { true }
     }
 
     /// Returns whether or not the message matches the rule.
@@ -61,7 +76,7 @@ impl<'a> MatchRule<'a> {
                 if check && s != *x { return false }
             } else if self.strict_sender { return false }
         };
-        if self.path.is_some() && msg.path() != self.path { return false };
+        if !self.path_match(msg) { return false }
         if self.interface.is_some() && msg.interface() != self.interface { return false };
         if self.member.is_some() && msg.member() != self.member { return false };
         true
@@ -89,6 +104,7 @@ impl<'a> MatchRule<'a> {
             path: self.path.as_ref().map(|x| x.clone().into_static()),
             interface: self.interface.as_ref().map(|x| x.clone().into_static()),
             member: self.member.as_ref().map(|x| x.clone().into_static()),
+            path_is_namespace: self.path_is_namespace,
             _more_fields_may_come: (),
         }
     }
