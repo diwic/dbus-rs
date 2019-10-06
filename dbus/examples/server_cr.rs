@@ -35,15 +35,21 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Let's register a new interface in Crossroads' interface registry.
     cr.register::<DBusTest, _>("com.example.dbustest")
+        // This row is just for introspection: It advertises that we can send a
+        // HelloHappened signal. We use the single-tuple to say that we have one single argument,
+        // named "sender" of type "String".
         .signal::<(String,), _>("HelloHappened", ("sender",))
         // Let's add a method to the interface. We have the method name, followed by
         // names of input and output arguments (used for introspection). The closure then controls
         // the types of these arguments. The last argument to the closure is a tuple of the input arguments.
-        .method("Hello", ("name",), ("reply",), |test: &mut DBusTest, _: &mut MsgCtx, (name,): (String,)| {
+        .method("Hello", ("name",), ("reply",), |test: &mut DBusTest, ctx: &mut MsgCtx, (name,): (String,)| {
+            // And here's what happens when the method is called.
             println!("Incoming hello call from {}!", name);
             test.called_count += 1;
             let s = format!("Hello {}! This API has been used {} times.", name, test.called_count);
-            // TODO: Emit signal
+            // The ctx parameter can be used to conveniently send extra messages.
+            let signal_msg = ctx.make_signal("HelloHappened", (name,));
+            ctx.send_msg(signal_msg);
             // And the return value is a tuple of the output arguments.
             Ok((s,))
         });

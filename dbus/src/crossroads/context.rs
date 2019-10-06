@@ -5,6 +5,7 @@ use super::crossroads::Crossroads;
 use super::path::Path;
 use super::handlers::Handlers;
 use std::ffi::CStr;
+use crate::arg::{AppendAll, IterAppend};
 
 #[derive(Debug)]
 pub struct MsgCtx<'a> {
@@ -13,7 +14,7 @@ pub struct MsgCtx<'a> {
     pub iface: IfaceName<'a>,
     pub path: PathName<'a>,
 
-    send_extra: Vec<Message>,
+    pub (super) send_extra: Vec<Message>,
 }
 
 impl<'a> MsgCtx<'a> {
@@ -27,6 +28,11 @@ impl<'a> MsgCtx<'a> {
 
     pub fn send_msg(&mut self, msg: Message) { self.send_extra.push(msg); }
 
+    pub fn make_signal<'b, A: AppendAll, N: Into<MemberName<'b>>>(&self, name: N, args: A) -> Message {
+        let mut msg = Message::signal(&self.path, &self.iface, &name.into());
+        args.append(&mut IterAppend::new(&mut msg));
+        msg
+    }
 }
 
 #[derive(Debug, Clone)]

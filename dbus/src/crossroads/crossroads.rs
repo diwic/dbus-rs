@@ -106,26 +106,25 @@ impl Crossroads<Par> {
 }
 
 impl Crossroads<handlers::Local> {
-    fn dispatch_ref(&self, ctx: &mut MsgCtx) -> Option<Vec<Message>> {
+    fn dispatch_ref(&self, ctx: &mut MsgCtx) -> Option<Message> {
         use super::handlers::LocalMethods;
         let refctx = RefCtx::new(self, ctx)?;
         let entry = self.reg.get(ctx.iface.as_cstr())?;
         let minfo = entry.info.methods.iter().find(|x| x.name() == &ctx.member)?;
-        let r = match minfo.handler().0 {
+        match minfo.handler().0 {
             LocalMethods::MutIface(_) => unreachable!(),
             LocalMethods::MutCr(_) => unreachable!(),
             LocalMethods::AllRef(ref f) => {
                 f(ctx, &refctx)
             },
-        };
-        Some(r.into_iter().collect())
+        }
     }
 
     pub fn dispatch_local(&mut self, msg: &Message) -> Option<Vec<Message>> {
         use super::handlers::LocalMethods;
         let mut ctx = MsgCtx::new(msg)?;
         let mut try_ref = false;
-        let r = {
+        let mut r = {
             let entry = self.reg.get_mut(ctx.iface.as_cstr())?;
             let minfo = entry.info.methods.iter_mut().find(|x| x.name() == &ctx.member)?;
             match minfo.handler_mut().0 {
@@ -139,8 +138,9 @@ impl Crossroads<handlers::Local> {
                 LocalMethods::MutCr(f) => { return Some(f(self, msg)) },
             }
         };
-        if try_ref { self.dispatch_ref(&mut ctx) }
-        else { Some(r.into_iter().collect()) }
+        if try_ref { r = self.dispatch_ref(&mut ctx) };
+        if let Some(r) = r { ctx.send_msg(r) };
+        Some(ctx.send_extra)
     }
 
     pub fn new_local(reg_default: bool) -> Self {
