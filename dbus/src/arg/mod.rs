@@ -224,7 +224,7 @@ impl<'a> Iter<'a> {
         T::get(self)
     }
 
-    /// Returns the current argument as a trait object (experimental).
+    /// Returns the current argument as a trait object.
     ///
     /// Note: For the more complex arguments (arrays / dicts / structs, and especially
     /// combinations thereof), their internal representations are still a bit in flux.

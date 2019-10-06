@@ -163,9 +163,9 @@ impl Crossroads<handlers::Local> {
         let mut mr = MatchRule::new();
         mr.msg_type = Some(MessageType::MethodCall);
         connection.start_receive(mr, Box::new(move |msg, c| {
-            // println!("Incoming: {:?}", msg);
+            // dbg!(&msg);
             if let Some(r) = self.dispatch_local(&msg) {
-                // println!("Reply: {:?}", r);
+                // dbg!(&r);
                 for retmsg in r.into_iter() { let _ = c.send(retmsg); }
             } else {
                 use super::MethodErr;
