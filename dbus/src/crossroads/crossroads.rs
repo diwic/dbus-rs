@@ -3,7 +3,8 @@ use std::any::{TypeId, Any};
 use std::ffi::{CString, CStr};
 use std::fmt;
 use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
-use crate::{Message, MessageType};
+use crate::{Message, MessageType, channel};
+use crate::message::MatchRule;
 use super::info::{IfaceInfo, MethodInfo, PropInfo, IfaceInfoBuilder};
 use super::handlers::{self, Handlers, Par};
 use super::stdimpl::{DBusProperties, DBusIntrospectable};
@@ -91,7 +92,7 @@ impl Crossroads<Par> {
         Some(r.into_iter().collect())
     }
 
-    pub fn new_par(reg_default: bool) -> Self { 
+    pub fn new_par(reg_default: bool) -> Self {
         let mut cr = Crossroads {
             reg: BTreeMap::new(),
             paths: BTreeMap::new(),
@@ -134,7 +135,7 @@ impl Crossroads<handlers::Local> {
                     let iface = &mut **iface;
                     f(iface, &mut ctx)
                 },
-                LocalMethods::AllRef(_) => { try_ref = true; None } 
+                LocalMethods::AllRef(_) => { try_ref = true; None }
                 LocalMethods::MutCr(f) => { return Some(f(self, msg)) },
             }
         };
@@ -142,7 +143,7 @@ impl Crossroads<handlers::Local> {
         else { Some(r.into_iter().collect()) }
     }
 
-    pub fn new_local(reg_default: bool) -> Self { 
+    pub fn new_local(reg_default: bool) -> Self {
         let mut cr = Crossroads {
             reg: BTreeMap::new(),
             paths: BTreeMap::new(),
@@ -154,6 +155,27 @@ impl Crossroads<handlers::Local> {
         }
         cr
     }
+
+    pub fn start_local<C>(mut self, connection: &C) -> u32
+    where
+        C: channel::MatchingReceiver<F=Box<dyn FnMut(Message, &C) -> bool>> + channel::Sender
+    {
+        let mut mr = MatchRule::new();
+        mr.msg_type = Some(MessageType::MethodCall);
+        connection.start_receive(mr, Box::new(move |msg, c| {
+            // println!("Incoming: {:?}", msg);
+            if let Some(r) = self.dispatch_local(&msg) {
+                // println!("Reply: {:?}", r);
+                for retmsg in r.into_iter() { let _ = c.send(retmsg); }
+            } else {
+                use super::MethodErr;
+                let m = MethodErr::from(("org.freedesktop.DBus.Error.UnknownMethod", "Unknown path, interface or method"));
+                let _ = c.send(m.to_message(&msg));
+            }
+            true
+        }))
+    }
+
 }
 
 

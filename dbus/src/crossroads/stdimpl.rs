@@ -11,7 +11,7 @@ use std::ffi::CStr;
 
 pub struct DBusProperties;
 
-fn setprop_mut<H: Handlers, F>(cr: &mut Crossroads<H>, msg: &Message, f: F) -> Result<Message, MethodErr> 
+fn setprop_mut<H: Handlers, F>(cr: &mut Crossroads<H>, msg: &Message, f: F) -> Result<Message, MethodErr>
 where F: FnOnce(&mut H::SetProp, &mut Path<H>, &mut arg::Iter, &Message) -> Result<bool, MethodErr>
 {
     let mut iter = msg.iter_init();
@@ -35,7 +35,7 @@ where F: FnOnce(&mut H::SetProp, &mut Path<H>, &mut arg::Iter, &Message) -> Resu
     Ok(msg.method_return())
 }
 
-fn setprop_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, f: F) -> Result<Message, MethodErr> 
+fn setprop_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, f: F) -> Result<Message, MethodErr>
 where F: FnOnce(&H::SetProp, &mut arg::Iter, &mut MsgCtx, &RefCtx<H>) -> Result<bool, MethodErr>
 {
     let mut iter = ctx.message.iter_init();
@@ -86,7 +86,7 @@ where F: FnOnce(&mut H::GetProp, &mut arg::IterAppend, &Message) -> Result<(), M
     Ok(mret)
 }
 
-fn getprop_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, f: F) -> Result<Message, MethodErr> 
+fn getprop_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, f: F) -> Result<Message, MethodErr>
 where F: FnOnce(&H::GetProp, &mut arg::IterAppend, &mut MsgCtx, &RefCtx<H>) -> Result<(), MethodErr> {
     let mut iter = ctx.message.iter_init();
     let (iname, propname): (&CStr, &CStr) = (iter.read()?, iter.read()?);
@@ -111,7 +111,7 @@ where F: FnOnce(&H::GetProp, &mut arg::IterAppend, &mut MsgCtx, &RefCtx<H>) -> R
     Ok(mret)
 }
 
-fn getallprops_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, mut f: F) -> Result<Message, MethodErr> 
+fn getallprops_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, mut f: F) -> Result<Message, MethodErr>
 where F: FnMut(&H::GetProp, &mut arg::IterAppend, &mut MsgCtx, &RefCtx<H>) -> Result<(), MethodErr> {
     let mut iter = ctx.message.iter_init();
     let iname: &CStr = iter.read()?;
@@ -243,7 +243,8 @@ fn introspect<H: Handlers>(cr: &Crossroads<H>, path: &Path<H>) -> String {
     use std::collections::Bound;
     let name = path.name();
     let mut p = Vec::<u8>::from(name.as_bytes());
-    p.push(b'/');
+    if !p.ends_with(b"/") { p.push(b'/'); }
+
     let mut children = cr.paths.range::<CStr,_>((Bound::Excluded(name.as_cstr()), Bound::Unbounded));
     let mut childstr = String::new();
     while let Some((c, _)) = children.next() {
@@ -274,6 +275,3 @@ impl DBusIntrospectable {
             .on_path_insert(|p, cr| p.insert(DBusIntrospectable));
     }
 }
-
-
-
