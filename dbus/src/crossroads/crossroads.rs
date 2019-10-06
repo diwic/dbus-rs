@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::any::{TypeId, Any};
 use std::ffi::{CString, CStr};
 use std::fmt;
+use std::ops::Deref;
 use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
 use crate::{Message, MessageType, channel};
 use crate::message::MatchRule;
@@ -147,6 +148,20 @@ impl Crossroads<Par> {
         let mut cr = Self::new_noprops(reg_default);
         if reg_default { DBusProperties::register_par(&mut cr); }
         cr
+    }
+
+    pub fn start_par<C, CC, CR>(cr: CR, connection: CC) -> u32
+    where
+        C: channel::MatchingReceiver<F=Box<dyn FnMut(Message, &C) -> bool + Send + Sync>> + channel::Sender,
+        CC: Deref<Target=C>,
+        CR: Deref<Target=Self> + Send + Sync + 'static,
+    {
+        let mut mr = MatchRule::new();
+        mr.msg_type = Some(MessageType::MethodCall);
+        connection.start_receive(mr, Box::new(move |msg, c| {
+            let _ = cr.dispatch_par(&msg, c);
+            true
+        }))
     }
 }
 

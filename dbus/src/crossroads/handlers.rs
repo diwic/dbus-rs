@@ -220,6 +220,30 @@ where F: Fn(&I, &mut MsgCtx, &RefCtx<Par>, IA) -> Result<OA, MethodErr> + Send +
     }
 }
 
+impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<() as Handlers>::Method, ((), IA, OA, I), ((), ())> for F
+where F: FnMut(&mut I, &mut MsgCtx, IA) -> Result<OA, MethodErr> + Send + 'static
+{
+    fn make(mut self) -> <() as Handlers>::Method {
+        SendMethod(SendMethods::MutIface(Box::new(move |data, info| {
+            let iface: &mut I = data.downcast_mut().unwrap();
+            let r = IA::read(&mut info.message.iter_init()).map_err(From::from);
+            let r = r.and_then(|ia| self(iface, info, ia));
+            Some(posthandler(info.message, r))
+        })))
+    }
+}
+
+impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<() as Handlers>::Method, ((), IA, OA, I), (u8, ())> for F
+where F: FnMut(&mut Path<()>, &mut MsgCtx, IA) -> Result<OA, MethodErr> + Send + 'static
+{
+    fn make(mut self) -> <() as Handlers>::Method {
+        SendMethod(SendMethods::MutPath(Box::new(move |path, ctx| {
+            let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
+            let r = r.and_then(|ia| self(path, ctx, ia));
+            Some(posthandler(ctx.message, r))
+        })))
+    }
+}
 
 impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<Local as Handlers>::Method, ((), IA, OA, I), ((), Local)> for F
 where F: FnMut(&mut I, &mut MsgCtx, IA) -> Result<OA, MethodErr> + 'static
@@ -234,6 +258,17 @@ where F: FnMut(&mut I, &mut MsgCtx, IA) -> Result<OA, MethodErr> + 'static
     }
 }
 
+impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<Local as Handlers>::Method, ((), IA, OA, I), (u8, ())> for F
+where F: FnMut(&mut Path<Local>, &mut MsgCtx, IA) -> Result<OA, MethodErr> + 'static
+{
+    fn make(mut self) -> <Local as Handlers>::Method {
+        LocalMethod(LocalMethods::MutPath(Box::new(move |path, ctx| {
+            let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
+            let r = r.and_then(|ia| self(path, ctx, ia));
+            Some(posthandler(ctx.message, r))
+        })))
+    }
+}
 
 // For introspection
 
