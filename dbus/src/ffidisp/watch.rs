@@ -78,7 +78,7 @@ impl Watch {
     pub fn writable(&self) -> bool { self.write }
     /// Returns the current watch as a libc::pollfd, to use with libc::poll
     pub fn to_pollfd(&self) -> libc::pollfd {
-        libc::pollfd { fd: self.fd, revents: 0, events: libc::POLLERR + libc::POLLHUP + 
+        libc::pollfd { fd: self.fd, revents: 0, events: libc::POLLERR + libc::POLLHUP +
             if self.readable() { libc::POLLIN } else { 0 } +
             if self.writable() { libc::POLLOUT } else { 0 },
         }
@@ -219,14 +219,16 @@ mod test {
                     println!("Async: got {:?}", e);
                     match e {
                         ConnectionItem::MethodCall(m) => {
-                            assert_eq!(m.headers(), (MessageType::MethodCall, Some("/test".to_string()),
-                                Some("com.example.asynctest".into()), Some("AsyncTest".to_string())));
+                            assert_eq!(m.msg_type(), MessageType::MethodCall);
+                            assert_eq!(&*m.path().unwrap(), "/test");
+                            assert_eq!(&*m.interface().unwrap(), "com.example.asynctest");
+                            assert_eq!(&*m.member().unwrap(), "AsyncTest");
                             let mut mr = Message::new_method_return(&m).unwrap();
                             mr.append_items(&["Goodies".into()]);
                             c.send(mr).unwrap();
                         }
                         ConnectionItem::MethodReturn(m) => {
-                            assert_eq!(m.headers().0, MessageType::MethodReturn);
+                            assert_eq!(m.msg_type(), MessageType::MethodReturn);
                             assert_eq!(m.get_reply_serial().unwrap(), serial);
                             let i = m.get_items();
                             let s: &str = i[0].inner().unwrap();

@@ -360,6 +360,7 @@ impl Message {
     }
 
     /// Returns a tuple of (Message type, Path, Interface, Member) of the current message.
+    #[deprecated]
     pub fn headers(&self) -> (MessageType, Option<String>, Option<String>, Option<String>) {
         let p = unsafe { ffi::dbus_message_get_path(self.msg) };
         let i = unsafe { ffi::dbus_message_get_interface(self.msg) };

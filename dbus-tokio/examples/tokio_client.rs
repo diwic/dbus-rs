@@ -58,9 +58,8 @@ fn main() {
     // running forever, handling all incoming messages
     let messages = aconn.messages().unwrap();
     let signals = messages.for_each(|m| {
-        let headers = m.headers();
-        let member = headers.3.unwrap();
-        if member == "HelloHappened" {
+        let member = m.member().unwrap();
+        if &*member == "HelloHappened" {
             let arg1 : &str = m.get1().unwrap();
             println!("Hello from {} happened on the bus!", arg1)
         } else {
@@ -72,4 +71,3 @@ fn main() {
     // Simultaneously run signal handling and method calling
     rt.block_on(signals.join(calls)).unwrap();
 }
-

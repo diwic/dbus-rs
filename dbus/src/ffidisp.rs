@@ -282,13 +282,13 @@ mod test {
         for n in c.iter(1000) {
             match n {
                 ConnectionItem::Signal(s) => {
-                    let (_, p, i, m) = s.headers();
+                    let (p, i, m) = (s.path(), s.interface(), s.member());
                     match (&*p.unwrap(), &*i.unwrap(), &*m.unwrap()) {
                         ("/mysignal", "com.example.signaltest", "ThisIsASignal") => {
                             assert_eq!(&*s.sender().unwrap(), &*uname);
                             break;
                         },
-                        (_, _, _) => println!("Other signal: {:?}", s.headers()),
+                        (_, _, _) => println!("Other signal: {:?}", s),
                     }
                 }
                 _ => {},
