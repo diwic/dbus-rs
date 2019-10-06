@@ -5,7 +5,7 @@ use std::fmt;
 use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
 use crate::{Message, MessageType};
 use super::info::{IfaceInfo, MethodInfo, PropInfo, IfaceInfoBuilder};
-use super::handlers::{Handlers, Par, Mut, MutMethods};
+use super::handlers::{self, Handlers, Par};
 use super::stdimpl::{DBusProperties, DBusIntrospectable};
 use super::path::Path;
 use super::context::{MsgCtx, RefCtx};
@@ -93,49 +93,51 @@ impl Crossroads<Par> {
     }
 }
 
-impl Crossroads<Mut> {
+impl Crossroads<handlers::Local> {
     fn dispatch_ref(&self, ctx: &mut MsgCtx) -> Option<Vec<Message>> {
+        use super::handlers::LocalMethods;
         let refctx = RefCtx::new(self, ctx)?;
         let (_, iinfo) = self.reg.get(ctx.iface.as_cstr())?;
         let minfo = iinfo.methods.iter().find(|x| x.name() == &ctx.member)?;
         let r = match minfo.handler().0 {
-            MutMethods::MutIface(_) => unreachable!(),
-            MutMethods::MutCr(_) => unreachable!(),
-            MutMethods::AllRef(ref f) => {
+            LocalMethods::MutIface(_) => unreachable!(),
+            LocalMethods::MutCr(_) => unreachable!(),
+            LocalMethods::AllRef(ref f) => {
                 f(ctx, &refctx)
             },
         };
         Some(r.into_iter().collect())
     }
 
-    pub fn dispatch_mut(&mut self, msg: &Message) -> Option<Vec<Message>> {
+    pub fn dispatch_local(&mut self, msg: &Message) -> Option<Vec<Message>> {
+        use super::handlers::LocalMethods;
         let mut ctx = MsgCtx::new(msg)?;
         let mut try_ref = false;
         let r = {
             let (typeid, iinfo) = self.reg.get_mut(ctx.iface.as_cstr())?;
             let minfo = iinfo.methods.iter_mut().find(|x| x.name() == &ctx.member)?;
             match minfo.handler_mut().0 {
-                MutMethods::MutIface(ref mut f) => {
+                LocalMethods::MutIface(ref mut f) => {
                     let data = self.paths.get_mut(ctx.path.as_cstr())?;
                     let iface = data.get_from_typeid_mut(*typeid)?;
                     let iface = &mut **iface;
                     f(iface, &mut ctx)
                 },
-                MutMethods::AllRef(_) => { try_ref = true; None } 
-                MutMethods::MutCr(f) => { return Some(f(self, msg)) },
+                LocalMethods::AllRef(_) => { try_ref = true; None } 
+                LocalMethods::MutCr(f) => { return Some(f(self, msg)) },
             }
         };
         if try_ref { self.dispatch_ref(&mut ctx) }
         else { Some(r.into_iter().collect()) }
     }
 
-    pub fn new_mut() -> Self { 
+    pub fn new_local() -> Self { 
         let mut cr = Crossroads {
             reg: BTreeMap::new(),
             paths: BTreeMap::new(),
         };
         DBusIntrospectable::register(&mut cr);
-        DBusProperties::register_mut(&mut cr);
+        DBusProperties::register_local(&mut cr);
         cr
     }
 }
@@ -156,8 +158,8 @@ mod test {
    }
 
     #[test]
-    fn cr_mut() {
-        let mut cr = Crossroads::new_mut();
+    fn cr_local() {
+        let mut cr = Crossroads::new_local();
 
         struct Score(u16);
 
@@ -178,7 +180,7 @@ mod test {
         let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "com.example.dbusrs.crossroads.score", "UpdateScore").unwrap();
         let mut msg = msg.append1(5u16);
         crate::message::message_set_serial(&mut msg, 57);
-        let mut r = cr.dispatch_mut(&msg).unwrap();
+        let mut r = cr.dispatch_local(&msg).unwrap();
         assert_eq!(r.len(), 1);
         r[0].as_result().unwrap();
         let (new_score, call_times): (u16, u32) = r[0].read2().unwrap();
@@ -187,7 +189,7 @@ mod test {
 
         let mut msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "org.freedesktop.DBus.Introspectable", "Introspect").unwrap();
         crate::message::message_set_serial(&mut msg, 57);
-        let mut r = cr.dispatch_mut(&msg).unwrap();
+        let mut r = cr.dispatch_local(&msg).unwrap();
         assert_eq!(r.len(), 1);
         r[0].as_result().unwrap();
         let xml_data: &str = r[0].read1().unwrap();

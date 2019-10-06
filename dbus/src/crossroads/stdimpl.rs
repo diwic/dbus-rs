@@ -1,5 +1,5 @@
 use super::crossroads::Crossroads;
-use super::handlers::{Par, Mut, Handlers, MakeHandler};
+use super::handlers::{self, Par, Handlers, MakeHandler};
 use super::info::{IfaceInfo, MethodInfo, PropInfo, Annotations, Argument, Access};
 use crate::{arg, Message, Path as PathName};
 use super::MethodErr;
@@ -165,7 +165,7 @@ impl DBusProperties {
         );
     }
 
-    pub fn register_mut(cr: &mut Crossroads<Mut>) {
+    pub fn register_local(cr: &mut Crossroads<handlers::Local>) {
 //        Self::register(cr, unimplemented!(), unimplemented!(), unimplemented!());
     }
 

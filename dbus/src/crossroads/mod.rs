@@ -16,6 +16,6 @@ pub use self::crossroads::{Crossroads};
 
 pub use self::path::{Path, PathData};
 
-pub use self::handlers::{Handlers, Par, Mut};
+pub use self::handlers::{Handlers, Par, Local};
 
 pub use self::context::{MsgCtx, RefCtx};

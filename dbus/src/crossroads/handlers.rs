@@ -52,19 +52,19 @@ impl Handlers for Par {
 
 }
 
-/// Mutable, non-Send tree
+/// Specifier for mutable and non-Sendable instances of Crossroads. This allows for non-Send method handlers.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Mut;
+pub struct Local;
 
-impl Handlers for Mut {
-    type Method = MutMethod;
+impl Handlers for Local {
+    type Method = LocalMethod;
     type GetProp = Box<dyn FnMut(&mut Path<Self>, &mut arg::IterAppend, &mut MsgCtx) -> Result<(), MethodErr> + 'static>;
     type SetProp = Box<dyn FnMut(&mut Path<Self>, &mut arg::Iter, &mut MsgCtx) -> Result<bool, MethodErr> + 'static>;
     type Iface = Box<dyn Any>;
 
     fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
     where F: Fn(&mut MsgCtx, &RefCtx<Self>, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
-        MutMethod(MutMethods::AllRef(Box::new(move |ctx, refctx| {
+        LocalMethod(LocalMethods::AllRef(Box::new(move |ctx, refctx| {
             let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
             let r = r.and_then(|ia| f(ctx, refctx, ia)); 
             Some(posthandler(ctx.message, r))
@@ -73,12 +73,12 @@ impl Handlers for Mut {
 }
 
 
-pub struct MutMethod(pub (super) MutMethods);
+pub struct LocalMethod(pub (super) LocalMethods);
 
-pub (super) enum MutMethods {
+pub (super) enum LocalMethods {
     MutIface(Box<dyn FnMut(&mut (dyn Any), &mut MsgCtx) -> Option<Message> + 'static>),
-    AllRef(Box<dyn Fn(&mut MsgCtx, &RefCtx<Mut>) -> Option<Message> + 'static>),
-    MutCr(fn(&mut Crossroads<Mut>, &Message) -> Vec<Message>),
+    AllRef(Box<dyn Fn(&mut MsgCtx, &RefCtx<Local>) -> Option<Message> + 'static>),
+    MutCr(fn(&mut Crossroads<Local>, &Message) -> Vec<Message>),
 }
 
 /// Internal helper trait
@@ -114,11 +114,11 @@ where F: Fn(&I, &mut MsgCtx, &RefCtx<Par>, IA) -> Result<OA, MethodErr> + Send +
 }
 
 
-impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<Mut as Handlers>::Method, ((), IA, OA, I), ((), Mut)> for F
+impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<Local as Handlers>::Method, ((), IA, OA, I), ((), Local)> for F
 where F: FnMut(&mut I, &mut MsgCtx, IA) -> Result<OA, MethodErr> + 'static
 {
-    fn make(mut self) -> <Mut as Handlers>::Method {
-        MutMethod(MutMethods::MutIface(Box::new(move |data, info| {
+    fn make(mut self) -> <Local as Handlers>::Method {
+        LocalMethod(LocalMethods::MutIface(Box::new(move |data, info| {
             let iface: &mut I = data.downcast_mut().unwrap();
             let r = IA::read(&mut info.message.iter_init()).map_err(From::from);
             let r = r.and_then(|ia| self(iface, info, ia)); 
