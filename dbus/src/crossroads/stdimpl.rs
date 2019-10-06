@@ -5,7 +5,7 @@ use crate::{arg, Message, Path as PathName};
 use super::MethodErr;
 use crate::arg::{Arg, Variant, Append};
 use std::collections::HashMap;
-use super::path::Path;
+use super::path::{Path, PathData};
 use super::context::{MsgCtx, RefCtx};
 use std::ffi::CStr;
 
@@ -144,11 +144,16 @@ where F: FnMut(&H::GetProp, &mut arg::IterAppend, &mut MsgCtx, &RefCtx<H>) -> Re
 
 
 impl DBusProperties {
-    fn register<H: Handlers>(cr: &mut Crossroads<H>, get: H::Method, getall: H::Method, set: H::Method) {
+    fn register<H: Handlers>(cr: &mut Crossroads<H>, get: H::Method, getall: H::Method, set: H::Method) where Self: PathData<H::Iface> {
         cr.register::<Self,_>("org.freedesktop.DBus.Properties")
             .method_custom::<(String, String), (Variant<u8>,)>("Get".into(), ("interface_name", "property_name"), ("value",), get)
             .method_custom::<(String,), (HashMap<String, Variant<u8>>,)>("GetAll".into(), ("interface_name",), ("props",), getall)
-            .method_custom::<(String, String, Variant<u8>), ()>("Set".into(), ("interface_name", "property_name", "value"), (), set);
+            .method_custom::<(String, String, Variant<u8>), ()>("Set".into(), ("interface_name", "property_name", "value"), (), set)
+            .on_path_insert(|p, cr| {
+                if cr.reg.values().any(|entry| !entry.info.props.is_empty() && p.get_from_typeid(entry.typeid).is_some()) {
+                    p.insert(DBusProperties)
+                }
+            });
     }
 
     pub fn register_par(cr: &mut Crossroads<Par>) {
@@ -248,9 +253,9 @@ fn introspect<H: Handlers>(cr: &Crossroads<H>, path: &Path<H>) -> String {
     }
 
     let mut ifacestr = String::new();
-    for (_, (typeid, info)) in &cr.reg {
-        if path.get_from_typeid(*typeid).is_some() {
-            ifacestr += &introspect_iface(info);
+    for entry in cr.reg.values() {
+        if path.get_from_typeid(entry.typeid).is_some() {
+            ifacestr += &introspect_iface(&entry.info);
         }
     }
 
@@ -261,11 +266,12 @@ fn introspect<H: Handlers>(cr: &Crossroads<H>, path: &Path<H>) -> String {
 }
 
 impl DBusIntrospectable {
-    pub fn register<H: Handlers>(cr: &mut Crossroads<H>) {
+    pub fn register<H: Handlers>(cr: &mut Crossroads<H>) where Self: PathData<H::Iface> {
         cr.register::<Self,_>("org.freedesktop.DBus.Introspectable")
             .method("Introspect", (), ("xml_data",), |_: &mut MsgCtx, c: &RefCtx<H>, _: ()| {
                 Ok((introspect(c.crossroads, c.path),))
-            });
+            })
+            .on_path_insert(|p, cr| p.insert(DBusIntrospectable));
     }
 }
 

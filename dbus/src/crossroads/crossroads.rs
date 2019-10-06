@@ -10,39 +10,48 @@ use super::stdimpl::{DBusProperties, DBusIntrospectable};
 use super::path::Path;
 use super::context::{MsgCtx, RefCtx};
 
-// The key is an IfaceName, but if we have that we bump into https://github.com/rust-lang/rust/issues/59732
-// so we use CString as a workaround.
-//#[derive(Default, Debug)]
-//struct IfaceReg<H: Handlers>(BTreeMap<CString, (TypeId, IfaceInfo<'static, H>)>);
+pub (super) struct RegEntry<H: Handlers> {
+    pub typeid: TypeId,
+    pub info: IfaceInfo<'static, H>,
+    pub path_insert: Option<Box<dyn Fn(&mut Path<H>, &Crossroads<H>) + Send + Sync>>
+}
 
-//#[derive(Debug)]
-//struct IfacePaths<H: Handlers>(BTreeMap<CString, PathData<H>>);
+impl<H: Handlers> RegEntry<H> {
+    pub fn new<I: 'static>(name: IfaceName<'static>) -> Self {
+        RegEntry {
+            typeid: TypeId::of::<I>(),
+            info: IfaceInfo::new_empty(name),
+            path_insert: None
+        }
+    }
+}
 
-//impl<H: Handlers> Default for IfacePaths<H> {
-//    fn default() -> Self { IfacePaths(BTreeMap::new()) }
-//}
+
+impl<H: Handlers> fmt::Debug for RegEntry<H> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "RegEntry") }
+}
 
 #[derive(Debug)]
 pub struct Crossroads<H: Handlers> {
-    pub (super) reg: BTreeMap<CString, (TypeId, IfaceInfo<'static, H>)>,
+    pub (super) reg: BTreeMap<CString, RegEntry<H>>,
     pub (super) paths: BTreeMap<CString, Path<H>>,
 }
 
 impl<H: Handlers> Crossroads<H> {
-
-    pub fn register_custom<I: 'static>(&mut self, info: IfaceInfo<'static, H>) -> Option<IfaceInfo<'static, H>> {
-        self.reg.insert(info.name.clone().into_cstring(), (TypeId::of::<I>(), info)).map(|x| x.1)
-    }
-
-    pub fn insert(&mut self, path: Path<H>) {
+    pub fn insert(&mut self, mut path: Path<H>) {
+        for x in self.reg.values() {
+            if let Some(ref cb) = x.path_insert { cb(&mut path, self) }
+        }
         let c = path.name().clone().into_cstring();
         self.paths.insert(c, path);
     }
 
+    /// Path accessor
     pub fn get<N: Into<PathName<'static>>>(&self, name: N) -> Option<&Path<H>> {
         self.paths.get(name.into().as_cstr())
     }
 
+    /// Allows for direct manipulation of a path, bypassing signal generation
     pub fn get_mut<N: Into<PathName<'static>>>(&mut self, name: N) -> Option<&mut Path<H>> {
         self.paths.get_mut(name.into().as_cstr())
     }
@@ -66,8 +75,8 @@ impl<H: Handlers> Crossroads<H> {
 */
     pub (super) fn prop_lookup_mut<'a>(&'a mut self, path: &CStr, iname: &CStr, propname: &CStr) ->
     Option<(&'a mut PropInfo<'static, H>, &'a mut Path<H>)> {
-        let (typeid, iinfo) = self.reg.get_mut(iname)?;
-        let propinfo = iinfo.props.iter_mut().find(|x| x.name.as_cstr() == propname)?;
+        let entry = self.reg.get_mut(iname)?;
+        let propinfo = entry.info.props.iter_mut().find(|x| x.name.as_cstr() == propname)?;
         let path = self.paths.get_mut(path)?;
         Some((propinfo, path))
     }
@@ -82,13 +91,15 @@ impl Crossroads<Par> {
         Some(r.into_iter().collect())
     }
 
-    pub fn new_par() -> Self { 
+    pub fn new_par(reg_default: bool) -> Self { 
         let mut cr = Crossroads {
             reg: BTreeMap::new(),
             paths: BTreeMap::new(),
         };
-        DBusProperties::register_par(&mut cr);
-        DBusIntrospectable::register(&mut cr);
+        if reg_default {
+            DBusProperties::register_par(&mut cr);
+            DBusIntrospectable::register(&mut cr);
+        }
         cr
     }
 }
@@ -97,8 +108,8 @@ impl Crossroads<handlers::Local> {
     fn dispatch_ref(&self, ctx: &mut MsgCtx) -> Option<Vec<Message>> {
         use super::handlers::LocalMethods;
         let refctx = RefCtx::new(self, ctx)?;
-        let (_, iinfo) = self.reg.get(ctx.iface.as_cstr())?;
-        let minfo = iinfo.methods.iter().find(|x| x.name() == &ctx.member)?;
+        let entry = self.reg.get(ctx.iface.as_cstr())?;
+        let minfo = entry.info.methods.iter().find(|x| x.name() == &ctx.member)?;
         let r = match minfo.handler().0 {
             LocalMethods::MutIface(_) => unreachable!(),
             LocalMethods::MutCr(_) => unreachable!(),
@@ -114,12 +125,12 @@ impl Crossroads<handlers::Local> {
         let mut ctx = MsgCtx::new(msg)?;
         let mut try_ref = false;
         let r = {
-            let (typeid, iinfo) = self.reg.get_mut(ctx.iface.as_cstr())?;
-            let minfo = iinfo.methods.iter_mut().find(|x| x.name() == &ctx.member)?;
+            let entry = self.reg.get_mut(ctx.iface.as_cstr())?;
+            let minfo = entry.info.methods.iter_mut().find(|x| x.name() == &ctx.member)?;
             match minfo.handler_mut().0 {
                 LocalMethods::MutIface(ref mut f) => {
                     let data = self.paths.get_mut(ctx.path.as_cstr())?;
-                    let iface = data.get_from_typeid_mut(*typeid)?;
+                    let iface = data.get_from_typeid_mut(entry.typeid)?;
                     let iface = &mut **iface;
                     f(iface, &mut ctx)
                 },
@@ -131,13 +142,16 @@ impl Crossroads<handlers::Local> {
         else { Some(r.into_iter().collect()) }
     }
 
-    pub fn new_local() -> Self { 
+    pub fn new_local(reg_default: bool) -> Self { 
         let mut cr = Crossroads {
             reg: BTreeMap::new(),
             paths: BTreeMap::new(),
         };
-        DBusIntrospectable::register(&mut cr);
-        DBusProperties::register_local(&mut cr);
+        if reg_default {
+            DBusIntrospectable::register(&mut cr);
+            DBusProperties::register_local(&mut cr);
+            cr.insert(Path::new("/"));
+        }
         cr
     }
 }
@@ -151,7 +165,7 @@ mod test {
     fn test_send_sync() {
         fn is_send<T: Send>(_: &T) {}
         fn is_sync<T: Sync>(_: &T) {}
-        let c = Crossroads::new_par();
+        let c = Crossroads::new_par(true);
         dbg!(&c);
         is_send(&c);
         is_sync(&c);
@@ -159,7 +173,7 @@ mod test {
 
     #[test]
     fn cr_local() {
-        let mut cr = Crossroads::new_local();
+        let mut cr = Crossroads::new_local(true);
 
         struct Score(u16);
 
@@ -174,7 +188,6 @@ mod test {
 
         let mut pdata = Path::new("/");
         pdata.insert(Score(7u16));
-        pdata.insert(DBusIntrospectable);
         cr.insert(pdata);
 
         let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "com.example.dbusrs.crossroads.score", "UpdateScore").unwrap();
@@ -200,7 +213,7 @@ mod test {
 
     #[test]
     fn cr_par() {
-        let mut cr = Crossroads::new_par();
+        let mut cr = Crossroads::new_par(true);
         use std::sync::Mutex;
         use crate::arg;
         use crate::arg::Variant;
@@ -223,8 +236,6 @@ mod test {
 
         let mut pdata = Path::new("/");
         pdata.insert(Score(7u16, Mutex::new(37u32)));
-        pdata.insert(DBusProperties);
-        pdata.insert(DBusIntrospectable);
         cr.insert(pdata);
 
         let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/", "com.example.dbusrs.crossroads.score", "Hello").unwrap();

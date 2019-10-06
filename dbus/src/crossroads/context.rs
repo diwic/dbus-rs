@@ -40,16 +40,16 @@ pub struct RefCtx<'a, H: Handlers> {
 impl<'a, H: Handlers> RefCtx<'a, H> {
 
     pub (super) fn new<'b>(cr: &'a Crossroads<H>, ctx: &'b MsgCtx) -> Option<Self> {
-        let (typeid, iinfo) = cr.reg.get(ctx.iface.as_cstr())?;
+        let entry = cr.reg.get(ctx.iface.as_cstr())?;
         let path = cr.paths.get(ctx.path.as_cstr())?;
-        let iface = path.get_from_typeid(*typeid)?;
-        Some(RefCtx { crossroads: cr, path, iface, iinfo })
+        let iface = path.get_from_typeid(entry.typeid)?;
+        Some(RefCtx { crossroads: cr, path, iface, iinfo: &entry.info })
     }
 
     pub (super) fn with_iface(&self, ifacename: &CStr) -> Option<Self> {
-        let (typeid, iinfo) = self.crossroads.reg.get(ifacename)?;
-        let iface = self.path.get_from_typeid(*typeid)?;
-        Some(RefCtx { crossroads: self.crossroads, path: self.path, iface, iinfo })
+        let entry = self.crossroads.reg.get(ifacename)?;
+        let iface = self.path.get_from_typeid(entry.typeid)?;
+        Some(RefCtx { crossroads: self.crossroads, path: self.path, iface, iinfo: &entry.info })
     }
 
 }

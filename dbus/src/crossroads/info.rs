@@ -2,13 +2,14 @@ use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberN
 use crate::Message;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::any::Any;
+use std::any::{Any, TypeId};
 use std::mem;
 use crate::arg::{Arg, Append, AppendAll, ReadAll, ArgAll, Get, TypeMismatchError, IterAppend};
 use std::marker::PhantomData;
 use super::MethodErr;
 use super::handlers::{Handlers, MakeHandler, DebugMethod, DebugProp, Par};
-use super::crossroads::Crossroads;
+use super::crossroads::{Crossroads, RegEntry};
+use super::path::Path;
 
 fn build_argvec<A: ArgAll>(a: A::strs) -> Vec<Argument<'static>> {
     let mut v = vec!();
@@ -98,20 +99,21 @@ enum MetSigProp { Method, Signal, Prop }
 #[derive(Debug)]
 pub struct IfaceInfoBuilder<'a, I: 'static, H: Handlers> {
     cr: Option<&'a mut Crossroads<H>>,
-    info: IfaceInfo<'static, H>,
+    entry: RegEntry<H>,
     last: Option<MetSigProp>,
     _dummy: PhantomData<*const I>,
 }
 
-impl<'a, I, H: Handlers> IfaceInfoBuilder<'a, I, H> {
+impl<'a, I: 'static, H: Handlers> IfaceInfoBuilder<'a, I, H> {
     pub fn new(cr: Option<&'a mut Crossroads<H>>, name: IfaceName<'static>) -> Self {
-        IfaceInfoBuilder { cr, _dummy: PhantomData, info: IfaceInfo::new_empty(name), last: None }
+        let entry = RegEntry::new::<I>(name);
+        IfaceInfoBuilder { cr, _dummy: PhantomData, entry, last: None }
     }
 
     /// Adds a signal to this interface.
     pub fn signal<A: ArgAll, N: Into<MemberName<'static>>>(mut self, name: N, args: A::strs) -> Self {
         let s = SignalInfo { name: name.into(), args: build_argvec::<A>(args), anns: Default::default() };
-        self.info.signals.push(s);
+        self.entry.info.signals.push(s);
         self.last = Some(MetSigProp::Signal);
         self
     }
@@ -119,10 +121,10 @@ impl<'a, I, H: Handlers> IfaceInfoBuilder<'a, I, H> {
     /// Annotates the last added method, signal or property, or the interface itself if nothing is added.
     pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
          let x: &mut Annotations = match self.last {
-             None => &mut self.info.anns,
-             Some(MetSigProp::Method) => &mut self.info.methods.last_mut().unwrap().anns,
-             Some(MetSigProp::Signal) => &mut self.info.signals.last_mut().unwrap().anns,
-             Some(MetSigProp::Prop) => &mut self.info.props.last_mut().unwrap().anns,
+             None => &mut self.entry.info.anns,
+             Some(MetSigProp::Method) => &mut self.entry.info.methods.last_mut().unwrap().anns,
+             Some(MetSigProp::Signal) => &mut self.entry.info.signals.last_mut().unwrap().anns,
+             Some(MetSigProp::Prop) => &mut self.entry.info.props.last_mut().unwrap().anns,
          };
          x.insert(name.into(), value.into());
          self
@@ -152,7 +154,7 @@ impl<'a, I, H: Handlers> IfaceInfoBuilder<'a, I, H> {
     /// Panics if the last added thing was not a property.
     pub fn access(mut self, a: Access) -> Self {
         if self.last != Some(MetSigProp::Prop) { panic!("Cannot modify access on a non property") }
-        self.info.props.last_mut().unwrap().access = a;
+        self.entry.info.props.last_mut().unwrap().access = a;
         self
     }
 
@@ -167,7 +169,7 @@ impl<'a, I, H: Handlers> IfaceInfoBuilder<'a, I, H> {
     pub fn method_custom<IA: ArgAll, OA: ArgAll>(mut self, name: MemberName<'static>, in_args: IA::strs, out_args: OA::strs, f: H::Method) -> Self {
         let m = MethodInfo { name, handler: DebugMethod(f), 
             i_args: build_argvec::<IA>(in_args), o_args: build_argvec::<OA>(out_args), anns: Default::default() };
-        self.info.methods.push(m);
+        self.entry.info.methods.push(m);
         self.last = Some(MetSigProp::Method);
         self
     }
@@ -175,7 +177,7 @@ impl<'a, I, H: Handlers> IfaceInfoBuilder<'a, I, H> {
     /// Adds a property to this interface.
     pub fn prop_custom(mut self, name: MemberName<'static>, sig: Signature<'static>, get: Option<H::GetProp>, set: Option<H::SetProp>) -> Self {
         let p = PropInfo::new(name, sig, get, set);
-        self.info.props.push(p);
+        self.entry.info.props.push(p);
         self.last = Some(MetSigProp::Prop);
         self
     }
@@ -193,13 +195,18 @@ impl<'a, I, H: Handlers> IfaceInfoBuilder<'a, I, H> {
         self.prop_custom(name.into(), T::signature(), Some(getf.make()), Some(setf.make()))
     }
 
+    pub (super) fn on_path_insert<F: Fn(&mut Path<H>, &Crossroads<H>) + 'static + Send + Sync>(mut self, f: F) -> Self {
+        self.entry.path_insert = Some(Box::new(f));
+        self
+    }
 }
 
 impl<'a, I: 'static, H: Handlers> Drop for IfaceInfoBuilder<'a, I, H> {
     fn drop(&mut self) {
         if let Some(ref mut cr) = self.cr {
-            let info = IfaceInfo::new_empty(self.info.name.clone()); // workaround for not being able to consume self.info
-            cr.register_custom::<I>(mem::replace(&mut self.info, info));
+            let n = self.entry.info.name.clone();
+            let entry = mem::replace(&mut self.entry, RegEntry::new::<()>(n.clone())); // workaround for not being able to consume self.entry
+            cr.reg.insert(n.into_cstring(), entry);
         }
     }
 }
