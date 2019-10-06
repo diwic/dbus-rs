@@ -54,8 +54,8 @@ impl Connection {
     })}
 
     /// Create a new connection to the system-wide bus.
-    pub fn new_system() -> Result<Self, Error> { Ok(Connection { 
-        channel: Channel::get_private(BusType::System)?, 
+    pub fn new_system() -> Result<Self, Error> { Ok(Connection {
+        channel: Channel::get_private(BusType::System)?,
         filters: Default::default(),
         filter_nextid: Default::default()
     })}
@@ -115,7 +115,7 @@ impl Connection {
     ///
     /// The returned value can be used to remove the match. The match is also removed if the callback
     /// returns "false".
-    pub fn add_match<S: ReadAll, F>(&self, match_rule: MatchRule<'static>, f: F) -> Result<u32, Error> 
+    pub fn add_match<S: ReadAll, F>(&self, match_rule: MatchRule<'static>, f: F) -> Result<u32, Error>
     where F: FnMut(S, &Self, &Message) -> bool + 'static {
         let m = match_rule.match_str();
         self.add_match_no_cb(&m)?;
@@ -139,8 +139,8 @@ impl SyncConnection {
     })}
 
     /// Create a new connection to the system-wide bus.
-    pub fn new_system() -> Result<Self, Error> { Ok(SyncConnection { 
-        channel: Channel::get_private(BusType::System)?, 
+    pub fn new_system() -> Result<Self, Error> { Ok(SyncConnection {
+        channel: Channel::get_private(BusType::System)?,
         filters: Default::default(),
     })}
 
@@ -152,7 +152,7 @@ impl SyncConnection {
     /// Tries to handle an incoming message if there is one. If there isn't one,
     /// it will wait up to timeout
     ///
-    /// Note: Might deadlock if called recursively. 
+    /// Note: Might deadlock if called recursively.
     pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
         if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
             if let Some(reply) = dispatch(&mut self.filters.lock().unwrap().1, msg, |cb, msg| { cb(msg, self) }) {
@@ -201,7 +201,7 @@ impl SyncConnection {
     ///
     /// The returned value can be used to remove the match. The match is also removed if the callback
     /// returns "false".
-    pub fn add_match<S: ReadAll, F>(&self, match_rule: MatchRule<'static>, f: F) -> Result<u32, Error> 
+    pub fn add_match<S: ReadAll, F>(&self, match_rule: MatchRule<'static>, f: F) -> Result<u32, Error>
     where F: FnMut(S, &Self, &Message) -> bool + Send + Sync + 'static {
         let m = match_rule.match_str();
         self.add_match_no_cb(&m)?;
@@ -214,7 +214,7 @@ impl SyncConnection {
         use channel::MatchingReceiver;
         let (mr, _) = self.stop_receive(id).ok_or_else(|| Error::new_failed("No match with that id found"))?;
         self.remove_match_no_cb(&mr.match_str())
-    } 
+    }
 
 
 }
@@ -262,7 +262,7 @@ impl channel::MatchingReceiver for Connection {
         id
     }
     fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
-        let mut filters = self.filters.borrow_mut(); 
+        let mut filters = self.filters.borrow_mut();
         if let Some(idx) = filters.iter().position(|f| f.id == id) {
             let x = filters.remove(idx);
             Some((x.rule, x.callback))
@@ -281,7 +281,7 @@ impl channel::MatchingReceiver for SyncConnection {
         id
     }
     fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
-        let mut filters = self.filters.lock().unwrap(); 
+        let mut filters = self.filters.lock().unwrap();
         if let Some(idx) = filters.1.iter().position(|f| f.id == id) {
             let x = filters.1.remove(idx);
             Some((x.rule, x.callback))
@@ -292,7 +292,7 @@ impl channel::MatchingReceiver for SyncConnection {
 
 /// A struct that wraps a connection, destination and path.
 ///
-/// A D-Bus "Proxy" is a client-side object that corresponds to a remote object on the server side. 
+/// A D-Bus "Proxy" is a client-side object that corresponds to a remote object on the server side.
 /// Calling methods on the proxy object calls methods on the remote object.
 /// Read more in the [D-Bus tutorial](https://dbus.freedesktop.org/doc/dbus-tutorial.html#proxies)
 #[derive(Clone, Debug)]
@@ -343,7 +343,7 @@ impl<'a, T: BlockingSender, C: std::ops::Deref<Target=T>> Proxy<'a, C> {
     /// The match rule will be modified to include this path and destination only.
     ///
     /// If call_add_match is true, will notify the D-Bus server that matching should start.
-    pub fn match_start(&self, mut mr: MatchRule<'static>, call_add_match: bool, f: <T as channel::MatchingReceiver>::F) -> Result<u32, Error> 
+    pub fn match_start(&self, mut mr: MatchRule<'static>, call_add_match: bool, f: <T as channel::MatchingReceiver>::F) -> Result<u32, Error>
     where T: channel::MatchingReceiver {
         mr.path = Some(self.path.clone().into_static());
         mr.sender = Some(self.destination.clone().into_static());
@@ -360,7 +360,7 @@ impl<'a, T: BlockingSender, C: std::ops::Deref<Target=T>> Proxy<'a, C> {
     ///
     /// If call_add_match is true, will notify the D-Bus server that matching should stop,
     /// this should be true in case match_signal_local or match_signal_sync was used.
-    pub fn match_stop(&self, id: u32, call_remove_match: bool) -> Result<(), Error> 
+    pub fn match_stop(&self, id: u32, call_remove_match: bool) -> Result<(), Error>
     where T: channel::MatchingReceiver {
         if let Some((mr, _)) = self.connection.stop_receive(id) {
             if call_remove_match {
@@ -417,66 +417,6 @@ impl<S: ReadAll, F: FnMut(S, &Connection, &Message) -> bool + 'static> MakeSigna
                 false
             } else { true }
         })
-    }
-}
-
-
-impl<'a, T, C> Proxy<'a, C> 
-where
-    T: BlockingSender + channel::MatchingReceiver<F=Box<dyn FnMut(Message, &T) -> bool + 'static>>,
-    C: std::ops::Deref<Target=T>
-{
-
-    /// Sets up an incoming signal match, that calls the supplied callback every time the signal is received.
-    ///
-    /// The returned value can be used to remove the match. The match is also removed if the callback
-    /// returns "false".
-    #[deprecated(note="use match_signal instead")]
-    pub fn match_signal_local<S: SignalArgs + ReadAll, F>(&self, mut f: F) -> Result<u32, Error>
-    where F: for <'b> FnMut(S, &'b T) -> bool + 'static
-    {
-        let mr = S::match_rule(Some(&self.destination), Some(&self.path)).static_clone();
-        let mstr = mr.match_str();
-        let ff = Box::new(move |msg: Message, conn: &T| {
-            if let Ok(s) = S::read(&mut msg.iter_init()) {
-                if f(s, conn) { return true };
-                let proxy = stdintf::proxy(conn);
-                use crate::blocking::stdintf::org_freedesktop::DBus;
-                let _ = proxy.remove_match(&mstr);
-                false
-            } else { true }
-        });
-        self.match_start(mr, true, ff)
-    }
-}
-
-
-impl<'a, T, C> Proxy<'a, C> 
-where
-    T: BlockingSender + Send + Sync + channel::MatchingReceiver<F=Box<dyn FnMut(Message, &T) -> bool + Send + Sync + 'static>>,
-    C: std::ops::Deref<Target=T>
-{
-
-    /// Sets up an incoming signal match, that calls the supplied callback every time the signal is received.
-    ///
-    /// The returned value can be used to remove the match. The match is also removed if the callback
-    /// returns "false".
-    #[deprecated(note="use match_signal instead")]
-    pub fn match_signal_sync<S: SignalArgs + ReadAll, F>(&self, mut f: F) -> Result<u32, Error>
-    where F: for <'b> FnMut(S, &'b T) -> bool + Send + Sync + 'static
-    {
-        let mr = S::match_rule(Some(&self.destination), Some(&self.path)).static_clone();
-        let mstr = mr.match_str();
-        let ff = Box::new(move |msg: Message, conn: &T| {
-            if let Ok(s) = S::read(&mut msg.iter_init()) {
-                if f(s, conn) { return true };
-                let proxy = stdintf::proxy(conn);
-                use crate::blocking::stdintf::org_freedesktop::DBus;
-                let _ = proxy.remove_match(&mstr);
-                false
-            } else { true }
-        });
-        self.match_start(mr, true, ff)
     }
 }
 

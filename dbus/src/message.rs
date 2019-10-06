@@ -174,16 +174,6 @@ impl Message {
         for a in v { a.append_by_ref(&mut ia); }
     }
 
-    /// Appends one MessageItem to a message.
-    /// Use in builder style: e g `m.method_return().append(7i32)`
-    ///
-    /// Note: using `append1`, `append2` or `append3` might be faster, especially for large arrays.
-    /// This method is provided for backwards compatibility.
-    #[deprecated]
-    pub fn append<I: Into<crate::arg::messageitem::MessageItem>>(self, v: I) -> Self {
-        self.append1(v.into())
-    }
-
     /// Appends one argument to this message.
     /// Use in builder style: e g `m.method_return().append1(7i32)`
     pub fn append1<A: Append>(mut self, a: A) -> Self {

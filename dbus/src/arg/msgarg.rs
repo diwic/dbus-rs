@@ -9,16 +9,11 @@ use super::{Iter, IterAppend, ArgType};
 
 /// Types that can represent a D-Bus message argument implement this trait.
 ///
-/// Types should also implement either Append or Get to be useful. 
+/// Types should also implement either Append or Get to be useful.
 pub trait Arg {
-    /// The corresponding D-Bus argument type code. 
+    /// The corresponding D-Bus argument type code.
     const ARG_TYPE: ArgType;
-    /// The corresponding D-Bus argument type code; just returns ARG_TYPE. 
-    ///
-    /// For backwards compatibility.
-    #[deprecated(note = "Use associated constant ARG_TYPE instead")]
-    fn arg_type() -> ArgType { Self::ARG_TYPE }
-    /// The corresponding D-Bus type signature for this type. 
+    /// The corresponding D-Bus type signature for this type.
     fn signature() -> Signature<'static>;
 }
 
@@ -33,10 +28,10 @@ pub trait ArgAll {
 /// Types that can be appended to a message as arguments implement this trait.
 pub trait Append {
     /// Performs the append operation by consuming self.
-    fn append(self, ia: &mut IterAppend) where Self: Sized { self.append_by_ref(ia) } 
+    fn append(self, ia: &mut IterAppend) where Self: Sized { self.append_by_ref(ia) }
 
     /// Performs the append operation by borrowing self.
-    fn append_by_ref(&self, _: &mut IterAppend); 
+    fn append_by_ref(&self, _: &mut IterAppend);
 }
 
 /// Helper trait to append many arguments to a message.
@@ -62,7 +57,7 @@ pub trait ReadAll: Sized {
 pub trait RefArg: fmt::Debug {
     /// The corresponding D-Bus argument type code.
     fn arg_type(&self) -> ArgType;
-    /// The corresponding D-Bus type signature for this type. 
+    /// The corresponding D-Bus type signature for this type.
     fn signature(&self) -> Signature<'static>;
     /// Performs the append operation.
     fn append(&self, _: &mut IterAppend);
@@ -136,7 +131,7 @@ pub fn cast_mut<'a, T: 'static>(a: &'a mut (dyn RefArg + 'static)) -> Option<&'a
 /// Note: Booleans do not implement this trait because D-Bus booleans are 4 bytes and Rust booleans are 1 byte.
 pub unsafe trait FixedArray: Arg + 'static + Clone + Copy {}
 
-/// Types that can be used as keys in a dict type implement this trait. 
+/// Types that can be used as keys in a dict type implement this trait.
 pub trait DictKey: Arg {}
 
 
@@ -230,7 +225,7 @@ macro_rules! argall_impl {
     ($($n: ident $t: ident $s: ty,)+) => {
 
 impl<$($t: Arg),*> ArgAll for ($($t,)*) {
-    type strs = ($(&'static $s,)*); 
+    type strs = ($(&'static $s,)*);
     fn strs_sig<Q: FnMut(&'static str, Signature<'static>)>(z: Self::strs, mut q: Q) {
         let ( $($n,)*) = z;
         $( q($n, $t::signature()); )*
