@@ -116,7 +116,7 @@ impl Connection {
     /// The returned value can be used to remove the match. The match is also removed if the callback
     /// returns "false".
     pub fn add_match<S: ReadAll, F>(&self, match_rule: MatchRule<'static>, f: F) -> Result<u32, Error> 
-    where F: FnMut(S, &Self) -> bool + 'static {
+    where F: FnMut(S, &Self, &Message) -> bool + 'static {
         let m = match_rule.match_str();
         self.add_match_no_cb(&m)?;
         use channel::MatchingReceiver;
@@ -202,7 +202,7 @@ impl SyncConnection {
     /// The returned value can be used to remove the match. The match is also removed if the callback
     /// returns "false".
     pub fn add_match<S: ReadAll, F>(&self, match_rule: MatchRule<'static>, f: F) -> Result<u32, Error> 
-    where F: FnMut(S, &Self) -> bool + Send + Sync + 'static {
+    where F: FnMut(S, &Self, &Message) -> bool + Send + Sync + 'static {
         let m = match_rule.match_str();
         self.add_match_no_cb(&m)?;
         use channel::MatchingReceiver;
@@ -392,11 +392,11 @@ pub trait MakeSignal<G, S, T> {
     fn make(self, mstr: String) -> G;
 }
 
-impl<S: ReadAll, F: FnMut(S, &SyncConnection) -> bool + Send + Sync + 'static> MakeSignal<SyncFilterCb, S, SyncConnection> for F {
+impl<S: ReadAll, F: FnMut(S, &SyncConnection, &Message) -> bool + Send + Sync + 'static> MakeSignal<SyncFilterCb, S, SyncConnection> for F {
     fn make(mut self, mstr: String) -> SyncFilterCb {
         Box::new(move |msg: Message, conn: &SyncConnection| {
             if let Ok(s) = S::read(&mut msg.iter_init()) {
-                if self(s, conn) { return true };
+                if self(s, conn, &msg) { return true };
                 let proxy = stdintf::proxy(conn);
                 use crate::blocking::stdintf::org_freedesktop::DBus;
                 let _ = proxy.remove_match(&mstr);
@@ -406,11 +406,11 @@ impl<S: ReadAll, F: FnMut(S, &SyncConnection) -> bool + Send + Sync + 'static> M
     }
 }
 
-impl<S: ReadAll, F: FnMut(S, &Connection) -> bool + 'static> MakeSignal<LocalFilterCb, S, Connection> for F {
+impl<S: ReadAll, F: FnMut(S, &Connection, &Message) -> bool + 'static> MakeSignal<LocalFilterCb, S, Connection> for F {
     fn make(mut self, mstr: String) -> LocalFilterCb {
         Box::new(move |msg: Message, conn: &Connection| {
             if let Ok(s) = S::read(&mut msg.iter_init()) {
-                if self(s, conn) { return true };
+                if self(s, conn, &msg) { return true };
                 let proxy = stdintf::proxy(conn);
                 use crate::blocking::stdintf::org_freedesktop::DBus;
                 let _ = proxy.remove_match(&mstr);
@@ -484,7 +484,7 @@ where
 fn test_add_match() {
     use self::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged as Ppc;
     let c = Connection::new_session().unwrap();
-    let x = c.add_match(Ppc::match_rule(None, None), |_: Ppc, _| { true }).unwrap();
+    let x = c.add_match(Ppc::match_rule(None, None), |_: Ppc, _, _| { true }).unwrap();
     c.remove_match(x).unwrap();
 }
 
