@@ -27,14 +27,69 @@ pub trait Handlers: Sized {
 
     fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
     where F: Fn(&mut MsgCtx, &RefCtx<Self>, IA) -> Result<OA, MethodErr> + Send + Sync + 'static;
+
+    fn call_method_ref(m: &Self::Method, ctx: &mut MsgCtx, refctx: &RefCtx<Self>) -> Option<Message>;
+    fn call_method_mut(cr: &mut Crossroads<Self>, ctx: &mut MsgCtx) -> Result<Option<Message>, MethodErr>;
 }
 
-/// Parallel tree - Par
+// The "default" - Method handlers that are "Send" but not "Sync"
+impl Handlers for () {
+    type Method = SendMethod;
+    type GetProp = Box<dyn FnMut(&mut Path<Self>, &mut arg::IterAppend, &mut MsgCtx) -> Result<(), MethodErr> + Send + 'static>;
+    type SetProp = Box<dyn FnMut(&mut Path<Self>, &mut arg::Iter, &mut MsgCtx) -> Result<bool, MethodErr> + Send + 'static>;
+    type Iface = Box<dyn Any + Send>;
+
+    fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
+    where F: Fn(&mut MsgCtx, &RefCtx<Self>, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
+        SendMethod(SendMethods::AllRef(Box::new(move |ctx, refctx| {
+            let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
+            let r = r.and_then(|ia| f(ctx, refctx, ia));
+            Some(posthandler(ctx.message, r))
+        })))
+    }
+
+    fn call_method_ref(m: &Self::Method, ctx: &mut MsgCtx, refctx: &RefCtx<Self>) -> Option<Message> {
+        match m.0 {
+            SendMethods::MutPath(_) => unreachable!(),
+            SendMethods::MutIface(_) => unreachable!(),
+            SendMethods::MutCr(_) => unreachable!(),
+            SendMethods::AllRef(ref f) => {
+                f(ctx, refctx)
+            },
+        }
+    }
+
+    fn call_method_mut(cr: &mut Crossroads<Self>, ctx: &mut MsgCtx) -> Result<Option<Message>, MethodErr> {
+        let mut try_ref = false;
+        let r = {
+            let entry = cr.reg.get_mut(ctx.iface.as_cstr()).ok_or_else(|| { MethodErr::no_interface(&ctx.iface) })?;
+            let minfo = entry.info.methods.iter_mut().find(|x| x.name() == &ctx.member)
+                .ok_or_else(|| { MethodErr::no_method(&ctx.member) })?;
+            match minfo.handler_mut().0 {
+                SendMethods::MutPath(ref mut f) => {
+                    let mut data = cr.paths.get_mut(ctx.path.as_cstr()).ok_or_else(|| { MethodErr::no_path(&ctx.path) })?;
+                    f(&mut data, ctx)
+                }
+                SendMethods::MutIface(ref mut f) => {
+                    let data = cr.paths.get_mut(ctx.path.as_cstr()).ok_or_else(|| { MethodErr::no_path(&ctx.path) })?;
+                    let iface = data.get_from_typeid_mut(entry.typeid).ok_or_else(|| { MethodErr::no_interface(&ctx.iface) })?;
+                    let iface = &mut **iface;
+                    f(iface, ctx)
+                },
+                SendMethods::AllRef(_) => { try_ref = true; None }
+                SendMethods::MutCr(f) => { f(cr, ctx) },
+            }
+        };
+        if try_ref { cr.dispatch_ref(ctx) } else { Ok(r) }
+    }
+}
+
+/// Parallel (Send + Sync) tree - Par
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Par;
 
 impl Handlers for Par {
-    type Method = Box<dyn Fn(&mut MsgCtx, &RefCtx<Par>) -> Option<Message> + Send + Sync + 'static>;
+    type Method = Box<dyn Fn(&mut MsgCtx, &RefCtx<Self>) -> Option<Message> + Send + Sync + 'static>;
     type GetProp = Box<dyn Fn(&mut arg::IterAppend, &mut MsgCtx, &RefCtx<Par>)
         -> Result<(), MethodErr> + Send + Sync + 'static>;
     type SetProp = Box<dyn Fn(&mut arg::Iter, &mut MsgCtx, &RefCtx<Par>)
@@ -45,11 +100,18 @@ impl Handlers for Par {
     where F: Fn(&mut MsgCtx, &RefCtx<Self>, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
         Box::new(move |ctx, refctx| {
             let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
-            let r = r.and_then(|ia| f(ctx, refctx, ia)); 
+            let r = r.and_then(|ia| f(ctx, refctx, ia));
             Some(posthandler(ctx.message, r))
         })
     }
 
+    fn call_method_ref(m: &Self::Method, ctx: &mut MsgCtx, refctx: &RefCtx<Self>) -> Option<Message> {
+        m(ctx, refctx)
+    }
+
+    fn call_method_mut(cr: &mut Crossroads<Self>, ctx: &mut MsgCtx) -> Result<Option<Message>,MethodErr> {
+        cr.dispatch_ref(ctx)
+    }
 }
 
 /// Specifier for mutable and non-Sendable instances of Crossroads. This allows for non-Send method handlers.
@@ -66,19 +128,64 @@ impl Handlers for Local {
     where F: Fn(&mut MsgCtx, &RefCtx<Self>, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
         LocalMethod(LocalMethods::AllRef(Box::new(move |ctx, refctx| {
             let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
-            let r = r.and_then(|ia| f(ctx, refctx, ia)); 
+            let r = r.and_then(|ia| f(ctx, refctx, ia));
             Some(posthandler(ctx.message, r))
         })))
+    }
+
+    fn call_method_ref(m: &Self::Method, ctx: &mut MsgCtx, refctx: &RefCtx<Self>) -> Option<Message> {
+        match m.0 {
+            LocalMethods::MutPath(_) => unreachable!(),
+            LocalMethods::MutIface(_) => unreachable!(),
+            LocalMethods::MutCr(_) => unreachable!(),
+            LocalMethods::AllRef(ref f) => {
+                f(ctx, refctx)
+            },
+        }
+    }
+
+    fn call_method_mut(cr: &mut Crossroads<Self>, ctx: &mut MsgCtx) -> Result<Option<Message>, MethodErr> {
+        let mut try_ref = false;
+        let r = {
+            let entry = cr.reg.get_mut(ctx.iface.as_cstr()).ok_or_else(|| { MethodErr::no_interface(&ctx.iface) })?;
+            let minfo = entry.info.methods.iter_mut().find(|x| x.name() == &ctx.member)
+                .ok_or_else(|| { MethodErr::no_method(&ctx.member) })?;
+            match minfo.handler_mut().0 {
+                LocalMethods::MutPath(ref mut f) => {
+                    let mut data = cr.paths.get_mut(ctx.path.as_cstr()).ok_or_else(|| { MethodErr::no_path(&ctx.path) })?;
+                    f(&mut data, ctx)
+                }
+                LocalMethods::MutIface(ref mut f) => {
+                    let data = cr.paths.get_mut(ctx.path.as_cstr()).ok_or_else(|| { MethodErr::no_path(&ctx.path) })?;
+                    let iface = data.get_from_typeid_mut(entry.typeid).ok_or_else(|| { MethodErr::no_interface(&ctx.iface) })?;
+                    let iface = &mut **iface;
+                    f(iface, ctx)
+                },
+                LocalMethods::AllRef(_) => { try_ref = true; None }
+                LocalMethods::MutCr(f) => { f(cr, ctx) },
+            }
+        };
+        if try_ref { cr.dispatch_ref(ctx) } else { Ok(r) }
     }
 }
 
 
-pub struct LocalMethod(pub (super) LocalMethods);
+pub struct LocalMethod(LocalMethods);
 
-pub (super) enum LocalMethods {
+enum LocalMethods {
+    MutPath(Box<dyn FnMut(&mut Path<Local>, &mut MsgCtx) -> Option<Message> + 'static>),
     MutIface(Box<dyn FnMut(&mut (dyn Any), &mut MsgCtx) -> Option<Message> + 'static>),
     AllRef(Box<dyn Fn(&mut MsgCtx, &RefCtx<Local>) -> Option<Message> + 'static>),
-    MutCr(fn(&mut Crossroads<Local>, &Message) -> Vec<Message>),
+    MutCr(fn(&mut Crossroads<Local>, &mut MsgCtx) -> Option<Message>),
+}
+
+pub struct SendMethod(SendMethods);
+
+enum SendMethods {
+    MutPath(Box<dyn FnMut(&mut Path<()>, &mut MsgCtx) -> Option<Message> + Send + 'static>),
+    MutIface(Box<dyn FnMut(&mut (dyn Any), &mut MsgCtx) -> Option<Message> + Send + 'static>),
+    AllRef(Box<dyn Fn(&mut MsgCtx, &RefCtx<()>) -> Option<Message> + Send + 'static>),
+    MutCr(fn(&mut Crossroads<()>, &mut MsgCtx) -> Option<Message>),
 }
 
 /// Internal helper trait
@@ -107,7 +214,7 @@ where F: Fn(&I, &mut MsgCtx, &RefCtx<Par>, IA) -> Result<OA, MethodErr> + Send +
         Box::new(move |ctx, refctx| {
             let iface: &I = refctx.path.get().unwrap();
             let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
-            let r = r.and_then(|ia| self(iface, ctx, refctx, ia)); 
+            let r = r.and_then(|ia| self(iface, ctx, refctx, ia));
             Some(posthandler(ctx.message, r))
         })
     }
@@ -121,7 +228,7 @@ where F: FnMut(&mut I, &mut MsgCtx, IA) -> Result<OA, MethodErr> + 'static
         LocalMethod(LocalMethods::MutIface(Box::new(move |data, info| {
             let iface: &mut I = data.downcast_mut().unwrap();
             let r = IA::read(&mut info.message.iter_init()).map_err(From::from);
-            let r = r.and_then(|ia| self(iface, info, ia)); 
+            let r = r.and_then(|ia| self(iface, info, ia));
             Some(posthandler(info.message, r))
         })))
     }
@@ -173,5 +280,3 @@ where F: Fn(&I, T, &mut MsgCtx, &RefCtx<Par>) -> Result<bool, MethodErr> + Send 
         })
     }
 }
-
-

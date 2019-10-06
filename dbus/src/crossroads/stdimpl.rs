@@ -144,7 +144,7 @@ where F: FnMut(&H::GetProp, &mut arg::IterAppend, &mut MsgCtx, &RefCtx<H>) -> Re
 
 
 impl DBusProperties {
-    fn register<H: Handlers>(cr: &mut Crossroads<H>, get: H::Method, getall: H::Method, set: H::Method) where Self: PathData<H::Iface> {
+    fn register_custom<H: Handlers>(cr: &mut Crossroads<H>, get: H::Method, getall: H::Method, set: H::Method) where Self: PathData<H::Iface> {
         cr.register::<Self,_>("org.freedesktop.DBus.Properties")
             .method_custom::<(String, String), (Variant<u8>,)>("Get".into(), ("interface_name", "property_name"), ("value",), get)
             .method_custom::<(String,), (HashMap<String, Variant<u8>>,)>("GetAll".into(), ("interface_name",), ("props",), getall)
@@ -157,7 +157,7 @@ impl DBusProperties {
     }
 
     pub fn register_par(cr: &mut Crossroads<Par>) {
-        Self::register(cr,
+        Self::register_custom(cr,
             Box::new(|ctx, refctx| {
                 Some(getprop_ref(ctx, refctx, |h, i, ctx, refctx| h(i, ctx, refctx)).unwrap_or_else(|e| e.to_message(ctx.message)))
             }),
@@ -171,6 +171,10 @@ impl DBusProperties {
     }
 
     pub fn register_local(cr: &mut Crossroads<handlers::Local>) {
+//        Self::register(cr, unimplemented!(), unimplemented!(), unimplemented!());
+    }
+
+    pub fn register(cr: &mut Crossroads<()>) {
 //        Self::register(cr, unimplemented!(), unimplemented!(), unimplemented!());
     }
 

@@ -4,6 +4,7 @@ use super::info::IfaceInfo;
 use super::crossroads::Crossroads;
 use super::path::Path;
 use super::handlers::Handlers;
+use super::MethodErr;
 use std::ffi::CStr;
 use crate::arg::{AppendAll, IterAppend};
 
@@ -45,11 +46,11 @@ pub struct RefCtx<'a, H: Handlers> {
 
 impl<'a, H: Handlers> RefCtx<'a, H> {
 
-    pub (super) fn new<'b>(cr: &'a Crossroads<H>, ctx: &'b MsgCtx) -> Option<Self> {
-        let entry = cr.reg.get(ctx.iface.as_cstr())?;
-        let path = cr.paths.get(ctx.path.as_cstr())?;
-        let iface = path.get_from_typeid(entry.typeid)?;
-        Some(RefCtx { crossroads: cr, path, iface, iinfo: &entry.info })
+    pub (super) fn new<'b>(cr: &'a Crossroads<H>, ctx: &'b MsgCtx) -> Result<Self, MethodErr> {
+        let path = cr.paths.get(ctx.path.as_cstr()).ok_or_else(|| { MethodErr::no_path(&ctx.path) })?;
+        let entry = cr.reg.get(ctx.iface.as_cstr()).ok_or_else(|| { MethodErr::no_interface(&ctx.iface) })?;
+        let iface = path.get_from_typeid(entry.typeid).ok_or_else(|| { MethodErr::no_interface(&ctx.iface) })?;
+        Ok(RefCtx { crossroads: cr, path, iface, iinfo: &entry.info })
     }
 
     pub (super) fn with_iface(&self, ifacename: &CStr) -> Option<Self> {

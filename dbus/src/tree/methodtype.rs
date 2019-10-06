@@ -6,7 +6,7 @@ use crate::ffidisp::stdintf;
 use crate::arg::{Iter, IterAppend, TypeMismatchError};
 use std::marker::PhantomData;
 use super::{Method, Interface, Property, ObjectPath, Tree};
-use crate::strings::{ErrorName}; 
+use crate::strings::{ErrorName};
 use std::cell::RefCell;
 use std::ffi::CString;
 use crate::Error as dbusError;
@@ -28,6 +28,12 @@ impl MethodErr {
     pub fn failed<T: fmt::Display + ?Sized>(a: &T) -> MethodErr {
         ("org.freedesktop.DBus.Error.Failed", a.to_string()).into()
     }
+
+    /// Create a MethodErr that the Object path was unknown.
+    pub fn no_path<T: fmt::Display + ?Sized>(a: &T) -> MethodErr {
+        ("org.freedesktop.DBus.Error.UnknownObject", format!("Unknown object path {}", a)).into()
+    }
+
     /// Create a MethodErr that the Interface was unknown.
     pub fn no_interface<T: fmt::Display + ?Sized>(a: &T) -> MethodErr {
         ("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", a)).into()
@@ -52,7 +58,7 @@ impl MethodErr {
 
     /// Creates an error reply from a method call message.
     ///
-    /// Note: You normally don't need to use this function, 
+    /// Note: You normally don't need to use this function,
     /// as it is called internally from Tree::handle.
     pub fn to_message(&self, msg: &Message) -> Message {
         msg.error(&self.0, &CString::new(&*self.1).unwrap())

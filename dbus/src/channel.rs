@@ -46,7 +46,7 @@ pub enum BusType {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 /// A file descriptor, and an indication whether it should be read from, written to, or both.
 pub struct Watch {
-    /// File descriptor 
+    /// File descriptor
     pub fd: RawFd,
     /// True if wakeup should happen when the file descriptor is ready for reading
     pub read: bool,
@@ -171,7 +171,7 @@ impl Channel {
     }
 
     fn conn_from_ptr(ptr: *mut ffi::DBusConnection) -> Result<Channel, Error> {
-        let handle = ConnHandle(ptr, true); 
+        let handle = ConnHandle(ptr, true);
 
         /* No, we don't want our app to suddenly quit if dbus goes down */
         unsafe { ffi::dbus_connection_set_exit_on_disconnect(ptr, 0) };
@@ -184,7 +184,7 @@ impl Channel {
 
     /// Creates a new D-Bus connection.
     ///
-    /// Blocking: until the connection is up and running. 
+    /// Blocking: until the connection is up and running.
     pub fn get_private(bus: BusType) -> Result<Channel, Error> {
         let mut e = Error::empty();
         let b = match bus {
@@ -255,7 +255,7 @@ impl Channel {
     }
 
     /// Sends a message over the D-Bus and waits for a reply. This is used for method calls.
-    /// 
+    ///
     /// Blocking: until a reply is received or the timeout expires.
     ///
     /// Note: In case of an error reply, this is returned as an Err(), not as a Ok(Message) with the error type.
@@ -275,7 +275,7 @@ impl Channel {
     }
 
     /// Flush the queue of outgoing messages.
-    /// 
+    ///
     /// Blocking: until the outgoing queue is empty.
     pub fn flush(&self) { unsafe { ffi::dbus_connection_flush(self.conn()) } }
 
@@ -381,6 +381,14 @@ pub trait Sender {
     ///
     /// Returns a serial number than can be used to match against a reply.
     fn send(&self, msg: Message) -> Result<u32, ()>;
+}
+
+/// Use in case you don't want the send the message, but just collect it instead.
+impl Sender for std::cell::RefCell<Vec<Message>> {
+    fn send(&self, msg: Message) -> Result<u32, ()> {
+        self.borrow_mut().push(msg);
+        Ok(0)
+    }
 }
 
 /// Abstraction over different connections that receive data
