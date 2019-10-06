@@ -14,7 +14,7 @@ pub enum MessageType {
     MethodCall = 1,
     /// This is a method return Ok D-Bus message, used when the method call message was successfully processed
     MethodReturn = 2,
-    /// This is a method return with error D-Bus message, used when the method call message could not be handled 
+    /// This is a method return with error D-Bus message, used when the method call message could not be handled
     Error = 3,
     /// This is a signal, usually sent to whoever wants to listen
     Signal = 4,
@@ -60,7 +60,7 @@ impl Message {
     }
 
     /// Creates a new method call message.
-    pub fn call_with_args<'d, 'p, 'i, 'm, A, D, P, I, M>(destination: D, path: P, iface: I, method: M, args: A) -> Message 
+    pub fn call_with_args<'d, 'p, 'i, 'm, A, D, P, I, M>(destination: D, path: P, iface: I, method: M, args: A) -> Message
     where D: Into<BusName<'d>>, P: Into<Path<'p>>, I: Into<Interface<'i>>, M: Into<Member<'m>>, A: AppendAll {
         let mut msg = Message::method_call(&destination.into(), &path.into(), &iface.into(), &method.into());
         args.append(&mut IterAppend::new(&mut msg));
@@ -134,8 +134,9 @@ impl Message {
     }
 
     /// Get the D-Bus serial of a message, if one was specified.
-    pub fn get_serial(&self) -> u32 {
-        unsafe { ffi::dbus_message_get_serial(self.msg) }
+    pub fn get_serial(&self) -> Option<u32> {
+        let x = unsafe { ffi::dbus_message_get_serial(self.msg) };
+        if x == 0 { None } else { Some(x) }
     }
 
     /// Get the serial of the message this message is a reply to, if present.
@@ -223,7 +224,7 @@ impl Message {
             }
         }
         self
-    } 
+    }
 
     /// Gets the first argument from the message, if that argument is of type G1.
     /// Returns None if there are not enough arguments, or if types don't match.
@@ -300,7 +301,7 @@ impl Message {
     /// Gets the first three arguments from the message, if those arguments are of type G1, G2 and G3.
     ///
     /// Returns a TypeMismatchError if there are not enough arguments, or if types don't match.
-    pub fn read3<'a, G1: Arg + Get<'a>, G2: Arg + Get<'a>, G3: Arg + Get<'a>>(&'a self) -> 
+    pub fn read3<'a, G1: Arg + Get<'a>, G2: Arg + Get<'a>, G3: Arg + Get<'a>>(&'a self) ->
         Result<(G1, G2, G3), TypeMismatchError> {
         let mut i = Iter::new(&self);
         Ok((i.read()?, i.read()?, i.read()?))
@@ -438,12 +439,13 @@ impl fmt::Debug for Message {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         let mut x = f.debug_struct("Message");
         x.field("Type", &self.msg_type());
+        // The &&** derefs to a &&str, which implements &dyn Debug
         if let Some(ref path) = self.path() { x.field("Path", &&**path); }
         if let Some(ref iface) = self.interface() { x.field("Interface", &&**iface); }
         if let Some(ref member) = self.member() { x.field("Member", &&**member); }
         if let Some(ref sender) = self.sender() { x.field("Sender", &&**sender); }
         if let Some(ref dest) = self.destination() { x.field("Destination", &&**dest); }
-        // if let Some(ref serial) = self.get_serial() { x.field("Serial", serial); }
+        if let Some(ref serial) = self.get_serial() { x.field("Serial", serial); }
         if let Some(ref rs) = self.get_reply_serial() { x.field("ReplySerial", rs); }
         let mut args = vec!();
         let mut iter = self.iter_init();
