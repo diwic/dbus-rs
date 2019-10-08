@@ -1,5 +1,5 @@
 use super::crossroads::Crossroads;
-use super::handlers::{self, Par, Handlers, MakeHandler};
+use super::handlers::{self, Par, Handlers, MakeHandler, SendMethod, LocalMethod};
 use super::info::{IfaceInfo, MethodInfo, PropInfo, Annotations, Argument, Access};
 use crate::{arg, Message, Path as PathName};
 use super::MethodErr;
@@ -11,12 +11,12 @@ use std::ffi::CStr;
 
 pub struct DBusProperties;
 
-fn setprop_mut<H: Handlers, F>(cr: &mut Crossroads<H>, msg: &Message, f: F) -> Result<Message, MethodErr>
-where F: FnOnce(&mut H::SetProp, &mut Path<H>, &mut arg::Iter, &Message) -> Result<bool, MethodErr>
+fn setprop_mut<H: Handlers, F>(cr: &mut Crossroads<H>, ctx: &mut MsgCtx, f: F) -> Result<Message, MethodErr>
+where F: FnOnce(&mut H::SetProp, &mut Path<H>, &mut arg::Iter, &mut MsgCtx) -> Result<bool, MethodErr>
 {
-    let mut iter = msg.iter_init();
+    let mut iter = ctx.message.iter_init();
     let (iname, propname) = (iter.read()?, iter.read()?);
-    let path = msg.path().ok_or_else(|| { MethodErr::no_property(&"Message has no path") })?;
+    let path = ctx.message.path().ok_or_else(|| { MethodErr::no_property(&"Message has no path") })?;
     let (propinfo, pathdata) = cr.prop_lookup_mut(path.as_cstr(), iname, propname)
         .ok_or_else(|| { MethodErr::no_property(&"Property not found") })?;
     if propinfo.access == Access::Read { Err(MethodErr::no_property(&"Property is read only"))? };
@@ -29,10 +29,10 @@ where F: FnOnce(&mut H::SetProp, &mut Path<H>, &mut arg::Iter, &Message) -> Resu
     if *subiter.signature() != *propinfo.sig {
         Err(MethodErr::failed(&format!("Property {} cannot change type", propinfo.name)))?;
     }
-    if f(handler, pathdata, &mut subiter, msg)? {
+    if f(handler, pathdata, &mut subiter, ctx)? {
         unimplemented!("Emits signal here");
     }
-    Ok(msg.method_return())
+    Ok(ctx.message.method_return())
 }
 
 fn setprop_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, f: F) -> Result<Message, MethodErr>
@@ -62,24 +62,24 @@ where F: FnOnce(&H::SetProp, &mut arg::Iter, &mut MsgCtx, &RefCtx<H>) -> Result<
 }
 
 
-fn getprop_mut<H: Handlers, F>(cr: &mut Crossroads<H>, msg: &Message, f: F) -> Result<Message, MethodErr>
-where F: FnOnce(&mut H::GetProp, &mut arg::IterAppend, &Message) -> Result<(), MethodErr>
+fn getprop_mut<H: Handlers, F>(cr: &mut Crossroads<H>, ctx: &mut MsgCtx, f: F) -> Result<Message, MethodErr>
+where F: FnOnce(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx) -> Result<(), MethodErr>
 {
-    let mut iter = msg.iter_init();
+    let mut iter = ctx.message.iter_init();
     let (iname, propname) = (iter.read()?, iter.read()?);
-    let path = msg.path().ok_or_else(|| { MethodErr::no_property(&"Message has no path") })?;
+    let path = ctx.message.path().ok_or_else(|| { MethodErr::no_property(&"Message has no path") })?;
     let (propinfo, pathdata) = cr.prop_lookup_mut(path.as_cstr(), iname, propname)
         .ok_or_else(|| { MethodErr::no_property(&"Property not found") })?;
     if propinfo.access == Access::Write { Err(MethodErr::no_property(&"Property is write only"))? };
     let handler = propinfo.handlers.0.as_mut()
-        .ok_or_else(|| { MethodErr::no_property(&"Property can not read from") })?;
+        .ok_or_else(|| { MethodErr::no_property(&"Property can not be read from") })?;
 
-    let mut mret = msg.method_return();
+    let mut mret = ctx.message.method_return();
     {
         let mut iter = arg::IterAppend::new(&mut mret);
         let mut z = None;
         iter.append_variant(&propinfo.sig, |subi| {
-            z = Some(f(handler, subi, msg));
+            z = Some(f(handler, pathdata, subi, ctx));
         });
         z.unwrap()?;
     }
@@ -175,6 +175,20 @@ impl DBusProperties {
     }
 
     pub fn register(cr: &mut Crossroads<()>) {
+        let getprop = |cr: &mut Crossroads<()>, ctx: &mut MsgCtx| {
+            Some(getprop_mut(cr, ctx, |f, path, ia, ctx| { f(path, ia, ctx) })
+                .unwrap_or_else(|e| e.to_message(&ctx.message)))
+        };
+        let getallprop = |cr: &mut Crossroads<()>, ctx: &mut MsgCtx| -> Option<Message> { unimplemented!() };
+        let setprop = |cr: &mut Crossroads<()>, ctx: &mut MsgCtx| {
+            Some(setprop_mut(cr, ctx, |f, path, iter, ctx| { f(path, iter, ctx) })
+                .unwrap_or_else(|e| e.to_message(&ctx.message)))
+        };
+
+        // let x = MakeHandler::<<() as Handlers>::Method, ((), (), (), DBusProperties), (i8, ())>::make(x);
+        Self::register_custom(cr,
+            SendMethod::from(getprop), SendMethod::from(getallprop), SendMethod::from(setprop)
+        );
 //        Self::register(cr, unimplemented!(), unimplemented!(), unimplemented!());
     }
 

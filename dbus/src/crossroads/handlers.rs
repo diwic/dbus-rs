@@ -77,7 +77,7 @@ impl Handlers for () {
                     f(iface, ctx)
                 },
                 SendMethods::AllRef(_) => { try_ref = true; None }
-                SendMethods::MutCr(f) => { f(cr, ctx) },
+                SendMethods::MutCr(ref f) => { f.box_clone()(cr, ctx) },
             }
         };
         if try_ref { cr.dispatch_ref(ctx) } else { Ok(r) }
@@ -162,13 +162,23 @@ impl Handlers for Local {
                     f(iface, ctx)
                 },
                 LocalMethods::AllRef(_) => { try_ref = true; None }
-                LocalMethods::MutCr(f) => { f(cr, ctx) },
+                LocalMethods::MutCr(ref f) => { f.box_clone()(cr, ctx) },
             }
         };
         if try_ref { cr.dispatch_ref(ctx) } else { Ok(r) }
     }
 }
 
+trait MutCrCb<H: Handlers>: FnOnce(&mut Crossroads<H>, &mut MsgCtx) -> Option<Message> {
+    fn box_clone(&self) -> Box<dyn MutCrCb<H>>;
+}
+
+impl<H: Handlers, F> MutCrCb<H> for F
+where F: FnOnce(&mut Crossroads<H>, &mut MsgCtx) -> Option<Message> + Clone + 'static {
+    fn box_clone(&self) -> Box<dyn MutCrCb<H>> {
+        Box::new(self.clone())
+    }
+}
 
 pub struct LocalMethod(LocalMethods);
 
@@ -176,7 +186,7 @@ enum LocalMethods {
     MutPath(Box<dyn FnMut(&mut Path<Local>, &mut MsgCtx) -> Option<Message> + 'static>),
     MutIface(Box<dyn FnMut(&mut (dyn Any), &mut MsgCtx) -> Option<Message> + 'static>),
     AllRef(Box<dyn Fn(&mut MsgCtx, &RefCtx<Local>) -> Option<Message> + 'static>),
-    MutCr(fn(&mut Crossroads<Local>, &mut MsgCtx) -> Option<Message>),
+    MutCr(Box<dyn MutCrCb<Local> + 'static>),
 }
 
 pub struct SendMethod(SendMethods);
@@ -185,7 +195,7 @@ enum SendMethods {
     MutPath(Box<dyn FnMut(&mut Path<()>, &mut MsgCtx) -> Option<Message> + Send + 'static>),
     MutIface(Box<dyn FnMut(&mut (dyn Any), &mut MsgCtx) -> Option<Message> + Send + 'static>),
     AllRef(Box<dyn Fn(&mut MsgCtx, &RefCtx<()>) -> Option<Message> + Send + 'static>),
-    MutCr(fn(&mut Crossroads<()>, &mut MsgCtx) -> Option<Message>),
+    MutCr(Box<dyn MutCrCb<()> + Send + 'static>),
 }
 
 /// Internal helper trait
@@ -233,6 +243,14 @@ where F: FnMut(&mut I, &mut MsgCtx, IA) -> Result<OA, MethodErr> + Send + 'stati
     }
 }
 
+impl<F: FnOnce(&mut Crossroads<()>, &mut MsgCtx) -> Option<Message> + Send + Clone + 'static> From<F> for SendMethod {
+    fn from(f: F) -> Self { SendMethod(SendMethods::MutCr(Box::new(f))) }
+}
+
+impl<F: FnOnce(&mut Crossroads<Local>, &mut MsgCtx) -> Option<Message> + Clone + 'static> From<F> for LocalMethod {
+    fn from(f: F) -> Self { LocalMethod(LocalMethods::MutCr(Box::new(f))) }
+}
+
 impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<() as Handlers>::Method, ((), IA, OA, I), (u8, ())> for F
 where F: FnMut(&mut Path<()>, &mut MsgCtx, IA) -> Result<OA, MethodErr> + Send + 'static
 {
@@ -240,6 +258,18 @@ where F: FnMut(&mut Path<()>, &mut MsgCtx, IA) -> Result<OA, MethodErr> + Send +
         SendMethod(SendMethods::MutPath(Box::new(move |path, ctx| {
             let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
             let r = r.and_then(|ia| self(path, ctx, ia));
+            Some(posthandler(ctx.message, r))
+        })))
+    }
+}
+
+impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<() as Handlers>::Method, ((), IA, OA, I), (i8, ())> for F
+where F: FnOnce(&mut Crossroads<()>, &mut MsgCtx, IA) -> Result<OA, MethodErr> + Send + Clone + 'static
+{
+    fn make(self) -> <() as Handlers>::Method {
+        SendMethod(SendMethods::MutCr(Box::new(move |cr, ctx| {
+            let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
+            let r = r.and_then(|ia| self(cr, ctx, ia));
             Some(posthandler(ctx.message, r))
         })))
     }
