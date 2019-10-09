@@ -4,7 +4,7 @@ use dbus::arg::ArgType;
 use xml;
 
 fn find_attr<'a>(a: &'a Vec<xml::attribute::OwnedAttribute>, n: &str) -> Result<&'a str, Box<dyn error::Error>> {
-    a.into_iter().find(|q| q.name.local_name == n).map(|f| &*f.value).ok_or_else(|| format!("attribute not found: {:?}", n).into())    
+    a.into_iter().find(|q| q.name.local_name == n).map(|f| &*f.value).ok_or_else(|| format!("attribute not found: {:?}", n).into())
 }
 
 struct Arg {
@@ -47,7 +47,7 @@ struct Intf {
 pub enum ServerAccess {
     /// Supply a closure from ref to ref
     RefClosure,
-    /// Supply a closure from ref to owned object which asrefs 
+    /// Supply a closure from ref to owned object which asrefs
     AsRefClosure,
     /// The interface is implemented for MethodInfo
     MethodInfo
@@ -83,7 +83,7 @@ pub struct GenOpts {
 }
 
 impl ::std::default::Default for GenOpts {
-    fn default() -> Self { GenOpts { 
+    fn default() -> Self { GenOpts {
         dbuscrate: "dbus".into(), methodtype: Some("MTFn".into()), skipprefix: None,
         serveraccess: ServerAccess::RefClosure, genericvariant: false, futures: false,
         crhandler: None, connectiontype: ConnectionType::Blocking,
@@ -240,7 +240,8 @@ fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool
             (ArgType::Signature, false) => "dbus::Signature".into(),
             (ArgType::Signature, true) => "dbus::Signature<'static>".into(),
             (ArgType::Variant, _) => if let &mut Some(ref mut g) = genvars {
-                let t = format!("arg::Variant<{}>", g.prefix);
+                let t = format!("{}", g.prefix);
+                // let t = format!("arg::Variant<{}>", g.prefix);
                 g.gen.push(g.prefix.clone());
                 g.prefix = format!("{}X", g.prefix);
                 t
@@ -276,6 +277,12 @@ impl Arg {
            make_snake(&self.name, true)
         } else { format!("arg{}", self.idx) }
     }
+    fn can_wrap_variant(&self, genvar: bool) -> bool { genvar && self.typ.starts_with("v") }
+    fn varname_maybewrap(&self, genvar: bool) -> String {
+        if self.can_wrap_variant(genvar) {
+            format!("arg::Variant({})", self.varname())
+        } else { self.varname() }
+    }
     fn typename(&self, genvar: bool) -> Result<(String, Vec<String>), Box<dyn error::Error>> {
         let mut g = if genvar { Some(GenVars {
             prefix: format!("{}{}", if self.is_out { 'R' } else { 'I' }, self.idx),
@@ -283,8 +290,14 @@ impl Arg {
         }) } else { None };
         let r = make_type(&self.typ, self.is_out, &mut g)?;
         Ok((r, g.map(|g| g.gen.iter().map(|s|
-            if self.is_out { format!("{}: for<'b> arg::Get<'b>", s) } else { format!("{}: arg::Arg + arg::Append", s) } 
+            if self.is_out { format!("{}: for<'b> arg::Get<'b> + 'static", s) } else { format!("{}: arg::Arg + arg::Append", s) }
         ).collect()).unwrap_or(vec!())))
+    }
+    fn typename_maybewrap(&self, genvar: bool) -> Result<String, Box<dyn error::Error>> {
+        let t = self.typename(genvar)?.0;
+        Ok(if self.can_wrap_variant(genvar) {
+            format!("arg::Variant<{}>", t)
+        } else { t })
     }
 }
 
@@ -305,7 +318,7 @@ fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), B
     } else { vec!() };
 
 
-    *s += &format!("    fn {}{}(&self", m.fn_name, 
+    *s += &format!("    fn {}{}(&self", m.fn_name,
         if g.len() > 0 { format!("<{}>", g.join(",")) } else { "".into() }
     );
 
@@ -398,12 +411,26 @@ fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box
         *s += " {\n";
         *s += &format!("        self.method_call(\"{}\", \"{}\", (", i.origname, m.name);
         for a in m.iargs.iter() {
-            *s += &a.varname();
+            *s += &a.varname_maybewrap(opts.genericvariant);
             *s += ", ";
         }
         *s += "))\n";
-        if m.oargs.len() == 1 {
-            *s += &format!("            .and_then(|r: ({},)| Ok(r.0))\n", m.oargs[0].typename(opts.genericvariant)?.0);
+        let needs_andthen = (m.oargs.len() == 1) || (m.oargs.iter().any(|oa| oa.can_wrap_variant(opts.genericvariant)));
+        if needs_andthen {
+            *s += &"            .and_then(|r: (";
+            for oa in m.oargs.iter() {
+                *s += &oa.typename_maybewrap(opts.genericvariant)?;
+                *s += ", ";
+            }
+            *s += ")| Ok(";
+            for idx in 0..m.oargs.len() {
+                *s += &if m.oargs[idx].can_wrap_variant(opts.genericvariant) {
+                    format!("(r.{}).0, ", idx)
+                } else {
+                    format!("r.{}, ", idx)
+                };
+            }
+            *s += "))\n";
         }
         *s += "    }\n";
     }
@@ -484,7 +511,7 @@ fn write_server_access(s: &mut String, i: &Intf, saccess: ServerAccess, minfo_is
 
 // Should we implement this for
 // 1) MethodInfo? That's the only way receiver can check Sender, etc - ServerAccess::MethodInfo
-// 2) D::ObjectPath?  
+// 2) D::ObjectPath?
 // 3) A user supplied struct?
 // 4) Something reachable from minfo - ServerAccess::RefClosure
 
@@ -622,7 +649,7 @@ fn write_intf_crossroads(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(),
             *s += &format!("            let {}: {} = i.read()?;\n", a.varname(), a.typename(opts.genericvariant)?.0);
         }
         let mut argsvar: Vec<_> = m.iargs.iter().map(|q| q.varname()).collect();
-        argsvar.push("info".into()); 
+        argsvar.push("info".into());
         let argsvar = argsvar.join(", ");
         let retargs = match m.oargs.len() {
             0 => String::new(),
@@ -684,7 +711,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
                 if let &Some(ref p) = &opts.skipprefix {
                     if n.len() > p.len() && n.starts_with(p) { n2 = &n[p.len()..]; }
                 }
-                curintf = Some(Intf { origname: n.into(), shortname: n2.into(), 
+                curintf = Some(Intf { origname: n.into(), shortname: n2.into(),
                     methods: Vec::new(), signals: Vec::new(), props: Vec::new() });
             }
             XmlEvent::EndElement { ref name } if &name.local_name == "interface" => {
@@ -733,7 +760,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
                 let get_fn_name = make_fn_name(curintf.as_ref().unwrap(), name);
                 let set_fn_name = make_fn_name(curintf.as_ref().unwrap(), &format!("Set{}", name));
                 curprop = Some(Prop {
-                    name: name.into(), 
+                    name: name.into(),
                     typ: find_attr(attributes, "type")?.into(),
                     access: find_attr(attributes, "access")?.into(),
                     get_fn_name: get_fn_name,
@@ -758,7 +785,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
                     _ => { Err("Invalid direction")?; unreachable!() }
                 }};
                 let arr = if let Some(ref mut sig) = cursig { &mut sig.args }
-                    else if is_out { &mut curm.as_mut().unwrap().oargs } else { &mut curm.as_mut().unwrap().iargs }; 
+                    else if is_out { &mut curm.as_mut().unwrap().oargs } else { &mut curm.as_mut().unwrap().iargs };
                 let arg = Arg { name: find_attr(attributes, "name").unwrap_or("").into(),
                     typ: typ, is_out: is_out, idx: arr.len() as i32 };
                 arr.push(arg);
@@ -889,7 +916,7 @@ static FROM_DBUS: &'static str = r#"
     </method>
   </interface>
 </node>
-"#; 
+"#;
 
     #[test]
     fn from_dbus() {
