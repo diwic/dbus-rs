@@ -131,6 +131,19 @@ impl Crossroads<()> {
         if reg_default { DBusProperties::register(&mut cr); }
         cr
     }
+
+    pub fn start<C>(mut self, connection: &C) -> u32
+    where
+        C: channel::MatchingReceiver<F=Box<dyn FnMut(Message, &C) -> bool + Send>> + channel::Sender
+    {
+        let mut mr = MatchRule::new();
+        mr.msg_type = Some(MessageType::MethodCall);
+        connection.start_receive(mr, Box::new(move |msg, c| {
+            let _ = self.dispatch(&msg, c);
+            true
+        }))
+    }
+
 }
 
 impl Crossroads<Par> {

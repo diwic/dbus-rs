@@ -11,14 +11,14 @@
 extern crate dbus;
 
 use std::sync::Arc;
-use dbus::blocking::Connection;
+use dbus::blocking::LocalConnection;
 use dbus::tree::Factory;
 use std::error::Error;
 use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Let's start by starting up a connection to the session bus and request a name.
-    let mut c = Connection::new_session()?;
+    let mut c = LocalConnection::new_session()?;
     c.request_name("com.example.dbustest", false, true, false)?;
 
     // The choice of factory tells us what type of tree we want,

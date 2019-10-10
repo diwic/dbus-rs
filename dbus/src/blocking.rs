@@ -6,58 +6,96 @@ use crate::arg::{AppendAll, ReadAll, IterAppend};
 use crate::{channel, Error, Message};
 use crate::message::{MatchRule, SignalArgs};
 use crate::channel::{Channel, BusType};
-use std::{cell::{RefCell, Cell}, time::Duration, sync::Mutex};
+use std::{cell::RefCell, time::Duration, sync::Mutex};
 
 pub mod stdintf;
 
+#[derive(Default)]
 struct Filter<F> {
    id: u32,
    rule: MatchRule<'static>,
    callback: F, // ,
 }
 
-fn dispatch<F, G: FnOnce(&mut F, Message) -> bool>(filters: &mut Vec<Filter<F>>, msg: Message, g: G) -> Option<Message> {
-    if let Some(idx) = filters.iter().position(|f| f.rule.matches(&msg)) {
-        if !g(&mut filters[idx].callback, msg) { filters.remove(idx); }
-        None
-    } else {
-        crate::channel::default_reply(&msg)
+struct Filters<F> {
+    list: Vec<Filter<F>>,
+    nextid: u32,
+}
+
+impl<F> Default for Filters<F> {
+    fn default() -> Self { Filters { list: vec!(), nextid: 1, }}
+}
+
+impl<F> Filters<F> {
+    fn dispatch<G: FnOnce(&mut F, Message) -> bool>(&mut self, msg: Message, g: G) -> Option<Message> {
+        if let Some(idx) = self.list.iter().position(|f| f.rule.matches(&msg)) {
+            if !g(&mut self.list[idx].callback, msg) { self.list.remove(idx); }
+            None
+        } else {
+            crate::channel::default_reply(&msg)
+        }
+    }
+
+    fn add(&mut self, m: MatchRule<'static>, f: F) -> u32 {
+        let id = self.nextid;
+        self.nextid += 1;
+        self.list.push(Filter { id, rule: m, callback: f } );
+        id
+    }
+
+    fn remove(&mut self, id: u32) -> Option<(MatchRule<'static>, F)> {
+        if let Some(idx) = self.list.iter().position(|f| f.id == id) {
+            let x = self.list.remove(idx);
+            Some((x.rule, x.callback))
+        }
+        else { None }
     }
 }
 
 /// A connection to D-Bus, thread local + non-async version
-pub struct Connection {
+pub struct LocalConnection {
     channel: Channel,
-    filters: RefCell<Vec<Filter<LocalFilterCb>>>,
-    filter_nextid: Cell<u32>,
+    filters: RefCell<Filters<LocalFilterCb>>,
 }
 
-type
-  SyncFilterCb = Box<dyn FnMut(Message, &SyncConnection) -> bool + Send + Sync + 'static>;
-type
-  LocalFilterCb = Box<dyn FnMut(Message, &Connection) -> bool + 'static>;
+/// A connection to D-Bus, non-async version where callbacks are Send but not Sync.
+pub struct Connection {
+    channel: Channel,
+    filters: RefCell<Filters<FilterCb>>,
+}
 
 /// A connection to D-Bus, Send + Sync + non-async version
 pub struct SyncConnection {
     channel: Channel,
-    filters: Mutex<(u32, Vec<Filter<SyncFilterCb>>)>
+    filters: Mutex<Filters<SyncFilterCb>>
 }
+
+
+type
+  SyncFilterCb = Box<dyn FnMut(Message, &SyncConnection) -> bool + Send + Sync + 'static>;
+type
+  FilterCb = Box<dyn FnMut(Message, &Connection) -> bool + Send + 'static>;
+type
+  LocalFilterCb = Box<dyn FnMut(Message, &LocalConnection) -> bool + 'static>;
+
 
 use crate::blocking::stdintf::org_freedesktop_dbus;
 
-impl Connection {
+macro_rules! connimpl {
+     ($c: ident, $cb: ident) =>  {
+
+impl $c {
+
     /// Create a new connection to the session bus.
-    pub fn new_session() -> Result<Self, Error> { Ok(Connection {
+    pub fn new_session() -> Result<Self, Error> { Ok($c {
         channel: Channel::get_private(BusType::Session)?,
         filters: Default::default(),
-        filter_nextid: Default::default()
     })}
 
     /// Create a new connection to the system-wide bus.
-    pub fn new_system() -> Result<Self, Error> { Ok(Connection {
+    pub fn new_system() -> Result<Self, Error> { Ok($c {
         channel: Channel::get_private(BusType::System)?,
         filters: Default::default(),
-        filter_nextid: Default::default()
     })}
 
     /// Get the connection's unique name.
@@ -65,24 +103,12 @@ impl Connection {
     /// It's usually something like ":1.54"
     pub fn unique_name(&self) -> BusName { self.channel.unique_name().unwrap().into() }
 
-    /// Tries to handle an incoming message if there is one. If there isn't one,
-    /// it will wait up to timeout
-    pub fn process(&mut self, timeout: Duration) -> Result<bool, Error> {
-        if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
-            if let Some(reply) = dispatch(&mut self.filters.borrow_mut(), msg, |cb, msg| { cb(msg, self) }) {
-                let _ = self.channel.send(reply);
-            }
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
-
     /// Create a convenience struct for easier calling of many methods on the same destination and path.
     pub fn with_proxy<'a, 'b, D: Into<BusName<'a>>, P: Into<Path<'a>>>(&'b self, dest: D, path: P, timeout: Duration) ->
-    Proxy<'a, &'b Connection> {
+    Proxy<'a, &'b Self> {
         Proxy { connection: self, destination: dest.into(), path: path.into(), timeout }
     }
+
 
     /// Request a name on the D-Bus.
     ///
@@ -109,6 +135,72 @@ impl Connection {
         use crate::blocking::stdintf::org_freedesktop::DBus;
         let proxy = stdintf::proxy(self);
         proxy.remove_match(match_str)
+    }
+
+    /// Removes a previously added match and callback from the connection.
+    pub fn remove_match(&self, id: u32) -> Result<(), Error> {
+        use channel::MatchingReceiver;
+        let (mr, _) = self.stop_receive(id).ok_or_else(|| Error::new_failed("No match with that id found"))?;
+        self.remove_match_no_cb(&mr.match_str())
+    }
+}
+
+impl BlockingSender for $c {
+    fn send_with_reply_and_block(&self, msg: Message, timeout: Duration) -> Result<Message, Error> {
+        self.channel.send_with_reply_and_block(msg, timeout)
+    }
+}
+
+impl channel::Sender for $c {
+    fn send(&self, msg: Message) -> Result<u32, ()> { self.channel.send(msg) }
+}
+
+     }
+}
+
+connimpl!(Connection, FilterCb);
+connimpl!(LocalConnection, LocalFilterCb);
+connimpl!(SyncConnection, SyncFilterCb);
+
+impl Connection {
+    /// Tries to handle an incoming message if there is one. If there isn't one,
+    /// it will wait up to timeout
+    pub fn process(&mut self, timeout: Duration) -> Result<bool, Error> {
+        if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
+            if let Some(reply) = self.filters.borrow_mut().dispatch(msg, |cb, msg| { cb(msg, self) }) {
+                let _ = self.channel.send(reply);
+            }
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Adds a new match to the connection, and sets up a callback when this message arrives.
+    ///
+    /// The returned value can be used to remove the match. The match is also removed if the callback
+    /// returns "false".
+    pub fn add_match<S: ReadAll, F>(&self, match_rule: MatchRule<'static>, f: F) -> Result<u32, Error>
+    where F: FnMut(S, &Self, &Message) -> bool + Send + 'static {
+        let m = match_rule.match_str();
+        self.add_match_no_cb(&m)?;
+        use channel::MatchingReceiver;
+        Ok(self.start_receive(match_rule, MakeSignal::make(f, m)))
+    }
+}
+
+impl LocalConnection {
+    /// Tries to handle an incoming message if there is one. If there isn't one,
+    /// it will wait up to timeout
+    pub fn process(&mut self, timeout: Duration) -> Result<bool, Error> {
+        if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
+            if let Some(reply) = self.filters.borrow_mut().dispatch(msg, |cb, msg| { cb(msg, self) }) {
+                let _ = self.channel.send(reply);
+            }
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     /// Adds a new match to the connection, and sets up a callback when this message arrives.
@@ -122,79 +214,22 @@ impl Connection {
         use channel::MatchingReceiver;
         Ok(self.start_receive(match_rule, MakeSignal::make(f, m)))
     }
-
-    /// Removes a previously added match and callback from the connection.
-    pub fn remove_match(&self, id: u32) -> Result<(), Error> {
-        use channel::MatchingReceiver;
-        let (mr, _) = self.stop_receive(id).ok_or_else(|| Error::new_failed("No match with that id found"))?;
-        self.remove_match_no_cb(&mr.match_str())
-    }
 }
 
 impl SyncConnection {
-    /// Create a new connection to the session bus.
-    pub fn new_session() -> Result<Self, Error> { Ok(SyncConnection {
-        channel: Channel::get_private(BusType::Session)?,
-        filters: Default::default(),
-    })}
-
-    /// Create a new connection to the system-wide bus.
-    pub fn new_system() -> Result<Self, Error> { Ok(SyncConnection {
-        channel: Channel::get_private(BusType::System)?,
-        filters: Default::default(),
-    })}
-
-    /// Get the connection's unique name.
-    ///
-    /// It's usually something like ":1.54"
-    pub fn unique_name(&self) -> BusName { self.channel.unique_name().unwrap().into() }
-
     /// Tries to handle an incoming message if there is one. If there isn't one,
     /// it will wait up to timeout
     ///
     /// Note: Might deadlock if called recursively.
     pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
         if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
-            if let Some(reply) = dispatch(&mut self.filters.lock().unwrap().1, msg, |cb, msg| { cb(msg, self) }) {
+            if let Some(reply) = self.filters.lock().unwrap().dispatch(msg, |cb, msg| { cb(msg, self) }) {
                 let _ = self.channel.send(reply);
             }
             Ok(true)
         } else {
             Ok(false)
         }
-    }
-
-    /// Create a convenience struct for easier calling of many methods on the same destination and path.
-    pub fn with_proxy<'a, D: Into<BusName<'a>>, P: Into<Path<'a>>>(&'a self, dest: D, path: P, timeout: Duration) ->
-    Proxy<'a, &'a SyncConnection> {
-        Proxy { connection: self, destination: dest.into(), path: path.into(), timeout }
-    }
-
-    /// Request a name on the D-Bus.
-    ///
-    /// For detailed information on the flags and return values, see the libdbus documentation.
-    pub fn request_name<'a, N: Into<BusName<'a>>>(&self, name: N, allow_replacement: bool, replace_existing: bool, do_not_queue: bool)
-    -> Result<org_freedesktop_dbus::RequestNameReply, Error> {
-        org_freedesktop_dbus::request_name(&self.channel, &name.into(), allow_replacement, replace_existing, do_not_queue)
-    }
-
-    /// Release a previously requested name on the D-Bus.
-    pub fn release_name<'a, N: Into<BusName<'a>>>(&self, name: N) -> Result<org_freedesktop_dbus::ReleaseNameReply, Error> {
-        org_freedesktop_dbus::release_name(&self.channel, &name.into())
-    }
-
-    /// Adds a new match to the connection, without setting up a callback when this message arrives.
-    pub fn add_match_no_cb(&self, match_str: &str) -> Result<(), Error> {
-        use crate::blocking::stdintf::org_freedesktop::DBus;
-        let proxy = stdintf::proxy(self);
-        proxy.add_match(match_str)
-    }
-
-    /// Removes a match from the connection, without removing any callbacks.
-    pub fn remove_match_no_cb(&self, match_str: &str) -> Result<(), Error> {
-        use crate::blocking::stdintf::org_freedesktop::DBus;
-        let proxy = stdintf::proxy(self);
-        proxy.remove_match(match_str)
     }
 
     /// Adds a new match to the connection, and sets up a callback when this message arrives.
@@ -208,15 +243,6 @@ impl SyncConnection {
         use channel::MatchingReceiver;
         Ok(self.start_receive(match_rule, MakeSignal::make(f, m)))
     }
-
-    /// Removes a previously added match and callback from the connection.
-    pub fn remove_match(&self, id: u32) -> Result<(), Error> {
-        use channel::MatchingReceiver;
-        let (mr, _) = self.stop_receive(id).ok_or_else(|| Error::new_failed("No match with that id found"))?;
-        self.remove_match_no_cb(&mr.match_str())
-    }
-
-
 }
 
 /// Abstraction over different connections
@@ -233,60 +259,33 @@ impl BlockingSender for Channel {
     }
 }
 
-impl BlockingSender for Connection {
-    fn send_with_reply_and_block(&self, msg: Message, timeout: Duration) -> Result<Message, Error> {
-        self.channel.send_with_reply_and_block(msg, timeout)
+impl channel::MatchingReceiver for LocalConnection {
+    type F = LocalFilterCb;
+    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
+        self.filters.borrow_mut().add(m, f)
     }
-}
-
-impl BlockingSender for SyncConnection {
-    fn send_with_reply_and_block(&self, msg: Message, timeout: Duration) -> Result<Message, Error> {
-        self.channel.send_with_reply_and_block(msg, timeout)
+    fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
+        self.filters.borrow_mut().remove(id)
     }
-}
-
-impl channel::Sender for Connection {
-    fn send(&self, msg: Message) -> Result<u32, ()> { self.channel.send(msg) }
-}
-
-impl channel::Sender for SyncConnection {
-    fn send(&self, msg: Message) -> Result<u32, ()> { self.channel.send(msg) }
 }
 
 impl channel::MatchingReceiver for Connection {
-    type F = LocalFilterCb;
+    type F = FilterCb;
     fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
-        let id = self.filter_nextid.get();
-        self.filter_nextid.set(id+1);
-        self.filters.borrow_mut().push(Filter { id, rule: m, callback: f } );
-        id
+        self.filters.borrow_mut().add(m, f)
     }
     fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
-        let mut filters = self.filters.borrow_mut();
-        if let Some(idx) = filters.iter().position(|f| f.id == id) {
-            let x = filters.remove(idx);
-            Some((x.rule, x.callback))
-        }
-        else { None }
+        self.filters.borrow_mut().remove(id)
     }
 }
 
 impl channel::MatchingReceiver for SyncConnection {
     type F = SyncFilterCb;
     fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
-        let mut filters = self.filters.lock().unwrap();
-        let id = filters.0 + 1;
-        filters.0 = id;
-        filters.1.push(Filter { id, rule: m, callback: f } );
-        id
+        self.filters.lock().unwrap().add(m, f)
     }
     fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
-        let mut filters = self.filters.lock().unwrap();
-        if let Some(idx) = filters.1.iter().position(|f| f.id == id) {
-            let x = filters.1.remove(idx);
-            Some((x.rule, x.callback))
-        }
-        else { None }
+        self.filters.lock().unwrap().remove(id)
     }
 }
 
@@ -406,8 +405,22 @@ impl<S: ReadAll, F: FnMut(S, &SyncConnection, &Message) -> bool + Send + Sync + 
     }
 }
 
-impl<S: ReadAll, F: FnMut(S, &Connection, &Message) -> bool + 'static> MakeSignal<LocalFilterCb, S, Connection> for F {
+impl<S: ReadAll, F: FnMut(S, &LocalConnection, &Message) -> bool + 'static> MakeSignal<LocalFilterCb, S, LocalConnection> for F {
     fn make(mut self, mstr: String) -> LocalFilterCb {
+        Box::new(move |msg: Message, conn: &LocalConnection| {
+            if let Ok(s) = S::read(&mut msg.iter_init()) {
+                if self(s, conn, &msg) { return true };
+                let proxy = stdintf::proxy(conn);
+                use crate::blocking::stdintf::org_freedesktop::DBus;
+                let _ = proxy.remove_match(&mstr);
+                false
+            } else { true }
+        })
+    }
+}
+
+impl<S: ReadAll, F: FnMut(S, &Connection, &Message) -> bool + Send + 'static> MakeSignal<FilterCb, S, Connection> for F {
+    fn make(mut self, mstr: String) -> FilterCb {
         Box::new(move |msg: Message, conn: &Connection| {
             if let Ok(s) = S::read(&mut msg.iter_init()) {
                 if self(s, conn, &msg) { return true };
@@ -432,9 +445,13 @@ fn test_add_match() {
 fn test_conn_send_sync() {
     fn is_send<T: Send>(_: &T) {}
     fn is_sync<T: Sync>(_: &T) {}
+
     let c = SyncConnection::new_session().unwrap();
     is_send(&c);
     is_sync(&c);
+
+    let c = Connection::new_session().unwrap();
+    is_send(&c);
 }
 
 #[test]

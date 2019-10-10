@@ -1,7 +1,7 @@
 //! This module contains some standard interfaces and an easy way to call them.
 //!
 //! See the [D-Bus specification](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces) for more information about these standard interfaces.
-//! 
+//!
 //! The code here was originally created by dbus-codegen.
 
 
@@ -104,4 +104,3 @@ impl<'a, T: nonblock::NonblockReply, C: ::std::ops::Deref<Target=T>> Peer for no
 
 
 }
-

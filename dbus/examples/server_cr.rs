@@ -29,9 +29,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     c.request_name("com.example.dbustest", false, true, false)?;
 
     // The choice of crossroads tells us what type of method handlers we want.
-    // The local variant is the one that allows non-Send methods.
+    // We choose the default one, which is Send but not Sync.
     // We also add introspection and properties interfaces by default on object path additions.
-    let mut cr = Crossroads::new_local(true);
+    let mut cr = Crossroads::new(true);
 
     // Let's register a new interface in Crossroads' interface registry.
     cr.register::<DBusTest, _>("com.example.dbustest")
@@ -62,7 +62,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     cr.insert(p);
 
     // We add the Crossroads instance to the connection so that incoming method calls will be handled.
-    cr.start_local(&c);
+    cr.start(&c);
 
     // Serve clients forever.
     loop { c.process(Duration::from_millis(1000))?; }
