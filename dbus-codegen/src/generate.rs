@@ -422,7 +422,8 @@ fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box
                 *s += &oa.typename_maybewrap(opts.genericvariant)?;
                 *s += ", ";
             }
-            *s += ")| Ok(";
+            let tuple = m.oargs.len() > 1;
+            *s += &format!(")| Ok({}", if tuple { "(" } else { "" });
             for idx in 0..m.oargs.len() {
                 *s += &if m.oargs[idx].can_wrap_variant(opts.genericvariant) {
                     format!("(r.{}).0, ", idx)
@@ -430,7 +431,7 @@ fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box
                     format!("r.{}, ", idx)
                 };
             }
-            *s += "))\n";
+            *s += &format!("{}))\n", if tuple { ")" } else { "" });
         }
         *s += "    }\n";
     }
