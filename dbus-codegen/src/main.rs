@@ -31,9 +31,11 @@ impl<'a, C: ::std::ops::Deref<Target=::dbus::ffidisp::Connection>> OrgFreedeskto
 fn main() {
     let matches = clap::App::new("D-Bus Rust code generator").about("Generates Rust code from xml introspection data")
         .arg(clap::Arg::with_name("destination").short("d").long("destination").takes_value(true).value_name("BUSNAME")
-             .help("If present, connects to the supplied service to get introspection data. Reads from stdin otherwise."))  
+             .help("If present, connects to the supplied service to get introspection data. Reads from stdin otherwise."))
         .arg(clap::Arg::with_name("path").short("p").long("path").takes_value(true).value_name("PATH")
              .help("The path to ask for introspection data. Defaults to '/'. (Ignored if destination is not specified.)"))
+        .arg(clap::Arg::with_name("interfaces").short("f").long("interfaces").takes_value(true).value_name("FILTER")
+            .help("Comma separated list of filter strings. Only matching interfaces are generated if set."))
         .arg(clap::Arg::with_name("systembus").short("s").long("system-bus")
              .help("Connects to system bus, if not specified, the session bus will be used. (Ignored if destination is not specified.)"))
         .arg(clap::Arg::with_name("genericvariant").short("g").long("generic-variant")
@@ -61,7 +63,7 @@ Defaults to 'RefClosure'."))
         panic!("Expected either xml file path as argument or destination option. But both are provided.");
     }
 
-    let s = 
+    let s =
     if let Some(dest) = matches.value_of("destination") {
         let path = matches.value_of("path").unwrap_or("/");
         let c = if matches.is_present("systembus") { Connection::new_system() } else { Connection::new_session() };
@@ -105,12 +107,16 @@ Defaults to 'RefClosure'."))
         _ => panic!("Invalid client connection type specified"),
     };
 
+    let interfaces = matches.value_of("interfaces").map(|s| s.split(",").map(|e| e.trim().to_owned()).collect());
+
     let opts = generate::GenOpts { methodtype: mtype.map(|x| x.into()), dbuscrate: dbuscrate.into(),
         skipprefix: matches.value_of("skipprefix").map(|x| x.into()), serveraccess: maccess,
         genericvariant: matches.is_present("genericvariant"),
         futures: false,
         connectiontype: client,
         crhandler: crhandler.map(|x| x.to_string()),
+        interfaces,
+        command_line: std::env::args().skip(1).collect::<Vec<String>>().join(" ")
     };
 
     let mut h: Box<dyn std::io::Write> = match matches.value_of("output") {
