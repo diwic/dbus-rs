@@ -70,15 +70,6 @@ pub struct SyncConnection {
     filters: Mutex<Filters<SyncFilterCb>>
 }
 
-/*
-type
-  SyncFilterCb = Box<dyn FnMut(Message, &SyncConnection) -> bool + Send + Sync + 'static>;
-type
-  FilterCb = Box<dyn FnMut(Message, &Connection) -> bool + Send + 'static>;
-type
-  LocalFilterCb = Box<dyn FnMut(Message, &LocalConnection) -> bool + 'static>;
-*/
-
 use crate::blocking::stdintf::org_freedesktop_dbus;
 
 macro_rules! connimpl {
@@ -185,6 +176,16 @@ impl<S: ReadAll, F: FnMut(S, &$c, &Message) -> bool $(+ $ss)* + 'static> MakeSig
     }
 }
 
+impl channel::MatchingReceiver for $c {
+    type F = $cb;
+    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
+        self.filters_mut().add(m, f)
+    }
+    fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
+        self.filters_mut().remove(id)
+    }
+}
+
      }
 }
 
@@ -193,6 +194,7 @@ connimpl!(LocalConnection, LocalFilterCb);
 connimpl!(SyncConnection, SyncFilterCb, Send, Sync);
 
 impl Connection {
+    fn filters_mut(&self) -> std::cell::RefMut<Filters<FilterCb>> { self.filters.borrow_mut() }
     /// Tries to handle an incoming message if there is one. If there isn't one,
     /// it will wait up to timeout
     pub fn process(&mut self, timeout: Duration) -> Result<bool, Error> {
@@ -208,6 +210,8 @@ impl Connection {
 }
 
 impl LocalConnection {
+    fn filters_mut(&self) -> std::cell::RefMut<Filters<LocalFilterCb>> { self.filters.borrow_mut() }
+
     /// Tries to handle an incoming message if there is one. If there isn't one,
     /// it will wait up to timeout
     pub fn process(&mut self, timeout: Duration) -> Result<bool, Error> {
@@ -223,6 +227,8 @@ impl LocalConnection {
 }
 
 impl SyncConnection {
+    fn filters_mut(&self) -> std::sync::MutexGuard<Filters<SyncFilterCb>> { self.filters.lock().unwrap() }
+
     /// Tries to handle an incoming message if there is one. If there isn't one,
     /// it will wait up to timeout
     ///
@@ -250,36 +256,6 @@ pub trait BlockingSender {
 impl BlockingSender for Channel {
     fn send_with_reply_and_block(&self, msg: Message, timeout: Duration) -> Result<Message, Error> {
         Channel::send_with_reply_and_block(self, msg, timeout)
-    }
-}
-
-impl channel::MatchingReceiver for LocalConnection {
-    type F = LocalFilterCb;
-    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
-        self.filters.borrow_mut().add(m, f)
-    }
-    fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
-        self.filters.borrow_mut().remove(id)
-    }
-}
-
-impl channel::MatchingReceiver for Connection {
-    type F = FilterCb;
-    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
-        self.filters.borrow_mut().add(m, f)
-    }
-    fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
-        self.filters.borrow_mut().remove(id)
-    }
-}
-
-impl channel::MatchingReceiver for SyncConnection {
-    type F = SyncFilterCb;
-    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
-        self.filters.lock().unwrap().add(m, f)
-    }
-    fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
-        self.filters.lock().unwrap().remove(id)
     }
 }
 
