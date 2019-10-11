@@ -176,18 +176,16 @@ impl DBusProperties {
 
     pub fn register(cr: &mut Crossroads<()>) {
         let getprop = |cr: &mut Crossroads<()>, ctx: &mut MsgCtx| {
-            Some(getprop_mut(cr, ctx, |f, path, ia, ctx| { f(path, ia, ctx) })
-                .unwrap_or_else(|e| e.to_message(&ctx.message)))
+            getprop_mut(cr, ctx, |f, path, ia, ctx| { f(path, ia, ctx) })
         };
         let getallprop = |cr: &mut Crossroads<()>, ctx: &mut MsgCtx| -> Option<Message> { unimplemented!() };
         let setprop = |cr: &mut Crossroads<()>, ctx: &mut MsgCtx| {
-            Some(setprop_mut(cr, ctx, |f, path, iter, ctx| { f(path, iter, ctx) })
-                .unwrap_or_else(|e| e.to_message(&ctx.message)))
+            setprop_mut(cr, ctx, |f, path, iter, ctx| { f(path, iter, ctx) })
         };
 
         // let x = MakeHandler::<<() as Handlers>::Method, ((), (), (), DBusProperties), (i8, ())>::make(x);
         Self::register_custom(cr,
-            SendMethod::from(getprop), SendMethod::from(getallprop), SendMethod::from(setprop)
+            MakeHandler::make(getprop), MakeHandler::make(getallprop), MakeHandler::make(setprop)
         );
 //        Self::register(cr, unimplemented!(), unimplemented!(), unimplemented!());
     }

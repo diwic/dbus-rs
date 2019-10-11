@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         // Let's add a method to the interface. We have the method name, followed by
         // names of input and output arguments (used for introspection). The closure then controls
         // the types of these arguments. The last argument to the closure is a tuple of the input arguments.
-        .method("Hello", ("name",), ("reply",), |test: &mut DBusTest, ctx: &mut MsgCtx, (name,): (String,)| {
+        .method("Hello", ("name",), ("reply",), |ctx: &mut MsgCtx, test: &mut DBusTest, (name,): (String,)| {
             // And here's what happens when the method is called.
             println!("Incoming hello call from {}!", name);
             test.called_count += 1;

@@ -74,7 +74,7 @@ impl Handlers for () {
                     let data = cr.paths.get_mut(ctx.path.as_cstr()).ok_or_else(|| { MethodErr::no_path(&ctx.path) })?;
                     let iface = data.get_from_typeid_mut(entry.typeid).ok_or_else(|| { MethodErr::no_interface(&ctx.iface) })?;
                     let iface = &mut **iface;
-                    f(iface, ctx)
+                    f(ctx, iface)
                 },
                 SendMethods::AllRef(_) => { try_ref = true; None }
                 SendMethods::MutCr(ref f) => { f.box_clone()(cr, ctx) },
@@ -159,7 +159,7 @@ impl Handlers for Local {
                     let data = cr.paths.get_mut(ctx.path.as_cstr()).ok_or_else(|| { MethodErr::no_path(&ctx.path) })?;
                     let iface = data.get_from_typeid_mut(entry.typeid).ok_or_else(|| { MethodErr::no_interface(&ctx.iface) })?;
                     let iface = &mut **iface;
-                    f(iface, ctx)
+                    f(ctx, iface)
                 },
                 LocalMethods::AllRef(_) => { try_ref = true; None }
                 LocalMethods::MutCr(ref f) => { f.box_clone()(cr, ctx) },
@@ -180,23 +180,162 @@ where F: FnOnce(&mut Crossroads<H>, &mut MsgCtx) -> Option<Message> + Clone + 's
     }
 }
 
-pub struct LocalMethod(LocalMethods);
+macro_rules! local_and_send_impl {
+     ($h: ty, $method: ident, $methods: ident $(, $ss:tt)*) =>  {
 
-enum LocalMethods {
-    MutPath(Box<dyn FnMut(&mut Path<Local>, &mut MsgCtx) -> Option<Message> + 'static>),
-    MutIface(Box<dyn FnMut(&mut (dyn Any), &mut MsgCtx) -> Option<Message> + 'static>),
-    AllRef(Box<dyn Fn(&mut MsgCtx, &RefCtx<Local>) -> Option<Message> + 'static>),
-    MutCr(Box<dyn MutCrCb<Local> + 'static>),
+pub struct $method($methods);
+
+enum $methods {
+    MutPath(Box<dyn FnMut(&mut Path<$h>, &mut MsgCtx) -> Option<Message> $(+ $ss)* + 'static>),
+    MutIface(Box<dyn FnMut(&mut MsgCtx, &mut (dyn Any $(+ $ss)*)) -> Option<Message> $(+ $ss)* + 'static>),
+    AllRef(Box<dyn Fn(&mut MsgCtx, &RefCtx<$h>) -> Option<Message> $(+ $ss)* + 'static>),
+    MutCr(Box<dyn MutCrCb<$h> $(+ $ss)* + 'static>),
 }
 
-pub struct SendMethod(SendMethods);
+// AllRef handlers
 
-enum SendMethods {
-    MutPath(Box<dyn FnMut(&mut Path<()>, &mut MsgCtx) -> Option<Message> + Send + 'static>),
-    MutIface(Box<dyn FnMut(&mut (dyn Any), &mut MsgCtx) -> Option<Message> + Send + 'static>),
-    AllRef(Box<dyn Fn(&mut MsgCtx, &RefCtx<()>) -> Option<Message> + Send + 'static>),
-    MutCr(Box<dyn MutCrCb<()> + Send + 'static>),
+impl<F> MakeHandler<<$h as Handlers>::Method, (), ($h, u128)> for F
+where F: Fn(&mut MsgCtx, &RefCtx<$h>) -> Option<Message> $(+ $ss)* + 'static
+{
+    fn make(self) -> <$h as Handlers>::Method {
+        $method($methods::AllRef(Box::new(self)))
+    }
 }
+
+impl<I: 'static $(+ $ss)*, F> MakeHandler<<$h as Handlers>::Method, ((), I), ($h, f32)> for F
+where F: Fn(&mut MsgCtx, &RefCtx<$h>, &I) -> Result<Message, MethodErr> $(+ $ss)* + 'static
+{
+    fn make(self) -> <$h as Handlers>::Method {
+        MakeHandler::make(move |ctx: &mut MsgCtx, refctx: &RefCtx<$h>| {
+            let iface: &I = refctx.path.get().unwrap();
+            Some(self(ctx, refctx, iface).unwrap_or_else(|e| e.to_message(ctx.message)))
+        })
+    }
+}
+
+impl<I: 'static $(+ $ss)*, IA: ReadAll, OA: AppendAll, F> MakeHandler<<$h as Handlers>::Method, ((), IA, OA, I), ($h, f64)> for F
+where F: Fn(&mut MsgCtx, &RefCtx<$h>, &I, IA) -> Result<OA, MethodErr> $(+ $ss)* + 'static
+{
+    fn make(self) -> <$h as Handlers>::Method {
+        MakeHandler::make(move |ctx: &mut MsgCtx, refctx: &RefCtx<$h>, i: &I| {
+            let ia = IA::read(&mut ctx.message.iter_init())?;
+            let r = self(ctx, refctx, i, ia)?;
+            let mut m = ctx.message.method_return();
+            OA::append(&r, &mut IterAppend::new(&mut m));
+            Ok(m)
+        })
+    }
+}
+
+
+// MutIface handlers
+
+impl<F> MakeHandler<<$h as Handlers>::Method, (), ($h, i64)> for F
+where F: FnMut(&mut MsgCtx, &mut (dyn Any $(+ $ss)*)) -> Option<Message> $(+ $ss)* + 'static
+{
+    fn make(self) -> <$h as Handlers>::Method {
+        $method($methods::MutIface(Box::new(self)))
+    }
+}
+
+impl<I: 'static $(+ $ss)*, F> MakeHandler<<$h as Handlers>::Method, ((), I), ($h, i64)> for F
+where F: FnMut(&mut MsgCtx, &mut I) -> Result<Message, MethodErr> $(+ $ss)* + 'static
+{
+    fn make(mut self) -> <$h as Handlers>::Method {
+        MakeHandler::make(move |ctx: &mut MsgCtx, data: &mut (dyn Any $(+ $ss)*)| {
+            let iface: &mut I = data.downcast_mut().unwrap();
+            Some(self(ctx, iface).unwrap_or_else(|e| e.to_message(ctx.message)))
+        })
+    }
+}
+
+impl<F, I: 'static $(+ $ss)*, IA: ReadAll, OA: AppendAll> MakeHandler<<$h as Handlers>::Method, ((), IA, OA, I), ($h, i128)> for F
+where F: FnMut(&mut MsgCtx, &mut I, IA) -> Result<OA, MethodErr> $(+ $ss)* + 'static
+{
+    fn make(mut self) -> <$h as Handlers>::Method {
+        MakeHandler::make(move |ctx: &mut MsgCtx, iface: &mut I| {
+            let ia = IA::read(&mut ctx.message.iter_init())?;
+            let r = self(ctx, iface, ia)?;
+            let mut m = ctx.message.method_return();
+            OA::append(&r, &mut IterAppend::new(&mut m));
+            Ok(m)
+        })
+    }
+}
+
+// MutCr handlers
+
+impl<F> MakeHandler<<$h as Handlers>::Method, (), ($h, i16)> for F
+where F: FnOnce(&mut Crossroads<$h>, &mut MsgCtx) -> Option<Message> $(+ $ss)* + Clone + 'static
+{
+    fn make(self) -> <$h as Handlers>::Method {
+        $method($methods::MutCr(Box::new(self)))
+    }
+}
+
+impl<F> MakeHandler<<$h as Handlers>::Method, (), ($h, u32)> for F
+where F: FnOnce(&mut Crossroads<$h>, &mut MsgCtx) -> Result<Message, MethodErr> $(+ $ss)* + Clone + 'static
+{
+    fn make(self) -> <$h as Handlers>::Method {
+        MakeHandler::make(move |cr: &mut Crossroads<$h>, ctx: &mut MsgCtx| {
+            Some(self(cr, ctx).unwrap_or_else(|e| e.to_message(ctx.message)))
+        })
+    }
+}
+
+impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<$h as Handlers>::Method, ((), IA, OA, I), ($h, i32)> for F
+where F: FnOnce(&mut Crossroads<$h>, &mut MsgCtx, IA) -> Result<OA, MethodErr> $(+ $ss)* + Clone + 'static
+{
+    fn make(self) -> <$h as Handlers>::Method {
+        MakeHandler::make(move |cr: &mut Crossroads<$h>, ctx: &mut MsgCtx| {
+            let ia = IA::read(&mut ctx.message.iter_init())?;
+            let r = self(cr, ctx, ia)?;
+            let mut m = ctx.message.method_return();
+            OA::append(&r, &mut IterAppend::new(&mut m));
+            Ok(m)
+        })
+    }
+}
+
+// MutPath handlers
+
+impl<F> MakeHandler<<$h as Handlers>::Method, (), ($h, u8)> for F
+where F: FnMut(&mut Path<$h>, &mut MsgCtx) -> Option<Message> $(+ $ss)* + 'static
+{
+    fn make(self) -> <$h as Handlers>::Method {
+        $method($methods::MutPath(Box::new(self)))
+    }
+}
+
+impl<F> MakeHandler<<$h as Handlers>::Method, (), ($h, i8)> for F
+where F: FnMut(&mut Path<$h>, &mut MsgCtx) -> Result<Message, MethodErr> $(+ $ss)* + 'static
+{
+    fn make(mut self) -> <$h as Handlers>::Method {
+        MakeHandler::make(move |path: &mut Path<$h>, ctx: &mut MsgCtx| {
+            Some(self(path, ctx).unwrap_or_else(|e| e.to_message(ctx.message)))
+        })
+    }
+}
+
+impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<$h as Handlers>::Method, ((), IA, OA, I), ($h, u16)> for F
+where F: FnMut(&mut Path<$h>, &mut MsgCtx, IA) -> Result<OA, MethodErr> $(+ $ss)* + 'static
+{
+    fn make(mut self) -> <$h as Handlers>::Method {
+        MakeHandler::make(move |path: &mut Path<$h>, ctx: &mut MsgCtx| -> Result<Message, MethodErr> {
+            let ia = IA::read(&mut ctx.message.iter_init())?;
+            let r = self(path, ctx, ia)?;
+            let mut m = ctx.message.method_return();
+            OA::append(&r, &mut IterAppend::new(&mut m));
+            Ok(m)
+        })
+    }
+}
+
+    }
+}
+
+local_and_send_impl!(Local, LocalMethod, LocalMethods);
+local_and_send_impl!((), SendMethod, SendMethods, Send);
 
 /// Internal helper trait
 pub trait MakeHandler<T, A, Dummy> {
@@ -227,76 +366,6 @@ where F: Fn(&I, &mut MsgCtx, &RefCtx<Par>, IA) -> Result<OA, MethodErr> + Send +
             let r = r.and_then(|ia| self(iface, ctx, refctx, ia));
             Some(posthandler(ctx.message, r))
         })
-    }
-}
-
-impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<() as Handlers>::Method, ((), IA, OA, I), ((), ())> for F
-where F: FnMut(&mut I, &mut MsgCtx, IA) -> Result<OA, MethodErr> + Send + 'static
-{
-    fn make(mut self) -> <() as Handlers>::Method {
-        SendMethod(SendMethods::MutIface(Box::new(move |data, info| {
-            let iface: &mut I = data.downcast_mut().unwrap();
-            let r = IA::read(&mut info.message.iter_init()).map_err(From::from);
-            let r = r.and_then(|ia| self(iface, info, ia));
-            Some(posthandler(info.message, r))
-        })))
-    }
-}
-
-impl<F: FnOnce(&mut Crossroads<()>, &mut MsgCtx) -> Option<Message> + Send + Clone + 'static> From<F> for SendMethod {
-    fn from(f: F) -> Self { SendMethod(SendMethods::MutCr(Box::new(f))) }
-}
-
-impl<F: FnOnce(&mut Crossroads<Local>, &mut MsgCtx) -> Option<Message> + Clone + 'static> From<F> for LocalMethod {
-    fn from(f: F) -> Self { LocalMethod(LocalMethods::MutCr(Box::new(f))) }
-}
-
-impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<() as Handlers>::Method, ((), IA, OA, I), (u8, ())> for F
-where F: FnMut(&mut Path<()>, &mut MsgCtx, IA) -> Result<OA, MethodErr> + Send + 'static
-{
-    fn make(mut self) -> <() as Handlers>::Method {
-        SendMethod(SendMethods::MutPath(Box::new(move |path, ctx| {
-            let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
-            let r = r.and_then(|ia| self(path, ctx, ia));
-            Some(posthandler(ctx.message, r))
-        })))
-    }
-}
-
-impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<() as Handlers>::Method, ((), IA, OA, I), (i8, ())> for F
-where F: FnOnce(&mut Crossroads<()>, &mut MsgCtx, IA) -> Result<OA, MethodErr> + Send + Clone + 'static
-{
-    fn make(self) -> <() as Handlers>::Method {
-        SendMethod(SendMethods::MutCr(Box::new(move |cr, ctx| {
-            let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
-            let r = r.and_then(|ia| self(cr, ctx, ia));
-            Some(posthandler(ctx.message, r))
-        })))
-    }
-}
-
-impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<Local as Handlers>::Method, ((), IA, OA, I), ((), Local)> for F
-where F: FnMut(&mut I, &mut MsgCtx, IA) -> Result<OA, MethodErr> + 'static
-{
-    fn make(mut self) -> <Local as Handlers>::Method {
-        LocalMethod(LocalMethods::MutIface(Box::new(move |data, info| {
-            let iface: &mut I = data.downcast_mut().unwrap();
-            let r = IA::read(&mut info.message.iter_init()).map_err(From::from);
-            let r = r.and_then(|ia| self(iface, info, ia));
-            Some(posthandler(info.message, r))
-        })))
-    }
-}
-
-impl<F, I: 'static, IA: ReadAll, OA: AppendAll> MakeHandler<<Local as Handlers>::Method, ((), IA, OA, I), (u8, ())> for F
-where F: FnMut(&mut Path<Local>, &mut MsgCtx, IA) -> Result<OA, MethodErr> + 'static
-{
-    fn make(mut self) -> <Local as Handlers>::Method {
-        LocalMethod(LocalMethods::MutPath(Box::new(move |path, ctx| {
-            let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
-            let r = r.and_then(|ia| self(path, ctx, ia));
-            Some(posthandler(ctx.message, r))
-        })))
     }
 }
 
