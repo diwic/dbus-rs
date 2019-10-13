@@ -2,7 +2,7 @@
 //!
 //! You're probably going to need a companion crate - dbus-tokio - for this connection to make sense,
 //! (although you can also just call read_write and process_all at regular intervals).
-//! 
+//!
 //! When async/await is stable, expect more here.
 
 use crate::{Error, Message};
@@ -25,13 +25,15 @@ mod generated_org_freedesktop_dbus;
 ///
 /// The code was created by dbus-codegen.
 pub mod stdintf {
+    #[allow(missing_docs)]
     pub mod org_freedesktop_dbus {
         pub use super::super::generated_org_freedesktop_notifications::*;
+        #[allow(unused_imports)]
         pub(crate) use super::super::generated_org_freedesktop_dbus::*;
     }
 }
 
-/// Thread local + async Connection 
+/// Thread local + async Connection
 pub struct LocalConnection {
     channel: Channel,
     replies: RefCell<HashMap<u32, Box<dyn FnOnce(Message, &LocalConnection)>>>,
@@ -217,7 +219,7 @@ impl Process for SyncConnection {
 
 /// A struct that wraps a connection, destination and path.
 ///
-/// A D-Bus "Proxy" is a client-side object that corresponds to a remote object on the server side. 
+/// A D-Bus "Proxy" is a client-side object that corresponds to a remote object on the server side.
 /// Calling methods on the proxy object calls methods on the remote object.
 /// Read more in the [D-Bus tutorial](https://dbus.freedesktop.org/doc/dbus-tutorial.html#proxies)
 #[derive(Clone, Debug)]
@@ -233,13 +235,13 @@ pub struct Proxy<'a, C> {
 impl<'a, C> Proxy<'a, C> {
     /// Creates a new proxy struct.
     pub fn new<D: Into<BusName<'a>>, P: Into<Path<'a>>>(dest: D, path: P, connection: C) -> Self {
-        Proxy { destination: dest.into(), path: path.into(), connection } 
+        Proxy { destination: dest.into(), path: path.into(), connection }
     }
 }
 
 impl<'a, T, C> Proxy<'a, C>
 where
-    T: NonblockReply, 
+    T: NonblockReply,
     C: std::ops::Deref<Target=T>
 {
 
@@ -270,7 +272,7 @@ enum MRInner {
 }
 
 /// Future method reply, used while waiting for a method call reply from the server.
-pub struct MethodReply<T>(Arc<Mutex<MRInner>>, Option<Box<dyn FnOnce(Message) -> Result<T, Error> + Send + Sync + 'static>>); 
+pub struct MethodReply<T>(Arc<Mutex<MRInner>>, Option<Box<dyn FnOnce(Message) -> Result<T, Error> + Send + Sync + 'static>>);
 
 impl<T> future::Future for MethodReply<T> {
     type Output = Result<T, Error>;
@@ -309,4 +311,3 @@ fn test_conn_send_sync() {
     is_send(&c);
     is_sync(&c);
 }
-

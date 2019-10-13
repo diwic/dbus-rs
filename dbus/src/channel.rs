@@ -244,9 +244,13 @@ impl Channel {
     }
 
 
-    /// Puts a message into libdbus out queue. Use "flush" or "read_write" to make sure it is sent over the wire.
+    /// Puts a message into libdbus out queue, and tries to send it.
     ///
     /// Returns a serial number than can be used to match against a reply.
+    ///
+    /// Note: usually the message is sent when this call happens, but in
+    /// case internal D-Bus buffers are full, it will be left in the out queue.
+    /// Call "flush" or "read_write" to retry flushing the out queue.
     pub fn send(&self, msg: Message) -> Result<u32, ()> {
         let mut serial = 0u32;
         let r = unsafe { ffi::dbus_connection_send(self.conn(), msg.ptr(), &mut serial) };
