@@ -24,25 +24,25 @@ mod networkmanager;
 /* ... */
 
 // Start a connection to the system bus.
-let c = Connection::get_private(BusType::System)?;
+let c = Connection::new_system()?;
 
 // Make a "ConnPath" struct that just contains a Connection, a destination and a path.
-let p = c.with_path("org.freedesktop.NetworkManager", "/org/freedesktop/NetworkManager", 5000);
+let p = c.with_proxy("org.freedesktop.NetworkManager", "/org/freedesktop/NetworkManager", Duration::new(5, 0));
 
 // Bring our generated code into scope.
 use networkmanager::OrgFreedesktopNetworkManager;
 
 // Now we can call methods on our connpath from the "org.freedesktop.NetworkManager" interface.
-let devices = c.get_all_devices()?;
+let devices = p.get_all_devices()?;
 ```
 
 There is also pre-generated code for standard D-Bus interfaces in the `stdintf` module. A similar example:
 
 ```rust
-let c = Connection::get_private(BusType::Session)?;
+let c = Connection::new_session()?;
 
 // Make a "ConnPath" struct that just contains a Connection, a destination and a path.
-let p = c.with_path("org.mpris.MediaPlayer2.rhythmbox", "/org/mpris/MediaPlayer2", 5000);
+let p = c.with_path("org.mpris.MediaPlayer2.rhythmbox", "/org/mpris/MediaPlayer2", Duration::new(5, 0));
 
 // The ConnPath struct implements many traits, e g `org.freedesktop.DBus.Properties`. Bring the trait into scope.
 use stdintf::org_freedesktop_dbus::Properties;
