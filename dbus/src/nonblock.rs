@@ -16,7 +16,20 @@ use std::{future, task, pin, mem};
 use std::collections::{HashMap, BTreeMap};
 use std::cell::{Cell, RefCell};
 
-pub mod stdintf;
+mod generated_org_freedesktop_notifications;
+mod generated_org_freedesktop_dbus;
+
+/// This module contains some standard interfaces and an easy way to call them.
+///
+/// See the [D-Bus specification](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces) for more information about these standard interfaces.
+///
+/// The code was created by dbus-codegen.
+pub mod stdintf {
+    pub mod org_freedesktop_dbus {
+        pub use super::super::generated_org_freedesktop_notifications::*;
+        pub(crate) use super::super::generated_org_freedesktop_dbus::*;
+    }
+}
 
 /// Thread local + async Connection 
 pub struct LocalConnection {
