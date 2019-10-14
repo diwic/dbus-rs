@@ -1,7 +1,7 @@
 use crate::ffi;
 use super::*;
 use super::check;
-use crate::strings::{Signature, Path};
+use crate::strings::{Signature, Path, Member, ErrorName, Interface};
 use std::{ptr, any, mem};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_char, c_int};
@@ -289,6 +289,8 @@ impl<'a> Get<'a> for $t<'static> {
     }
 }
 
+string_impl!(Interface, String, b"s\0");
+string_impl!(ErrorName, String, b"s\0");
+string_impl!(Member, String, b"s\0");
 string_impl!(Path, ObjectPath, b"o\0");
 string_impl!(Signature, Signature, b"g\0");
-
