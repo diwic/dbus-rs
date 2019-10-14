@@ -24,6 +24,10 @@ pub struct IOResource<C> {
 impl<C: AsRef<Channel> + Process> IOResource<C> {
     fn poll_internal(&self, _ctx: &mut task::Context<'_>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let c: &Channel = (*self.connection).as_ref();
+
+        c.read_write(Some(Default::default())).map_err(|_| Error::new_failed("Read/write failed"))?;
+        self.connection.process_all();
+
         let w = c.watch();
         let r = &self.registration;
         r.register(&mio::unix::EventedFd(&w.fd))?;
@@ -42,8 +46,6 @@ impl<C: AsRef<Channel> + Process> IOResource<C> {
             if w.write { r.poll_write_ready()?; };
         }
 
-        c.read_write(Some(Default::default())).map_err(|_| Error::new_failed("Read/write failed"))?;
-        self.connection.process_all();
         Ok(())
     }
 }
@@ -61,7 +63,7 @@ impl<C: AsRef<Channel> + Process> future::Future for IOResource<C> {
 }
 
 
-/// Generic connection creator, you might want to use e g `new_session_local`, `new_system_sync` etc for convenience. 
+/// Generic connection creator, you might want to use e g `new_session_local`, `new_system_sync` etc for convenience.
 pub fn new<C: From<Channel>>(b: BusType) -> Result<(IOResource<C>, Arc<C>), Error> {
     let mut channel = Channel::get_private(b)?;
     channel.set_watch_enabled(true);
