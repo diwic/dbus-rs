@@ -434,7 +434,7 @@ impl arg::Append for MessageItem {
             MessageItem::Double(a) => a.append_by_ref(i),
             MessageItem::Array(a) => a.append_by_ref(i),
             MessageItem::Struct(a) => i.append_container(ArgType::Struct, None, |s| {
-                for v in a { v.append_by_ref(s); }   
+                for v in a { v.append_by_ref(s); }
             }),
             MessageItem::Variant(a) => {
                 i.append_container(ArgType::Variant, Some(a.signature().as_cstr()), |s| a.append_by_ref(s))
@@ -460,7 +460,7 @@ impl<'a> arg::Get<'a> for MessageItem {
                         ss.next();
                         let vv = MessageItem::get(&mut ss).unwrap();
                         v.push((kk, vv));
-                        s.next(); 
+                        s.next();
                     };
                     MessageItem::Dict(MessageItemDict { v: v, sig:  i.signature() })
                 } else {
@@ -648,7 +648,7 @@ mod test {
         use std::io::prelude::*;
         use std::io::SeekFrom;
         use std::fs::OpenOptions;
-        use std::os::unix::io::AsRawFd;
+        use std::os::unix::io::{IntoRawFd, AsRawFd};
 
         let c = Connection::get_private(BusType::Session).unwrap();
         c.register_object_path("/hello").unwrap();
@@ -660,7 +660,7 @@ mod test {
         let mut file = OpenOptions::new().create(true).read(true).write(true).open(&filename).unwrap();
         file.write_all(b"z").unwrap();
         file.seek(SeekFrom::Start(0)).unwrap();
-        let ofd = OwnedFd::new(file.as_raw_fd());
+        let ofd = unsafe { OwnedFd::new(file.into_raw_fd()) };
         m.append_items(&[MessageItem::UnixFd(ofd.clone())]);
         println!("Sending {:?}", m.get_items());
         c.send(m).unwrap();
@@ -848,4 +848,3 @@ mod test {
     }
 
 }
-

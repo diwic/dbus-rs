@@ -233,7 +233,7 @@ impl Append for OwnedFd {
 impl DictKey for OwnedFd {}
 impl<'a> Get<'a> for OwnedFd {
     fn get(i: &mut Iter) -> Option<Self> {
-        arg_get_basic(&mut i.0, ArgType::UnixFd).map(OwnedFd::new)
+        arg_get_basic(&mut i.0, ArgType::UnixFd).map(|fd| unsafe { OwnedFd::new(fd) })
     }
 }
 

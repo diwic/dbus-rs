@@ -3,18 +3,18 @@
 //! Also see the arguments guide (in the examples directory).
 //!
 //! A message has `read1`, `read2` etc, and `append1`, `append2` etc, which is your
-//! starting point into this module's types. 
+//! starting point into this module's types.
 //!
 //! **Append a**:
 //!
 //! `bool, u8, u16, u32, u64, i16, i32, i64, f64` - the corresponding D-Bus basic type
 //!
-//! `&str` - a D-Bus string. D-Bus strings do not allow null characters, so 
+//! `&str` - a D-Bus string. D-Bus strings do not allow null characters, so
 //! if the string contains null characters, it will be cropped
 //! to only include the data before the null character. (Tip: This allows for skipping an
 //! allocation by writing a string literal which ends with a null character.)
 //!
-//! `&[T] where T: Append` - a D-Bus array. Note: can use an efficient fast-path in case of 
+//! `&[T] where T: Append` - a D-Bus array. Note: can use an efficient fast-path in case of
 //! T being an FixedArray type.
 //!
 //! `Array<T, I> where T: Append, I: Iterator<Item=T>` - a D-Bus array, maximum flexibility.
@@ -73,9 +73,9 @@ use std::{fmt, mem, ptr, error};
 use crate::{ffi, Message, Signature, Path};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_void, c_int};
-use std::os::unix::io::{RawFd, AsRawFd};
+use std::os::unix::io::{RawFd, AsRawFd, FromRawFd, IntoRawFd};
 
-fn check(f: &str, i: u32) { if i == 0 { panic!("D-Bus error: '{}' failed", f) }} 
+fn check(f: &str, i: u32) { if i == 0 { panic!("D-Bus error: '{}' failed", f) }}
 
 fn ffi_iter() -> ffi::DBusMessageIter {
     // Safe because DBusMessageIter contains only fields that are allowed to be zeroed (i e no references or similar)
@@ -91,7 +91,10 @@ pub struct OwnedFd {
 
 impl OwnedFd {
     /// Create a new OwnedFd from a RawFd.
-    pub fn new(fd: RawFd) -> OwnedFd {
+    ///
+    /// This function is unsafe, because you could potentially send in an invalid file descriptor,
+    /// or close it during the lifetime of this struct. This could potentially be unsound.
+    pub unsafe fn new(fd: RawFd) -> OwnedFd {
         OwnedFd { fd: fd }
     }
 
@@ -113,7 +116,7 @@ impl Clone for OwnedFd {
     fn clone(&self) -> OwnedFd {
         let x = unsafe { libc::dup(self.fd) };
         if x == -1 { panic!("Duplicating file descriptor failed") }
-        OwnedFd::new(x)
+        unsafe { OwnedFd::new(x) }
     }
 }
 
@@ -123,14 +126,23 @@ impl AsRawFd for OwnedFd {
     }
 }
 
+impl IntoRawFd for OwnedFd {
+    fn into_raw_fd(self) -> RawFd {
+        self.into_fd()
+    }
+}
+
+impl FromRawFd for OwnedFd {
+    unsafe fn from_raw_fd(fd: RawFd) -> Self { OwnedFd::new(fd) }
+}
 
 #[derive(Clone, Copy)]
-/// Helper struct for appending one or more arguments to a Message. 
+/// Helper struct for appending one or more arguments to a Message.
 pub struct IterAppend<'a>(ffi::DBusMessageIter, &'a Message);
 
 impl<'a> IterAppend<'a> {
     /// Creates a new IterAppend struct.
-    pub fn new(m: &'a mut Message) -> IterAppend<'a> { 
+    pub fn new(m: &'a mut Message) -> IterAppend<'a> {
         let mut i = ffi_iter();
         unsafe { ffi::dbus_message_iter_init_append(m.ptr(), &mut i) };
         IterAppend(i, m)
@@ -156,7 +168,7 @@ impl<'a> IterAppend<'a> {
     ///
     /// In order not to get D-Bus errors: during the call to "f" you need to call "append" on
     /// the supplied `IterAppend` exactly once,
-    /// and with a value which has the same signature as inner_sig.  
+    /// and with a value which has the same signature as inner_sig.
     pub fn append_variant<F: FnOnce(&mut IterAppend<'a>)>(&mut self, inner_sig: &Signature, f: F) {
         self.append_container(ArgType::Variant, Some(inner_sig.as_cstr()), f)
     }
@@ -212,8 +224,8 @@ impl<'a> IterAppend<'a> {
 pub struct Iter<'a>(ffi::DBusMessageIter, &'a Message, u32);
 
 impl<'a> Iter<'a> {
-    /// Creates a new struct for iterating over the arguments of a message, starting with the first argument. 
-    pub fn new(m: &'a Message) -> Iter<'a> { 
+    /// Creates a new struct for iterating over the arguments of a message, starting with the first argument.
+    pub fn new(m: &'a Message) -> Iter<'a> {
         let mut i = ffi_iter();
         unsafe { ffi::dbus_message_iter_init(m.ptr(), &mut i) };
         Iter(i, m, 0)
@@ -280,10 +292,10 @@ impl<'a> Iter<'a> {
     /// Returns false if there are no more items.
     pub fn next(&mut self) -> bool {
         self.2 += 1;
-        unsafe { ffi::dbus_message_iter_next(&mut self.0) != 0 } 
+        unsafe { ffi::dbus_message_iter_next(&mut self.0) != 0 }
     }
 
-    /// Wrapper around `get` and `next`. Calls `get`, and then `next` if `get` succeeded. 
+    /// Wrapper around `get` and `next`. Calls `get`, and then `next` if `get` succeeded.
     ///
     /// Also returns a `Result` rather than an `Option` to give an error if successful.
     ///
@@ -358,7 +370,7 @@ impl<'a> Iterator for Iter<'a> {
 
 /// Type of Argument
 ///
-/// use this to figure out, e g, which type of argument is at the current position of Iter. 
+/// use this to figure out, e g, which type of argument is at the current position of Iter.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum ArgType {
@@ -421,7 +433,7 @@ const ALL_ARG_TYPES: [(ArgType, &str); 18] =
     (ArgType::Invalid, "nothing")];
 
 impl ArgType {
-    /// A str corresponding to the name of a Rust type. 
+    /// A str corresponding to the name of a Rust type.
     pub fn as_str(self) -> &'static str {
         ALL_ARG_TYPES.iter().skip_while(|a| a.0 != self).next().unwrap().1
     }
@@ -438,7 +450,7 @@ impl ArgType {
 
 /// Error struct to indicate a D-Bus argument type mismatch.
 ///
-/// Might be returned from `iter::read()`. 
+/// Might be returned from `iter::read()`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TypeMismatchError {
     expected: ArgType,
@@ -450,7 +462,7 @@ impl TypeMismatchError {
     /// The ArgType we were trying to read, but failed
     pub fn expected_arg_type(&self) -> ArgType { self.expected }
 
-    /// The ArgType we should have been trying to read, if we wanted the read to succeed 
+    /// The ArgType we should have been trying to read, if we wanted the read to succeed
     pub fn found_arg_type(&self) -> ArgType { self.found }
 
     /// At what argument was the error found?
@@ -484,4 +496,3 @@ fn test_compile() {
     q.append((8u8, &[9u8, 6, 7][..]));
     q.append(Variant((6u8, 7u8)));
 }
-
