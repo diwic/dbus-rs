@@ -279,6 +279,29 @@ impl MessageItem {
         T::try_from(self)
     }
 
+    /// Get the underlying `MessageItem` of a `MessageItem::Variant`
+    ///
+    /// Nested `MessageItem::Variant`s are unwrapped recursively until a
+    /// non-`Variant` is found.
+    ///
+    /// # Example
+    /// ```
+    /// use dbus::arg::messageitem::MessageItem;
+    /// let nested = MessageItem::Variant(Box::new(6i64.into()));
+    /// let flat: MessageItem = 6i64.into();
+    /// assert_ne!(&nested, &flat);
+    /// assert_eq!(nested.peel(), &flat);
+    /// ```
+    pub fn peel(&self) -> &Self {
+        let mut current = self;
+
+        while let MessageItem::Variant(b) = current {
+            current = &*b;
+        }
+
+        current
+    }
+
     fn new_array2<D, I>(i: I) -> MessageItem
     where D: Into<MessageItem>, D: Default, I: Iterator<Item=D> {
         let v: Vec<MessageItem> = i.map(|ii| ii.into()).collect();
@@ -844,6 +867,50 @@ mod test {
 
         let ob = MessageItem::Signature(Signature::make::<u32>());
         assert_ne!("i", ob.inner::<&str>().unwrap());
+
+    }
+
+    #[test]
+    fn message_peel() {
+        let flat_str = MessageItem::Str("foobar".into());
+        assert_eq!(flat_str.peel(), &flat_str);
+
+        let flat_path = MessageItem::ObjectPath("/path".into());
+        assert_eq!(flat_path.peel(), &flat_path);
+
+        let flat_sig = MessageItem::Signature(Signature::make::<i32>());
+        assert_eq!(flat_sig.peel(), &flat_sig);
+
+        let flat_int = MessageItem::Int32(1234);
+        assert_eq!(flat_int.peel(), &flat_int);
+
+        let layered_str = MessageItem::Variant(Box::new(flat_str));
+        assert_eq!(layered_str.peel(), &MessageItem::Str("foobar".into()));
+
+        let layered_path = MessageItem::Variant(Box::new(flat_path));
+        assert_eq!(layered_path.peel(), &MessageItem::ObjectPath("/path".into()));
+
+        let layered_sig = MessageItem::Variant(Box::new(flat_sig));
+        assert_eq!(layered_sig.peel(), &MessageItem::Signature(Signature::make::<i32>()));
+
+        let layered_int = MessageItem::Variant(Box::new(flat_int));
+        assert_eq!(layered_int.peel(), &MessageItem::Int32(1234));
+
+        let very_deep =
+            MessageItem::Variant(Box::new(
+            MessageItem::Variant(Box::new(
+            MessageItem::Variant(Box::new(
+            MessageItem::Variant(Box::new(
+            MessageItem::Variant(Box::new(
+            MessageItem::Variant(Box::new(
+            MessageItem::Variant(Box::new(
+            MessageItem::Variant(Box::new(
+            MessageItem::Variant(Box::new(
+            MessageItem::Variant(Box::new(
+            MessageItem::Int32(1234)
+            ))))))))))))))))))));
+
+        assert_eq!(very_deep.peel(), &MessageItem::Int32(1234));
 
     }
 
