@@ -332,7 +332,7 @@ macro_rules! msgitem_convert {
         impl<'a> TryFrom<&'a MessageItem> for $t {
             type Error = ();
             fn try_from(i: &'a MessageItem) -> Result<$t,()> {
-                if let MessageItem::$s(b) = i { Ok(*b) } else { Err(()) }
+                if let MessageItem::$s(b) = i.peel() { Ok(*b) } else { Err(()) }
             }
         }
     }
@@ -384,7 +384,7 @@ impl From<Box<MessageItem>> for MessageItem {
 impl<'a> TryFrom<&'a MessageItem> for &'a str {
     type Error = ();
     fn try_from(i: &'a MessageItem) -> Result<&'a str, Self::Error> {
-        match i {
+        match i.peel() {
             MessageItem::Str(ref b) => Ok(b),
             MessageItem::ObjectPath(ref b) => Ok(b),
             MessageItem::Signature(ref b) => Ok(b),
@@ -395,17 +395,17 @@ impl<'a> TryFrom<&'a MessageItem> for &'a str {
 
 impl<'a> TryFrom<&'a MessageItem> for &'a String {
     type Error = ();
-    fn try_from(i: &'a MessageItem) -> Result<&'a String,()> { if let MessageItem::Str(b) = i { Ok(b) } else { Err(()) } }
+    fn try_from(i: &'a MessageItem) -> Result<&'a String,()> { if let MessageItem::Str(b) = i.peel() { Ok(b) } else { Err(()) } }
 }
 
 impl<'a> TryFrom<&'a MessageItem> for &'a Path<'static> {
     type Error = ();
-    fn try_from(i: &'a MessageItem) -> Result<&'a Path<'static>,()> { if let MessageItem::ObjectPath(b) = i { Ok(b) } else { Err(()) } }
+    fn try_from(i: &'a MessageItem) -> Result<&'a Path<'static>,()> { if let MessageItem::ObjectPath(b) = i.peel() { Ok(b) } else { Err(()) } }
 }
 
 impl<'a> TryFrom<&'a MessageItem> for &'a Signature<'static> {
     type Error = ();
-    fn try_from(i: &'a MessageItem) -> Result<&'a Signature<'static>,()> { if let MessageItem::Signature(b) = i { Ok(b) } else { Err(()) } }
+    fn try_from(i: &'a MessageItem) -> Result<&'a Signature<'static>,()> { if let MessageItem::Signature(b) = i.peel() { Ok(b) } else { Err(()) } }
 }
 
 impl<'a> TryFrom<&'a MessageItem> for &'a Box<MessageItem> {
@@ -416,7 +416,7 @@ impl<'a> TryFrom<&'a MessageItem> for &'a Box<MessageItem> {
 impl<'a> TryFrom<&'a MessageItem> for &'a Vec<MessageItem> {
     type Error = ();
     fn try_from(i: &'a MessageItem) -> Result<&'a Vec<MessageItem>,()> {
-        match i {
+        match i.peel() {
             MessageItem::Array(b) => Ok(&b.v),
             MessageItem::Struct(b) => Ok(b),
             _ => Err(()),
@@ -911,6 +911,52 @@ mod test {
             ))))))))))))))))))));
 
         assert_eq!(very_deep.peel(), &MessageItem::Int32(1234));
+
+    }
+
+    #[test]
+    fn inner_from_variant() {
+        let msg_u8 = MessageItem::Variant(Box::new(3u8.into()));
+        assert_eq!(msg_u8.inner::<u8>().unwrap(), 3u8);
+
+        let msg_u16 = MessageItem::Variant(Box::new(4u16.into()));
+        assert_eq!(msg_u16.inner::<u16>().unwrap(), 4u16);
+
+        let msg_u32 = MessageItem::Variant(Box::new(5u32.into()));
+        assert_eq!(msg_u32.inner::<u32>().unwrap(), 5u32);
+
+        let msg_u64 = MessageItem::Variant(Box::new(6u64.into()));
+        assert_eq!(msg_u64.inner::<u64>().unwrap(), 6u64);
+
+        let msg_i16 = MessageItem::Variant(Box::new(4i16.into()));
+        assert_eq!(msg_i16.inner::<i16>().unwrap(), 4i16);
+
+        let msg_i32 = MessageItem::Variant(Box::new(5i32.into()));
+        assert_eq!(msg_i32.inner::<i32>().unwrap(), 5i32);
+
+        let msg_i64 = MessageItem::Variant(Box::new(6i64.into()));
+        assert_eq!(msg_i64.inner::<i64>().unwrap(), 6i64);
+
+        let msg_f64 = MessageItem::Variant(Box::new(6.5f64.into()));
+        assert_eq!(msg_f64.inner::<f64>().unwrap(), 6.5f64);
+
+        let msg_bool = MessageItem::Variant(Box::new(false.into()));
+        assert_eq!(msg_bool.inner::<bool>().unwrap(), false);
+
+        let msg_string = MessageItem::Variant(Box::new("asdf".to_string().into()));
+        assert_eq!(msg_string.inner::<&String>().unwrap(), "asdf");
+
+        let path: Path = "/path".into();
+        let msg_path = MessageItem::Variant(Box::new(MessageItem::ObjectPath(path.clone())));
+        assert_eq!(msg_path.inner::<&Path>().unwrap(), &path);
+
+        let sig: Signature = "a{si}".into();
+        let msg_sig = MessageItem::Variant(Box::new(MessageItem::Signature(sig.clone())));
+        assert_eq!(msg_sig.inner::<&Signature>().unwrap(), &sig);
+
+        assert_eq!(msg_string.inner::<&str>().unwrap(), "asdf");
+        assert_eq!(msg_path.inner::<&str>().unwrap(), "/path");
+        assert_eq!(msg_sig.inner::<&str>().unwrap(), "a{si}");
 
     }
 
