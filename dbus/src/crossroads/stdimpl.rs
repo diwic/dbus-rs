@@ -192,16 +192,19 @@ where F: FnMut(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx)
         type VArg2 = HashMap<String, VArg1>;
         ia.append_dict(&PathName::signature(), &VArg2::signature(), |ia2| {
             while let Some((c, pdata)) = children.next() {
-                if !c.as_bytes().starts_with(&p) { break; }
+                if !c.as_bytes().starts_with(&p) && pathname.as_bytes() != c.as_bytes() { break; }
                 ia2.append_dict_entry(|mut ia3| {
                     pdata.name().append_by_ref(&mut ia3);
-                    ia3.append_dict(&String::signature(), &VArg1::signature(), |mut ia4| {
+                    ia3.append_dict(&String::signature(), &VArg1::signature(), |ia4| {
                         for entry in cr_reg.values_mut() {
-                            if !pdata.get_from_typeid(entry.typeid).is_none() { continue };
-                            entry.info.name.append_by_ref(&mut ia4);
-                            if let Err(e) = append_props_mut(&mut ia4, &mut entry.info, |ia5, handler| {
-                                f(handler, pdata, ia5, ctx)
-                            }) { ret = Err(e); return };
+                            if pdata.get_from_typeid(entry.typeid).is_none() { continue };
+                            ia4.append_dict_entry(|mut ia5| {
+                                entry.info.name.append_by_ref(&mut ia5);
+                                if let Err(e) = append_props_mut(&mut ia5, &mut entry.info, |ia6, handler| {
+                                    f(handler, pdata, ia6, ctx)
+                                }) { ret = Err(e); return };
+                            });
+                            if ret.is_err() { return; }
                         }
                     });
                     if ret.is_err() { return; }

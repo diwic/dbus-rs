@@ -331,6 +331,48 @@ where F: FnMut(&mut Path<$h>, &mut MsgCtx, IA) -> Result<OA, MethodErr> $(+ $ss)
     }
 }
 
+// GetProp handlers
+
+impl<F> MakeHandler<<$h as Handlers>::GetProp, i64, ($h, u8)> for F
+where F: FnMut(&mut Path<$h>, &mut arg::IterAppend, &mut MsgCtx) -> Result<(), MethodErr> $(+ $ss)* + 'static
+{
+    fn make(self) -> <$h as Handlers>::GetProp {
+        Box::new(self)
+    }
+}
+
+impl<F, I: 'static $(+ $ss)*, T: Append> MakeHandler<<$h as Handlers>::GetProp, (i64, T, I), ($h, u8)> for F
+where F: FnMut(&I, &mut MsgCtx) -> Result<T, MethodErr> $(+ $ss)* + 'static
+{
+    fn make(mut self) -> <$h as Handlers>::GetProp {
+        MakeHandler::make(move |path: &mut Path<$h>, ia: &mut arg::IterAppend, ctx: &mut MsgCtx| {
+            let iface: &I = path.get().unwrap();
+            self(iface, ctx).map(|r| { ia.append(r); })
+        })
+    }
+}
+
+// SetProp handlers
+
+impl<F> MakeHandler<<$h as Handlers>::SetProp, u64, ($h, u8)> for F
+where F: FnMut(&mut Path<$h>, &mut arg::Iter, &mut MsgCtx) -> Result<bool, MethodErr> $(+ $ss)* + 'static
+{
+    fn make(self) -> <$h as Handlers>::SetProp {
+        Box::new(self)
+    }
+}
+
+impl<F, I: 'static $(+ $ss)*, T: Arg + for <'s> Get<'s>> MakeHandler<<$h as Handlers>::SetProp, (u64, T, I), ($h, u8)> for F
+where F: FnMut(&mut I, &mut MsgCtx, T) -> Result<bool, MethodErr> $(+ $ss)* + 'static
+{
+    fn make(mut self) -> <$h as Handlers>::SetProp {
+        MakeHandler::make(move |path: &mut Path<$h>, iter: &mut arg::Iter, ctx: &mut MsgCtx| {
+            let iface: &mut I = path.get_mut().unwrap();
+            self(iface, ctx, iter.read()?)
+        })
+    }
+}
+
     }
 }
 

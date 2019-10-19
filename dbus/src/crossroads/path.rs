@@ -48,6 +48,10 @@ impl<H: Handlers> Path<H> {
         self.data.insert(id, t);
     }
 
+    pub fn with<I: 'static + PathData<H::Iface>>(mut self, i: I) -> Self {
+        self.insert(i); self
+    }
+
     pub fn remove<I: 'static + PathData<H::Iface>>(&mut self) {
         let id = TypeId::of::<I>();
         self.data.remove(&id);

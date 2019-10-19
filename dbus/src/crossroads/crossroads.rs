@@ -8,7 +8,7 @@ use crate::{Message, MessageType, channel};
 use crate::message::MatchRule;
 use super::info::{IfaceInfo, MethodInfo, PropInfo, IfaceInfoBuilder};
 use super::handlers::{self, Handlers, Par};
-use super::stdimpl::{DBusProperties, DBusIntrospectable};
+use super::stdimpl::{DBusProperties, DBusIntrospectable, DBusObjectManager};
 use super::path::{Path, PathData};
 use super::context::{MsgCtx, RefCtx};
 use super::MethodErr;
@@ -128,7 +128,10 @@ impl Crossroads<()> {
     /// Creates a new instance which is Send but not Sync.
     pub fn new(reg_default: bool) -> Self {
         let mut cr = Self::new_noprops(reg_default);
-        if reg_default { DBusProperties::register(&mut cr); }
+        if reg_default {
+            DBusProperties::register(&mut cr);
+            DBusObjectManager::register(&mut cr);
+        }
         cr
     }
 
@@ -216,19 +219,55 @@ mod test {
 
         let c2 = Crossroads::new(true);
         is_send(&c2);
+    }
+
+    fn dispatch_helper<H: Handlers>(cr: &mut Crossroads<H>, mut msg: Message) -> Message {
+        crate::message::message_set_serial(&mut msg, 57);
+        let r = RefCell::new(vec!());
+        cr.dispatch(&msg, &r).unwrap();
+        let mut r = r.into_inner();
+        assert_eq!(r.len(), 1);
+        r[0].as_result().unwrap();
+        r.into_iter().next().unwrap()
+    }
+
+    #[test]
+    fn object_manager() {
+        let mut cr = Crossroads::new(true);
+        let istr = "com.example.dbusrs.crossroads.score";
+
+        use crate::arg;
+        use crate::arg::Variant;
+        struct Score(u16);
+
+        cr.register::<Score,_>(istr)
+            .prop_rw("Score", |score: &Score, _: &mut MsgCtx| { Ok(score.0) }, |score: &mut Score, _: &mut MsgCtx, new_val| {
+                score.0 = new_val;
+                dbg!(new_val);
+                Ok(false)
+            })
+            .prop_ro("Whatever", |score: &Score, _: &mut MsgCtx| { Ok("lorem ipsum") });
+
+       cr.insert(Path::new("/hello").with(Score(7u16)).with(DBusObjectManager));
+       cr.insert(Path::new("/hellothere").with(Score(3u16)));
+       cr.insert(Path::new("/hello/world").with(Score(5u16)));
+
+       let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/hello", "org.freedesktop.DBus.Properties", "Set").unwrap();
+       let msg = msg.append3("com.example.dbusrs.crossroads.score", "Score", Variant(8u16));
+       let _ = dispatch_helper(&mut cr, msg);
+
+       let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/hello", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects").unwrap();
+       let r = dispatch_helper(&mut cr, msg);
+       let d: HashMap<crate::strings::Path, HashMap<String, HashMap<String, Variant<Box<dyn arg::RefArg>>>>> = r.read1().unwrap();
+       dbg!(&d);
+       assert_eq!(d.get(&"/hello".into()).unwrap().get(istr).unwrap().get("Score").unwrap().0.as_i64().unwrap(), 8);
+       assert_eq!(d.get(&"/hello/world".into()).unwrap().get(istr).unwrap().get("Score").unwrap().0.as_i64().unwrap(), 5);
+       assert_eq!(d.get(&"/hello/world".into()).unwrap().get(istr).unwrap().get("Whatever").unwrap().0.as_str().unwrap(), "lorem ipsum");
+       assert!(d.get(&"/hellothere".into()).is_none());
    }
 
     #[test]
     fn cr_local() {
-        fn dispatch_helper<H: Handlers>(cr: &mut Crossroads<H>, mut msg: Message) -> Message {
-            crate::message::message_set_serial(&mut msg, 57);
-            let r = RefCell::new(vec!());
-            cr.dispatch(&msg, &r).unwrap();
-            let mut r = r.into_inner();
-            assert_eq!(r.len(), 1);
-            r[0].as_result().unwrap();
-            r.into_iter().next().unwrap()
-        }
 
         let mut cr = Crossroads::new_local(true);
 
