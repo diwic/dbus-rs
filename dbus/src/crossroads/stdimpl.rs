@@ -174,6 +174,28 @@ where F: FnMut(&H::GetProp, &mut arg::IterAppend, &mut MsgCtx, &RefCtx<H>) -> Re
     Ok(mret)
 }
 
+fn getallprops_mut<H: Handlers, F>(cr: &mut Crossroads<H>, ctx: &mut MsgCtx, mut f: F) -> Result<Message, MethodErr>
+where F: FnMut(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx) -> Result<(), MethodErr> {
+    let mut iter = ctx.message.iter_init();
+    let iname: &CStr = iter.read()?;
+
+    let path = ctx.message.path().ok_or_else(|| { MethodErr::no_property(&"Message has no path") })?;
+    let pdata = cr.paths.get_mut(path.as_cstr())
+        .ok_or_else(|| { MethodErr::no_property(&"Path not found") })?;
+    let entry = cr.reg.get_mut(iname)
+        .ok_or_else(|| { MethodErr::no_property(&"Interface not found") })?;
+    let _ = pdata.get_from_typeid(entry.typeid)
+        .ok_or_else(|| { MethodErr::no_property(&"Interface not found") })?;
+
+    let mut mret = ctx.message.method_return();
+    {
+        append_props_mut(&mut arg::IterAppend::new(&mut mret), &mut entry.info, |iter4, handler| {
+            f(handler, pdata, iter4, ctx)
+        })?;
+    }
+    Ok(mret)
+}
+
 fn objmgr_mut<H: Handlers, F>(cr: &mut Crossroads<H>, ctx: &mut MsgCtx, mut f: F) -> Result<Message, MethodErr>
 where F: FnMut(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx) -> Result<(), MethodErr>
 {
@@ -243,24 +265,35 @@ impl DBusProperties {
         );
     }
 
+
     pub fn register_local(cr: &mut Crossroads<handlers::Local>) {
-//        Self::register(cr, unimplemented!(), unimplemented!(), unimplemented!());
+        let getprop = |cr: &mut Crossroads<handlers::Local>, ctx: &mut MsgCtx| {
+            getprop_mut(cr, ctx, |f, path, ia, ctx| { f(path, ia, ctx) })
+        };
+        let getallprop = |cr: &mut Crossroads<handlers::Local>, ctx: &mut MsgCtx| {
+            getallprops_mut(cr, ctx, |f, path, ia, ctx| { f(path, ia, ctx) })
+        };
+        let setprop = |cr: &mut Crossroads<handlers::Local>, ctx: &mut MsgCtx| {
+            setprop_mut(cr, ctx, |f, path, iter, ctx| { f(path, iter, ctx) })
+        };
+        Self::register_custom(cr,
+            MakeHandler::make(getprop), MakeHandler::make(getallprop), MakeHandler::make(setprop)
+        );
     }
 
     pub fn register(cr: &mut Crossroads<()>) {
         let getprop = |cr: &mut Crossroads<()>, ctx: &mut MsgCtx| {
             getprop_mut(cr, ctx, |f, path, ia, ctx| { f(path, ia, ctx) })
         };
-        let getallprop = |cr: &mut Crossroads<()>, ctx: &mut MsgCtx| -> Option<Message> { unimplemented!() };
+        let getallprop = |cr: &mut Crossroads<()>, ctx: &mut MsgCtx| {
+            getallprops_mut(cr, ctx, |f, path, ia, ctx| { f(path, ia, ctx) })
+        };
         let setprop = |cr: &mut Crossroads<()>, ctx: &mut MsgCtx| {
             setprop_mut(cr, ctx, |f, path, iter, ctx| { f(path, iter, ctx) })
         };
-
-        // let x = MakeHandler::<<() as Handlers>::Method, ((), (), (), DBusProperties), (i8, ())>::make(x);
         Self::register_custom(cr,
             MakeHandler::make(getprop), MakeHandler::make(getallprop), MakeHandler::make(setprop)
         );
-//        Self::register(cr, unimplemented!(), unimplemented!(), unimplemented!());
     }
 
 }
@@ -276,6 +309,12 @@ impl DBusObjectManager {
 
     pub fn register(cr: &mut Crossroads<()>) {
         Self::register_custom(cr, MakeHandler::make(|cr: &mut Crossroads<()>, ctx: &mut MsgCtx| {
+            objmgr_mut(cr, ctx, |h, path, ia, ctx| h(path, ia, ctx))
+        }))
+    }
+
+    pub fn register_local(cr: &mut Crossroads<handlers::Local>) {
+        Self::register_custom(cr, MakeHandler::make(|cr: &mut Crossroads<handlers::Local>, ctx: &mut MsgCtx| {
             objmgr_mut(cr, ctx, |h, path, ia, ctx| h(path, ia, ctx))
         }))
     }

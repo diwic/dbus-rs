@@ -184,7 +184,10 @@ impl Crossroads<Par> {
 impl Crossroads<handlers::Local> {
     pub fn new_local(reg_default: bool) -> Self {
         let mut cr = Self::new_noprops(reg_default);
-        if reg_default { DBusProperties::register_local(&mut cr); }
+        if reg_default {
+            DBusProperties::register_local(&mut cr);
+            DBusObjectManager::register_local(&mut cr);
+        }
         cr
     }
 
