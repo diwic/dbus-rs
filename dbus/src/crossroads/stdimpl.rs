@@ -12,6 +12,10 @@ use crate::strings::{Member, Signature};
 
 pub struct DBusProperties;
 
+type PathIntfProps = HashMap<PathName<'static>, IntfProps>;
+type IntfProps = HashMap<String, Props>;
+type Props = HashMap<String, Variant<u8>>;
+
 fn append_prop<F>(iter: &mut IterAppend, name: &Member, sig: &Signature, f: F) -> Result<(), MethodErr>
 where F: FnOnce(&mut IterAppend) -> Result<(), MethodErr> {
     let mut z = None;
@@ -210,14 +214,12 @@ where F: FnMut(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx)
     let mut mret = ctx.message.method_return();
     {
         let mut ia = arg::IterAppend::new(&mut mret);
-        type VArg1 = HashMap<String, Variant<u8>>;
-        type VArg2 = HashMap<String, VArg1>;
-        ia.append_dict(&PathName::signature(), &VArg2::signature(), |ia2| {
+        ia.append_dict(&PathName::signature(), &IntfProps::signature(), |ia2| {
             while let Some((c, pdata)) = children.next() {
                 if !c.as_bytes().starts_with(&p) && pathname.as_bytes() != c.as_bytes() { break; }
                 ia2.append_dict_entry(|mut ia3| {
                     pdata.name().append_by_ref(&mut ia3);
-                    ia3.append_dict(&String::signature(), &VArg1::signature(), |ia4| {
+                    ia3.append_dict(&String::signature(), &Props::signature(), |ia4| {
                         for entry in cr_reg.values_mut() {
                             if pdata.get_from_typeid(entry.typeid).is_none() { continue };
                             ia4.append_dict_entry(|mut ia5| {
@@ -242,8 +244,10 @@ impl DBusProperties {
     fn register_custom<H: Handlers>(cr: &mut Crossroads<H>, get: H::Method, getall: H::Method, set: H::Method) where Self: PathData<H::Iface> {
         cr.register::<Self,_>("org.freedesktop.DBus.Properties")
             .method_custom::<(String, String), (Variant<u8>,)>("Get".into(), ("interface_name", "property_name"), ("value",), get)
-            .method_custom::<(String,), (HashMap<String, Variant<u8>>,)>("GetAll".into(), ("interface_name",), ("props",), getall)
+            .method_custom::<(String,), (Props,)>("GetAll".into(), ("interface_name",), ("props",), getall)
             .method_custom::<(String, String, Variant<u8>), ()>("Set".into(), ("interface_name", "property_name", "value"), (), set)
+            .signal::<(String, Props, Vec<String>), _>("PropertiesChanged",
+                ("interface_name", "changed_properties", "invalidated_properties"))
             .on_path_insert(|p, cr| {
                 if cr.reg.values().any(|entry| !entry.info.props.is_empty() && p.get_from_typeid(entry.typeid).is_some()) {
                     p.insert(DBusProperties)
@@ -302,9 +306,12 @@ pub struct DBusObjectManager;
 
 impl DBusObjectManager {
     fn register_custom<H: Handlers>(cr: &mut Crossroads<H>, m: H::Method) where Self: PathData<H::Iface> {
-        type OutArg = HashMap<PathName<'static>, HashMap<String, HashMap<String, Variant<u8>>>>;
         cr.register::<Self,_>("org.freedesktop.DBus.ObjectManager")
-            .method_custom::<(), (OutArg,)>("GetManagedObjects".into(), (), ("objpath_interfaces_and_properties",), m);
+            .method_custom::<(), (PathIntfProps,)>("GetManagedObjects".into(), (), ("objpath_interfaces_and_properties",), m)
+            .signal::<(PathName, IntfProps), _>("InterfacesAdded",
+                ("object_path", "interfaces_and_properties"))
+            .signal::<(PathName, Vec<String>), _>("InterfacesRemoved",
+                ("object_path", "interfaces"));
     }
 
     pub fn register(cr: &mut Crossroads<()>) {
