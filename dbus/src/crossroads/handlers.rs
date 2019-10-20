@@ -36,7 +36,7 @@ pub trait Handlers: Sized {
 impl Handlers for () {
     type Method = SendMethod;
     type GetProp = Box<dyn FnMut(&mut Path<Self>, &mut arg::IterAppend, &mut MsgCtx) -> Result<(), MethodErr> + Send + 'static>;
-    type SetProp = Box<dyn FnMut(&mut Path<Self>, &mut arg::Iter, &mut MsgCtx) -> Result<bool, MethodErr> + Send + 'static>;
+    type SetProp = Box<dyn FnMut(&mut Path<Self>, &mut arg::Iter, &mut MsgCtx) -> Result<Option<Box<dyn arg::RefArg>>, MethodErr> + Send + 'static>;
     type Iface = Box<dyn Any + Send>;
 
     fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
@@ -121,7 +121,7 @@ pub struct Local;
 impl Handlers for Local {
     type Method = LocalMethod;
     type GetProp = Box<dyn FnMut(&mut Path<Self>, &mut arg::IterAppend, &mut MsgCtx) -> Result<(), MethodErr> + 'static>;
-    type SetProp = Box<dyn FnMut(&mut Path<Self>, &mut arg::Iter, &mut MsgCtx) -> Result<bool, MethodErr> + 'static>;
+    type SetProp = Box<dyn FnMut(&mut Path<Self>, &mut arg::Iter, &mut MsgCtx) -> Result<Option<Box<dyn arg::RefArg>>, MethodErr> + 'static>;
     type Iface = Box<dyn Any>;
 
     fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
@@ -355,20 +355,21 @@ where F: FnMut(&I, &mut MsgCtx) -> Result<T, MethodErr> $(+ $ss)* + 'static
 // SetProp handlers
 
 impl<F> MakeHandler<<$h as Handlers>::SetProp, u64, ($h, u8)> for F
-where F: FnMut(&mut Path<$h>, &mut arg::Iter, &mut MsgCtx) -> Result<bool, MethodErr> $(+ $ss)* + 'static
+where F: FnMut(&mut Path<$h>, &mut arg::Iter, &mut MsgCtx) -> Result<Option<Box<dyn arg::RefArg>>, MethodErr> $(+ $ss)* + 'static
 {
     fn make(self) -> <$h as Handlers>::SetProp {
         Box::new(self)
     }
 }
 
-impl<F, I: 'static $(+ $ss)*, T: Arg + for <'s> Get<'s>> MakeHandler<<$h as Handlers>::SetProp, (u64, T, I), ($h, u8)> for F
-where F: FnMut(&mut I, &mut MsgCtx, T) -> Result<bool, MethodErr> $(+ $ss)* + 'static
+impl<F, I: 'static $(+ $ss)*, T:Arg + for <'s> Get<'s> + arg::RefArg + 'static> MakeHandler<<$h as Handlers>::SetProp, (u64, T, I), ($h, u8)> for F
+where F: FnMut(&mut I, &mut MsgCtx, T) -> Result<Option<T>, MethodErr> $(+ $ss)* + 'static
 {
     fn make(mut self) -> <$h as Handlers>::SetProp {
-        MakeHandler::make(move |path: &mut Path<$h>, iter: &mut arg::Iter, ctx: &mut MsgCtx| {
+        MakeHandler::make(move |path: &mut Path<$h>, iter: &mut arg::Iter, ctx: &mut MsgCtx| -> Result<Option<Box<dyn arg::RefArg>>, MethodErr> {
             let iface: &mut I = path.get_mut().unwrap();
-            self(iface, ctx, iter.read()?)
+            let res = self(iface, ctx, iter.read()?)?;
+            Ok(res.map(|x| Box::new(x) as Box<dyn arg::RefArg>))
         })
     }
 }

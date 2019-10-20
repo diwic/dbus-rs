@@ -46,7 +46,7 @@ impl<'m> $t<'m> {
         if s.len() == 0 || s[s.len()-1] != 0 { return $t::new(s) };
         $t::check_valid(s.as_ptr() as *const c_char).map(|_| {
             let c = unsafe { CStr::from_ptr(s.as_ptr() as *const c_char) };
-            $t(Cow::Borrowed(c)) 
+            $t(Cow::Borrowed(c))
         })
     }
 
@@ -91,6 +91,12 @@ impl<'m> From<&'m String> for $t<'m> { fn from(s: &'m String) -> $t<'m> { $t::fr
 /// If given string is not valid.
 impl<'m> From<&'m str> for $t<'m> { fn from(s: &'m str) -> $t<'m> { $t::from_slice(s.as_bytes()).unwrap() } }
 
+/// #Panics
+///
+/// If given string is not valid.
+impl<'m> From<&'m CStr> for $t<'m> { fn from(s: &'m CStr) -> $t<'m> { $t::from_slice(s.to_bytes_with_nul()).unwrap() } }
+
+
 impl<'m> From<$t<'m>> for CString { fn from(s: $t<'m>) -> CString { s.0.into_owned() } }
 
 
@@ -98,7 +104,7 @@ impl<'m> From<$t<'m>> for CString { fn from(s: $t<'m>) -> CString { s.0.into_own
 ///
 /// If given string is not valid.
 impl<'m> From<Cow<'m, str>> for $t<'m> {
-    fn from(s: Cow<'m, str>) -> $t<'m> { 
+    fn from(s: Cow<'m, str>) -> $t<'m> {
         match s {
             Cow::Borrowed(z) => z.into(),
             Cow::Owned(z) => z.into(),
@@ -143,7 +149,7 @@ pub struct Signature<'a>(Cow<'a, CStr>);
 cstring_wrapper!(Signature, dbus_signature_validate_single);
 
 impl Signature<'static> {
-    /// Makes a D-Bus signature that corresponds to A. 
+    /// Makes a D-Bus signature that corresponds to A.
     pub fn make<A: super::arg::Arg>() -> Signature<'static> { A::signature() }
 }
 

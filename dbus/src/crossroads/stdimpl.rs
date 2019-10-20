@@ -1,14 +1,14 @@
 use super::crossroads::Crossroads;
 use super::handlers::{self, Par, Handlers, MakeHandler, SendMethod, LocalMethod};
-use super::info::{IfaceInfo, MethodInfo, PropInfo, Annotations, Argument, Access};
-use crate::{arg, Message, Path as PathName};
+use super::info::{IfaceInfo, MethodInfo, PropInfo, Annotations, Argument, Access, EmitsChangedSignal};
+use crate::{arg, Message};
 use super::MethodErr;
 use crate::arg::{Arg, Variant, Append, IterAppend};
-use std::collections::{HashMap, Bound};
+use std::collections::{HashMap, HashSet, Bound};
 use super::path::{Path, PathData};
 use super::context::{MsgCtx, RefCtx};
-use std::ffi::CStr;
-use crate::strings::{Member, Signature};
+use std::ffi::{CStr, CString};
+use crate::strings::{Member, Signature, Interface as IfaceName, Path as PathName};
 
 pub struct DBusProperties;
 
@@ -16,7 +16,7 @@ type PathIntfProps = HashMap<PathName<'static>, IntfProps>;
 type IntfProps = HashMap<String, Props>;
 type Props = HashMap<String, Variant<u8>>;
 
-fn append_prop<F>(iter: &mut IterAppend, name: &Member, sig: &Signature, f: F) -> Result<(), MethodErr>
+fn append_prop<F>(iter: &mut IterAppend, name: &str, sig: &Signature, f: F) -> Result<(), MethodErr>
 where F: FnOnce(&mut IterAppend) -> Result<(), MethodErr> {
     let mut z = None;
     iter.append_dict_entry(|mut iter3| {
@@ -63,12 +63,12 @@ where F: FnMut(&mut IterAppend, &mut H::GetProp) -> Result<(), MethodErr> {
 }
 
 fn setprop_mut<H: Handlers, F>(cr: &mut Crossroads<H>, ctx: &mut MsgCtx, f: F) -> Result<Message, MethodErr>
-where F: FnOnce(&mut H::SetProp, &mut Path<H>, &mut arg::Iter, &mut MsgCtx) -> Result<bool, MethodErr>
+where F: FnOnce(&mut H::SetProp, &mut Path<H>, &mut arg::Iter, &mut MsgCtx) -> Result<Option<Box<dyn arg::RefArg>>, MethodErr>
 {
     let mut iter = ctx.message.iter_init();
     let (iname, propname) = (iter.read()?, iter.read()?);
     let path = ctx.message.path().ok_or_else(|| { MethodErr::no_property(&"Message has no path") })?;
-    let (propinfo, pathdata) = cr.prop_lookup_mut(path.as_cstr(), iname, propname)
+    let (propinfo, pathdata, emits) = cr.prop_lookup_mut(path.as_cstr(), iname, propname)
         .ok_or_else(|| { MethodErr::no_property(&"Property not found") })?;
     if propinfo.access == Access::Read { Err(MethodErr::no_property(&"Property is read only"))? };
     let handler = propinfo.handlers.1.as_mut()
@@ -80,8 +80,17 @@ where F: FnOnce(&mut H::SetProp, &mut Path<H>, &mut arg::Iter, &mut MsgCtx) -> R
     if *subiter.signature() != *propinfo.sig {
         Err(MethodErr::failed(&format!("Property {} cannot change type", propinfo.name)))?;
     }
-    if f(handler, pathdata, &mut subiter, ctx)? {
-        unimplemented!("Emits signal here");
+    if let Some(r) = f(handler, pathdata, &mut subiter, ctx)? {
+        match emits {
+            EmitsChangedSignal::True => ctx.dbus_signals_mut().add_changed_property(
+                path.into_static(), IfaceName::from(iname).into_static(), propname.into(), r
+            ),
+            EmitsChangedSignal::False => {},
+            EmitsChangedSignal::Invalidates => ctx.dbus_signals_mut().add_invalidated_property(
+                path.into_static(), IfaceName::from(iname).into_static(), propname.into()
+            ),
+            EmitsChangedSignal::Const => {}, // Panic here because the property cannot change?
+        }
     }
     Ok(ctx.message.method_return())
 }
@@ -90,10 +99,10 @@ fn setprop_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, f: F) -> Re
 where F: FnOnce(&H::SetProp, &mut arg::Iter, &mut MsgCtx, &RefCtx<H>) -> Result<bool, MethodErr>
 {
     let mut iter = ctx.message.iter_init();
-    let (iname, propname): (&CStr, &CStr) = (iter.read()?, iter.read()?);
+    let (iname, propname): (&CStr, &str) = (iter.read()?, iter.read()?);
     let refctx = refctx.with_iface(iname)
         .ok_or_else(|| { MethodErr::no_property(&"Interface not found") })?;
-    let propinfo = refctx.iinfo.props.iter().find(|x| x.name.as_cstr() == propname)
+    let propinfo = refctx.iinfo.props.iter().find(|x| &x.name == propname)
         .ok_or_else(|| { MethodErr::no_property(&"Property not found") })?;
 
     if propinfo.access == Access::Read { Err(MethodErr::no_property(&"Property is read only"))? };
@@ -119,7 +128,7 @@ where F: FnOnce(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx
     let mut iter = ctx.message.iter_init();
     let (iname, propname) = (iter.read()?, iter.read()?);
     let path = ctx.message.path().ok_or_else(|| { MethodErr::no_property(&"Message has no path") })?;
-    let (propinfo, pathdata) = cr.prop_lookup_mut(path.as_cstr(), iname, propname)
+    let (propinfo, pathdata, _) = cr.prop_lookup_mut(path.as_cstr(), iname, propname)
         .ok_or_else(|| { MethodErr::no_property(&"Property not found") })?;
     if propinfo.access == Access::Write { Err(MethodErr::no_property(&"Property is write only"))? };
     let handler = propinfo.handlers.0.as_mut()
@@ -140,10 +149,10 @@ where F: FnOnce(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx
 fn getprop_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, f: F) -> Result<Message, MethodErr>
 where F: FnOnce(&H::GetProp, &mut arg::IterAppend, &mut MsgCtx, &RefCtx<H>) -> Result<(), MethodErr> {
     let mut iter = ctx.message.iter_init();
-    let (iname, propname): (&CStr, &CStr) = (iter.read()?, iter.read()?);
+    let (iname, propname): (&CStr, &str) = (iter.read()?, iter.read()?);
     let refctx = refctx.with_iface(iname)
         .ok_or_else(|| { MethodErr::no_property(&"Interface not found") })?;
-    let propinfo = refctx.iinfo.props.iter().find(|x| x.name.as_cstr() == propname)
+    let propinfo = refctx.iinfo.props.iter().find(|x| &*x.name == propname)
         .ok_or_else(|| { MethodErr::no_property(&"Property not found") })?;
 
     if propinfo.access == Access::Write { Err(MethodErr::no_property(&"Property is write only"))? };
@@ -424,5 +433,56 @@ impl DBusIntrospectable {
                 Ok((introspect(c.crossroads, c.path),))
             })
             .on_path_insert(|p, cr| p.insert(DBusIntrospectable));
+    }
+}
+/*
+#[derive(Debug, Default)]
+struct PropsPerIntf {
+    changed: HashMap<String, Box<dyn arg::RefArg>>,
+    invalidated: HashSet<String>,
+}
+*/
+
+use crate::blocking::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged as PPC;
+
+#[derive(Debug, Default)]
+struct SignalsPerPath {
+    properties: HashMap<IfaceName<'static>, PPC>,
+    interfaces_removed: HashSet<CString>,
+    interfaces_added: HashMap<CString, HashMap<CString, Box<dyn arg::RefArg>>>,
+}
+
+#[derive(Debug, Default)]
+pub struct DBusSignals(HashMap<PathName<'static>, SignalsPerPath>);
+
+impl DBusSignals {
+    pub fn new() -> Self { Default::default() }
+
+    pub fn add_changed_property(&mut self, path: PathName<'static>, iface: IfaceName<'static>, propname: String, value: Box<dyn arg::RefArg>) {
+        let i2 = iface.to_string();
+        self.0.entry(path).or_default()
+            .properties.entry(iface).or_insert_with(|| {
+                PPC { interface_name: i2, changed_properties: Default::default(), invalidated_properties: Default::default() }
+            }).changed_properties.insert(propname, Variant(value));
+    }
+
+    pub fn add_invalidated_property(&mut self, path: PathName<'static>, iface: IfaceName<'static>, propname: String) {
+        let i2 = iface.to_string();
+        let inv = &mut self.0.entry(path).or_default()
+            .properties.entry(iface).or_insert_with(|| {
+                PPC { interface_name: i2, changed_properties: Default::default(), invalidated_properties: Default::default() }
+            }).invalidated_properties;
+        if !inv.iter().any(|x| x == &propname) { inv.push(propname) }
+    }
+
+    pub fn into_messages(self) -> Vec<Message> {
+        use crate::message::SignalArgs;
+        let mut result = vec!();
+        for (pathname, sigs) in self.0 {
+            for (_, props) in sigs.properties {
+                result.push(props.to_emit_message(&pathname));
+            }
+        }
+        result
     }
 }

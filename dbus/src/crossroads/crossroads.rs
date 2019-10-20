@@ -6,7 +6,7 @@ use std::ops::Deref;
 use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
 use crate::{Message, MessageType, channel};
 use crate::message::MatchRule;
-use super::info::{IfaceInfo, MethodInfo, PropInfo, IfaceInfoBuilder};
+use super::info::{IfaceInfo, MethodInfo, PropInfo, IfaceInfoBuilder, EmitsChangedSignal};
 use super::handlers::{self, Handlers, Par};
 use super::stdimpl::{DBusProperties, DBusIntrospectable, DBusObjectManager};
 use super::path::{Path, PathData};
@@ -79,12 +79,15 @@ impl<H: Handlers> Crossroads<H> {
         Some((refctx, pinfo))
     }
 */
-    pub (super) fn prop_lookup_mut<'a>(&'a mut self, path: &CStr, iname: &CStr, propname: &CStr) ->
-    Option<(&'a mut PropInfo<'static, H>, &'a mut Path<H>)> {
+    pub (super) fn prop_lookup_mut<'a>(&'a mut self, path: &CStr, iname: &CStr, propname: &str) ->
+    Option<(&'a mut PropInfo<'static, H>, &'a mut Path<H>, EmitsChangedSignal)> {
+        use std::convert::TryInto;
         let entry = self.reg.get_mut(iname)?;
-        let propinfo = entry.info.props.iter_mut().find(|x| x.name.as_cstr() == propname)?;
+        let emits = (&entry.info.anns).try_into();
+        let propinfo = entry.info.props.iter_mut().find(|x| &x.name == propname)?;
+        let emits = (&propinfo.anns).try_into().or(emits);
         let path = self.paths.get_mut(path)?;
-        Some((propinfo, path))
+        Some((propinfo, path, emits.unwrap_or(EmitsChangedSignal::True)))
     }
 
     fn new_noprops(reg_default: bool) -> Self where DBusIntrospectable: PathData<H::Iface> {
@@ -113,6 +116,7 @@ impl<H: Handlers> Crossroads<H> {
             let _ = c.send(reply);
         }
         for retmsg in ctx.send_extra.into_iter() { let _ = c.send(retmsg); }
+        for sigmsg in ctx.signals.into_messages() { let _ = c.send(sigmsg); }
     }
 
     /// Handles an incoming message. Returns false if the message was broken somehow
@@ -224,11 +228,15 @@ mod test {
         is_send(&c2);
     }
 
-    fn dispatch_helper<H: Handlers>(cr: &mut Crossroads<H>, mut msg: Message) -> Message {
+    fn dispatch_helper2<H: Handlers>(cr: &mut Crossroads<H>, mut msg: Message) -> Vec<Message> {
         crate::message::message_set_serial(&mut msg, 57);
         let r = RefCell::new(vec!());
         cr.dispatch(&msg, &r).unwrap();
-        let mut r = r.into_inner();
+        r.into_inner()
+    }
+
+    fn dispatch_helper<H: Handlers>(cr: &mut Crossroads<H>, msg: Message) -> Message {
+        let mut r = dispatch_helper2(cr, msg);
         assert_eq!(r.len(), 1);
         r[0].as_result().unwrap();
         r.into_iter().next().unwrap()
@@ -247,7 +255,7 @@ mod test {
             .prop_rw("Score", |score: &Score, _: &mut MsgCtx| { Ok(score.0) }, |score: &mut Score, _: &mut MsgCtx, new_val| {
                 score.0 = new_val;
                 dbg!(new_val);
-                Ok(false)
+                Ok(Some(new_val))
             })
             .prop_ro("Whatever", |score: &Score, _: &mut MsgCtx| { Ok("lorem ipsum") });
 
@@ -257,7 +265,13 @@ mod test {
 
        let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/hello", "org.freedesktop.DBus.Properties", "Set").unwrap();
        let msg = msg.append3("com.example.dbusrs.crossroads.score", "Score", Variant(8u16));
-       let _ = dispatch_helper(&mut cr, msg);
+       let v = dispatch_helper2(&mut cr, msg);
+       dbg!(&v);
+       assert_eq!(v.len(), 2);
+       use crate::blocking::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged as PPC;
+       let ppc: PPC = crate::message::SignalArgs::from_message(&v[1]).unwrap();
+       let cp = ppc.changed_properties.get("Score").unwrap();
+       assert_eq!(cp.0.as_i64(), Some(8));
 
        let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/hello", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects").unwrap();
        let r = dispatch_helper(&mut cr, msg);

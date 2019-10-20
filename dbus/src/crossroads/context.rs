@@ -5,6 +5,7 @@ use super::crossroads::Crossroads;
 use super::path::Path;
 use super::handlers::Handlers;
 use super::MethodErr;
+use super::stdimpl::DBusSignals;
 use std::ffi::CStr;
 use crate::arg::{AppendAll, IterAppend};
 
@@ -14,6 +15,7 @@ pub struct MsgCtx<'a> {
     pub member: MemberName<'a>,
     pub iface: IfaceName<'a>,
     pub path: PathName<'a>,
+    pub (super) signals: DBusSignals,
 
     pub (super) send_extra: Vec<Message>,
 }
@@ -24,7 +26,7 @@ impl<'a> MsgCtx<'a> {
         let path = msg.path()?;
         let iface = msg.interface()?;
         let member = msg.member()?;
-        Some(MsgCtx { message: msg, member, iface, path, send_extra: vec!() })
+        Some(MsgCtx { message: msg, member, iface, path, send_extra: vec!(), signals: Default::default() })
     }
 
     pub fn send_msg(&mut self, msg: Message) { self.send_extra.push(msg); }
@@ -34,6 +36,8 @@ impl<'a> MsgCtx<'a> {
         args.append(&mut IterAppend::new(&mut msg));
         msg
     }
+
+    pub fn dbus_signals_mut(&mut self) -> &mut DBusSignals { &mut self.signals }
 }
 
 #[derive(Debug, Clone)]

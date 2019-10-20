@@ -66,6 +66,20 @@ pub enum EmitsChangedSignal {
     False,
 }
 
+impl<'a> std::convert::TryFrom<&'a Annotations> for EmitsChangedSignal {
+    type Error = ();
+    fn try_from(a: &'a Annotations) -> Result<Self, Self::Error> {
+        match a.get("org.freedesktop.DBus.Property.EmitsChangedSignal").map(|s| &**s) {
+            None => Err(()),
+            Some("true") => Ok(EmitsChangedSignal::True),
+            Some("false") => Ok(EmitsChangedSignal::False),
+            Some("invalidates") => Ok(EmitsChangedSignal::Invalidates),
+            Some("const") => Ok(EmitsChangedSignal::Const),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Debug)]
 /// The possible access characteristics a Property can have.
 pub enum Access {
@@ -79,7 +93,7 @@ pub enum Access {
 
 #[derive(Debug)]
 pub struct PropInfo<'a, H: Handlers> {
-    pub (super) name: MemberName<'a>,
+    pub (super) name: String,
     pub (super) handlers: DebugProp<H>,
     pub (super) anns: Annotations,
     pub (super) sig: Signature<'a>,
@@ -167,7 +181,7 @@ impl<'a, I: 'static, H: Handlers> IfaceInfoBuilder<'a, I, H> {
     /// Adds a method to this interface. Input and output arguments are used for introspection, callback
     /// needs to convert arguments.
     pub fn method_custom<IA: ArgAll, OA: ArgAll>(mut self, name: MemberName<'static>, in_args: IA::strs, out_args: OA::strs, f: H::Method) -> Self {
-        let m = MethodInfo { name, handler: DebugMethod(f), 
+        let m = MethodInfo { name, handler: DebugMethod(f),
             i_args: build_argvec::<IA>(in_args), o_args: build_argvec::<OA>(out_args), anns: Default::default() };
         self.entry.info.methods.push(m);
         self.last = Some(MetSigProp::Method);
@@ -175,7 +189,7 @@ impl<'a, I: 'static, H: Handlers> IfaceInfoBuilder<'a, I, H> {
     }
 
     /// Adds a property to this interface.
-    pub fn prop_custom(mut self, name: MemberName<'static>, sig: Signature<'static>, get: Option<H::GetProp>, set: Option<H::SetProp>) -> Self {
+    pub fn prop_custom(mut self, name: String, sig: Signature<'static>, get: Option<H::GetProp>, set: Option<H::SetProp>) -> Self {
         let p = PropInfo::new(name, sig, get, set);
         self.entry.info.props.push(p);
         self.last = Some(MetSigProp::Prop);
@@ -183,13 +197,13 @@ impl<'a, I: 'static, H: Handlers> IfaceInfoBuilder<'a, I, H> {
     }
 
     /// Adds a read-only property to this interface.
-    pub fn prop_ro<T: Arg, N: Into<MemberName<'static>>, G, D>(self, name: N, getf: G) -> Self
+    pub fn prop_ro<T: Arg, N: Into<String>, G, D>(self, name: N, getf: G) -> Self
     where G: MakeHandler<<H as Handlers>::GetProp, (i64, T, I), D> {
         self.prop_custom(name.into(), T::signature(), Some(getf.make()), None)
     }
 
     /// Adds a read-write property to this interface.
-    pub fn prop_rw<T: Arg, N: Into<MemberName<'static>>, G, S, D>(self, name: N, getf: G, setf: S) -> Self
+    pub fn prop_rw<T: Arg, N: Into<String>, G, S, D>(self, name: N, getf: G, setf: S) -> Self
     where G: MakeHandler<<H as Handlers>::GetProp, (i64, T, I), D>,
         S: MakeHandler<<H as Handlers>::SetProp, (u64, T, I), D> {
         self.prop_custom(name.into(), T::signature(), Some(getf.make()), Some(setf.make()))
@@ -220,7 +234,7 @@ impl<H: Handlers> MethodInfo<'_, H> {
 }
 
 impl<H: Handlers> PropInfo<'_, H> {
-    pub fn new(name: MemberName<'static>, sig: Signature<'static>, get: Option<H::GetProp>, 
+    pub fn new(name: String, sig: Signature<'static>, get: Option<H::GetProp>,
         set: Option<H::SetProp>) -> Self {
         let a = match (&get, &set) {
             (Some(_), Some(_)) => Access::ReadWrite,
@@ -233,13 +247,25 @@ impl<H: Handlers> PropInfo<'_, H> {
 }
 
 impl<'a, H: Handlers> IfaceInfo<'a, H> {
+    pub (super) fn emits_for_prop(&self, propinfo: &PropInfo<H>) -> EmitsChangedSignal {
+        propinfo.anns.get("org.freedesktop.DBus.Property.EmitsChangedSignal")
+            .or_else(|| self.anns.get("org.freedesktop.DBus.Property.EmitsChangedSignal"))
+            .map(|x| match &**x {
+                "true" => EmitsChangedSignal::True,
+                "false" => EmitsChangedSignal::False,
+                "invalidates" => EmitsChangedSignal::Invalidates,
+                "const" => EmitsChangedSignal::Const,
+                n @ _ => panic!("Invalid EmitsChangedSignal value: {}", n),
+            }).unwrap_or(EmitsChangedSignal::True)
+    }
+
     pub fn new_empty(name: IfaceName<'static>) -> Self {
         IfaceInfo { name, methods: vec!(), props: vec!(), signals: vec!(), anns: Default::default(), }
     }
 
     pub fn new<N, M, P, S>(name: N, methods: M, properties: P, signals: S) -> Self where
-        N: Into<IfaceName<'a>>, 
-        M: IntoIterator<Item=MethodInfo<'a, H>>, 
+        N: Into<IfaceName<'a>>,
+        M: IntoIterator<Item=MethodInfo<'a, H>>,
         P: IntoIterator<Item=PropInfo<'a, H>>,
         S: IntoIterator<Item=SignalInfo<'a>>
     {
@@ -252,4 +278,3 @@ impl<'a, H: Handlers> IfaceInfo<'a, H> {
         }
     }
 }
-
