@@ -30,6 +30,22 @@ pub mod stdintf {
         pub use super::super::generated_org_freedesktop_notifications::*;
         #[allow(unused_imports)]
         pub(crate) use super::super::generated_org_freedesktop_dbus::*;
+
+        #[derive(Debug, PartialEq, Eq, Copy, Clone)]
+        pub enum RequestNameReply {
+            PrimaryOwner = 1,
+            InQueue = 2,
+            Exists = 3,
+            AlreadyOwner = 4,
+        }
+
+        #[derive(Debug, PartialEq, Eq, Copy, Clone)]
+        pub enum ReleaseNameReply {
+            Released = 1,
+            NonExistent = 2,
+            NotOwner = 3,
+        }
+
     }
 }
 
@@ -124,6 +140,45 @@ impl Process for $c {
         }
     }
 }
+
+impl $c {
+    /// Get the connection's unique name.
+    ///
+    /// It's usually something like ":1.54"
+    pub fn unique_name(&self) -> BusName { self.channel.unique_name().unwrap().into() }
+
+    /// Request a name on the D-Bus.
+    ///
+    /// For detailed information on the flags and return values, see the libdbus documentation.
+    pub async fn request_name<'a, N: Into<BusName<'a>>>(&self, name: N, allow_replacement: bool, replace_existing: bool, do_not_queue: bool)
+    -> Result<stdintf::org_freedesktop_dbus::RequestNameReply, Error> {
+        let flags: u32 =
+            if allow_replacement { 1 } else { 0 } +
+            if replace_existing { 2 } else { 0 } +
+            if do_not_queue { 4 } else { 0 };
+        let proxy = Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", self);
+        use stdintf::org_freedesktop_dbus::DBus;
+        let r = proxy.request_name(&name.into(), flags).await?;
+        use stdintf::org_freedesktop_dbus::RequestNameReply::*;
+        let all = [PrimaryOwner, InQueue, Exists, AlreadyOwner];
+        all.iter().find(|x| **x as u32 == r).copied().ok_or_else(||
+            crate::Error::new_failed("Invalid reply from DBus server")
+        )
+    }
+
+    /// Release a previously requested name on the D-Bus.
+    pub async fn release_name<'a, N: Into<BusName<'a>>>(&self, name: N) -> Result<stdintf::org_freedesktop_dbus::ReleaseNameReply, Error> {
+        let proxy = Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", self);
+        use stdintf::org_freedesktop_dbus::DBus;
+        let r = proxy.release_name(&name.into()).await?;
+        use stdintf::org_freedesktop_dbus::ReleaseNameReply::*;
+        let all = [Released, NonExistent, NotOwner];
+        all.iter().find(|x| **x as u32 == r).copied().ok_or_else(||
+            crate::Error::new_failed("Invalid reply from DBus server")
+        )
+    }
+}
+
 
     }
 }
