@@ -1,5 +1,5 @@
 use dbus::channel::{Channel, BusType};
-use dbus::nonblock::{LocalConnection, SyncConnection, Process};
+use dbus::nonblock::{LocalConnection, SyncConnection, Connection, Process};
 use dbus::Error;
 
 use std::{future, task, pin};
@@ -77,6 +77,8 @@ pub fn new_session_local() -> Result<(IOResource<LocalConnection>, Arc<LocalConn
 pub fn new_system_local() -> Result<(IOResource<LocalConnection>, Arc<LocalConnection>), Error> { new(BusType::System) }
 pub fn new_session_sync() -> Result<(IOResource<SyncConnection>, Arc<SyncConnection>), Error> { new(BusType::Session) }
 pub fn new_system_sync() -> Result<(IOResource<SyncConnection>, Arc<SyncConnection>), Error> { new(BusType::System) }
+pub fn new_session() -> Result<(IOResource<Connection>, Arc<Connection>), Error> { new(BusType::Session) }
+pub fn new_system() -> Result<(IOResource<Connection>, Arc<Connection>), Error> { new(BusType::System) }
 
 #[test]
 fn method_call() {
