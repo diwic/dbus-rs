@@ -5,11 +5,7 @@ use dbus::Error;
 use std::{future, task, pin};
 use std::sync::Arc;
 
-
-#[cfg(feature = "nightly")]
-use tokio02net::driver::Registration;
-#[cfg(not(feature = "nightly"))]
-use tokio_reactor::Registration;
+use tokio_net::driver::Registration;
 
 /// The I/O Resource should be spawned onto a Tokio compatible reactor.
 ///
@@ -22,7 +18,7 @@ pub struct IOResource<C> {
 }
 
 impl<C: AsRef<Channel> + Process> IOResource<C> {
-    fn poll_internal(&self, _ctx: &mut task::Context<'_>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    fn poll_internal(&self, ctx: &mut task::Context<'_>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let c: &Channel = (*self.connection).as_ref();
 
         c.read_write(Some(Default::default())).map_err(|_| Error::new_failed("Read/write failed"))?;
@@ -34,17 +30,8 @@ impl<C: AsRef<Channel> + Process> IOResource<C> {
         r.take_read_ready()?;
         r.take_write_ready()?;
 
-        #[cfg(feature = "nightly")]
-        {
-            if w.read { let _ = r.poll_read_ready(_ctx)?; };
-            if w.write { let _ = r.poll_write_ready(_ctx)?; };
-        }
-
-        #[cfg(not(feature = "nightly"))]
-        {
-            if w.read { r.poll_read_ready()?; };
-            if w.write { r.poll_write_ready()?; };
-        }
+        if w.read { let _ = r.poll_read_ready(ctx)?; };
+        if w.write { let _ = r.poll_write_ready(ctx)?; };
 
         Ok(())
     }
@@ -82,20 +69,15 @@ pub fn new_system() -> Result<(IOResource<Connection>, Arc<Connection>), Error> 
 
 #[test]
 fn method_call() {
-    use fut03::future::{FutureExt, TryFutureExt, ready};
     use tokio::runtime::current_thread::Runtime;
 
     let mut rt = Runtime::new().unwrap();
 
     let (res, conn) = new_session_local().unwrap();
-
-    #[allow(unreachable_code)] // Easier than trying to figure a good return type for the closure
-    let res = res.then(|e| { panic!(e); ready(()) }).unit_error().boxed_local().compat();
-    rt.spawn(res);
+    rt.spawn(async { panic!(res.await); });
 
     let proxy = dbus::nonblock::Proxy::new("org.freedesktop.DBus", "/", conn);
     let fut = proxy.method_call("org.freedesktop.DBus", "NameHasOwner", ("dummy.name.without.owner",));
-    let fut = fut.boxed().compat();
     let (has_owner,): (bool,) = rt.block_on(fut).unwrap();
 
     assert_eq!(has_owner, false);

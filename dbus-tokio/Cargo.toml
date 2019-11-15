@@ -14,14 +14,10 @@ readme = "README.md"
 
 [dependencies]
 dbus = { path = "../dbus", version = "0.7.1" }
-futures = "0.1.12"
-mio = "0.6.9"
-tokio = "0.1.22"
-tokio-reactor = "0.1.9"
-log = "0.3"
-fut03 = { version = "=0.3.0-alpha.18", package = "futures-preview", features = ["compat"] }
-tokio02 = { optional = true, version = "=0.2.0-alpha.4", package = "tokio" }
-tokio02net = { optional = true, version = "=0.2.0-alpha.4", package = "tokio-net" }
+mio = "0.6.14"
+futures = "0.3.1"
+tokio = "=0.2.0-alpha.6"
+tokio-net = "=0.2.0-alpha.6"
 
 [dev-dependencies]
 tokio-timer = "0.2.4"
@@ -31,7 +27,3 @@ tokio-timer = "0.2.4"
 is-it-maintained-open-issues = { repository = "diwic/dbus-rs" }
 is-it-maintained-issue-resolution = { repository = "diwic/dbus-rs" }
 travis-ci = { repository = "diwic/dbus-rs" }
-
-[features]
-# Temporary - will be removed when async/await is stable
-nightly = ["tokio02", "tokio02net"]

@@ -9,19 +9,4 @@
 //!    you can return a future that will reply when that future resolves - see `tree::AFactory::amethod`
 //!
 //! For examples to get you started, see the examples directory and the Readme.
-
-extern crate dbus;
-extern crate futures;
-extern crate tokio;
-extern crate mio;
-
-#[macro_use]
-extern crate log;
-
-pub mod tree;
-
-mod adriver;
-
-pub use crate::adriver::{AConnection, AMessageStream, AMethodCall};
-
 pub mod connection;

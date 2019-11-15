@@ -1,30 +1,11 @@
-// First, some boilerplate code to make sure we don't break the stable channel.
-
-#[cfg(not(feature = "nightly"))]
-fn main() {
-    println!("Enable the nightly feature to run this example, like this:");
-    println!("cargo +nightly run --features=nightly --example tokio02_client");
-}
-
-#[cfg(feature = "nightly")]
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let rt = tokio02::runtime::Runtime::new().unwrap();
-    rt.block_on(nightly::main())
-}
-
-#[cfg(feature = "nightly")]
-mod nightly {
-
-// Okay, now we can start coding.
-
 use dbus_tokio::connection;
 use dbus::nonblock;
-use tokio02 as tokio;
 use std::time::Duration;
-use tokio02::prelude::*;
+use tokio::prelude::*;
 use dbus::message::MatchRule;
 use dbus::channel::MatchingReceiver;
 
+#[tokio::main]
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Connect to the D-Bus session bus (this is blocking, unfortunately).
@@ -75,7 +56,3 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     unreachable!()
 }
-
-}
-
-
