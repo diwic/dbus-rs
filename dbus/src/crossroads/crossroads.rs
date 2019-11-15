@@ -139,7 +139,7 @@ impl Crossroads<()> {
         cr
     }
 
-    pub fn start<C>(mut self, connection: &C) -> u32
+    pub fn start<C>(mut self, connection: &C) -> channel::Token
     where
         C: channel::MatchingReceiver<F=Box<dyn FnMut(Message, &C) -> bool + Send>> + channel::Sender
     {
@@ -170,7 +170,7 @@ impl Crossroads<Par> {
         cr
     }
 
-    pub fn start_par<C, CC, CR>(cr: CR, connection: CC) -> u32
+    pub fn start_par<C, CC, CR>(cr: CR, connection: CC) -> channel::Token
     where
         C: channel::MatchingReceiver<F=Box<dyn FnMut(Message, &C) -> bool + Send + Sync>> + channel::Sender,
         CC: Deref<Target=C>,
@@ -195,7 +195,7 @@ impl Crossroads<handlers::Local> {
         cr
     }
 
-    pub fn start_local<C>(mut self, connection: &C) -> u32
+    pub fn start_local<C>(mut self, connection: &C) -> channel::Token
     where
         C: channel::MatchingReceiver<F=Box<dyn FnMut(Message, &C) -> bool>> + channel::Sender
     {

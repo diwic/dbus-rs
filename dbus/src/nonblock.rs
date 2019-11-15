@@ -6,15 +6,15 @@
 //! When async/await is stable, expect more here.
 
 use crate::{Error, Message};
-use crate::channel::{MatchingReceiver, Channel, Sender};
+use crate::channel::{MatchingReceiver, Channel, Sender, Token};
 use crate::strings::{BusName, Path, Interface, Member};
 use crate::arg::{AppendAll, ReadAll, IterAppend};
 use crate::message::MatchRule;
 
 use std::sync::{Arc, Mutex};
 use std::{future, task, pin, mem};
-use std::collections::{HashMap, BTreeMap};
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
+use crate::filters::{Filters, Replies};
 
 mod generated_org_freedesktop_notifications;
 mod generated_org_freedesktop_dbus;
@@ -33,47 +33,40 @@ pub mod stdintf {
     }
 }
 
-/// Thread local + async Connection
+/// A connection to D-Bus, thread local + async version
 pub struct LocalConnection {
     channel: Channel,
-    replies: RefCell<HashMap<u32, Box<dyn FnOnce(Message, &LocalConnection)>>>,
-    filters: RefCell<BTreeMap<u32, (MatchRule<'static>, Box<dyn FnMut(Message, &LocalConnection) -> bool>)>>,
-    filter_nextid: Cell<u32>,
+    filters: RefCell<Filters<LocalFilterCb>>,
+    replies: RefCell<Replies<LocalRepliesCb>>,
 }
 
-impl AsRef<Channel> for LocalConnection {
-    fn as_ref(&self) -> &Channel { &self.channel }
+/// A connection to D-Bus, async version where callbacks are Send but not Sync.
+pub struct Connection {
+    channel: Channel,
+    filters: RefCell<Filters<FilterCb>>,
+    replies: RefCell<Replies<RepliesCb>>,
 }
 
-impl From<Channel> for LocalConnection {
-    fn from(x: Channel) -> Self {
-        LocalConnection {
-            channel: x,
-            replies: Default::default(),
-            filters: Default::default(),
-            filter_nextid: Default::default(),
-        }
-    }
-}
-
-impl Sender for LocalConnection {
-    fn send(&self, msg: Message) -> Result<u32, ()> { self.channel.send(msg) }
-}
-
-/// Async Connection which is Send + Sync.
+/// A connection to D-Bus, Send + Sync + async version
 pub struct SyncConnection {
     channel: Channel,
-    replies: Mutex<HashMap<u32, <Self as NonblockReply>::F>>,
-    filters: Mutex<(u32, BTreeMap<u32, (MatchRule<'static>, <Self as MatchingReceiver>::F)>)>,
+    filters: Mutex<Filters<SyncFilterCb>>,
+    replies: Mutex<Replies<SyncRepliesCb>>,
 }
 
-impl AsRef<Channel> for SyncConnection {
-    fn as_ref(&self) -> &Channel { &self.channel }
-}
 
-impl From<Channel> for SyncConnection {
+
+macro_rules! connimpl {
+     ($c: ident, $cb: ident, $rcb: ident $(, $ss:tt)*) =>  {
+
+type
+    $cb = Box<dyn FnMut(Message, &$c) -> bool $(+ $ss)* + 'static>;
+type
+    $rcb = Box<dyn FnOnce(Message, &$c) $(+ $ss)* + 'static>;
+
+impl From<Channel> for $c {
     fn from(x: Channel) -> Self {
-        SyncConnection {
+        $c {
             channel: x,
             replies: Default::default(),
             filters: Default::default(),
@@ -81,73 +74,88 @@ impl From<Channel> for SyncConnection {
     }
 }
 
-impl Sender for SyncConnection {
+impl AsRef<Channel> for $c {
+    fn as_ref(&self) -> &Channel { &self.channel }
+}
+
+impl Sender for $c {
     fn send(&self, msg: Message) -> Result<u32, ()> { self.channel.send(msg) }
 }
 
+impl MatchingReceiver for $c {
+    type F = $cb;
+    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> Token {
+        self.filters_mut().add(m, f)
+    }
+    fn stop_receive(&self, id: Token) -> Option<(MatchRule<'static>, Self::F)> {
+        self.filters_mut().remove(id)
+    }
+}
+
+impl NonblockReply for $c {
+    type F = $rcb;
+    fn send_with_reply(&self, msg: Message, f: Self::F) -> Result<Token, ()> {
+        self.channel.send(msg).map(|x| {
+            let t = Token(x as usize);
+            self.replies_mut().insert(t, f);
+            t
+        })
+    }
+    fn cancel_reply(&self, id: Token) -> Option<Self::F> { self.replies_mut().remove(&id) }
+    fn make_f<G: FnOnce(Message, &Self) + Send + 'static>(g: G) -> Self::F { Box::new(g) }
+}
+
+
+impl Process for $c {
+    fn process_one(&self, msg: Message) {
+        if let Some(serial) = msg.get_reply_serial() {
+            if let Some(f) = self.replies_mut().remove(&Token(serial as usize)) {
+                f(msg, self);
+                return;
+            }
+        }
+        if let Some(mut ff) = self.filters_mut().remove_matching(&msg) {
+            if ff.2(msg, self) {
+                self.filters_mut().insert(ff);
+            }
+        } else if let Some(reply) = crate::channel::default_reply(&msg) {
+            let _ = self.send(reply);
+        }
+    }
+}
+
+    }
+}
+
+connimpl!(Connection, FilterCb, RepliesCb, Send);
+connimpl!(LocalConnection, LocalFilterCb, LocalRepliesCb);
+connimpl!(SyncConnection, SyncFilterCb, SyncRepliesCb, Send);
+
+impl Connection {
+    fn filters_mut(&self) -> std::cell::RefMut<Filters<FilterCb>> { self.filters.borrow_mut() }
+    fn replies_mut(&self) -> std::cell::RefMut<Replies<RepliesCb>> { self.replies.borrow_mut() }
+}
+
+impl LocalConnection {
+    fn filters_mut(&self) -> std::cell::RefMut<Filters<LocalFilterCb>> { self.filters.borrow_mut() }
+    fn replies_mut(&self) -> std::cell::RefMut<Replies<LocalRepliesCb>> { self.replies.borrow_mut() }
+}
+
+impl SyncConnection {
+    fn filters_mut(&self) -> std::sync::MutexGuard<Filters<SyncFilterCb>> { self.filters.lock().unwrap() }
+    fn replies_mut(&self) -> std::sync::MutexGuard<Replies<SyncRepliesCb>> { self.replies.lock().unwrap() }
+}
 
 /// Internal helper trait for async method replies.
 pub trait NonblockReply {
     /// Callback type
     type F;
     /// Sends a message and calls the callback when a reply is received.
-    fn send_with_reply(&self, msg: Message, f: Self::F) -> Result<u32, ()>;
+    fn send_with_reply(&self, msg: Message, f: Self::F) -> Result<Token, ()>;
     /// Cancels a pending reply.
-    fn cancel_reply(&self, id: u32) -> Option<Self::F>;
+    fn cancel_reply(&self, id: Token) -> Option<Self::F>;
     /// Internal helper function that creates a callback.
     fn make_f<G: FnOnce(Message, &Self) + Send + 'static>(g: G) -> Self::F where Self: Sized;
-}
-
-impl NonblockReply for LocalConnection {
-    type F = Box<dyn FnOnce(Message, &LocalConnection)>;
-    fn send_with_reply(&self, msg: Message, f: Self::F) -> Result<u32, ()> {
-        self.channel.send(msg).map(|x| {
-            self.replies.borrow_mut().insert(x, f);
-            x
-        })
-    }
-    fn cancel_reply(&self, id: u32) -> Option<Self::F> { self.replies.borrow_mut().remove(&id) }
-    fn make_f<G: FnOnce(Message, &Self) + Send + 'static>(g: G) -> Self::F { Box::new(g) }
-}
-
-impl MatchingReceiver for LocalConnection {
-    type F = Box<dyn FnMut(Message, &LocalConnection) -> bool>;
-    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
-        let id = self.filter_nextid.get();
-        self.filter_nextid.set(id+1);
-        self.filters.borrow_mut().insert(id, (m, f));
-        id
-    }
-    fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
-        self.filters.borrow_mut().remove(&id)
-    }
-}
-
-impl NonblockReply for SyncConnection {
-    type F = Box<dyn FnOnce(Message, &SyncConnection) + Send>;
-    fn send_with_reply(&self, msg: Message, f: Self::F) -> Result<u32, ()> {
-        self.channel.send(msg).map(|x| {
-            self.replies.lock().unwrap().insert(x, f);
-            x
-        })
-    }
-    fn cancel_reply(&self, id: u32) -> Option<Self::F> { self.replies.lock().unwrap().remove(&id) }
-    fn make_f<G: FnOnce(Message, &Self) + Send + 'static>(g: G) -> Self::F { Box::new(g) }
-}
-
-impl MatchingReceiver for SyncConnection {
-    type F = Box<dyn FnMut(Message, &Self) -> bool + Send>;
-    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
-        let mut filters = self.filters.lock().unwrap();
-        let id = filters.0 + 1;
-        filters.0 = id;
-        filters.1.insert(id, (m, f));
-        id
-    }
-    fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
-        let mut filters = self.filters.lock().unwrap();
-        filters.1.remove(&id)
-    }
 }
 
 
@@ -167,54 +175,6 @@ pub trait Process: Sender + AsRef<Channel> {
 
     /// Dispatches a message.
     fn process_one(&self, msg: Message);
-}
-
-impl Process for LocalConnection {
-    fn process_one(&self, msg: Message) {
-        if let Some(serial) = msg.get_reply_serial() {
-            if let Some(f) = self.replies.borrow_mut().remove(&serial) {
-                f(msg, self);
-                return;
-            }
-        }
-        let mut filters = self.filters.borrow_mut();
-        if let Some(k) = filters.iter_mut().find(|(_, v)| v.0.matches(&msg)).map(|(k, _)| *k) {
-            let mut v = filters.remove(&k).unwrap();
-            drop(filters);
-            if v.1(msg, &self) {
-                let mut filters = self.filters.borrow_mut();
-                filters.insert(k, v);
-            }
-            return;
-        }
-        if let Some(reply) = crate::channel::default_reply(&msg) {
-            let _ = self.send(reply);
-        }
-    }
-}
-
-impl Process for SyncConnection {
-    fn process_one(&self, msg: Message) {
-        if let Some(serial) = msg.get_reply_serial() {
-            if let Some(f) = self.replies.lock().unwrap().remove(&serial) {
-                f(msg, self);
-                return;
-            }
-        }
-        let mut filters = self.filters.lock().unwrap();
-        if let Some(k) = filters.1.iter_mut().find(|(_, v)| v.0.matches(&msg)).map(|(k, _)| *k) {
-            let mut v = filters.1.remove(&k).unwrap();
-            drop(filters);
-            if v.1(msg, &self) {
-                let mut filters = self.filters.lock().unwrap();
-                filters.1.insert(k, v);
-            }
-            return;
-        }
-        if let Some(reply) = crate::channel::default_reply(&msg) {
-            let _ = self.send(reply);
-        }
-    }
 }
 
 /// A struct that wraps a connection, destination and path.
@@ -310,4 +270,7 @@ fn test_conn_send_sync() {
     let c = SyncConnection::from(Channel::get_private(crate::channel::BusType::Session).unwrap());
     is_send(&c);
     is_sync(&c);
+
+    let c = Connection::from(Channel::get_private(crate::channel::BusType::Session).unwrap());
+    is_send(&c);
 }

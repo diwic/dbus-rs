@@ -489,7 +489,8 @@ impl fmt::Display for TypeMismatchError {
 
 #[allow(dead_code)]
 fn test_compile() {
-    let mut q = IterAppend::new(unsafe { mem::transmute(0usize) });
+    let mut msg = Message::new_signal("/", "a.b", "C").unwrap();
+    let mut q = IterAppend::new(&mut msg);
 
     q.append(5u8);
     q.append(Array::new(&[5u8, 6, 7]));

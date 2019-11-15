@@ -5,52 +5,13 @@ use crate::strings::{BusName, Path, Interface, Member};
 use crate::arg::{AppendAll, ReadAll, IterAppend};
 use crate::{channel, Error, Message};
 use crate::message::{MatchRule, SignalArgs};
-use crate::channel::{Channel, BusType};
+use crate::channel::{Channel, BusType, Token};
 use std::{cell::RefCell, time::Duration, sync::Mutex};
+use crate::filters::Filters;
 
 pub mod stdintf;
 
-#[derive(Default)]
-struct Filter<F> {
-   id: u32,
-   rule: MatchRule<'static>,
-   callback: F, // ,
-}
 
-struct Filters<F> {
-    list: Vec<Filter<F>>,
-    nextid: u32,
-}
-
-impl<F> Default for Filters<F> {
-    fn default() -> Self { Filters { list: vec!(), nextid: 1, }}
-}
-
-impl<F> Filters<F> {
-    fn dispatch<G: FnOnce(&mut F, Message) -> bool>(&mut self, msg: Message, g: G) -> Option<Message> {
-        if let Some(idx) = self.list.iter().position(|f| f.rule.matches(&msg)) {
-            if !g(&mut self.list[idx].callback, msg) { self.list.remove(idx); }
-            None
-        } else {
-            crate::channel::default_reply(&msg)
-        }
-    }
-
-    fn add(&mut self, m: MatchRule<'static>, f: F) -> u32 {
-        let id = self.nextid;
-        self.nextid += 1;
-        self.list.push(Filter { id, rule: m, callback: f } );
-        id
-    }
-
-    fn remove(&mut self, id: u32) -> Option<(MatchRule<'static>, F)> {
-        if let Some(idx) = self.list.iter().position(|f| f.id == id) {
-            let x = self.list.remove(idx);
-            Some((x.rule, x.callback))
-        }
-        else { None }
-    }
-}
 
 /// A connection to D-Bus, thread local + non-async version
 pub struct LocalConnection {
@@ -122,7 +83,7 @@ impl $c {
     ///
     /// The returned value can be used to remove the match. The match is also removed if the callback
     /// returns "false".
-    pub fn add_match<S: ReadAll, F>(&self, match_rule: MatchRule<'static>, f: F) -> Result<u32, Error>
+    pub fn add_match<S: ReadAll, F>(&self, match_rule: MatchRule<'static>, f: F) -> Result<Token, Error>
     where F: FnMut(S, &Self, &Message) -> bool $(+ $ss)* + 'static {
         let m = match_rule.match_str();
         self.add_match_no_cb(&m)?;
@@ -145,10 +106,27 @@ impl $c {
     }
 
     /// Removes a previously added match and callback from the connection.
-    pub fn remove_match(&self, id: u32) -> Result<(), Error> {
+    pub fn remove_match(&self, id: Token) -> Result<(), Error> {
         use channel::MatchingReceiver;
         let (mr, _) = self.stop_receive(id).ok_or_else(|| Error::new_failed("No match with that id found"))?;
         self.remove_match_no_cb(&mr.match_str())
+    }
+
+    /// Tries to handle an incoming message if there is one. If there isn't one,
+    /// it will wait up to timeout
+    pub fn process(&mut self, timeout: Duration) -> Result<bool, Error> {
+        if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
+            if let Some(mut ff) = self.filters_mut().remove_matching(&msg) {
+                if ff.2(msg, self) {
+                    self.filters_mut().insert(ff);
+                }
+            } else if let Some(reply) = crate::channel::default_reply(&msg) {
+                let _ = self.channel.send(reply);
+            }
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 }
 
@@ -178,13 +156,15 @@ impl<S: ReadAll, F: FnMut(S, &$c, &Message) -> bool $(+ $ss)* + 'static> MakeSig
 
 impl channel::MatchingReceiver for $c {
     type F = $cb;
-    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32 {
+    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> Token {
         self.filters_mut().add(m, f)
     }
-    fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)> {
+    fn stop_receive(&self, id: Token) -> Option<(MatchRule<'static>, Self::F)> {
         self.filters_mut().remove(id)
     }
 }
+
+
 
      }
 }
@@ -195,54 +175,14 @@ connimpl!(SyncConnection, SyncFilterCb, Send, Sync);
 
 impl Connection {
     fn filters_mut(&self) -> std::cell::RefMut<Filters<FilterCb>> { self.filters.borrow_mut() }
-    /// Tries to handle an incoming message if there is one. If there isn't one,
-    /// it will wait up to timeout
-    pub fn process(&mut self, timeout: Duration) -> Result<bool, Error> {
-        if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
-            if let Some(reply) = self.filters.borrow_mut().dispatch(msg, |cb, msg| { cb(msg, self) }) {
-                let _ = self.channel.send(reply);
-            }
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
 }
 
 impl LocalConnection {
     fn filters_mut(&self) -> std::cell::RefMut<Filters<LocalFilterCb>> { self.filters.borrow_mut() }
-
-    /// Tries to handle an incoming message if there is one. If there isn't one,
-    /// it will wait up to timeout
-    pub fn process(&mut self, timeout: Duration) -> Result<bool, Error> {
-        if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
-            if let Some(reply) = self.filters.borrow_mut().dispatch(msg, |cb, msg| { cb(msg, self) }) {
-                let _ = self.channel.send(reply);
-            }
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
 }
 
 impl SyncConnection {
     fn filters_mut(&self) -> std::sync::MutexGuard<Filters<SyncFilterCb>> { self.filters.lock().unwrap() }
-
-    /// Tries to handle an incoming message if there is one. If there isn't one,
-    /// it will wait up to timeout
-    ///
-    /// Note: Might deadlock if called recursively.
-    pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
-        if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
-            if let Some(reply) = self.filters.lock().unwrap().dispatch(msg, |cb, msg| { cb(msg, self) }) {
-                let _ = self.channel.send(reply);
-            }
-            Ok(true)
-        } else {
-            Ok(false)
-        }
-    }
 }
 
 /// Abstraction over different connections
@@ -312,7 +252,8 @@ impl<'a, T: BlockingSender, C: std::ops::Deref<Target=T>> Proxy<'a, C> {
     /// The match rule will be modified to include this path and destination only.
     ///
     /// If call_add_match is true, will notify the D-Bus server that matching should start.
-    pub fn match_start(&self, mut mr: MatchRule<'static>, call_add_match: bool, f: <T as channel::MatchingReceiver>::F) -> Result<u32, Error>
+    pub fn match_start(&self, mut mr: MatchRule<'static>, call_add_match: bool, f: <T as channel::MatchingReceiver>::F)
+    -> Result<Token, Error>
     where T: channel::MatchingReceiver {
         mr.path = Some(self.path.clone().into_static());
         mr.sender = Some(self.destination.clone().into_static());
@@ -329,7 +270,7 @@ impl<'a, T: BlockingSender, C: std::ops::Deref<Target=T>> Proxy<'a, C> {
     ///
     /// If call_add_match is true, will notify the D-Bus server that matching should stop,
     /// this should be true in case match_signal_local or match_signal_sync was used.
-    pub fn match_stop(&self, id: u32, call_remove_match: bool) -> Result<(), Error>
+    pub fn match_stop(&self, id: Token, call_remove_match: bool) -> Result<(), Error>
     where T: channel::MatchingReceiver {
         if let Some((mr, _)) = self.connection.stop_receive(id) {
             if call_remove_match {
@@ -345,7 +286,7 @@ impl<'a, T: BlockingSender, C: std::ops::Deref<Target=T>> Proxy<'a, C> {
     ///
     /// The returned value can be used to remove the match. The match is also removed if the callback
     /// returns "false".
-    pub fn match_signal<S: SignalArgs + ReadAll, F>(&self, f: F) -> Result<u32, Error>
+    pub fn match_signal<S: SignalArgs + ReadAll, F>(&self, f: F) -> Result<Token, Error>
     where T: channel::MatchingReceiver,
           F: MakeSignal<<T as channel::MatchingReceiver>::F, S, T>
     {

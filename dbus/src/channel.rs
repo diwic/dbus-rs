@@ -395,6 +395,10 @@ impl Sender for std::cell::RefCell<Vec<Message>> {
     }
 }
 
+/// Token used to identify a callback in the MatchingReceiver trait
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct Token(pub usize);
+
 /// Abstraction over different connections that receive data
 pub trait MatchingReceiver {
     /// Type of callback
@@ -402,9 +406,9 @@ pub trait MatchingReceiver {
     /// Add a callback to be called in case a message matches.
     ///
     /// Returns an id that can be used to remove the callback.
-    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> u32;
+    fn start_receive(&self, m: MatchRule<'static>, f: Self::F) -> Token;
     /// Remove a previously added callback.
-    fn stop_receive(&self, id: u32) -> Option<(MatchRule<'static>, Self::F)>;
+    fn stop_receive(&self, id: Token) -> Option<(MatchRule<'static>, Self::F)>;
 }
 
 impl Sender for Channel {

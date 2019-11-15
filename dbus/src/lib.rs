@@ -11,7 +11,7 @@
 //!
 //! In addition to this crate, there are two companion crates, dbus-codegen for generating Rust
 //! code from D-Bus introspection data, and dbus-tokio for integrating D-Bus with [Tokio](http://tokio.rs).
-//! However, at the time of this writing, these are far less mature than this crate. 
+//! However, at the time of this writing, these are far less mature than this crate.
 
 #![warn(missing_docs)]
 
@@ -30,6 +30,8 @@ mod error;
 pub use error::Error;
 
 pub mod channel;
+
+mod filters;
 
 // Not ready for release yet
 #[doc(hidden)]
@@ -65,6 +67,3 @@ fn c_str_to_slice(c: & *const c_char) -> Option<&str> {
 }
 
 fn to_c_str(n: &str) -> CString { CString::new(n.as_bytes()).unwrap() }
-
-
-
