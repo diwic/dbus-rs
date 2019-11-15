@@ -114,7 +114,8 @@ impl Process for $c {
                 return;
             }
         }
-        if let Some(mut ff) = self.filters_mut().remove_matching(&msg) {
+        let ff = self.filters_mut().remove_matching(&msg);
+        if let Some(mut ff) = ff {
             if ff.2(msg, self) {
                 self.filters_mut().insert(ff);
             }

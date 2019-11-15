@@ -116,7 +116,8 @@ impl $c {
     /// it will wait up to timeout
     pub fn process(&mut self, timeout: Duration) -> Result<bool, Error> {
         if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
-            if let Some(mut ff) = self.filters_mut().remove_matching(&msg) {
+            let ff = self.filters_mut().remove_matching(&msg);
+            if let Some(mut ff) = ff {
                 if ff.2(msg, self) {
                     self.filters_mut().insert(ff);
                 }
