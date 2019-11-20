@@ -7,7 +7,8 @@ use super::crossroads::Crossroads;
 use super::info::{MethodInfo, PropInfo};
 use super::path::Path;
 use super::MethodErr;
-use super::context::{MsgCtx, RefCtx};
+use super::context::{MsgCtx, RefCtx, AsyncMsgCtx};
+use std::future::Future;
 
 pub struct DebugMethod<H: Handlers>(pub H::Method);
 impl<H: Handlers> fmt::Debug for DebugMethod<H> {
@@ -259,6 +260,55 @@ where F: FnMut(&mut MsgCtx, &mut I, IA) -> Result<OA, MethodErr> $(+ $ss)* + 'st
             let mut m = ctx.message.method_return();
             OA::append(&r, &mut IterAppend::new(&mut m));
             Ok(m)
+        })
+    }
+}
+
+// AsyncMutIface
+
+impl<F, R> MakeHandler<<$h as Handlers>::Method, (), ($h, (i16, u8))> for F
+where F: FnMut(AsyncMsgCtx, &mut (dyn Any $(+ $ss)*)) -> R $(+ $ss)* + 'static,
+    R: Future<Output = Option<Message>>
+{
+    fn make(self) -> <$h as Handlers>::Method {
+        unimplemented!()
+        // $method($methods::MutIface(Box::new(self)))
+    }
+}
+
+impl<I: 'static $(+ $ss)*, F, R> MakeHandler<<$h as Handlers>::Method, ((), I), ($h, (i16, bool))> for F
+where F: FnMut(AsyncMsgCtx, &mut I) -> R $(+ $ss)* + 'static,
+    R: Future<Output = Result<Message, MethodErr>>
+{
+    fn make(mut self) -> <$h as Handlers>::Method {
+        MakeHandler::make(move |ctx: AsyncMsgCtx, data: &mut (dyn Any $(+ $ss)*)| {
+            let iface: &mut I = data.downcast_mut().unwrap();
+            let r = self(ctx, iface);
+            async {
+                let r = r.await;
+                Some(r.unwrap()) // FIXME
+            }
+        })
+    }
+}
+
+
+impl<I: 'static $(+ $ss)*, IA: ReadAll, OA: AppendAll, F, R> MakeHandler<<$h as Handlers>::Method, ((), IA, OA, I), ($h, (i16, ()))> for F
+where F: FnMut(AsyncMsgCtx, &mut I, IA) -> R $(+ $ss)* + 'static,
+    R: Future<Output = Result<OA, MethodErr>>
+{
+    fn make(mut self) -> <$h as Handlers>::Method {
+        MakeHandler::make(move |ctx: AsyncMsgCtx, iface: &mut I| {
+            let mut m = ctx.message().method_return();
+            let r = IA::read(&mut ctx.message().iter_init()).map(|ia| {
+                self(ctx, iface, ia)
+            });
+            async {
+                let r = r?;
+                let r = r.await?;
+                OA::append(&r, &mut IterAppend::new(&mut m));
+                Ok(m)
+            }
         })
     }
 }

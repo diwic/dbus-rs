@@ -18,4 +18,4 @@ pub use self::path::{Path, PathData};
 
 pub use self::handlers::{Handlers, Par, Local};
 
-pub use self::context::{MsgCtx, RefCtx};
+pub use self::context::{MsgCtx, RefCtx, AsyncMsgCtx};

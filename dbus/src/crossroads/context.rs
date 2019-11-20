@@ -40,6 +40,20 @@ impl<'a> MsgCtx<'a> {
     pub fn dbus_signals_mut(&mut self) -> &mut DBusSignals { &mut self.signals }
 }
 
+pub struct AsyncMsgCtx {
+
+}
+
+impl AsyncMsgCtx {
+    pub fn send_msg(&mut self, msg: Message) { unimplemented!() }
+
+    pub fn make_signal<'b, A: AppendAll, N: Into<MemberName<'b>>>(&self, name: N, args: A) -> Message {
+        unimplemented!()
+    }
+
+    pub fn message(&self) -> &Message { unimplemented!() }
+}
+
 #[derive(Debug, Clone)]
 pub struct RefCtx<'a, H: Handlers> {
     pub crossroads: &'a Crossroads<H>,
