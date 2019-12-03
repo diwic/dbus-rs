@@ -56,7 +56,8 @@ Defaults to 'RefClosure'."))
              .help("Type of client connection. Valid values are: 'blocking', 'nonblock', 'ffidisp'."))
         .arg(clap::Arg::with_name("output").short("o").long("output").takes_value(true).value_name("FILE")
              .help("Write output into the specified file"))
-        .arg(clap::Arg::with_name("file").long("file").required(false).help("D-Bus XML Introspection file"))
+        .arg(clap::Arg::with_name("file").long("file").required(false).takes_value(true).value_name("FILE")
+            .help("D-Bus XML Introspection file"))
         .get_matches();
 
     if matches.is_present("destination") && matches.is_present("file") {
