@@ -44,6 +44,7 @@ pub trait SignalArgs {
     /// If the message is a signal of the correct type, return its arguments, otherwise return None.
     ///
     /// This does not check sender and path of the message, which is likely relevant to you as well.
+    #[allow(clippy::if_same_then_else)]
     fn from_message(m: &Message) -> Option<Self> where Self: Sized + arg::ReadAll {
         if m.msg_type() != MessageType::Signal { None }
         else if m.interface().as_ref().map(|x| &**x) != Some(Self::INTERFACE) { None }

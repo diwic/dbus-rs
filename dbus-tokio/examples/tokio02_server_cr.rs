@@ -1,6 +1,6 @@
 use dbus_tokio::connection;
-use tokio::future;
-use tokio::timer::delay;
+use futures::future;
+use tokio::time::delay_for;
 use dbus::crossroads::{Crossroads, Path, AsyncMsgCtx};
 use std::time::Duration;
 
@@ -46,8 +46,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let s = format!("Hello {}! This API has been used {} times.", name, test.called_count);
             async move {
                 // Let's wait half a second just to show off how async we are.
-               let when = tokio::clock::now() + Duration::from_millis(500);
-               delay(when).await;
+               delay_for(Duration::from_millis(500)).await;
                 // The ctx parameter can be used to conveniently send extra messages.
                 let signal_msg = ctx.make_signal("HelloHappened", (name,));
                 ctx.send_msg(signal_msg);
