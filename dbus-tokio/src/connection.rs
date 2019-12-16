@@ -83,19 +83,26 @@ pub fn new_system() -> Result<(IOResource<Connection>, Arc<Connection>), Error> 
 
 #[test]
 fn method_call() {
+    use tokio::task;
+    use futures::future::FutureExt;
+
     let mut rt = tokio::runtime::Builder::new()
         .basic_scheduler()
         .enable_io()
         .build()
         .unwrap();
 
-    let (res, conn) = new_session_sync().unwrap();
-    rt.spawn(async { panic!(res.await);});
+    let local = task::LocalSet::new();
+
+    let (res, conn) = new_session_local().unwrap();
+    let spawner = async move {
+        task::spawn_local(async move { panic!(res.await);});
+    };
 
     let proxy = dbus::nonblock::Proxy::new("org.freedesktop.DBus", "/", conn);
     let fut = proxy.method_call("org.freedesktop.DBus", "NameHasOwner", ("dummy.name.without.owner",));
 
-    let (has_owner,): (bool,) = rt.block_on(fut).unwrap();
+    let (has_owner,): (bool,) = local.block_on(& mut rt , spawner.then(|_| fut)).unwrap();
 
     assert_eq!(has_owner, false);
 }
