@@ -32,7 +32,9 @@ impl<C: AsRef<Channel> + Process> IOResource<C> {
                 self.registration = Some((reg, w.fd));
             }
             Some((_reg, fd)) if *fd == w.fd => (),
-            Some((_reg, _fd)) => unreachable!(),
+            Some((_reg, fd)) => return Err(Box::new(Error::new_failed(
+                &format!("Unexpected changing file descriptor for dbus (from {} to {})",  w.fd, fd)
+            ))),
         };
 
         if let Some((r,_)) = &self.registration {
