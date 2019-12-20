@@ -1,9 +1,9 @@
 use dbus_tokio::connection;
 use dbus::nonblock;
 use std::time::Duration;
-use tokio::prelude::*;
 use dbus::message::MatchRule;
 use dbus::channel::MatchingReceiver;
+use futures_util::stream::StreamExt;
 
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -37,7 +37,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }));
 
     // Create interval - a Stream that will fire an event periodically
-    let interval = tokio::timer::Interval::new_interval(Duration::from_secs(2));
+    let interval = tokio::time::interval(Duration::from_secs(2));
 
     // Create a future calling D-Bus method each time the interval generates a tick
     let calls = interval.for_each(move |_| {
