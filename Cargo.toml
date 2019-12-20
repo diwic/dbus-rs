@@ -1,4 +1,4 @@
 [workspace]
 members = ["libdbus-sys", "dbus", "dbus-tokio", "dbus-codegen", "dbus-codegen-tests"]
 
-exclude = ["dbus-futures"]
+exclude = ["dbus-futures", "dbus-crossroads"]
