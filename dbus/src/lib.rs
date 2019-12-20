@@ -33,10 +33,6 @@ pub mod channel;
 
 mod filters;
 
-// Not ready for release yet
-#[doc(hidden)]
-pub mod crossroads;
-
 pub mod blocking;
 
 pub mod nonblock;
