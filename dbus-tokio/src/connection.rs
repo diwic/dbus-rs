@@ -37,18 +37,14 @@ impl<C: AsRef<Channel> + Process> IOResource<C> {
             ))),
         };
 
-        if let Some((r,_)) = &self.registration {
-            r.take_read_ready()?;
-            r.take_write_ready()?;
+        let (r,_) = self.registration.as_ref().unwrap();
+        r.take_read_ready()?;
+        r.take_write_ready()?;
 
-            if w.read { let _ = r.poll_read_ready(ctx)?; };
-            if w.write { let _ = r.poll_write_ready(ctx)?; };
-        } else {
-            unreachable!()
-        }
+        if w.read { let _ = r.poll_read_ready(ctx)?; };
+        if w.write { let _ = r.poll_write_ready(ctx)?; };
 
         Ok(())
-
     }
 }
 
@@ -66,7 +62,7 @@ impl<C: AsRef<Channel> + Process> future::Future for IOResource<C> {
 
 
 /// Generic connection creator, you might want to use e g `new_session_local`, `new_system_sync` etc for convenience.
-pub fn new< C: From<Channel>>(b: BusType) -> Result<(IOResource< C>, Arc<C>), Error> {
+pub fn new<C: From<Channel>>(b: BusType) -> Result<(IOResource<C>, Arc<C>), Error> {
     let mut channel = Channel::get_private(b)?;
     channel.set_watch_enabled(true);
 
@@ -86,7 +82,6 @@ pub fn new_system() -> Result<(IOResource<Connection>, Arc<Connection>), Error> 
 #[test]
 fn method_call() {
     use tokio::task;
-    use futures::future::FutureExt;
 
     let mut rt = tokio::runtime::Builder::new()
         .basic_scheduler()
@@ -97,14 +92,12 @@ fn method_call() {
     let local = task::LocalSet::new();
 
     let (res, conn) = new_session_local().unwrap();
-    let spawner = async move {
-        task::spawn_local(async move { panic!(res.await);});
-    };
+    local.spawn_local(async move { panic!(res.await);});
 
     let proxy = dbus::nonblock::Proxy::new("org.freedesktop.DBus", "/", conn);
     let fut = proxy.method_call("org.freedesktop.DBus", "NameHasOwner", ("dummy.name.without.owner",));
 
-    let (has_owner,): (bool,) = local.block_on(& mut rt , spawner.then(|_| fut)).unwrap();
+    let (has_owner,): (bool,) = local.block_on(&mut rt, fut).unwrap();
 
     assert_eq!(has_owner, false);
 }
