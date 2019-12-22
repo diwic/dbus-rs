@@ -26,18 +26,18 @@ impl<C: AsRef<Channel> + Process> IOResource<C> {
 
         let w = c.watch();
 
-        match &mut self.registration {
+        let r = match &self.registration {
             None => {
                 let reg = Registration::new(&mio::unix::EventedFd(&w.fd))?;
                 self.registration = Some((reg, w.fd));
+                &self.registration.as_ref().unwrap().0
             }
-            Some((_reg, fd)) if *fd == w.fd => (),
-            Some((_reg, fd)) => return Err(Box::new(Error::new_failed(
-                &format!("Unexpected changing file descriptor for dbus (from {} to {})",  w.fd, fd)
-            ))),
+            Some((reg, fd)) => {
+                assert_eq!(*fd, w.fd);
+                reg
+            },
         };
 
-        let (r,_) = self.registration.as_ref().unwrap();
         r.take_read_ready()?;
         r.take_write_ready()?;
 
