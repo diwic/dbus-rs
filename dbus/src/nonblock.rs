@@ -1,9 +1,7 @@
 //! Async version of connection.
 //!
-//! You're probably going to need a companion crate - dbus-tokio - for this connection to make sense,
-//! (although you can also just call read_write and process_all at regular intervals).
-//!
-//! When async/await is stable, expect more here.
+//! You're probably going to need a companion crate - dbus-tokio - for this connection to make sense.
+//! (Although you can also just call read_write and process_all at regular intervals.)
 
 use crate::{Error, Message};
 use crate::channel::{MatchingReceiver, Channel, Sender, Token};
@@ -56,7 +54,7 @@ pub struct LocalConnection {
     replies: RefCell<Replies<LocalRepliesCb>>,
 }
 
-/// A connection to D-Bus, async version where callbacks are Send but not Sync.
+/// A connection to D-Bus, async version, which is Send but not Sync.
 pub struct Connection {
     channel: Channel,
     filters: RefCell<Filters<FilterCb>>,
