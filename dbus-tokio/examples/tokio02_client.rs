@@ -25,7 +25,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mr = MatchRule::new_signal("com.example.dbustest", "HelloHappened");
 
     // Call the dbus server to register our interest in the signal.
-    let dbus_server = nonblock::Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", conn.clone());
+    let dbus_server = nonblock::Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", Duration::from_secs(2), conn.clone());
     let _: () = dbus_server.method_call("org.freedesktop.DBus", "AddMatch", (mr.match_str(),)).await?;
 
     // This is our own method handler that will be called every time we receive a matching signal.
@@ -44,7 +44,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let conn = conn.clone();
         async {
             println!("Calling Hello...");
-            let proxy = nonblock::Proxy::new("com.example.dbustest", "/hello", conn);
+            let proxy = nonblock::Proxy::new("com.example.dbustest", "/hello", Duration::from_secs(2), conn);
             // TODO: Handle timeouts and errors here
             let (x,): (String,) = proxy.method_call("com.example.dbustest", "Hello", ("Tokio async/await",)).await.unwrap();
             println!("{}", x);

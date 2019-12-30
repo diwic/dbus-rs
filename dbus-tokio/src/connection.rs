@@ -82,6 +82,7 @@ pub fn new_system() -> Result<(IOResource<Connection>, Arc<Connection>), Error> 
 #[test]
 fn method_call() {
     use tokio::task;
+    use std::time::Duration;
 
     let mut rt = tokio::runtime::Builder::new()
         .basic_scheduler()
@@ -94,7 +95,7 @@ fn method_call() {
     let (res, conn) = new_session_local().unwrap();
     local.spawn_local(async move { panic!(res.await);});
 
-    let proxy = dbus::nonblock::Proxy::new("org.freedesktop.DBus", "/", conn);
+    let proxy = dbus::nonblock::Proxy::new("org.freedesktop.DBus", "/", Duration::from_secs(2), conn);
     let fut = proxy.method_call("org.freedesktop.DBus", "NameHasOwner", ("dummy.name.without.owner",));
 
     let (has_owner,): (bool,) = local.block_on(&mut rt, fut).unwrap();

@@ -12,6 +12,7 @@ use crate::message::MatchRule;
 use std::sync::{Arc, Mutex};
 use std::{future, task, pin, mem};
 use std::cell::RefCell;
+use std::time::Duration;
 use crate::filters::{Filters, Replies};
 
 mod generated_org_freedesktop_notifications;
@@ -154,7 +155,7 @@ impl $c {
             if allow_replacement { 1 } else { 0 } +
             if replace_existing { 2 } else { 0 } +
             if do_not_queue { 4 } else { 0 };
-        let proxy = Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", self);
+        let proxy = Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", Duration::from_secs(10), self);
         use stdintf::org_freedesktop_dbus::DBus;
         let r = proxy.request_name(&name.into(), flags).await?;
         use stdintf::org_freedesktop_dbus::RequestNameReply::*;
@@ -166,7 +167,7 @@ impl $c {
 
     /// Release a previously requested name on the D-Bus.
     pub async fn release_name<'a, N: Into<BusName<'a>>>(&self, name: N) -> Result<stdintf::org_freedesktop_dbus::ReleaseNameReply, Error> {
-        let proxy = Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", self);
+        let proxy = Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", Duration::from_secs(10), self);
         use stdintf::org_freedesktop_dbus::DBus;
         let r = proxy.release_name(&name.into()).await?;
         use stdintf::org_freedesktop_dbus::ReleaseNameReply::*;
@@ -244,12 +245,14 @@ pub struct Proxy<'a, C> {
     pub path: Path<'a>,
     /// Some way to send and/or receive messages, non-blocking.
     pub connection: C,
+    /// Timeout for method calls
+    pub timeout: Duration,
 }
 
 impl<'a, C> Proxy<'a, C> {
     /// Creates a new proxy struct.
-    pub fn new<D: Into<BusName<'a>>, P: Into<Path<'a>>>(dest: D, path: P, connection: C) -> Self {
-        Proxy { destination: dest.into(), path: path.into(), connection }
+    pub fn new<D: Into<BusName<'a>>, P: Into<Path<'a>>>(dest: D, path: P, timeout: Duration, connection: C) -> Self {
+        Proxy { destination: dest.into(), path: path.into(), timeout, connection }
     }
 }
 
