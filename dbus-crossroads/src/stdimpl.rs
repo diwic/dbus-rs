@@ -1,14 +1,14 @@
 use super::crossroads::Crossroads;
 use super::handlers::{self, Par, Handlers, MakeHandler, SendMethod, LocalMethod};
 use super::info::{IfaceInfo, MethodInfo, PropInfo, Annotations, Argument, Access, EmitsChangedSignal};
-use crate::{arg, Message};
+use dbus::{arg, Message};
 use super::MethodErr;
-use crate::arg::{Arg, Variant, Append, IterAppend};
+use dbus::arg::{Arg, Variant, Append, IterAppend};
 use std::collections::{HashMap, HashSet, Bound};
 use super::path::{Path, PathData};
 use super::context::{MsgCtx, RefCtx};
 use std::ffi::{CStr, CString};
-use crate::strings::{Member, Signature, Interface as IfaceName, Path as PathName};
+use dbus::strings::{Member, Signature, Interface as IfaceName, Path as PathName};
 
 pub struct DBusProperties;
 
@@ -443,7 +443,7 @@ struct PropsPerIntf {
 }
 */
 
-use crate::blocking::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged as PPC;
+use dbus::blocking::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged as PPC;
 
 #[derive(Debug, Default)]
 struct SignalsPerPath {
@@ -476,7 +476,7 @@ impl DBusSignals {
     }
 
     pub fn into_messages(self) -> Vec<Message> {
-        use crate::message::SignalArgs;
+        use dbus::message::SignalArgs;
         let mut result = vec!();
         for (pathname, sigs) in self.0 {
             for (_, props) in sigs.properties {

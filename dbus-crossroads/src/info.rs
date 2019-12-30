@@ -1,10 +1,10 @@
-use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
-use crate::Message;
+use dbus::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
+use dbus::Message;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::any::{Any, TypeId};
 use std::mem;
-use crate::arg::{Arg, Append, AppendAll, ReadAll, ArgAll, Get, TypeMismatchError, IterAppend};
+use dbus::arg::{Arg, Append, AppendAll, ReadAll, ArgAll, Get, TypeMismatchError, IterAppend};
 use std::marker::PhantomData;
 use super::MethodErr;
 use super::handlers::{Handlers, MakeHandler, DebugMethod, DebugProp, Par};

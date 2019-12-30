@@ -1,5 +1,5 @@
 use super::handlers::Handlers;
-use crate::strings::Path as PathName;
+use dbus::strings::Path as PathName;
 use std::collections::HashMap;
 use std::any::{Any, TypeId};
 use std::fmt;

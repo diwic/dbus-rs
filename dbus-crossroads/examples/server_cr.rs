@@ -9,11 +9,8 @@
    and a "HelloHappened" signal (with a string argument) which is sent every time
    someone calls the "Hello" method.
 */
-
-extern crate dbus;
-
 use dbus::blocking::Connection;
-use dbus::crossroads::{Crossroads, Path, MsgCtx};
+use dbus_crossroads::{Crossroads, Path, MsgCtx};
 use std::error::Error;
 use std::time::Duration;
 

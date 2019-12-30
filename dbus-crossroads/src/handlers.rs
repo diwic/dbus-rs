@@ -1,8 +1,8 @@
 use std::{fmt, cell, ops};
 use std::any::Any;
-use crate::{arg, Message};
-use crate::arg::{ReadAll, AppendAll, Append, IterAppend, Get, Arg};
-use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
+use dbus::{arg, Message};
+use dbus::arg::{ReadAll, AppendAll, Append, IterAppend, Get, Arg};
+use dbus::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
 use super::crossroads::Crossroads;
 use super::info::{MethodInfo, PropInfo};
 use super::path::Path;

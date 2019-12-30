@@ -3,9 +3,9 @@ use std::any::{TypeId, Any};
 use std::ffi::{CString, CStr};
 use std::fmt;
 use std::ops::Deref;
-use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
-use crate::{Message, MessageType, channel};
-use crate::message::MatchRule;
+use dbus::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
+use dbus::{Message, MessageType, channel};
+use dbus::message::MatchRule;
 use super::info::{IfaceInfo, MethodInfo, PropInfo, IfaceInfoBuilder, EmitsChangedSignal};
 use super::handlers::{self, Handlers, Par};
 use super::stdimpl::{DBusProperties, DBusIntrospectable, DBusObjectManager};
@@ -229,7 +229,8 @@ mod test {
     }
 
     fn dispatch_helper2<H: Handlers>(cr: &mut Crossroads<H>, mut msg: Message) -> Vec<Message> {
-        crate::message::message_set_serial(&mut msg, 57);
+        todo!();
+        // dbus::message::message_set_serial(&mut msg, 57);
         let r = RefCell::new(vec!());
         cr.dispatch(&msg, &r).unwrap();
         r.into_inner()
@@ -247,8 +248,8 @@ mod test {
         let mut cr = Crossroads::new(true);
         let istr = "com.example.dbusrs.crossroads.score";
 
-        use crate::arg;
-        use crate::arg::Variant;
+        use dbus::arg;
+        use dbus::arg::Variant;
         struct Score(u16);
 
         cr.register::<Score,_>(istr)
@@ -268,14 +269,14 @@ mod test {
        let v = dispatch_helper2(&mut cr, msg);
        dbg!(&v);
        assert_eq!(v.len(), 2);
-       use crate::blocking::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged as PPC;
-       let ppc: PPC = crate::message::SignalArgs::from_message(&v[1]).unwrap();
+       use dbus::blocking::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged as PPC;
+       let ppc: PPC = dbus::message::SignalArgs::from_message(&v[1]).unwrap();
        let cp = ppc.changed_properties.get("Score").unwrap();
        assert_eq!(cp.0.as_i64(), Some(8));
 
        let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/hello", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects").unwrap();
        let r = dispatch_helper(&mut cr, msg);
-       let d: HashMap<crate::strings::Path, HashMap<String, HashMap<String, Variant<Box<dyn arg::RefArg>>>>> = r.read1().unwrap();
+       let d: HashMap<dbus::strings::Path, HashMap<String, HashMap<String, Variant<Box<dyn arg::RefArg>>>>> = r.read1().unwrap();
        dbg!(&d);
        assert_eq!(d.get(&"/hello".into()).unwrap().get(istr).unwrap().get("Score").unwrap().0.as_i64().unwrap(), 8);
        assert_eq!(d.get(&"/hello/world".into()).unwrap().get(istr).unwrap().get("Score").unwrap().0.as_i64().unwrap(), 5);
@@ -320,7 +321,8 @@ mod test {
     #[test]
     fn cr_par() {
         fn dispatch_helper(cr: &Crossroads<Par>, mut msg: Message) -> Message {
-            crate::message::message_set_serial(&mut msg, 57);
+            todo!();
+            // dbus::message::message_set_serial(&mut msg, 57);
             let r = RefCell::new(vec!());
             cr.dispatch_par(&msg, &r).unwrap();
             let mut r = r.into_inner();
@@ -331,8 +333,8 @@ mod test {
 
         let mut cr = Crossroads::new_par(true);
         use std::sync::Mutex;
-        use crate::arg;
-        use crate::arg::Variant;
+        use dbus::arg;
+        use dbus::arg::Variant;
 
         struct Score(u16, Mutex<u32>);
 

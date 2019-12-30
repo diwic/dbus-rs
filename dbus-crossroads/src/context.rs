@@ -1,5 +1,5 @@
-use crate::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
-use crate::{Message, MessageType};
+use dbus::strings::{Path as PathName, Interface as IfaceName, Member as MemberName, Signature};
+use dbus::{Message, MessageType};
 use super::info::IfaceInfo;
 use super::crossroads::Crossroads;
 use super::path::Path;
@@ -7,7 +7,7 @@ use super::handlers::Handlers;
 use super::MethodErr;
 use super::stdimpl::DBusSignals;
 use std::ffi::CStr;
-use crate::arg::{AppendAll, IterAppend};
+use dbus::arg::{AppendAll, IterAppend};
 
 #[derive(Debug)]
 pub struct MsgCtx<'a> {
