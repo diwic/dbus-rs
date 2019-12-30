@@ -416,6 +416,13 @@ impl Message {
         Message { msg: ptr }
     }
 
+    /// Sets serial number manually - should not be used in production code
+    ///
+    /// However, this can be very useful in test code that is supposed to handle a method call.
+    /// This way, you can create a method call and handle it without sending it to a real D-Bus instance.
+    pub fn set_serial(&mut self, val: u32) {
+        unsafe { ffi::dbus_message_set_serial(self.msg, val) };
+    }
 }
 
 impl Drop for Message {
@@ -448,12 +455,6 @@ impl fmt::Debug for Message {
         x.field("Args", &args2);
         x.finish()
     }
-}
-
-// For purpose of testing the library only.
-#[cfg(test)]
-pub (crate) fn message_set_serial(m: &mut Message, s: u32) {
-    unsafe { ffi::dbus_message_set_serial(m.msg, s) };
 }
 
 #[cfg(test)]

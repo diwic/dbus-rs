@@ -230,7 +230,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
     /// Builder method that allows setting the Property's signal
     /// behavior when changed.
     ///
-    /// Note: if e is set to const, the property will be read only. 
+    /// Note: if e is set to const, the property will be read only.
     pub fn emits_changed(mut self, e: EmitsChangedSignal) -> Self {
         self.emits = e;
         if self.emits == EmitsChangedSignal::Const { self.rw = Access::Read };
@@ -278,7 +278,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
 
     /// Returns Ok if the property is gettable
     pub fn can_get(&self) -> Result<(), MethodErr> {
-        if self.rw == Access::Write || self.get_cb.is_none() { 
+        if self.rw == Access::Write || self.get_cb.is_none() {
             Err(MethodErr::failed(&format!("Property {} is write only", &self.name)))
         } else { Ok(()) }
     }
@@ -289,7 +289,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
     pub fn get_as_variant(&self, i: &mut arg::IterAppend, pinfo: &PropInfo<M, D>) -> Result<(), MethodErr> {
         let mut r = Ok(());
         i.append_variant(&self.sig, |subi| {
-            r = M::call_getprop(&*self.get_cb.as_ref().unwrap().0, subi, pinfo); 
+            r = M::call_getprop(&*self.get_cb.as_ref().unwrap().0, subi, pinfo);
         });
         r
     }
@@ -510,19 +510,19 @@ fn test_prop_handlers() {
 
     let mut msg = Message::new_method_call("com.example.test", "/test", "org.freedesktop.DBus.Properties", "Get").unwrap()
         .append2("com.example.test", "Value1");
-    crate::message::message_set_serial(&mut msg, 4);
+    msg.set_serial(4);
     let res = tree.handle(&msg).unwrap();
     assert_eq!(res[0].get1(), Some(arg::Variant(5i32)));
 
     let mut msg = Message::new_method_call("com.example.test", "/test", "org.freedesktop.DBus.Properties", "Set").unwrap()
         .append3("com.example.test", "Value1", arg::Variant(3i32));
-    crate::message::message_set_serial(&mut msg, 4);
+    msg.set_serial(4);
     let mut res = tree.handle(&msg).unwrap();
     assert!(res[0].as_result().is_err());
 
     let mut msg = Message::new_method_call("com.example.test", "/test", "org.freedesktop.DBus.Properties", "GetAll").unwrap()
         .append1("com.example.test");
-    crate::message::message_set_serial(&mut msg, 4);
+    msg.set_serial(4);
     let res = tree.handle(&msg).unwrap();
     let d: Dict<&str, Variant<i32>, _> = res[0].get1().unwrap();
     let z2: BTreeMap<_, _> = d.collect();
@@ -531,7 +531,7 @@ fn test_prop_handlers() {
     assert_eq!(z2.get("Mooh"), None);
 
     let mut msg = Message::new_method_call("com.example.test", "/test", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects").unwrap();
-    crate::message::message_set_serial(&mut msg, 4);
+    msg.set_serial(4);
     let res = tree.handle(&msg).unwrap();
     let pdict: arg::Dict<Path, Dict<&str, Dict<&str, Variant<i32>, _>, _>, _> = res[0].get1().unwrap();
     let pmap: BTreeMap<_, _> = pdict.collect();
@@ -550,7 +550,7 @@ fn test_set_prop() {
     use std::cell::{Cell, RefCell};
     use std::collections::BTreeMap;
     use std::rc::Rc;
- 
+
     let changes = Rc::new(Cell::new(0i32));
     let (changes1, changes2) = (changes.clone(), changes.clone());
     let setme = Rc::new(RefCell::new("I have not been set yet!".to_owned()));
@@ -560,7 +560,7 @@ fn test_set_prop() {
     let tree = f.tree(()).add(f.object_path("/example", ()).introspectable()
         .add(f.interface("com.example.dbus.rs", ())
             .add_p(f.property::<i32,_>("changes", ())
-                .on_get(move |i, _| { i.append(changes1.get()); Ok(()) })) 
+                .on_get(move |i, _| { i.append(changes1.get()); Ok(()) }))
             .add_p(f.property::<String,_>("setme", ())
                 .access(Access::ReadWrite)
                 .on_get(move |i, _| { i.append(&*setme1.borrow()); Ok(()) })
@@ -571,25 +571,25 @@ fn test_set_prop() {
                 }))
         )
     );
-    
+
     // Read-only
     let mut msg = Message::new_method_call("com.example.dbus.rs", "/example", "org.freedesktop.DBus.Properties", "Set").unwrap()
         .append3("com.example.dbus.rs", "changes", arg::Variant(5i32));
-    crate::message::message_set_serial(&mut msg, 20);
+    msg.set_serial(20);
     let mut r = tree.handle(&msg).unwrap();
     assert!(r.get_mut(0).unwrap().as_result().is_err());
 
     // Wrong type
     let mut msg = Message::new_method_call("com.example.dbus.rs", "/example", "org.freedesktop.DBus.Properties", "Set").unwrap()
         .append3("com.example.dbus.rs", "setme", arg::Variant(8i32));
-    crate::message::message_set_serial(&mut msg, 30);
+    msg.set_serial(30);
     let mut r = tree.handle(&msg).unwrap();
     assert!(r.get_mut(0).unwrap().as_result().is_err());
 
     // Correct!
     let mut msg = Message::new_method_call("com.example.dbus.rs", "/example", "org.freedesktop.DBus.Properties", "Set").unwrap()
         .append3("com.example.dbus.rs", "setme", arg::Variant("Correct"));
-    crate::message::message_set_serial(&mut msg, 30);
+    msg.set_serial(30);
     let r = tree.handle(&msg).unwrap();
 
     assert_eq!(changes.get(), 1);
@@ -622,7 +622,7 @@ fn test_sync_prop() {
             .add_p(f.property::<u32,_>("syncprop", ())
                 .access(Access::ReadWrite)
                 .emits_changed(EmitsChangedSignal::False)
-                .on_get(move |i,_| { i.append(cget.load(Ordering::SeqCst) as u32); Ok(()) }) 
+                .on_get(move |i,_| { i.append(cget.load(Ordering::SeqCst) as u32); Ok(()) })
                 .on_set(move |i,_| { cset.store(i.get::<u32>().unwrap() as usize, Ordering::SeqCst); Ok(()) })
             )
         )
@@ -634,7 +634,7 @@ fn test_sync_prop() {
     ::std::thread::spawn(move || {
         let mut msg = Message::new_method_call("com.example.syncprop", "/syncprop", "org.freedesktop.DBus.Properties", "Set").unwrap()
             .append3("com.example.syncprop", "syncprop", arg::Variant(5u32));
-         crate::message::message_set_serial(&mut msg, 30);
+         msg.set_serial(30);
          let mut r = tree2.handle(&msg).unwrap();
          assert!(r[0].as_result().is_ok());
     });
@@ -642,7 +642,7 @@ fn test_sync_prop() {
     loop {
         let mut msg = Message::new_method_call("com.example.echoserver", "/syncprop", "org.freedesktop.DBus.Properties", "Get").unwrap()
             .append1("com.example.syncprop").append1("syncprop");
-        crate::message::message_set_serial(&mut msg, 4);
+        msg.set_serial(4);
         let mut r = tree1.handle(&msg).unwrap();
         let r = r[0].as_result().unwrap();
         let z: arg::Variant<u32> = r.get1().unwrap();

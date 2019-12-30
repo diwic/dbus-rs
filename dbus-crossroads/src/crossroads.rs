@@ -229,8 +229,7 @@ mod test {
     }
 
     fn dispatch_helper2<H: Handlers>(cr: &mut Crossroads<H>, mut msg: Message) -> Vec<Message> {
-        todo!();
-        // dbus::message::message_set_serial(&mut msg, 57);
+        msg.set_serial(57);
         let r = RefCell::new(vec!());
         cr.dispatch(&msg, &r).unwrap();
         r.into_inner()
@@ -321,8 +320,7 @@ mod test {
     #[test]
     fn cr_par() {
         fn dispatch_helper(cr: &Crossroads<Par>, mut msg: Message) -> Message {
-            todo!();
-            // dbus::message::message_set_serial(&mut msg, 57);
+            msg.set_serial(57);
             let r = RefCell::new(vec!());
             cr.dispatch_par(&msg, &r).unwrap();
             let mut r = r.into_inner();
