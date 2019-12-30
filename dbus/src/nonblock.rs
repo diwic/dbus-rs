@@ -10,13 +10,18 @@ use crate::arg::{AppendAll, ReadAll, IterAppend};
 use crate::message::MatchRule;
 
 use std::sync::{Arc, Mutex};
-use std::{future, task, pin, mem};
+use std::{task, pin, mem};
 use std::cell::RefCell;
 use std::time::Duration;
-use crate::filters::{Filters, Replies};
+use crate::filters::Filters;
+use std::future::Future;
+use std::time::Instant;
+use std::collections::HashMap;
 
+/*
 mod generated_org_freedesktop_notifications;
 mod generated_org_freedesktop_dbus;
+*/
 
 /// This module contains some standard interfaces and an easy way to call them.
 ///
@@ -26,9 +31,9 @@ mod generated_org_freedesktop_dbus;
 pub mod stdintf {
     #[allow(missing_docs)]
     pub mod org_freedesktop_dbus {
-        pub use super::super::generated_org_freedesktop_notifications::*;
-        #[allow(unused_imports)]
-        pub(crate) use super::super::generated_org_freedesktop_dbus::*;
+        // pub use super::super::generated_org_freedesktop_notifications::*;
+        // #[allow(unused_imports)]
+        // pub(crate) use super::super::generated_org_freedesktop_dbus::*;
 
         #[derive(Debug, PartialEq, Eq, Copy, Clone)]
         pub enum RequestNameReply {
@@ -48,11 +53,15 @@ pub mod stdintf {
     }
 }
 
+
+type Replies<F> = HashMap<Token, F>;
+
 /// A connection to D-Bus, thread local + async version
 pub struct LocalConnection {
     channel: Channel,
     filters: RefCell<Filters<LocalFilterCb>>,
     replies: RefCell<Replies<LocalRepliesCb>>,
+    timeout_maker: Option<TimeoutMakerCb>,
 }
 
 /// A connection to D-Bus, async version, which is Send but not Sync.
@@ -60,6 +69,7 @@ pub struct Connection {
     channel: Channel,
     filters: RefCell<Filters<FilterCb>>,
     replies: RefCell<Replies<RepliesCb>>,
+    timeout_maker: Option<TimeoutMakerCb>,
 }
 
 /// A connection to D-Bus, Send + Sync + async version
@@ -67,6 +77,7 @@ pub struct SyncConnection {
     channel: Channel,
     filters: Mutex<Filters<SyncFilterCb>>,
     replies: Mutex<Replies<SyncRepliesCb>>,
+    timeout_maker: Option<TimeoutMakerCb>,
 }
 
 
@@ -85,6 +96,7 @@ impl From<Channel> for $c {
             channel: x,
             replies: Default::default(),
             filters: Default::default(),
+            timeout_maker: None,
         }
     }
 }
@@ -118,6 +130,10 @@ impl NonblockReply for $c {
     }
     fn cancel_reply(&self, id: Token) -> Option<Self::F> { self.replies_mut().remove(&id) }
     fn make_f<G: FnOnce(Message, &Self) + Send + 'static>(g: G) -> Self::F { Box::new(g) }
+    fn timeout_maker(&self) -> Option<TimeoutMakerCb> { self.timeout_maker }
+    fn set_timeout_maker(&mut self, f: Option<TimeoutMakerCb>) -> Option<TimeoutMakerCb> {
+        mem::replace(&mut self.timeout_maker, f)
+    }
 }
 
 
@@ -156,8 +172,11 @@ impl $c {
             if replace_existing { 2 } else { 0 } +
             if do_not_queue { 4 } else { 0 };
         let proxy = Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", Duration::from_secs(10), self);
-        use stdintf::org_freedesktop_dbus::DBus;
-        let r = proxy.request_name(&name.into(), flags).await?;
+/*        use stdintf::org_freedesktop_dbus::DBus;
+        let r = proxy.request_name(&name.into(), flags).await?; */
+        let n: &str = &name.into();
+        let (r,): (u32,) = proxy.method_call("org.freedesktop.DBus", "RequestName", (n, flags, )).await?;
+
         use stdintf::org_freedesktop_dbus::RequestNameReply::*;
         let all = [PrimaryOwner, InQueue, Exists, AlreadyOwner];
         all.iter().find(|x| **x as u32 == r).copied().ok_or_else(||
@@ -168,8 +187,11 @@ impl $c {
     /// Release a previously requested name on the D-Bus.
     pub async fn release_name<'a, N: Into<BusName<'a>>>(&self, name: N) -> Result<stdintf::org_freedesktop_dbus::ReleaseNameReply, Error> {
         let proxy = Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", Duration::from_secs(10), self);
-        use stdintf::org_freedesktop_dbus::DBus;
-        let r = proxy.release_name(&name.into()).await?;
+/*        use stdintf::org_freedesktop_dbus::DBus;
+        let r = proxy.release_name(&name.into()).await?; */
+        let n: &str = &name.into();
+        let (r,): (u32,) = proxy.method_call("org.freedesktop.DBus", "ReleaseName", (n, )).await?;
+
         use stdintf::org_freedesktop_dbus::ReleaseNameReply::*;
         let all = [Released, NonExistent, NotOwner];
         all.iter().find(|x| **x as u32 == r).copied().ok_or_else(||
@@ -201,6 +223,9 @@ impl SyncConnection {
     fn replies_mut(&self) -> std::sync::MutexGuard<Replies<SyncRepliesCb>> { self.replies.lock().unwrap() }
 }
 
+/// Internal callback for the executor when a timeout needs to be made.
+pub type TimeoutMakerCb = fn(timeout: Instant) -> pin::Pin<Box<dyn Future<Output=()> + Send + Sync + 'static>>;
+
 /// Internal helper trait for async method replies.
 pub trait NonblockReply {
     /// Callback type
@@ -211,6 +236,10 @@ pub trait NonblockReply {
     fn cancel_reply(&self, id: Token) -> Option<Self::F>;
     /// Internal helper function that creates a callback.
     fn make_f<G: FnOnce(Message, &Self) + Send + 'static>(g: G) -> Self::F where Self: Sized;
+    /// Set the internal timeout maker
+    fn set_timeout_maker(&mut self, f: Option<TimeoutMakerCb>) -> Option<TimeoutMakerCb>;
+    /// Get the internal timeout maker
+    fn timeout_maker(&self) -> Option<TimeoutMakerCb>;
 }
 
 
@@ -263,22 +292,33 @@ where
 {
 
     /// Make a method call using typed input argument, returns a future that resolves to the typed output arguments.
-    pub fn method_call<'i, 'm, R: ReadAll + 'static, A: AppendAll, I: Into<Interface<'i>>, M: Into<Member<'m>>>(&self, i: I, m: M, args: A)
-    -> MethodReply<R> {
+    pub fn method_call<'i, 'm, R: ReadAll + 'static + Send, A: AppendAll, I: Into<Interface<'i>>, M: Into<Member<'m>>>(&self, i: I, m: M, args: A)
+    -> impl Future<Output=Result<R, Error>> + Send {
         let mut msg = Message::method_call(&self.destination, &self.path, &i.into(), &m.into());
         args.append(&mut IterAppend::new(&mut msg));
 
+        use futures::future;
+
         let mr = Arc::new(Mutex::new(MRInner::Neither));
-        let mr2 = mr.clone();
+        let mr2 = MROuter(mr.clone());
         let f = T::make_f(move |msg: Message, _: &T| {
-            let mut inner = mr2.lock().unwrap();
+            let mut inner = mr.lock().unwrap();
             let old = mem::replace(&mut *inner, MRInner::Ready(Ok(msg)));
             if let MRInner::Pending(waker) = old { waker.wake() }
         });
-        if let Err(_) = self.connection.send_with_reply(msg, f) {
-            *mr.lock().unwrap() = MRInner::Ready(Err(Error::new_failed("Failed to send message")));
+
+        let timeout = Instant::now() + self.timeout;
+        let token = self.connection.send_with_reply(msg, f);
+        let timeoutfn = self.connection.timeout_maker();
+        async move {
+            if token.is_err() { return Err(Error::new_failed("Failed to send message")) };
+            let timeout = if let Some(tfn) = timeoutfn { tfn(timeout) } else { Box::pin(future::pending()) };
+            match future::select(mr2, timeout).await {
+                future::Either::Left((Ok(msg), _)) => msg.read_all(),
+                future::Either::Left((Err(e), _)) => Err(e),
+                future::Either::Right(_) => Err(Error::new_custom("org.freedesktop.DBus.Error.Timeout", "Timeout waiting for reply")),
+            }
         }
-        MethodReply(mr, Some(Box::new(|msg: Message| { msg.read_all() })))
     }
 }
 
@@ -288,23 +328,37 @@ enum MRInner {
     Neither,
 }
 
-/// Future method reply, used while waiting for a method call reply from the server.
-pub struct MethodReply<T>(Arc<Mutex<MRInner>>, Option<Box<dyn FnOnce(Message) -> Result<T, Error> + Send + Sync + 'static>>);
+struct MROuter(Arc<Mutex<MRInner>>);
 
-impl<T> future::Future for MethodReply<T> {
+impl Future for MROuter {
+    type Output = Result<Message, Error>;
+    fn poll(self: pin::Pin<&mut Self>, ctx: &mut task::Context) -> task::Poll<Self::Output> {
+        let mut inner = self.0.lock().unwrap();
+        let r = mem::replace(&mut *inner, MRInner::Neither);
+        if let MRInner::Ready(r) = r { task::Poll::Ready(r) }
+        else {
+            mem::replace(&mut *inner, MRInner::Pending(ctx.waker().clone()));
+            return task::Poll::Pending
+        }
+    }
+}
+
+/*
+/// Future method reply, used while waiting for a method call reply from the server.
+pub struct MethodReply<T>(pin::Pin<Box<dyn Future<Output=Result<Message, Error>> + Send + Sync + 'static>>,
+    Option<Box<dyn FnOnce(Message) -> Result<T, Error> + Send + Sync + 'static>>);
+
+impl<T> Future for MethodReply<T> {
     type Output = Result<T, Error>;
     fn poll(mut self: pin::Pin<&mut Self>, ctx: &mut task::Context) -> task::Poll<Result<T, Error>> {
-        let r = {
-            let mut inner = self.0.lock().unwrap();
-            let r = mem::replace(&mut *inner, MRInner::Neither);
-            if let MRInner::Ready(r) = r { r }
-            else {
-                mem::replace(&mut *inner, MRInner::Pending(ctx.waker().clone()));
-                return task::Poll::Pending
+        match self.0.poll(ctx) {
+            task::Poll::Pending => task::Poll::Pending,
+            task::Poll::Ready(Err(e)) => task::Poll::Ready(Err(e)),
+            task::Poll::Ready(Ok(r)) => {
+                let readfn = self.1.take().expect("Polled MethodReply after Ready");
+                task::Poll::Ready(readfn(r))
             }
-        };
-        let readfn = self.1.take().expect("Polled MethodReply after Ready");
-        task::Poll::Ready(r.and_then(readfn))
+        }
     }
 }
 
@@ -318,8 +372,7 @@ impl<T: 'static> MethodReply<T> {
         }))
     }
 }
-
-
+*/
 #[test]
 fn test_conn_send_sync() {
     fn is_send<T: Send>(_: &T) {}

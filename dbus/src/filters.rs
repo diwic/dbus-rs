@@ -1,10 +1,7 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use crate::message::MatchRule;
 use crate::Message;
 use crate::channel::Token;
-
-
-pub type Replies<F> = HashMap<Token, F>;
 
 pub struct Filters<F> {
     list: BTreeMap<Token, (MatchRule<'static>, F)>,
@@ -13,7 +10,10 @@ pub struct Filters<F> {
 
 
 impl<F> Default for Filters<F> {
-    fn default() -> Self { Filters { list: BTreeMap::new(), nextid: Token(1), }}
+    fn default() -> Self { Filters {
+        list: BTreeMap::new(),
+        nextid: Token(1),
+    }}
 }
 
 impl<F> Filters<F> {

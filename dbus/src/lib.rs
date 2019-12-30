@@ -35,6 +35,7 @@ mod filters;
 
 pub mod blocking;
 
+#[cfg(feature = "futures")]
 pub mod nonblock;
 
 pub mod strings;

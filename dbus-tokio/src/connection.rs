@@ -1,9 +1,10 @@
 use dbus::channel::{Channel, BusType};
-use dbus::nonblock::{LocalConnection, SyncConnection, Connection, Process};
+use dbus::nonblock::{LocalConnection, SyncConnection, Connection, Process, NonblockReply};
 use dbus::Error;
 
 use std::{future, task, pin};
 use std::sync::Arc;
+use std::time::Instant;
 
 use tokio::io::Registration;
 
@@ -60,14 +61,20 @@ impl<C: AsRef<Channel> + Process> future::Future for IOResource<C> {
     type Output = Box<dyn std::error::Error + Send + Sync>;
 }
 
+fn make_timeout(timeout: Instant) -> pin::Pin<Box<dyn future::Future<Output=()> + Send + Sync + 'static>> {
+    let t = tokio::time::delay_until(timeout.into());
+    Box::pin(t)
+}
 
 /// Generic connection creator, you might want to use e g `new_session_local`, `new_system_sync` etc for convenience.
-pub fn new<C: From<Channel>>(b: BusType) -> Result<(IOResource<C>, Arc<C>), Error> {
+pub fn new<C: From<Channel> + NonblockReply>(b: BusType) -> Result<(IOResource<C>, Arc<C>), Error> {
     let mut channel = Channel::get_private(b)?;
     channel.set_watch_enabled(true);
 
-    let conn = Arc::new(C::from(channel));
+    let mut conn = C::from(channel);
+    conn.set_timeout_maker(Some(make_timeout));
 
+    let conn = Arc::new(conn);
     let res = IOResource { connection: conn.clone(), registration: None };
     Ok((res, conn))
 }
@@ -87,6 +94,7 @@ fn method_call() {
     let mut rt = tokio::runtime::Builder::new()
         .basic_scheduler()
         .enable_io()
+        .enable_time()
         .build()
         .unwrap();
 
