@@ -4,7 +4,7 @@ use crate::strings::{BusName, Path, Interface, Member};
 #[derive(Clone, Debug, Default)]
 /// A "match rule", that can match Messages on its headers.
 ///
-/// A field set to "None" means no filter for that header, 
+/// A field set to "None" means no filter for that header,
 /// a field set to "Some(_)" must match exactly.
 pub struct MatchRule<'a> {
     /// Match on message type (you typically want to do this)
@@ -37,8 +37,6 @@ fn msg_type_str(m: MessageType) -> &'static str {
 
 impl<'a> MatchRule<'a> {
     /// Make a string which you can use in the call to "add_match".
-    ///
-    /// Panics: if msg_type is set to Some(MessageType::Invalid)
     pub fn match_str(&self) -> String {
         let mut v = vec!();
         if let Some(x) = self.msg_type { v.push(("type", msg_type_str(x))) };
@@ -48,7 +46,7 @@ impl<'a> MatchRule<'a> {
         if let Some(ref x) = self.interface { v.push(("interface", &x)) };
         if let Some(ref x) = self.member { v.push(("member", &x)) };
 
-        // For now we don't need to worry about internal quotes in strings as those are not valid names. 
+        // For now we don't need to worry about internal quotes in strings as those are not valid names.
         // If we start matching against arguments, we need to worry.
         let v: Vec<_> = v.into_iter().map(|(k, v)| format!("{}='{}'", k, v)).collect();
         v.join(",")
@@ -85,6 +83,13 @@ impl<'a> MatchRule<'a> {
     /// Create a new struct which matches every message.
     pub fn new() -> Self { Default::default() }
 
+    /// Create a new struct which matches every incoming method call message.
+    pub fn new_method_call() -> Self {
+        let mut m = Self::new();
+        m.msg_type = Some(MessageType::MethodCall);
+        m
+    }
+
     /// Create a new struct which matches signals on the interface and member name.
     pub fn new_signal<I: Into<Interface<'a>>, N: Into<Member<'a>>>(intf: I, name: N) -> Self {
         let mut m = Self::new();
@@ -93,7 +98,6 @@ impl<'a> MatchRule<'a> {
         m.member = Some(name.into());
         m
     }
-
 
     /// Returns a clone with no borrowed references
     pub fn static_clone(&self) -> MatchRule<'static> {
@@ -108,4 +112,4 @@ impl<'a> MatchRule<'a> {
             _more_fields_may_come: (),
         }
     }
-} 
+}

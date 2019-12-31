@@ -87,7 +87,7 @@ pub fn new_session() -> Result<(IOResource<Connection>, Arc<Connection>), Error>
 pub fn new_system() -> Result<(IOResource<Connection>, Arc<Connection>), Error> { new(BusType::System) }
 
 #[test]
-fn method_call() {
+fn method_call_local() {
     use tokio::task;
     use std::time::Duration;
 
@@ -109,4 +109,22 @@ fn method_call() {
     let (has_owner,): (bool,) = local.block_on(&mut rt, fut).unwrap();
 
     assert_eq!(has_owner, false);
+}
+
+#[tokio::test]
+async fn timeout() {
+    use std::time::Duration;
+
+    let (ress, conns) = new_session_sync().unwrap();
+    tokio::spawn(async move { panic!(ress.await);});
+    conns.request_name("com.example.dbusrs.tokiotest", true, true, true).await.unwrap();
+    use dbus::channel::MatchingReceiver;
+    conns.start_receive(dbus::message::MatchRule::new_method_call(), Box::new(|_,_| true));
+
+    let (res, conn) = new_session_sync().unwrap();
+    tokio::spawn(async move { panic!(res.await);});
+    let proxy = dbus::nonblock::Proxy::new("com.example.dbusrs.tokiotest", "/", Duration::from_millis(150), conn);
+    let e: Result<(), _> = proxy.method_call("com.example.dbusrs.tokiotest", "Whatever", ()).await;
+    let e = e.unwrap_err();
+    assert_eq!(e.name(), Some("org.freedesktop.DBus.Error.Timeout"));
 }

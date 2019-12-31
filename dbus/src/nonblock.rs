@@ -356,7 +356,7 @@ pub struct MethodReply<T>(pin::Pin<Box<dyn Future<Output=Result<T, Error>> + Sen
 
 impl<T> MethodReply<T> {
     /// Creates a new method reply from a future.
-    pub fn new<Fut: Future<Output=Result<T, Error>> + Send + 'static>(fut: Fut) -> Self {
+    fn new<Fut: Future<Output=Result<T, Error>> + Send + 'static>(fut: Fut) -> Self {
         MethodReply(Box::pin(fut))
     }
 }
