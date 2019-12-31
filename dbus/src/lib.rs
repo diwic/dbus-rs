@@ -6,12 +6,14 @@
 //! system-wide.
 //!
 //! In addition to the API documentation, which you're currently reading, you might want to
-//! look in the examples directory, which contains many examples and an argument guide.
-//! README.md also contain a few quick "getting started" examples.
+//! look in the examples directory, which contains many examples and some additional documents.
+//! README.md also contains a few quick "getting started" examples (as well as information about
+//! the `futures` and `no-string-validation` features).
 //!
-//! In addition to this crate, there are two companion crates, dbus-codegen for generating Rust
-//! code from D-Bus introspection data, and dbus-tokio for integrating D-Bus with [Tokio](http://tokio.rs).
-//! However, at the time of this writing, these are far less mature than this crate.
+//! In addition to this crate, there are some companion crates:
+//!  * dbus-tokio for integrating D-Bus with [Tokio](http://tokio.rs)
+//!  * dbus-codegen for generating code from D-Bus introspection data
+//!  * libdbus-sys contains the raw bindings to the C libdbus library.
 
 #![warn(missing_docs)]
 

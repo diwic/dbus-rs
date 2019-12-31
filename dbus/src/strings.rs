@@ -187,7 +187,7 @@ pub struct BusName<'a>(Cow<'a, CStr>);
 cstring_wrapper!(BusName, dbus_validate_bus_name);
 
 /// A wrapper around a string that is guaranteed to be
-/// a valid D-Bus bus name.
+/// a valid D-Bus error name.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct ErrorName<'a>(Cow<'a, CStr>);
 

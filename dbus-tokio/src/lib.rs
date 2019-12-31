@@ -1,12 +1,11 @@
+#![warn(missing_docs)]
 //! Tokio integration for dbus
 //!
-//! What's currently working is:
+//! This crate contains code for interfacing `dbus` with `tokio`, enabling async/non-blocking operation.
 //!
-//!  * Client: Make method calls and wait asynchronously for them to be replied to - see `AConnection::method_call`
-//!  * Get a stream of incoming messages (so you can listen to signals etc) - see `AConnection::messages`
-//!  * Server: Make a tree handle that stream of incoming messages - see `tree::ATreeServer`
-//!  * Server: Add asynchronous methods to the tree - in case you cannot reply right away,
-//!    you can return a future that will reply when that future resolves - see `tree::AFactory::amethod`
+//! This crate contains only the connection components, most of the async code is in the `dbus::nonblock`
+//! module, where you can find additional information.
 //!
-//! For examples to get you started, see the examples directory and the Readme.
+//! There are some examples in the examples directory to help you get started.
+
 pub mod connection;

@@ -1,5 +1,42 @@
+//! Contains connection components.
+//!
+//! # Example
+//!
+//! ```
+//! use dbus_tokio::connection;
+//! use dbus::nonblock::Proxy;
+//! use std::time::Duration;
+//!
+//! #[tokio::main]
+//! pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!
+//!     // Connect to the D-Bus session bus (this is blocking, unfortunately).
+//!     let (resource, conn) = connection::new_session_sync()?;
+//!
+//!     // The resource is a task that should be spawned onto a tokio compatible
+//!     // reactor ASAP. If the resource ever finishes, you lost connection to D-Bus.
+//!     tokio::spawn(async {
+//!         let err = resource.await;
+//!         panic!("Lost connection to D-Bus: {}", err);
+//!     });
+//!
+//!     // Make a "proxy object" that contains the destination and path of our method call.
+//!     let proxy = Proxy::new("org.freedesktop.DBus", "/", Duration::from_secs(5), conn);
+//!
+//!     // Call the method and await a response. See the argument guide for details about
+//!     // how to send and receive arguments to the method.
+//!     let (names,): (Vec<String>,) = proxy.method_call("org.freedesktop.DBus", "ListNames", ()).await?;
+//!
+//!     // Print all the names.
+//!     for name in names { println!("{}", name); }
+//!
+//!     Ok(())
+//! }
+//! ```
+
+
 use dbus::channel::{Channel, BusType};
-use dbus::nonblock::{LocalConnection, SyncConnection, Connection, Process, NonblockReply};
+use dbus::nonblock::{LocalConnection, SyncConnection, Process, NonblockReply};
 use dbus::Error;
 
 use std::{future, task, pin};
@@ -79,12 +116,30 @@ pub fn new<C: From<Channel> + NonblockReply>(b: BusType) -> Result<(IOResource<C
     Ok((res, conn))
 }
 
+/// Creates a connection to the session bus, to use with Tokio's basic (single-thread) scheduler.
+///
+/// Note: This function blocks until the connection is set up.
 pub fn new_session_local() -> Result<(IOResource<LocalConnection>, Arc<LocalConnection>), Error> { new(BusType::Session) }
+
+/// Creates a connection to the system bus, to use with Tokio's basic (single-thread) scheduler.
+///
+/// Note: This function blocks until the connection is set up.
 pub fn new_system_local() -> Result<(IOResource<LocalConnection>, Arc<LocalConnection>), Error> { new(BusType::System) }
+
+/// Creates a connection to the session bus, to use with Tokio's default (multi-thread) scheduler.
+///
+/// Note: This function blocks until the connection is set up.
 pub fn new_session_sync() -> Result<(IOResource<SyncConnection>, Arc<SyncConnection>), Error> { new(BusType::Session) }
+
+/// Creates a connection to the system bus, to use with Tokio's default (multi-thread) scheduler.
+///
+/// Note: This function blocks until the connection is set up.
 pub fn new_system_sync() -> Result<(IOResource<SyncConnection>, Arc<SyncConnection>), Error> { new(BusType::System) }
+
+/* Let's skip these for now, not sure if they are useful?
 pub fn new_session() -> Result<(IOResource<Connection>, Arc<Connection>), Error> { new(BusType::Session) }
 pub fn new_system() -> Result<(IOResource<Connection>, Arc<Connection>), Error> { new(BusType::System) }
+*/
 
 #[test]
 fn method_call_local() {

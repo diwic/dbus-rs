@@ -1,7 +1,17 @@
 //! Async version of connection.
 //!
+//! This module requires the `futures` feature to be enabled.
+//!
+//! Current status:
+//!  * Basic client functionality is up and running, i e, you can make method calls.
+//!  * Receiving messages (e g signals) is possible, but expect a simpler API later.
+//!  * As for server side code, you can use the `tree` module with this connection, but it does not
+//!    support async method handlers.
+//!
 //! You're probably going to need a companion crate - dbus-tokio - for this connection to make sense.
-//! (Although you can also just call read_write and process_all at regular intervals.)
+//! (Although you can also just call read_write and process_all at regular intervals, and possibly
+//! set a timeout handler.)
+
 
 use crate::{Error, Message};
 use crate::channel::{MatchingReceiver, Channel, Sender, Token};
