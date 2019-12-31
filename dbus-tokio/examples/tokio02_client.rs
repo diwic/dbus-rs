@@ -3,7 +3,7 @@ use dbus::nonblock;
 use std::time::Duration;
 use dbus::message::MatchRule;
 use dbus::channel::MatchingReceiver;
-use futures_util::stream::StreamExt;
+use futures::StreamExt;
 
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {

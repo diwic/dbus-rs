@@ -1,7 +1,7 @@
 [package]
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 name = "dbus-tokio"
-version = "0.4.0"
+version = "0.5.0"
 
 description = "Makes it possible to use Tokio with D-Bus, which is a bus commonly used on Linux for inter-process communication."
 repository = "https://github.com/diwic/dbus-rs"
@@ -13,11 +13,12 @@ edition = "2018"
 readme = "README.md"
 
 [dependencies]
-dbus = { path = "../dbus", version = "0.7.1", features=["futures"] }
-mio = "0.6.14"
+dbus = { path = "../dbus", version = "0.8", features=["futures"] }
+mio = "0.6.21"
+tokio = {version = "0.2.4", features=["time", "macros", "io-driver", "rt-core", "rt-util", "rt-threaded", "stream"]}
+
+[dev-dependencies]
 futures = "0.3.1"
-futures-util = "0.3.1"
-tokio = {version = "0.2.4", features=["full"]}
 
 [badges]
 is-it-maintained-open-issues = { repository = "diwic/dbus-rs" }

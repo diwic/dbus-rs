@@ -12,7 +12,7 @@ build = "build.rs"
 path = "src/lib.rs"
 
 [dependencies]
-dbus = { path = "../dbus", version = "0.7", features=["futures"] }
+dbus = { path = "../dbus", version = "0.8", features=["futures"] }
 
 [build-dependencies]
 dbus-codegen = { path = "../dbus-codegen" }
