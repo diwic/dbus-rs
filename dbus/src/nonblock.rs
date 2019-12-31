@@ -18,10 +18,10 @@ use std::future::Future;
 use std::time::Instant;
 use std::collections::HashMap;
 
-/*
+
 mod generated_org_freedesktop_notifications;
 mod generated_org_freedesktop_dbus;
-*/
+
 
 /// This module contains some standard interfaces and an easy way to call them.
 ///
@@ -31,9 +31,9 @@ mod generated_org_freedesktop_dbus;
 pub mod stdintf {
     #[allow(missing_docs)]
     pub mod org_freedesktop_dbus {
-        // pub use super::super::generated_org_freedesktop_notifications::*;
-        // #[allow(unused_imports)]
-        // pub(crate) use super::super::generated_org_freedesktop_dbus::*;
+        pub use super::super::generated_org_freedesktop_notifications::*;
+        #[allow(unused_imports)]
+        pub(crate) use super::super::generated_org_freedesktop_dbus::*;
 
         #[derive(Debug, PartialEq, Eq, Copy, Clone)]
         pub enum RequestNameReply {
@@ -172,11 +172,8 @@ impl $c {
             if replace_existing { 2 } else { 0 } +
             if do_not_queue { 4 } else { 0 };
         let proxy = Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", Duration::from_secs(10), self);
-/*        use stdintf::org_freedesktop_dbus::DBus;
-        let r = proxy.request_name(&name.into(), flags).await?; */
-        let n: &str = &name.into();
-        let (r,): (u32,) = proxy.method_call("org.freedesktop.DBus", "RequestName", (n, flags, )).await?;
-
+        use stdintf::org_freedesktop_dbus::DBus;
+        let r = proxy.request_name(&name.into(), flags).await?;
         use stdintf::org_freedesktop_dbus::RequestNameReply::*;
         let all = [PrimaryOwner, InQueue, Exists, AlreadyOwner];
         all.iter().find(|x| **x as u32 == r).copied().ok_or_else(||
@@ -187,11 +184,8 @@ impl $c {
     /// Release a previously requested name on the D-Bus.
     pub async fn release_name<'a, N: Into<BusName<'a>>>(&self, name: N) -> Result<stdintf::org_freedesktop_dbus::ReleaseNameReply, Error> {
         let proxy = Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", Duration::from_secs(10), self);
-/*        use stdintf::org_freedesktop_dbus::DBus;
-        let r = proxy.release_name(&name.into()).await?; */
-        let n: &str = &name.into();
-        let (r,): (u32,) = proxy.method_call("org.freedesktop.DBus", "ReleaseName", (n, )).await?;
-
+        use stdintf::org_freedesktop_dbus::DBus;
+        let r = proxy.release_name(&name.into()).await?;
         use stdintf::org_freedesktop_dbus::ReleaseNameReply::*;
         let all = [Released, NonExistent, NotOwner];
         all.iter().find(|x| **x as u32 == r).copied().ok_or_else(||
@@ -285,22 +279,33 @@ impl<'a, C> Proxy<'a, C> {
     }
 }
 
+struct MRAwait {
+    mrouter: MROuter,
+    token: Result<Token, ()>,
+    timeout: Instant,
+    timeoutfn: Option<TimeoutMakerCb>
+}
+
+async fn method_call_await(mra: MRAwait) -> Result<Message, Error> {
+    use futures::future;
+    let MRAwait { mrouter, token, timeout, timeoutfn } = mra;
+    if token.is_err() { return Err(Error::new_failed("Failed to send message")) };
+    let timeout = if let Some(tfn) = timeoutfn { tfn(timeout) } else { Box::pin(future::pending()) };
+    match future::select(mrouter, timeout).await {
+        future::Either::Left((r, _)) => r,
+        future::Either::Right(_) => Err(Error::new_custom("org.freedesktop.DBus.Error.Timeout", "Timeout waiting for reply")),
+    }
+}
+
 impl<'a, T, C> Proxy<'a, C>
 where
     T: NonblockReply,
     C: std::ops::Deref<Target=T>
 {
 
-    /// Make a method call using typed input argument, returns a future that resolves to the typed output arguments.
-    pub fn method_call<'i, 'm, R: ReadAll + 'static + Send, A: AppendAll, I: Into<Interface<'i>>, M: Into<Member<'m>>>(&self, i: I, m: M, args: A)
-    -> impl Future<Output=Result<R, Error>> + Send {
-        let mut msg = Message::method_call(&self.destination, &self.path, &i.into(), &m.into());
-        args.append(&mut IterAppend::new(&mut msg));
-
-        use futures::future;
-
+    fn method_call_setup(&self, msg: Message) -> MRAwait {
         let mr = Arc::new(Mutex::new(MRInner::Neither));
-        let mr2 = MROuter(mr.clone());
+        let mrouter = MROuter(mr.clone());
         let f = T::make_f(move |msg: Message, _: &T| {
             let mut inner = mr.lock().unwrap();
             let old = mem::replace(&mut *inner, MRInner::Ready(Ok(msg)));
@@ -310,15 +315,18 @@ where
         let timeout = Instant::now() + self.timeout;
         let token = self.connection.send_with_reply(msg, f);
         let timeoutfn = self.connection.timeout_maker();
-        async move {
-            if token.is_err() { return Err(Error::new_failed("Failed to send message")) };
-            let timeout = if let Some(tfn) = timeoutfn { tfn(timeout) } else { Box::pin(future::pending()) };
-            match future::select(mr2, timeout).await {
-                future::Either::Left((Ok(msg), _)) => msg.read_all(),
-                future::Either::Left((Err(e), _)) => Err(e),
-                future::Either::Right(_) => Err(Error::new_custom("org.freedesktop.DBus.Error.Timeout", "Timeout waiting for reply")),
-            }
-        }
+        MRAwait { mrouter, token, timeout, timeoutfn }
+    }
+
+    /// Make a method call using typed input argument, returns a future that resolves to the typed output arguments.
+    pub fn method_call<'i, 'm, R: ReadAll + 'static, A: AppendAll, I: Into<Interface<'i>>, M: Into<Member<'m>>>(&self, i: I, m: M, args: A)
+    -> MethodReply<R> {
+        let mut msg = Message::method_call(&self.destination, &self.path, &i.into(), &m.into());
+        args.append(&mut IterAppend::new(&mut msg));
+        let mra = self.method_call_setup(msg);
+        let r = method_call_await(mra);
+        let r = futures::FutureExt::map(r, |r| -> Result<R, Error> { r.and_then(|rmsg| rmsg.read_all()) } );
+        MethodReply::new(r)
     }
 }
 
@@ -343,36 +351,33 @@ impl Future for MROuter {
     }
 }
 
-/*
 /// Future method reply, used while waiting for a method call reply from the server.
-pub struct MethodReply<T>(pin::Pin<Box<dyn Future<Output=Result<Message, Error>> + Send + Sync + 'static>>,
-    Option<Box<dyn FnOnce(Message) -> Result<T, Error> + Send + Sync + 'static>>);
+pub struct MethodReply<T>(pin::Pin<Box<dyn Future<Output=Result<T, Error>> + Send + 'static>>);
+
+impl<T> MethodReply<T> {
+    /// Creates a new method reply from a future.
+    pub fn new<Fut: Future<Output=Result<T, Error>> + Send + 'static>(fut: Fut) -> Self {
+        MethodReply(Box::pin(fut))
+    }
+}
 
 impl<T> Future for MethodReply<T> {
     type Output = Result<T, Error>;
     fn poll(mut self: pin::Pin<&mut Self>, ctx: &mut task::Context) -> task::Poll<Result<T, Error>> {
-        match self.0.poll(ctx) {
-            task::Poll::Pending => task::Poll::Pending,
-            task::Poll::Ready(Err(e)) => task::Poll::Ready(Err(e)),
-            task::Poll::Ready(Ok(r)) => {
-                let readfn = self.1.take().expect("Polled MethodReply after Ready");
-                task::Poll::Ready(readfn(r))
-            }
-        }
+        self.0.as_mut().poll(ctx)
     }
 }
 
 impl<T: 'static> MethodReply<T> {
     /// Convenience combinator in case you want to post-process the result after reading it
     pub fn and_then<T2>(self, f: impl FnOnce(T) -> Result<T2, Error> + Send + Sync + 'static) -> MethodReply<T2> {
-        let MethodReply(inner, first) = self;
-        MethodReply(inner, Some({
-            let first = first.unwrap();
-            Box::new(|r| first(r).and_then(f))
+        MethodReply(Box::pin(async move {
+            let x = self.0.await?;
+            f(x)
         }))
     }
 }
-*/
+
 #[test]
 fn test_conn_send_sync() {
     fn is_send<T: Send>(_: &T) {}
