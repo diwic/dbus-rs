@@ -25,8 +25,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mr = MatchRule::new_signal("com.example.dbustest", "HelloHappened");
 
     // Call the dbus server to register our interest in the signal.
-    let dbus_server = nonblock::Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", Duration::from_secs(2), conn.clone());
-    let _: () = dbus_server.method_call("org.freedesktop.DBus", "AddMatch", (mr.match_str(),)).await?;
+    conn.add_match_no_cb(&mr.match_str()).await?;
 
     // This is our own method handler that will be called every time we receive a matching signal.
     conn.start_receive(mr, Box::new(|msg, _| {
