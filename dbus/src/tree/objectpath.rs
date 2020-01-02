@@ -177,7 +177,7 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
         prop.can_get()?;
         let mut mret = m.msg.method_return();
         {
-            let mut iter = arg::IterAppend::new(&mut mret); 
+            let mut iter = arg::IterAppend::new(&mut mret);
             let pinfo = m.to_prop_info(iface, prop);
             prop.get_as_variant(&mut iter, &pinfo)?;
         }
@@ -186,8 +186,8 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
 
     fn prop_get_all(&self, m: &MethodInfo<M, D>) -> MethodResult {
         let iface = self.get_iface(m.msg.read1()?)?;
-        let mut mret = m.msg.method_return(); 
-        prop_append_dict(&mut arg::IterAppend::new(&mut mret), 
+        let mut mret = m.msg.method_return();
+        prop_append_dict(&mut arg::IterAppend::new(&mut mret),
             iface.properties.values().map(|v| &**v), m)?;
         Ok(vec!(mret))
     }
@@ -252,7 +252,7 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
 
 }
 
-impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> 
+impl<M: MethodType<D>, D: DataType> ObjectPath<M, D>
 where <D as DataType>::Interface: Default, <D as DataType>::Method: Default
 {
     /// Adds introspection support for this object path.
@@ -272,7 +272,7 @@ where <D as DataType>::Interface: Default, <D as DataType>::Method: Default
         self
     }
 
-    /// Builder function that sets what interface should be dispatched on an incoming 
+    /// Builder function that sets what interface should be dispatched on an incoming
     /// method call without interface.
     pub fn default_interface(mut self, i: IfaceName<'static>) -> Self {
         self.default_iface = Some(i);
@@ -435,14 +435,49 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
 }
 
 impl<M: MethodType<D> + 'static, D: DataType + 'static> Tree<M, D> {
+    /// Connects a SyncConnection with a Tree so that incoming method calls are handled.
+    ///
+    /// The tree needs to be of type MTSync.
+    pub fn start_receive_sync<C>(self, connection: &C)
+    where
+        C: channel::MatchingReceiver<F=Box<dyn FnMut(Message, &C) -> bool + Send + Sync>> + channel::Sender,
+        D::Tree: Send + Sync, D::ObjectPath: Send + Sync, D::Interface: Send + Sync,
+        D::Property: Send + Sync, D::Method: Send + Sync, D::Signal: Send + Sync,
+        M::Method: Send + Sync, M::GetProp: Send + Sync, M::SetProp: Send + Sync,
+    {
+        connection.start_receive(message::MatchRule::new_method_call(), Box::new(move |msg, c| {
+            if let Some(replies) = self.handle(&msg) {
+                for r in replies { let _ = c.send(r); }
+            }
+            true
+        }));
+    }
+
     /// Connects a Connection with a Tree so that incoming method calls are handled.
+    ///
+    /// The tree needs to be of type MTSync.
+    pub fn start_receive_send<C>(self, connection: &C)
+    where
+        C: channel::MatchingReceiver<F=Box<dyn FnMut(Message, &C) -> bool + Send>> + channel::Sender,
+        D::Tree: Send + Sync, D::ObjectPath: Send + Sync, D::Interface: Send + Sync,
+        D::Property: Send + Sync, D::Method: Send + Sync, D::Signal: Send + Sync,
+        M::Method: Send + Sync, M::GetProp: Send + Sync, M::SetProp: Send + Sync,
+    {
+        connection.start_receive(message::MatchRule::new_method_call(), Box::new(move |msg, c| {
+            if let Some(replies) = self.handle(&msg) {
+                for r in replies { let _ = c.send(r); }
+            }
+            true
+        }));
+    }
+
+
+    /// Connects a LocalConnection with a Tree so that incoming method calls are handled.
     pub fn start_receive<C>(self, connection: &C)
     where
         C: channel::MatchingReceiver<F=Box<dyn FnMut(Message, &C) -> bool>> + channel::Sender
     {
-        let mut rule = message::MatchRule::new();
-        rule.msg_type = Some(MessageType::MethodCall);
-        connection.start_receive(rule, Box::new(move |msg, c| {
+        connection.start_receive(message::MatchRule::new_method_call(), Box::new(move |msg, c| {
             if let Some(replies) = self.handle(&msg) {
                 for r in replies { let _ = c.send(r); }
             }
@@ -574,7 +609,6 @@ fn test_introspection() {
   </interface>
   <node name="subpath"/>
 </node>"##;
- 
-    assert_eq!(expected_result, actual_result);   
-}
 
+    assert_eq!(expected_result, actual_result);
+}

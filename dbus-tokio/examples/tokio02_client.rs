@@ -45,13 +45,13 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     calls.await;
 
     /*
-        // ..or use the match as a stream if you prefer
-        let (incoming_signal, stream) = conn.add_match(mr).await?.stream();
-        let stream = stream.for_each(|(_, (source,)): (_, (String,))| {
-            println!("Hello from {} happened on the bus!", source);
-            async {}
-        });
-        futures::join!(stream, calls)
+    // ..or use the match as a stream if you prefer
+    let (incoming_signal, stream) = conn.add_match(mr).await?.stream();
+    let stream = stream.for_each(|(_, (source,)): (_, (String,))| {
+        println!("Hello from {} happened on the bus!", source);
+        async {}
+    });
+    futures::join!(stream, calls)
     */
 
     // Needed here to ensure the "incoming_signal" object is not dropped too early
