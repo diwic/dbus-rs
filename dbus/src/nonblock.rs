@@ -3,8 +3,8 @@
 //! This module requires the `futures` feature to be enabled.
 //!
 //! Current status:
-//!  * Basic client functionality is up and running, i e, you can make method calls.
-//!  * Receiving messages (e g signals) is possible, but expect a simpler API later.
+//!  * Basic client functionality is up and running, i e, you can make method calls and
+//!    receive incoming messages (e g signals).
 //!  * As for server side code, you can use the `tree` module with this connection, but it does not
 //!    support async method handlers.
 //!
