@@ -20,6 +20,7 @@ use crate::arg::{AppendAll, ReadAll, IterAppend};
 use crate::message::MatchRule;
 
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 use std::{task, pin, mem};
 use std::cell::RefCell;
 use std::time::Duration;
@@ -203,6 +204,25 @@ impl $c {
         )
     }
 
+    /// Adds a new match to the connection, and sets up a callback when this message arrives.
+    ///
+    /// The returned value can be used to remove the match.
+    pub async fn add_match(&self, match_rule: MatchRule<'static>) -> Result<MsgMatch, Error> {
+        let m = match_rule.match_str();
+        self.add_match_no_cb(&m).await?;
+        let mi = Arc::new(MatchInner {
+            token: Default::default(),
+            cb: Default::default(),
+        });
+        let mi_weak = Arc::downgrade(&mi);
+        let token = self.start_receive(match_rule, Box::new(move |msg, _| {
+            mi_weak.upgrade().map(|mi| mi.incoming(msg)).unwrap_or(false)
+        }));
+        mi.token.store(token.0, SeqCst);
+        Ok(MsgMatch(mi))
+    }
+
+
     /// Adds a new match to the connection, without setting up a callback when this message arrives.
     pub async fn add_match_no_cb(&self, match_str: &str) -> Result<(), Error> {
         self.dbus_proxy().add_match(match_str).await
@@ -211,6 +231,12 @@ impl $c {
     /// Removes a match from the connection, without removing any callbacks.
     pub async fn remove_match_no_cb(&self, match_str: &str) -> Result<(), Error> {
         self.dbus_proxy().remove_match(match_str).await
+    }
+
+    /// Removes a previously added match and callback from the connection.
+    pub async fn remove_match(&self, id: Token) -> Result<(), Error> {
+        let (mr, _) = self.stop_receive(id).ok_or_else(|| Error::new_failed("No match with that id found"))?;
+        self.remove_match_no_cb(&mr.match_str()).await
     }
 }
 
@@ -273,6 +299,95 @@ pub trait Process: Sender + AsRef<Channel> {
 
     /// Dispatches a message.
     fn process_one(&self, msg: Message);
+}
+
+/// A struct used to handle incoming matches
+///
+/// Note: Due to the lack of async destructors, please call Connection.remove_match()
+/// in order to properly stop matching (instead of just dropping this struct).
+pub struct MsgMatch(Arc<MatchInner>);
+
+struct MatchInner {
+    token: AtomicUsize,
+    cb: Mutex<Option<Box<dyn FnMut(Message) -> bool + Send>>>,
+}
+
+impl MatchInner {
+    fn incoming(&self, msg: Message) -> bool {
+        if let Some(ref mut cb) = self.cb.lock().unwrap().as_mut() {
+            cb(msg)
+        }
+        else { true }
+    }
+}
+
+impl MsgMatch {
+    /// Configures the match to receive a synchronous callback with only a message parameter.
+    pub fn msg_cb<F: FnMut(Message) -> bool + Send + 'static>(self, f: F) -> Self {
+        {
+            let mut cb = self.0.cb.lock().unwrap();
+            *cb = Some(Box::new(f));
+        }
+        self
+    }
+
+    /// Configures the match to receive a synchronous callback with a message parameter and typed
+    /// message arguments.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let mr = MatchRule::new_signal("com.example.dbustest", "HelloHappened");
+    /// let incoming_signal = connection.add_match(mr).await?.cb(|_, (source,): (String,)| {
+    ///    println!("Hello from {} happened on the bus!", source);
+    ///    true
+    /// });
+    /// ```
+    pub fn cb<R: ReadAll, F: FnMut(Message, R) -> bool + Send + 'static>(self, mut f: F) -> Self {
+        self.msg_cb(move |msg| {
+            if let Ok(r) = R::read(&mut msg.iter_init()) {
+                f(msg, r)
+            } else { true }
+        })
+    }
+
+    /// Configures the match to receive a stream of messages.
+    ///
+    /// Note: If the receiving end is disconnected and a message is received,
+    /// the message matching will end but not in a clean fashion. Call remove_match() to
+    /// stop matching cleanly.
+    pub fn msg_stream(self) -> (Self, futures::channel::mpsc::UnboundedReceiver<Message>) {
+        let (sender, receiver) = futures::channel::mpsc::unbounded();
+        (self.msg_cb(move |msg| {
+            sender.unbounded_send(msg).is_ok()
+        }), receiver)
+    }
+
+    /// Configures the match to receive a stream of messages, parsed and ready.
+    ///
+    /// Note: If the receiving end is disconnected and a message is received,
+    /// the message matching will end but not in a clean fashion. Call remove_match() to
+    /// stop matching cleanly.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let mr = MatchRule::new_signal("com.example.dbustest", "HelloHappened");
+    /// let (incoming_signal, stream) = conn.add_match(mr).await?.stream();
+    /// let stream = stream.for_each(|(_, (source,)): (_, (String,))| {
+    ///    println!("Hello from {} happened on the bus!", source);
+    ///    async {}
+    /// });
+    /// ```
+    pub fn stream<R: ReadAll + Send + 'static>(self) -> (Self, futures::channel::mpsc::UnboundedReceiver<(Message, R)>) {
+        let (sender, receiver) = futures::channel::mpsc::unbounded();
+        (self.cb(move |msg, r| {
+            sender.unbounded_send((msg, r)).is_ok()
+        }), receiver)
+    }
+
+    /// The token retreived can be used in a call to remove_match to stop matching on the data.
+    pub fn token(&self) -> Token { Token(self.0.token.load(SeqCst)) }
 }
 
 /// A struct that wraps a connection, destination and path.
@@ -400,12 +515,10 @@ impl<T: 'static> MethodReply<T> {
 
 #[test]
 fn test_conn_send_sync() {
-    fn is_send<T: Send>(_: &T) {}
-    fn is_sync<T: Sync>(_: &T) {}
-    let c = SyncConnection::from(Channel::get_private(crate::channel::BusType::Session).unwrap());
-    is_send(&c);
-    is_sync(&c);
-
-    let c = Connection::from(Channel::get_private(crate::channel::BusType::Session).unwrap());
-    is_send(&c);
+    fn is_send<T: Send>() {}
+    fn is_sync<T: Sync>() {}
+    is_send::<Connection>();
+    is_send::<SyncConnection>();
+    is_sync::<SyncConnection>();
+    is_send::<MsgMatch>();
 }
