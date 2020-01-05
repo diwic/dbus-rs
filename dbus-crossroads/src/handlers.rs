@@ -7,7 +7,7 @@ use super::crossroads::Crossroads;
 use super::info::{MethodInfo, PropInfo};
 use super::path::Path;
 use super::MethodErr;
-use super::context::{MsgCtx, RefCtx, AsyncMsgCtx};
+use super::context::{MsgCtx, RefCtx, AsyncMsgCtx, AsyncMsgReply};
 use std::future::Future;
 
 pub struct DebugMethod<H: Handlers>(pub H::Method);
@@ -54,6 +54,7 @@ impl Handlers for () {
             SendMethods::MutPath(_) => unreachable!(),
             SendMethods::MutIface(_) => unreachable!(),
             SendMethods::MutCr(_) => unreachable!(),
+            SendMethods::AsyncMutPath(_) => unreachable!(),
             SendMethods::AllRef(ref f) => {
                 f(ctx, refctx)
             },
@@ -79,6 +80,7 @@ impl Handlers for () {
                 },
                 SendMethods::AllRef(_) => { try_ref = true; None }
                 SendMethods::MutCr(ref f) => { f.box_clone()(cr, ctx) },
+                SendMethods::AsyncMutPath(_) => todo!(),
             }
         };
         if try_ref { cr.dispatch_ref(ctx) } else { Ok(r) }
@@ -139,6 +141,7 @@ impl Handlers for Local {
             LocalMethods::MutPath(_) => unreachable!(),
             LocalMethods::MutIface(_) => unreachable!(),
             LocalMethods::MutCr(_) => unreachable!(),
+            LocalMethods::AsyncMutPath(_) => unreachable!(),
             LocalMethods::AllRef(ref f) => {
                 f(ctx, refctx)
             },
@@ -164,6 +167,7 @@ impl Handlers for Local {
                 },
                 LocalMethods::AllRef(_) => { try_ref = true; None }
                 LocalMethods::MutCr(ref f) => { f.box_clone()(cr, ctx) },
+                LocalMethods::AsyncMutPath(_) => todo!(),
             }
         };
         if try_ref { cr.dispatch_ref(ctx) } else { Ok(r) }
@@ -187,6 +191,7 @@ macro_rules! local_and_send_impl {
 pub struct $method($methods);
 
 enum $methods {
+    AsyncMutPath(Box<dyn FnMut(AsyncMsgCtx, &mut Path<$h>) -> Box<dyn Future<Output=AsyncMsgReply> $(+ $ss)* + 'static> $(+ $ss)* + 'static>),
     MutPath(Box<dyn FnMut(&mut Path<$h>, &mut MsgCtx) -> Option<Message> $(+ $ss)* + 'static>),
     MutIface(Box<dyn FnMut(&mut MsgCtx, &mut (dyn Any $(+ $ss)*)) -> Option<Message> $(+ $ss)* + 'static>),
     AllRef(Box<dyn Fn(&mut MsgCtx, &RefCtx<$h>) -> Option<Message> $(+ $ss)* + 'static>),
@@ -264,50 +269,82 @@ where F: FnMut(&mut MsgCtx, &mut I, IA) -> Result<OA, MethodErr> $(+ $ss)* + 'st
     }
 }
 
-// AsyncMutIface
+// AsyncMutPath
 
-impl<F, R> MakeHandler<<$h as Handlers>::Method, (), ($h, (i16, u8))> for F
-where F: FnMut(AsyncMsgCtx, &mut (dyn Any $(+ $ss)*)) -> R $(+ $ss)* + 'static,
-    R: Future<Output = Option<Message>>
+impl<F> MakeHandler<<$h as Handlers>::Method, (), ($h, (i16, i16))> for F
+where F: FnMut(AsyncMsgCtx, &mut Path<$h>) -> Box<dyn Future<Output=AsyncMsgReply> $(+ $ss)* + 'static> $(+ $ss)* + 'static
 {
     fn make(self) -> <$h as Handlers>::Method {
-        unimplemented!()
-        // $method($methods::MutIface(Box::new(self)))
+        $method($methods::AsyncMutPath(Box::new(self)))
     }
 }
 
-impl<I: 'static $(+ $ss)*, F, R> MakeHandler<<$h as Handlers>::Method, ((), I), ($h, (i16, bool))> for F
-where F: FnMut(AsyncMsgCtx, &mut I) -> R $(+ $ss)* + 'static,
-    R: Future<Output = Result<Message, MethodErr>>
+impl<F, R> MakeHandler<<$h as Handlers>::Method, (), ($h, (i16, u16))> for F
+where F: FnMut(AsyncMsgCtx, &mut Path<$h>) -> R $(+ $ss)* + 'static,
+    R: Future<Output = AsyncMsgReply> $(+ $ss)* + 'static
 {
     fn make(mut self) -> <$h as Handlers>::Method {
-        MakeHandler::make(move |ctx: AsyncMsgCtx, data: &mut (dyn Any $(+ $ss)*)| {
-            let iface: &mut I = data.downcast_mut().unwrap();
-            let r = self(ctx, iface);
-            async {
-                let r = r.await;
-                Some(r.unwrap()) // FIXME
-            }
+        MakeHandler::make(move |ctx: AsyncMsgCtx, path: &mut Path<$h>| {
+            let r = self(ctx, path);
+            let r: Box<dyn Future<Output=AsyncMsgReply> $(+ $ss)* + 'static> = Box::new(r);
+            r
         })
     }
 }
 
 
-impl<I: 'static $(+ $ss)*, IA: ReadAll, OA: AppendAll, F, R> MakeHandler<<$h as Handlers>::Method, ((), IA, OA, I), ($h, (i16, ()))> for F
+impl<F, R> MakeHandler<<$h as Handlers>::Method, (), ($h, (i16, u8))> for F
+where F: FnMut(AsyncMsgCtx, &mut (dyn Any $(+ $ss)*)) -> R $(+ $ss)* + 'static,
+    R: Future<Output = AsyncMsgReply> $(+ $ss)* + 'static
+{
+    fn make(mut self) -> <$h as Handlers>::Method {
+        MakeHandler::make(move |ctx: AsyncMsgCtx, path: &mut Path<$h>| {
+            let iface = path.get_from_typeid_mut(ctx.iface_typeid().unwrap());
+            let r: Box<dyn Future<Output=AsyncMsgReply> $(+ $ss)* + 'static> =
+                if let Some(iface) = iface {
+                    let iface = &mut **iface;
+                    let r = self(ctx, iface);
+                    Box::new(r)
+                } else {
+                    Box::new(async {
+                        let s = ctx.iface().unwrap_or(dbus::strings::Interface::from(""));
+                        ctx.err(MethodErr::no_interface(&s))
+                    })
+                };
+            r
+        })
+    }
+}
+
+impl<I: 'static $(+ $ss)*, F, R> MakeHandler<<$h as Handlers>::Method, ((), I), ($h, (i16, bool))> for F
+where F: FnMut(AsyncMsgCtx, &mut I) -> R $(+ $ss)* + 'static,
+    R: Future<Output = AsyncMsgReply> $(+ $ss)* + 'static
+{
+    fn make(mut self) -> <$h as Handlers>::Method {
+        MakeHandler::make(move |ctx: AsyncMsgCtx, data: &mut (dyn Any $(+ $ss)*)| {
+            let iface: &mut I = data.downcast_mut().unwrap();
+            self(ctx, iface)
+        })
+    }
+}
+
+
+impl<I: 'static $(+ $ss)*, IA: ReadAll $(+ $ss)* + 'static, OA: AppendAll, F, R>
+   MakeHandler<<$h as Handlers>::Method, ((), IA, OA, I), ($h, (i16, ()))> for F
 where F: FnMut(AsyncMsgCtx, &mut I, IA) -> R $(+ $ss)* + 'static,
-    R: Future<Output = Result<OA, MethodErr>>
+    R: Future<Output = AsyncMsgReply> $(+ $ss)* + 'static
 {
     fn make(mut self) -> <$h as Handlers>::Method {
         MakeHandler::make(move |ctx: AsyncMsgCtx, iface: &mut I| {
-            let mut m = ctx.message().method_return();
-            let r = IA::read(&mut ctx.message().iter_init()).map(|ia| {
-                self(ctx, iface, ia)
-            });
+            let r = match IA::read(&mut ctx.message().iter_init()) {
+                Ok(ia) => Ok(self(ctx, iface, ia)),
+                Err(e) => Err(ctx.err(e)),
+            };
             async {
-                let r = r?;
-                let r = r.await?;
-                OA::append(&r, &mut IterAppend::new(&mut m));
-                Ok(m)
+                match r {
+                    Ok(r) => r.await,
+                    Err(e) => e,
+                }
             }
         })
     }

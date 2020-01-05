@@ -1,7 +1,7 @@
 use dbus_tokio::connection;
 use futures::future;
 use tokio::time::delay_for;
-use dbus::crossroads::{Crossroads, Path, AsyncMsgCtx};
+use dbus_crossroads::{Crossroads, Path, AsyncMsgCtx};
 use std::time::Duration;
 
 // In crossroads, every interface must be registered with a unique type.
@@ -39,19 +39,19 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Let's add a method to the interface. We have the method name, followed by
         // names of input and output arguments (used for introspection). The closure then controls
         // the types of these arguments. The last argument to the closure is a tuple of the input arguments.
-        .method("Hello", ("name",), ("reply",), |mut ctx: AsyncMsgCtx, test: &mut DBusTest, (name,): (String,)| {
+        .method::<_, (String,), _,_,_>("Hello", ("name",), ("reply",), |mut ctx: AsyncMsgCtx, test: &mut DBusTest, (name,): (String,)| {
             // And here's what happens when the method is called.
             println!("Incoming hello call from {}!", name);
             test.called_count += 1;
             let s = format!("Hello {}! This API has been used {} times.", name, test.called_count);
             async move {
                 // Let's wait half a second just to show off how async we are.
-               delay_for(Duration::from_millis(500)).await;
+                delay_for(Duration::from_millis(500)).await;
                 // The ctx parameter can be used to conveniently send extra messages.
                 let signal_msg = ctx.make_signal("HelloHappened", (name,));
                 ctx.send_msg(signal_msg);
                 // And the return value is a tuple of the output arguments.
-                Ok((s,))
+                ctx.reply((s,))
             }
         });
 

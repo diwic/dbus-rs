@@ -44,6 +44,10 @@ pub struct AsyncMsgCtx {
 
 }
 
+pub struct AsyncMsgReply {
+
+}
+
 impl AsyncMsgCtx {
     pub fn send_msg(&mut self, msg: Message) { unimplemented!() }
 
@@ -52,6 +56,16 @@ impl AsyncMsgCtx {
     }
 
     pub fn message(&self) -> &Message { unimplemented!() }
+
+    pub fn iface(&self) -> Option<IfaceName<'static>> { unimplemented!() }
+
+    pub fn custom_reply(self, r: Option<Message>) -> AsyncMsgReply { unimplemented!() }
+
+    pub fn reply<A: AppendAll>(self, a: A) -> AsyncMsgReply { unimplemented!() }
+
+    pub fn err<I: Into<MethodErr>>(self, m: I) -> AsyncMsgReply { unimplemented!() }
+
+    pub (crate) fn iface_typeid(&self) -> Option<std::any::TypeId> { todo!() }
 }
 
 #[derive(Debug, Clone)]
