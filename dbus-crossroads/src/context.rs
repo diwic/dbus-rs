@@ -11,7 +11,7 @@ use dbus::arg::{AppendAll, IterAppend};
 
 #[derive(Debug)]
 pub struct MsgCtx<'a> {
-    pub message: &'a Message,
+    msg: &'a Message,
     pub member: MemberName<'a>,
     pub iface: IfaceName<'a>,
     pub path: PathName<'a>,
@@ -26,8 +26,10 @@ impl<'a> MsgCtx<'a> {
         let path = msg.path()?;
         let iface = msg.interface()?;
         let member = msg.member()?;
-        Some(MsgCtx { message: msg, member, iface, path, send_extra: vec!(), signals: Default::default() })
+        Some(MsgCtx { msg, member, iface, path, send_extra: vec!(), signals: Default::default() })
     }
+
+    pub fn message(&self) -> &'a Message { self.msg }
 
     pub fn send_msg(&mut self, msg: Message) { self.send_extra.push(msg); }
 

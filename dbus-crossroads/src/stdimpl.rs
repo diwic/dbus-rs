@@ -65,10 +65,9 @@ where F: FnMut(&mut IterAppend, &mut H::GetProp) -> Result<(), MethodErr> {
 fn setprop_mut<H: Handlers, F>(cr: &mut Crossroads<H>, ctx: &mut MsgCtx, f: F) -> Result<Message, MethodErr>
 where F: FnOnce(&mut H::SetProp, &mut Path<H>, &mut arg::Iter, &mut MsgCtx) -> Result<Option<Box<dyn arg::RefArg>>, MethodErr>
 {
-    let mut iter = ctx.message.iter_init();
+    let mut iter = ctx.message().iter_init();
     let (iname, propname) = (iter.read()?, iter.read()?);
-    let path = ctx.message.path().ok_or_else(|| { MethodErr::no_property(&"Message has no path") })?;
-    let (propinfo, pathdata, emits) = cr.prop_lookup_mut(path.as_cstr(), iname, propname)
+    let (propinfo, pathdata, emits) = cr.prop_lookup_mut(ctx.path.as_cstr(), iname, propname)
         .ok_or_else(|| { MethodErr::no_property(&"Property not found") })?;
     if propinfo.access == Access::Read { Err(MethodErr::no_property(&"Property is read only"))? };
     let handler = propinfo.handlers.1.as_mut()
@@ -80,25 +79,29 @@ where F: FnOnce(&mut H::SetProp, &mut Path<H>, &mut arg::Iter, &mut MsgCtx) -> R
     if *subiter.signature() != *propinfo.sig {
         Err(MethodErr::failed(&format!("Property {} cannot change type", propinfo.name)))?;
     }
+    let iname = IfaceName::from(iname).into_static();
+    let propname = propname.into();
     if let Some(r) = f(handler, pathdata, &mut subiter, ctx)? {
         match emits {
-            EmitsChangedSignal::True => ctx.dbus_signals_mut().add_changed_property(
-                path.into_static(), IfaceName::from(iname).into_static(), propname.into(), r
-            ),
+            EmitsChangedSignal::True => {
+                let p = ctx.path.clone().into_static();
+                ctx.dbus_signals_mut().add_changed_property(p, iname, propname, r);
+            },
             EmitsChangedSignal::False => {},
-            EmitsChangedSignal::Invalidates => ctx.dbus_signals_mut().add_invalidated_property(
-                path.into_static(), IfaceName::from(iname).into_static(), propname.into()
-            ),
+            EmitsChangedSignal::Invalidates => {
+                let p = ctx.path.clone().into_static();
+                ctx.dbus_signals_mut().add_invalidated_property(p, iname, propname);
+            },
             EmitsChangedSignal::Const => {}, // Panic here because the property cannot change?
         }
     }
-    Ok(ctx.message.method_return())
+    Ok(ctx.message().method_return())
 }
 
 fn setprop_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, f: F) -> Result<Message, MethodErr>
 where F: FnOnce(&H::SetProp, &mut arg::Iter, &mut MsgCtx, &RefCtx<H>) -> Result<bool, MethodErr>
 {
-    let mut iter = ctx.message.iter_init();
+    let mut iter = ctx.message().iter_init();
     let (iname, propname): (&CStr, &str) = (iter.read()?, iter.read()?);
     let refctx = refctx.with_iface(iname)
         .ok_or_else(|| { MethodErr::no_property(&"Interface not found") })?;
@@ -118,23 +121,22 @@ where F: FnOnce(&H::SetProp, &mut arg::Iter, &mut MsgCtx, &RefCtx<H>) -> Result<
     if f(handler, &mut subiter, ctx, &refctx)? {
         unimplemented!("Emits signal here");
     }
-    Ok(ctx.message.method_return())
+    Ok(ctx.message().method_return())
 }
 
 
 fn getprop_mut<H: Handlers, F>(cr: &mut Crossroads<H>, ctx: &mut MsgCtx, f: F) -> Result<Message, MethodErr>
 where F: FnOnce(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx) -> Result<(), MethodErr>
 {
-    let mut iter = ctx.message.iter_init();
+    let mut iter = ctx.message().iter_init();
     let (iname, propname) = (iter.read()?, iter.read()?);
-    let path = ctx.message.path().ok_or_else(|| { MethodErr::no_property(&"Message has no path") })?;
-    let (propinfo, pathdata, _) = cr.prop_lookup_mut(path.as_cstr(), iname, propname)
+    let (propinfo, pathdata, _) = cr.prop_lookup_mut(ctx.path.as_cstr(), iname, propname)
         .ok_or_else(|| { MethodErr::no_property(&"Property not found") })?;
     if propinfo.access == Access::Write { Err(MethodErr::no_property(&"Property is write only"))? };
     let handler = propinfo.handlers.0.as_mut()
         .ok_or_else(|| { MethodErr::no_property(&"Property can not be read from") })?;
 
-    let mut mret = ctx.message.method_return();
+    let mut mret = ctx.message().method_return();
     {
         let mut iter = arg::IterAppend::new(&mut mret);
         let mut z = None;
@@ -148,7 +150,7 @@ where F: FnOnce(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx
 
 fn getprop_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, f: F) -> Result<Message, MethodErr>
 where F: FnOnce(&H::GetProp, &mut arg::IterAppend, &mut MsgCtx, &RefCtx<H>) -> Result<(), MethodErr> {
-    let mut iter = ctx.message.iter_init();
+    let mut iter = ctx.message().iter_init();
     let (iname, propname): (&CStr, &str) = (iter.read()?, iter.read()?);
     let refctx = refctx.with_iface(iname)
         .ok_or_else(|| { MethodErr::no_property(&"Interface not found") })?;
@@ -159,7 +161,7 @@ where F: FnOnce(&H::GetProp, &mut arg::IterAppend, &mut MsgCtx, &RefCtx<H>) -> R
     let handler = propinfo.handlers.0.as_ref()
         .ok_or_else(|| { MethodErr::no_property(&"Property can not read from") })?;
 
-    let mut mret = ctx.message.method_return();
+    let mut mret = ctx.message().method_return();
     {
         let mut iter = arg::IterAppend::new(&mut mret);
         let mut z = None;
@@ -173,12 +175,12 @@ where F: FnOnce(&H::GetProp, &mut arg::IterAppend, &mut MsgCtx, &RefCtx<H>) -> R
 
 fn getallprops_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, mut f: F) -> Result<Message, MethodErr>
 where F: FnMut(&H::GetProp, &mut arg::IterAppend, &mut MsgCtx, &RefCtx<H>) -> Result<(), MethodErr> {
-    let mut iter = ctx.message.iter_init();
+    let mut iter = ctx.message().iter_init();
     let iname: &CStr = iter.read()?;
     let refctx = refctx.with_iface(iname)
         .ok_or_else(|| { MethodErr::no_property(&"Interface not found") })?;
 
-    let mut mret = ctx.message.method_return();
+    let mut mret = ctx.message().method_return();
     {
         append_props_ref(&mut arg::IterAppend::new(&mut mret), &refctx.iinfo, |iter4, handler| {
             f(handler, iter4, ctx, &refctx)
@@ -189,18 +191,17 @@ where F: FnMut(&H::GetProp, &mut arg::IterAppend, &mut MsgCtx, &RefCtx<H>) -> Re
 
 fn getallprops_mut<H: Handlers, F>(cr: &mut Crossroads<H>, ctx: &mut MsgCtx, mut f: F) -> Result<Message, MethodErr>
 where F: FnMut(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx) -> Result<(), MethodErr> {
-    let mut iter = ctx.message.iter_init();
+    let mut iter = ctx.message().iter_init();
     let iname: &CStr = iter.read()?;
 
-    let path = ctx.message.path().ok_or_else(|| { MethodErr::no_property(&"Message has no path") })?;
-    let pdata = cr.paths.get_mut(path.as_cstr())
+    let pdata = cr.paths.get_mut(ctx.path.as_cstr())
         .ok_or_else(|| { MethodErr::no_property(&"Path not found") })?;
     let entry = cr.reg.get_mut(iname)
         .ok_or_else(|| { MethodErr::no_property(&"Interface not found") })?;
     let _ = pdata.get_from_typeid(entry.typeid)
         .ok_or_else(|| { MethodErr::no_property(&"Interface not found") })?;
 
-    let mut mret = ctx.message.method_return();
+    let mut mret = ctx.message().method_return();
     {
         append_props_mut(&mut arg::IterAppend::new(&mut mret), &mut entry.info, |iter4, handler| {
             f(handler, pdata, iter4, ctx)
@@ -212,7 +213,7 @@ where F: FnMut(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx)
 fn objmgr_mut<H: Handlers, F>(cr: &mut Crossroads<H>, ctx: &mut MsgCtx, mut f: F) -> Result<Message, MethodErr>
 where F: FnMut(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx) -> Result<(), MethodErr>
 {
-    let pathname = ctx.message.path().ok_or_else(|| { MethodErr::no_property(&"Message has no path") })?;
+    let pathname = ctx.path.clone().into_static();
     let mut p = Vec::<u8>::from(pathname.as_bytes());
     if !p.ends_with(b"/") { p.push(b'/'); }
 
@@ -220,7 +221,7 @@ where F: FnMut(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx)
     let cr_reg = &mut cr.reg;
 
     let mut ret = Ok(());
-    let mut mret = ctx.message.method_return();
+    let mut mret = ctx.message().method_return();
     {
         let mut ia = arg::IterAppend::new(&mut mret);
         ia.append_dict(&PathName::signature(), &IntfProps::signature(), |ia2| {
@@ -267,13 +268,13 @@ impl DBusProperties {
     pub fn register_par(cr: &mut Crossroads<Par>) {
         Self::register_custom(cr,
             Box::new(|ctx, refctx| {
-                Some(getprop_ref(ctx, refctx, |h, i, ctx, refctx| h(i, ctx, refctx)).unwrap_or_else(|e| e.to_message(ctx.message)))
+                Some(getprop_ref(ctx, refctx, |h, i, ctx, refctx| h(i, ctx, refctx)).unwrap_or_else(|e| e.to_message(ctx.message())))
             }),
             Box::new(|ctx, refctx| {
-                Some(getallprops_ref(ctx, refctx, |h, i, ctx, refctx| h(i, ctx, refctx)).unwrap_or_else(|e| e.to_message(ctx.message)))
+                Some(getallprops_ref(ctx, refctx, |h, i, ctx, refctx| h(i, ctx, refctx)).unwrap_or_else(|e| e.to_message(ctx.message())))
             }),
             Box::new(|ctx, refctx| {
-                Some(setprop_ref(ctx, refctx, |h, i, ctx, refctx| h(i, ctx, refctx)).unwrap_or_else(|e| e.to_message(ctx.message)))
+                Some(setprop_ref(ctx, refctx, |h, i, ctx, refctx| h(i, ctx, refctx)).unwrap_or_else(|e| e.to_message(ctx.message())))
             })
         );
     }

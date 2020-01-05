@@ -43,9 +43,9 @@ impl Handlers for () {
     fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
     where F: Fn(&mut MsgCtx, &RefCtx<Self>, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
         SendMethod(SendMethods::AllRef(Box::new(move |ctx, refctx| {
-            let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
+            let r = IA::read(&mut ctx.message().iter_init()).map_err(From::from);
             let r = r.and_then(|ia| f(ctx, refctx, ia));
-            Some(posthandler(ctx.message, r))
+            Some(posthandler(ctx.message(), r))
         })))
     }
 
@@ -102,9 +102,9 @@ impl Handlers for Par {
     fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
     where F: Fn(&mut MsgCtx, &RefCtx<Self>, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
         Box::new(move |ctx, refctx| {
-            let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
+            let r = IA::read(&mut ctx.message().iter_init()).map_err(From::from);
             let r = r.and_then(|ia| f(ctx, refctx, ia));
-            Some(posthandler(ctx.message, r))
+            Some(posthandler(ctx.message(), r))
         })
     }
 
@@ -130,9 +130,9 @@ impl Handlers for Local {
     fn make_method<IA: ReadAll, OA: AppendAll, F>(f: F) -> Self::Method
     where F: Fn(&mut MsgCtx, &RefCtx<Self>, IA) -> Result<OA, MethodErr> + Send + Sync + 'static {
         LocalMethod(LocalMethods::AllRef(Box::new(move |ctx, refctx| {
-            let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
+            let r = IA::read(&mut ctx.message().iter_init()).map_err(From::from);
             let r = r.and_then(|ia| f(ctx, refctx, ia));
-            Some(posthandler(ctx.message, r))
+            Some(posthandler(ctx.message(), r))
         })))
     }
 
@@ -214,7 +214,7 @@ where F: Fn(&mut MsgCtx, &RefCtx<$h>, &I) -> Result<Message, MethodErr> $(+ $ss)
     fn make(self) -> <$h as Handlers>::Method {
         MakeHandler::make(move |ctx: &mut MsgCtx, refctx: &RefCtx<$h>| {
             let iface: &I = refctx.path.get().unwrap();
-            Some(self(ctx, refctx, iface).unwrap_or_else(|e| e.to_message(ctx.message)))
+            Some(self(ctx, refctx, iface).unwrap_or_else(|e| e.to_message(ctx.message())))
         })
     }
 }
@@ -224,9 +224,9 @@ where F: Fn(&mut MsgCtx, &RefCtx<$h>, &I, IA) -> Result<OA, MethodErr> $(+ $ss)*
 {
     fn make(self) -> <$h as Handlers>::Method {
         MakeHandler::make(move |ctx: &mut MsgCtx, refctx: &RefCtx<$h>, i: &I| {
-            let ia = IA::read(&mut ctx.message.iter_init())?;
+            let ia = IA::read(&mut ctx.message().iter_init())?;
             let r = self(ctx, refctx, i, ia)?;
-            let mut m = ctx.message.method_return();
+            let mut m = ctx.message().method_return();
             OA::append(&r, &mut IterAppend::new(&mut m));
             Ok(m)
         })
@@ -250,7 +250,7 @@ where F: FnMut(&mut MsgCtx, &mut I) -> Result<Message, MethodErr> $(+ $ss)* + 's
     fn make(mut self) -> <$h as Handlers>::Method {
         MakeHandler::make(move |ctx: &mut MsgCtx, data: &mut (dyn Any $(+ $ss)*)| {
             let iface: &mut I = data.downcast_mut().unwrap();
-            Some(self(ctx, iface).unwrap_or_else(|e| e.to_message(ctx.message)))
+            Some(self(ctx, iface).unwrap_or_else(|e| e.to_message(ctx.message())))
         })
     }
 }
@@ -260,9 +260,9 @@ where F: FnMut(&mut MsgCtx, &mut I, IA) -> Result<OA, MethodErr> $(+ $ss)* + 'st
 {
     fn make(mut self) -> <$h as Handlers>::Method {
         MakeHandler::make(move |ctx: &mut MsgCtx, iface: &mut I| {
-            let ia = IA::read(&mut ctx.message.iter_init())?;
+            let ia = IA::read(&mut ctx.message().iter_init())?;
             let r = self(ctx, iface, ia)?;
-            let mut m = ctx.message.method_return();
+            let mut m = ctx.message().method_return();
             OA::append(&r, &mut IterAppend::new(&mut m));
             Ok(m)
         })
@@ -365,7 +365,7 @@ where F: FnOnce(&mut Crossroads<$h>, &mut MsgCtx) -> Result<Message, MethodErr> 
 {
     fn make(self) -> <$h as Handlers>::Method {
         MakeHandler::make(move |cr: &mut Crossroads<$h>, ctx: &mut MsgCtx| {
-            Some(self(cr, ctx).unwrap_or_else(|e| e.to_message(ctx.message)))
+            Some(self(cr, ctx).unwrap_or_else(|e| e.to_message(ctx.message())))
         })
     }
 }
@@ -375,9 +375,9 @@ where F: FnOnce(&mut Crossroads<$h>, &mut MsgCtx, IA) -> Result<OA, MethodErr> $
 {
     fn make(self) -> <$h as Handlers>::Method {
         MakeHandler::make(move |cr: &mut Crossroads<$h>, ctx: &mut MsgCtx| {
-            let ia = IA::read(&mut ctx.message.iter_init())?;
+            let ia = IA::read(&mut ctx.message().iter_init())?;
             let r = self(cr, ctx, ia)?;
-            let mut m = ctx.message.method_return();
+            let mut m = ctx.message().method_return();
             OA::append(&r, &mut IterAppend::new(&mut m));
             Ok(m)
         })
@@ -399,7 +399,7 @@ where F: FnMut(&mut Path<$h>, &mut MsgCtx) -> Result<Message, MethodErr> $(+ $ss
 {
     fn make(mut self) -> <$h as Handlers>::Method {
         MakeHandler::make(move |path: &mut Path<$h>, ctx: &mut MsgCtx| {
-            Some(self(path, ctx).unwrap_or_else(|e| e.to_message(ctx.message)))
+            Some(self(path, ctx).unwrap_or_else(|e| e.to_message(ctx.message())))
         })
     }
 }
@@ -409,9 +409,9 @@ where F: FnMut(&mut Path<$h>, &mut MsgCtx, IA) -> Result<OA, MethodErr> $(+ $ss)
 {
     fn make(mut self) -> <$h as Handlers>::Method {
         MakeHandler::make(move |path: &mut Path<$h>, ctx: &mut MsgCtx| -> Result<Message, MethodErr> {
-            let ia = IA::read(&mut ctx.message.iter_init())?;
+            let ia = IA::read(&mut ctx.message().iter_init())?;
             let r = self(path, ctx, ia)?;
-            let mut m = ctx.message.method_return();
+            let mut m = ctx.message().method_return();
             OA::append(&r, &mut IterAppend::new(&mut m));
             Ok(m)
         })
@@ -492,9 +492,9 @@ where F: Fn(&I, &mut MsgCtx, &RefCtx<Par>, IA) -> Result<OA, MethodErr> + Send +
     fn make(self) -> <Par as Handlers>::Method {
         Box::new(move |ctx, refctx| {
             let iface: &I = refctx.path.get().unwrap();
-            let r = IA::read(&mut ctx.message.iter_init()).map_err(From::from);
+            let r = IA::read(&mut ctx.message().iter_init()).map_err(From::from);
             let r = r.and_then(|ia| self(iface, ctx, refctx, ia));
-            Some(posthandler(ctx.message, r))
+            Some(posthandler(ctx.message(), r))
         })
     }
 }

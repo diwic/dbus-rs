@@ -111,7 +111,7 @@ impl<H: Handlers> Crossroads<H> {
     }
 
     fn post_dispatch<C: channel::Sender>(&self, ctx: MsgCtx, reply: Result<Option<Message>, MethodErr>, c: &C) {
-        let r = reply.unwrap_or_else(|e| Some(e.to_message(&ctx.message)));
+        let r = reply.unwrap_or_else(|e| Some(e.to_message(&ctx.message())));
         if let Some(reply) = r {
             let _ = c.send(reply);
         }
