@@ -10,8 +10,14 @@ use std::ffi::CStr;
 use dbus::arg::{AppendAll, IterAppend};
 
 #[derive(Debug)]
+enum MsgCow<'a> {
+    Borrowed(&'a Message),
+    Owned(Message),
+}
+
+#[derive(Debug)]
 pub struct MsgCtx<'a> {
-    msg: &'a Message,
+    msg: MsgCow<'a>,
     member: MemberName<'a>,
     iface: IfaceName<'a>,
     path: PathName<'a>,
@@ -20,16 +26,25 @@ pub struct MsgCtx<'a> {
     pub (super) send_extra: Vec<Message>,
 }
 
-impl<'a> MsgCtx<'a> {
-    pub fn new(msg: &'a Message) -> Option<Self> {
+impl MsgCtx<'static> {
+    pub fn new(msg: Message) -> Option<Self> {
         if msg.msg_type() != MessageType::MethodCall { return None };
-        let path = msg.path()?;
-        let iface = msg.interface()?;
-        let member = msg.member()?;
-        Some(MsgCtx { msg, member, iface, path, send_extra: vec!(), signals: Default::default() })
+        let path = msg.path()?.into_static();
+        let iface = msg.interface()?.into_static();
+        let member = msg.member()?.into_static();
+        Some(MsgCtx { msg: MsgCow::Owned(msg), member, iface, path, send_extra: vec!(), signals: Default::default() })
     }
+}
 
-    pub fn message(&self) -> &Message { self.msg }
+
+impl<'a> MsgCtx<'a> {
+
+    pub fn message(&self) -> &Message {
+        match self.msg {
+            MsgCow::Owned(ref r) => r,
+            MsgCow::Borrowed(r) => r,
+        }
+    }
 
     pub fn member(&self) -> &MemberName<'a> { &self.member }
     pub fn path(&self) -> &PathName<'a> { &self.path }

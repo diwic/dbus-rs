@@ -120,7 +120,7 @@ impl<H: Handlers> Crossroads<H> {
     }
 
     /// Handles an incoming message. Returns false if the message was broken somehow
-    pub fn dispatch<C: channel::Sender>(&mut self, msg: &Message, c: &C) -> Result<(), ()> {
+    pub fn dispatch<C: channel::Sender>(&mut self, msg: Message, c: &C) -> Result<(), ()> {
         let mut ctx = MsgCtx::new(msg).ok_or(())?;
         let r = H::call_method_mut(self, &mut ctx);
         self.post_dispatch(ctx, r, c);
@@ -146,7 +146,7 @@ impl Crossroads<()> {
         let mut mr = MatchRule::new();
         mr.msg_type = Some(MessageType::MethodCall);
         connection.start_receive(mr, Box::new(move |msg, c| {
-            let _ = self.dispatch(&msg, c);
+            let _ = self.dispatch(msg, c);
             true
         }))
     }
@@ -156,7 +156,7 @@ impl Crossroads<()> {
 impl Crossroads<Par> {
 
     /// Handles an incoming message. Returns err if the message was broken somehow
-    pub fn dispatch_par<C: channel::Sender>(&self, msg: &Message, c: &C) -> Result<(), ()> {
+    pub fn dispatch_par<C: channel::Sender>(&self, msg: Message, c: &C) -> Result<(), ()> {
         let mut ctx = MsgCtx::new(msg).ok_or(())?;
         let r = self.dispatch_ref(&mut ctx);
         self.post_dispatch(ctx, r, c);
@@ -179,7 +179,7 @@ impl Crossroads<Par> {
         let mut mr = MatchRule::new();
         mr.msg_type = Some(MessageType::MethodCall);
         connection.start_receive(mr, Box::new(move |msg, c| {
-            let _ = cr.dispatch_par(&msg, c);
+            let _ = cr.dispatch_par(msg, c);
             true
         }))
     }
@@ -202,7 +202,7 @@ impl Crossroads<handlers::Local> {
         let mut mr = MatchRule::new();
         mr.msg_type = Some(MessageType::MethodCall);
         connection.start_receive(mr, Box::new(move |msg, c| {
-            let _ = self.dispatch(&msg, c);
+            let _ = self.dispatch(msg, c);
             true
         }))
     }
@@ -231,7 +231,7 @@ mod test {
     fn dispatch_helper2<H: Handlers>(cr: &mut Crossroads<H>, mut msg: Message) -> Vec<Message> {
         msg.set_serial(57);
         let r = RefCell::new(vec!());
-        cr.dispatch(&msg, &r).unwrap();
+        cr.dispatch(msg, &r).unwrap();
         r.into_inner()
     }
 
@@ -322,7 +322,7 @@ mod test {
         fn dispatch_helper(cr: &Crossroads<Par>, mut msg: Message) -> Message {
             msg.set_serial(57);
             let r = RefCell::new(vec!());
-            cr.dispatch_par(&msg, &r).unwrap();
+            cr.dispatch_par(msg, &r).unwrap();
             let mut r = r.into_inner();
             assert_eq!(r.len(), 1);
             r[0].as_result().unwrap();
