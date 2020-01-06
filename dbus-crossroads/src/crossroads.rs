@@ -252,10 +252,10 @@ mod test {
         struct Score(u16);
 
         cr.register::<Score,_>(istr)
-            .prop_rw("Score", |score: &Score, _: &mut MsgCtx| { Ok(score.0) }, |score: &mut Score, _: &mut MsgCtx, new_val| {
-                score.0 = new_val;
+            .prop_rw("Score", |score: &Score, _: &mut MsgCtx| { Ok(score.0) }, |score: &mut Score, _: &mut MsgCtx, new_val: &u16| {
+                score.0 = *new_val;
                 dbg!(new_val);
-                Ok(Some(new_val))
+                Ok(Some(*new_val))
             })
             .prop_ro("Whatever", |score: &Score, _: &mut MsgCtx| { Ok("lorem ipsum") });
 
@@ -347,7 +347,7 @@ mod test {
             }).emits_changed(super::super::info::EmitsChangedSignal::False)
             .prop_rw("Dummy",
                 |score: &Score, _: &mut MsgCtx, _: &RefCtx<_>| { Ok(*score.1.lock().unwrap()) },
-                |score: &Score, val: u32, _: &mut MsgCtx, _: &RefCtx<_>| { *score.1.lock().unwrap() = val; Ok(false) })
+                |score: &Score, val: &u32, _: &mut MsgCtx, _: &RefCtx<_>| { *score.1.lock().unwrap() = *val; Ok(false) })
             .signal::<(u16,),_>("ScoreChanged", ("NewScore",));
 
         let mut pdata = Path::new("/");

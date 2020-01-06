@@ -29,7 +29,7 @@ impl<'a> MsgCtx<'a> {
         Some(MsgCtx { msg, member, iface, path, send_extra: vec!(), signals: Default::default() })
     }
 
-    pub fn message(&self) -> &'a Message { self.msg }
+    pub fn message(&self) -> &Message { self.msg }
 
     pub fn send_msg(&mut self, msg: Message) { self.send_extra.push(msg); }
 

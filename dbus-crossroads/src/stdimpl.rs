@@ -63,7 +63,7 @@ where F: FnMut(&mut IterAppend, &mut H::GetProp) -> Result<(), MethodErr> {
 }
 
 fn setprop_mut<H: Handlers, F>(cr: &mut Crossroads<H>, ctx: &mut MsgCtx, f: F) -> Result<Message, MethodErr>
-where F: FnOnce(&mut H::SetProp, &mut Path<H>, &mut arg::Iter, &mut MsgCtx) -> Result<Option<Box<dyn arg::RefArg>>, MethodErr>
+where F: FnOnce(&mut H::SetProp, &mut Path<H>, Box<dyn arg::RefArg>, &mut MsgCtx) -> Result<Option<Box<dyn arg::RefArg>>, MethodErr>
 {
     let mut iter = ctx.message().iter_init();
     let (iname, propname) = (iter.read()?, iter.read()?);
@@ -81,7 +81,9 @@ where F: FnOnce(&mut H::SetProp, &mut Path<H>, &mut arg::Iter, &mut MsgCtx) -> R
     }
     let iname = IfaceName::from(iname).into_static();
     let propname = propname.into();
-    if let Some(r) = f(handler, pathdata, &mut subiter, ctx)? {
+    let val = subiter.get_refarg().unwrap();
+
+    if let Some(r) = f(handler, pathdata, val, ctx)? {
         match emits {
             EmitsChangedSignal::True => {
                 let p = ctx.path.clone().into_static();
@@ -98,8 +100,9 @@ where F: FnOnce(&mut H::SetProp, &mut Path<H>, &mut arg::Iter, &mut MsgCtx) -> R
     Ok(ctx.message().method_return())
 }
 
+
 fn setprop_ref<H: Handlers, F>(ctx: &mut MsgCtx, refctx: &RefCtx<H>, f: F) -> Result<Message, MethodErr>
-where F: FnOnce(&H::SetProp, &mut arg::Iter, &mut MsgCtx, &RefCtx<H>) -> Result<bool, MethodErr>
+where F: FnOnce(&H::SetProp, Box<dyn arg::RefArg>, &mut MsgCtx, &RefCtx<H>) -> Result<bool, MethodErr>
 {
     let mut iter = ctx.message().iter_init();
     let (iname, propname): (&CStr, &str) = (iter.read()?, iter.read()?);
@@ -118,7 +121,9 @@ where F: FnOnce(&H::SetProp, &mut arg::Iter, &mut MsgCtx, &RefCtx<H>) -> Result<
     if *subiter.signature() != *propinfo.sig {
         Err(MethodErr::failed(&format!("Property {} cannot change type", propinfo.name)))?;
     }
-    if f(handler, &mut subiter, ctx, &refctx)? {
+    let val = subiter.get_refarg().unwrap();
+
+    if f(handler, val, ctx, &refctx)? {
         unimplemented!("Emits signal here");
     }
     Ok(ctx.message().method_return())
