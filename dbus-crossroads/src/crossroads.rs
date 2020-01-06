@@ -104,9 +104,9 @@ impl<H: Handlers> Crossroads<H> {
 
     pub (super) fn dispatch_ref(&self, ctx: &mut MsgCtx) -> Result<Option<Message>, MethodErr> {
         let refctx = RefCtx::new(self, ctx)?;
-        let entry = self.reg.get(ctx.iface.as_cstr()).ok_or_else(|| { MethodErr::no_interface(&ctx.iface) })?;
-        let minfo = entry.info.methods.iter().find(|x| x.name() == &ctx.member)
-            .ok_or_else(|| { MethodErr::no_interface(&ctx.member) })?;
+        let entry = self.reg.get(ctx.interface().as_cstr()).ok_or_else(|| { MethodErr::no_interface(ctx.interface()) })?;
+        let minfo = entry.info.methods.iter().find(|x| x.name() == ctx.member())
+            .ok_or_else(|| { MethodErr::no_interface(ctx.member()) })?;
         Ok(H::call_method_ref(&minfo.handler(), ctx, &refctx))
     }
 

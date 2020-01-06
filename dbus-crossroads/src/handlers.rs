@@ -64,17 +64,18 @@ impl Handlers for () {
     fn call_method_mut(cr: &mut Crossroads<Self>, ctx: &mut MsgCtx) -> Result<Option<Message>, MethodErr> {
         let mut try_ref = false;
         let r = {
-            let entry = cr.reg.get_mut(ctx.iface.as_cstr()).ok_or_else(|| { MethodErr::no_interface(&ctx.iface) })?;
-            let minfo = entry.info.methods.iter_mut().find(|x| x.name() == &ctx.member)
-                .ok_or_else(|| { MethodErr::no_method(&ctx.member) })?;
+            let entry = cr.reg.get_mut(ctx.interface().as_cstr())
+                .ok_or_else(|| { MethodErr::no_interface(ctx.interface()) })?;
+            let minfo = entry.info.methods.iter_mut().find(|x| x.name() == ctx.member())
+                .ok_or_else(|| { MethodErr::no_method(ctx.member()) })?;
             match minfo.handler_mut().0 {
                 SendMethods::MutPath(ref mut f) => {
-                    let mut data = cr.paths.get_mut(ctx.path.as_cstr()).ok_or_else(|| { MethodErr::no_path(&ctx.path) })?;
+                    let mut data = cr.paths.get_mut(ctx.path().as_cstr()).ok_or_else(|| { MethodErr::no_path(ctx.path()) })?;
                     f(&mut data, ctx)
                 }
                 SendMethods::MutIface(ref mut f) => {
-                    let data = cr.paths.get_mut(ctx.path.as_cstr()).ok_or_else(|| { MethodErr::no_path(&ctx.path) })?;
-                    let iface = data.get_from_typeid_mut(entry.typeid).ok_or_else(|| { MethodErr::no_interface(&ctx.iface) })?;
+                    let data = cr.paths.get_mut(ctx.path().as_cstr()).ok_or_else(|| { MethodErr::no_path(ctx.path()) })?;
+                    let iface = data.get_from_typeid_mut(entry.typeid).ok_or_else(|| { MethodErr::no_interface(ctx.interface()) })?;
                     let iface = &mut **iface;
                     f(ctx, iface)
                 },
@@ -151,17 +152,17 @@ impl Handlers for Local {
     fn call_method_mut(cr: &mut Crossroads<Self>, ctx: &mut MsgCtx) -> Result<Option<Message>, MethodErr> {
         let mut try_ref = false;
         let r = {
-            let entry = cr.reg.get_mut(ctx.iface.as_cstr()).ok_or_else(|| { MethodErr::no_interface(&ctx.iface) })?;
-            let minfo = entry.info.methods.iter_mut().find(|x| x.name() == &ctx.member)
-                .ok_or_else(|| { MethodErr::no_method(&ctx.member) })?;
+            let entry = cr.reg.get_mut(ctx.interface().as_cstr()).ok_or_else(|| { MethodErr::no_interface(ctx.interface()) })?;
+            let minfo = entry.info.methods.iter_mut().find(|x| x.name() == ctx.member())
+                .ok_or_else(|| { MethodErr::no_method(ctx.member()) })?;
             match minfo.handler_mut().0 {
                 LocalMethods::MutPath(ref mut f) => {
-                    let mut data = cr.paths.get_mut(ctx.path.as_cstr()).ok_or_else(|| { MethodErr::no_path(&ctx.path) })?;
+                    let mut data = cr.paths.get_mut(ctx.path().as_cstr()).ok_or_else(|| { MethodErr::no_path(ctx.path()) })?;
                     f(&mut data, ctx)
                 }
                 LocalMethods::MutIface(ref mut f) => {
-                    let data = cr.paths.get_mut(ctx.path.as_cstr()).ok_or_else(|| { MethodErr::no_path(&ctx.path) })?;
-                    let iface = data.get_from_typeid_mut(entry.typeid).ok_or_else(|| { MethodErr::no_interface(&ctx.iface) })?;
+                    let data = cr.paths.get_mut(ctx.path().as_cstr()).ok_or_else(|| { MethodErr::no_path(ctx.path()) })?;
+                    let iface = data.get_from_typeid_mut(entry.typeid).ok_or_else(|| { MethodErr::no_interface(ctx.interface()) })?;
                     let iface = &mut **iface;
                     f(ctx, iface)
                 },

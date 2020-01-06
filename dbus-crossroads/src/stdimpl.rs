@@ -67,7 +67,7 @@ where F: FnOnce(&mut H::SetProp, &mut Path<H>, Box<dyn arg::RefArg>, &mut MsgCtx
 {
     let mut iter = ctx.message().iter_init();
     let (iname, propname) = (iter.read()?, iter.read()?);
-    let (propinfo, pathdata, emits) = cr.prop_lookup_mut(ctx.path.as_cstr(), iname, propname)
+    let (propinfo, pathdata, emits) = cr.prop_lookup_mut(ctx.path().as_cstr(), iname, propname)
         .ok_or_else(|| { MethodErr::no_property(&"Property not found") })?;
     if propinfo.access == Access::Read { Err(MethodErr::no_property(&"Property is read only"))? };
     let handler = propinfo.handlers.1.as_mut()
@@ -86,12 +86,12 @@ where F: FnOnce(&mut H::SetProp, &mut Path<H>, Box<dyn arg::RefArg>, &mut MsgCtx
     if let Some(r) = f(handler, pathdata, val, ctx)? {
         match emits {
             EmitsChangedSignal::True => {
-                let p = ctx.path.clone().into_static();
+                let p = ctx.path().clone().into_static();
                 ctx.dbus_signals_mut().add_changed_property(p, iname, propname, r);
             },
             EmitsChangedSignal::False => {},
             EmitsChangedSignal::Invalidates => {
-                let p = ctx.path.clone().into_static();
+                let p = ctx.path().clone().into_static();
                 ctx.dbus_signals_mut().add_invalidated_property(p, iname, propname);
             },
             EmitsChangedSignal::Const => {}, // Panic here because the property cannot change?
@@ -135,7 +135,7 @@ where F: FnOnce(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx
 {
     let mut iter = ctx.message().iter_init();
     let (iname, propname) = (iter.read()?, iter.read()?);
-    let (propinfo, pathdata, _) = cr.prop_lookup_mut(ctx.path.as_cstr(), iname, propname)
+    let (propinfo, pathdata, _) = cr.prop_lookup_mut(ctx.path().as_cstr(), iname, propname)
         .ok_or_else(|| { MethodErr::no_property(&"Property not found") })?;
     if propinfo.access == Access::Write { Err(MethodErr::no_property(&"Property is write only"))? };
     let handler = propinfo.handlers.0.as_mut()
@@ -199,7 +199,7 @@ where F: FnMut(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx)
     let mut iter = ctx.message().iter_init();
     let iname: &CStr = iter.read()?;
 
-    let pdata = cr.paths.get_mut(ctx.path.as_cstr())
+    let pdata = cr.paths.get_mut(ctx.path().as_cstr())
         .ok_or_else(|| { MethodErr::no_property(&"Path not found") })?;
     let entry = cr.reg.get_mut(iname)
         .ok_or_else(|| { MethodErr::no_property(&"Interface not found") })?;
@@ -218,7 +218,7 @@ where F: FnMut(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx)
 fn objmgr_mut<H: Handlers, F>(cr: &mut Crossroads<H>, ctx: &mut MsgCtx, mut f: F) -> Result<Message, MethodErr>
 where F: FnMut(&mut H::GetProp, &mut Path<H>, &mut arg::IterAppend, &mut MsgCtx) -> Result<(), MethodErr>
 {
-    let pathname = ctx.path.clone().into_static();
+    let pathname = ctx.path().clone().into_static();
     let mut p = Vec::<u8>::from(pathname.as_bytes());
     if !p.ends_with(b"/") { p.push(b'/'); }
 
