@@ -1,6 +1,11 @@
 dbus-futures
 ============
 
+Abandoned - there is code in dbus-tokio and dbus crates that provide some support
+for async connections.
+
+
+
 Async DBus connection for Futures 0.3.
 
 Experimental / WIP / alpha.
@@ -72,4 +77,3 @@ let s = c.add_signal_stream::<DBusNameOwnerChanged>(None, None).into_stream().fo
 exec.spawn(s);
 exec.run();
 ```
-
