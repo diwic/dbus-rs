@@ -47,6 +47,8 @@ impl Authentication {
 
 
 #[test]
+#[ignore] // ignored by default, because older distros have abstract sockets, which rust does not
+// support. https://github.com/rust-lang/rust/issues/42048
 fn session_auth() {
     let addr = crate::address::read_session_address().unwrap();
     assert!(addr.starts_with("unix:path="));

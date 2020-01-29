@@ -22,12 +22,14 @@ pub fn read_system_address() -> Result<String, Box<dyn std::error::Error>> {
 fn bus_exists() {
     let addr = read_session_address().unwrap();
     println!("Bus address is: {:?}", addr);
-    assert!(addr.starts_with("unix:path="));
-    let path = std::path::Path::new(&addr["unix:path=".len()..]);
-    assert!(path.exists());
+    if addr.starts_with("unix:path=") {
+        let path = std::path::Path::new(&addr["unix:path=".len()..]);
+        assert!(path.exists());
+    }
 
     let addr = read_system_address().unwrap();
-    assert!(addr.starts_with("unix:path="));
-    let path = std::path::Path::new(&addr["unix:path=".len()..]);
-    assert!(path.exists());
+    if addr.starts_with("unix:path=") {
+        let path = std::path::Path::new(&addr["unix:path=".len()..]);
+        assert!(path.exists());
+    }
 }
