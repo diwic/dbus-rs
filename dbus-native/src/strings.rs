@@ -28,27 +28,27 @@ fn is_az09_hyphen(b: u8) -> Result<(), ()> {
     }
 }
 
-pub fn is_valid_member_name(s: &str) -> Result<(), ()> {
-    if s.len() > 255 { return Err(()); }
-    let mut x = s.bytes();
-    let c = x.next().ok_or(())?;
+pub fn is_valid_member_name(s: &[u8]) -> Result<(), ()> {
+    if s.len() > 255 { Err(())? }
+    let mut x = s.into_iter();
+    let c = *x.next().ok_or(())?;
     is_az_(c)?;
-    for c in x { is_az09_(c)? };
+    for c in x { is_az09_(*c)? };
     Ok(())
 }
 
-pub fn is_valid_error_name(s: &str) -> Result<(), ()> {
+pub fn is_valid_error_name(s: &[u8]) -> Result<(), ()> {
     return is_valid_interface_name(s)
 }
 
-pub fn is_valid_interface_name(s: &str) -> Result<(), ()> {
-    if s.len() > 255 { return Err(()); }
-    let mut x = s.bytes();
+pub fn is_valid_interface_name(s: &[u8]) -> Result<(), ()> {
+    if s.len() > 255 { Err(())? }
+    let mut x = s.into_iter();
     let mut elements = 1;
     'outer: loop {
-        let c = x.next().ok_or(())?;
+        let c = *x.next().ok_or(())?;
         is_az_(c)?;
-        while let Some(c) = x.next() {
+        while let Some(&c) = x.next() {
             if c == b'.' {
                 elements += 1;
                 continue 'outer;
@@ -59,12 +59,12 @@ pub fn is_valid_interface_name(s: &str) -> Result<(), ()> {
     }
 }
 
-fn is_valid_unique_conn_name(mut x: std::str::Bytes) -> Result<(), ()> {
+fn is_valid_unique_conn_name(mut x: std::slice::Iter<u8>) -> Result<(), ()> {
     let mut elements = 1;
     'outer: loop {
-        let c = x.next().ok_or(())?;
+        let c = *x.next().ok_or(())?;
         is_az09_hyphen(c)?;
-        while let Some(c) = x.next() {
+        while let Some(&c) = x.next() {
             if c == b'.' {
                 elements += 1;
                 continue 'outer;
@@ -75,18 +75,18 @@ fn is_valid_unique_conn_name(mut x: std::str::Bytes) -> Result<(), ()> {
     }
 }
 
-pub fn is_valid_bus_name(s: &str) -> Result<(), ()> {
+pub fn is_valid_bus_name(s: &[u8]) -> Result<(), ()> {
     if s.len() > 255 { return Err(()); }
-    let mut x = s.bytes();
-    let mut c_first = x.next().ok_or(())?;
+    let mut x = s.into_iter();
+    let mut c_first = *x.next().ok_or(())?;
     if c_first == b':' { return is_valid_unique_conn_name(x); }
     let mut elements = 1;
     'outer: loop {
         is_az_hyphen(c_first)?;
-        while let Some(c) = x.next() {
+        while let Some(&c) = x.next() {
             if c == b'.' {
                 elements += 1;
-                c_first = x.next().ok_or(())?;
+                c_first = *x.next().ok_or(())?;
                 continue 'outer;
             }
             is_az09_hyphen(c)?;
@@ -95,16 +95,16 @@ pub fn is_valid_bus_name(s: &str) -> Result<(), ()> {
     }
 }
 
-pub fn is_valid_object_path(s: &str) -> Result<(), ()> {
-    let mut x = s.bytes();
+pub fn is_valid_object_path(s: &[u8]) -> Result<(), ()> {
+    let mut x = s.into_iter();
     let c = x.next();
-    if c != Some(b'/') { Err(())? };
+    if c != Some(&b'/') { Err(())? };
     if s.len() == 1 { return Ok(()) };
 
     'outer: loop {
-        let c = x.next().ok_or(())?;
+        let c = *x.next().ok_or(())?;
         is_az09_(c)?;
-        while let Some(c) = x.next() {
+        while let Some(&c) = x.next() {
             if c == b'/' { continue 'outer; }
             is_az09_(c)?;
         }
@@ -164,46 +164,46 @@ pub fn is_valid_signature_multi(s: &[u8]) -> Result<(), ()> {
 
 #[test]
 fn member() {
-    assert!(is_valid_member_name("").is_err());
-    assert!(is_valid_member_name("He11o").is_ok());
-    assert!(is_valid_member_name("He11o!").is_err());
-    assert!(is_valid_member_name("1Hello").is_err());
-    assert!(is_valid_member_name(":1.54").is_err());
+    assert!(is_valid_member_name(b"").is_err());
+    assert!(is_valid_member_name(b"He11o").is_ok());
+    assert!(is_valid_member_name(b"He11o!").is_err());
+    assert!(is_valid_member_name(b"1Hello").is_err());
+    assert!(is_valid_member_name(b":1.54").is_err());
 }
 
 #[test]
 fn interface() {
-    assert!(is_valid_interface_name("").is_err());
-    assert!(is_valid_interface_name("He11o").is_err());
-    assert!(is_valid_interface_name("Hello.").is_err());
-    assert!(is_valid_interface_name("Hello!.World").is_err());
-    assert!(is_valid_interface_name("ZZZ.1Hello").is_err());
-    assert!(is_valid_interface_name("Hello.W0rld").is_ok());
-    assert!(is_valid_interface_name(":1.54").is_err());
+    assert!(is_valid_interface_name(b"").is_err());
+    assert!(is_valid_interface_name(b"He11o").is_err());
+    assert!(is_valid_interface_name(b"Hello.").is_err());
+    assert!(is_valid_interface_name(b"Hello!.World").is_err());
+    assert!(is_valid_interface_name(b"ZZZ.1Hello").is_err());
+    assert!(is_valid_interface_name(b"Hello.W0rld").is_ok());
+    assert!(is_valid_interface_name(b":1.54").is_err());
 }
 
 #[test]
 fn bus() {
-    assert!(is_valid_bus_name("").is_err());
-    assert!(is_valid_bus_name("He11o").is_err());
-    assert!(is_valid_bus_name("Hello.").is_err());
-    assert!(is_valid_bus_name("Hello!.World").is_err());
-    assert!(is_valid_bus_name("ZZZ.1Hello").is_err());
-    assert!(is_valid_bus_name("Hello.W0rld").is_ok());
-    assert!(is_valid_bus_name(":1.54").is_ok());
-    assert!(is_valid_bus_name("1.54").is_err());
+    assert!(is_valid_bus_name(b"").is_err());
+    assert!(is_valid_bus_name(b"He11o").is_err());
+    assert!(is_valid_bus_name(b"Hello.").is_err());
+    assert!(is_valid_bus_name(b"Hello!.World").is_err());
+    assert!(is_valid_bus_name(b"ZZZ.1Hello").is_err());
+    assert!(is_valid_bus_name(b"Hello.W0rld").is_ok());
+    assert!(is_valid_bus_name(b":1.54").is_ok());
+    assert!(is_valid_bus_name(b"1.54").is_err());
 }
 
 #[test]
 fn object_path() {
-    assert!(is_valid_object_path("").is_err());
-    assert!(is_valid_object_path("/").is_ok());
-    assert!(is_valid_object_path("/1234").is_ok());
-    assert!(is_valid_object_path("/abce/").is_err());
-    assert!(is_valid_object_path("/ab//c/d").is_err());
-    assert!(is_valid_object_path("/a/c/df1").is_ok());
-    assert!(is_valid_object_path("/12.43/fasd").is_err());
-    assert!(is_valid_object_path("/asdf/_123").is_ok());
+    assert!(is_valid_object_path(b"").is_err());
+    assert!(is_valid_object_path(b"/").is_ok());
+    assert!(is_valid_object_path(b"/1234").is_ok());
+    assert!(is_valid_object_path(b"/abce/").is_err());
+    assert!(is_valid_object_path(b"/ab//c/d").is_err());
+    assert!(is_valid_object_path(b"/a/c/df1").is_ok());
+    assert!(is_valid_object_path(b"/12.43/fasd").is_err());
+    assert!(is_valid_object_path(b"/asdf/_123").is_ok());
 }
 
 #[test]
