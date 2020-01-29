@@ -21,6 +21,7 @@ pub fn read_system_address() -> Result<String, Box<dyn std::error::Error>> {
 #[test]
 fn bus_exists() {
     let addr = read_session_address().unwrap();
+    println!("Bus address is: {:?}", addr);
     assert!(addr.starts_with("unix:path="));
     let path = std::path::Path::new(&addr["unix:path=".len()..]);
     assert!(path.exists());
