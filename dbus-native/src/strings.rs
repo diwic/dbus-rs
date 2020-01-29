@@ -114,34 +114,36 @@ pub fn is_valid_object_path(s: &[u8]) -> Result<(), ()> {
 
 const BASIC_TYPES: &[u8] = b"ybnqiuxtdhsog";
 
-fn sig_multi(s: &[u8]) -> Option<usize> {
+fn sig_multi(s: &[u8], arrs: u8, structs: u8) -> Option<usize> {
     let mut pos = 0;
     while pos < s.len() {
         if s.get(pos) == Some(&b')') { return Some(pos) }
-        pos += sig_single(&s[pos..])?;
+        pos += sig_single(&s[pos..], arrs, structs)?;
     }
     Some(pos)
 }
 
-fn sig_single(s: &[u8]) -> Option<usize> {
+fn sig_single(s: &[u8], arrs: u8, structs: u8) -> Option<usize> {
     s.first().and_then(|c| {
         if BASIC_TYPES.into_iter().any(|x| x == c) { Some(1) }
         else {
             Some(1 + match c {
                 b'v' => 0, // Variant
                 b'a' => { // Array
+                    if arrs >= 32 { None? };
                     if s.get(1) == Some(&b'{') { // Dict
                         let c = s.get(2)?;
                         if !BASIC_TYPES.into_iter().any(|x| x == c) { None? };
-                        let pos = 3 + sig_single(&s[3..])?;
+                        let pos = 3 + sig_single(&s[3..], arrs+1, structs)?;
                         if s.get(pos)? != &b'}' { None? }
                         pos
                     } else {
-                        sig_single(&s[1..])?
+                        sig_single(&s[1..], arrs+1, structs)?
                     }
                 },
                 b'(' => {
-                    let pos = 1 + sig_multi(&s[1..])?;
+                    if structs >= 32 { None? };
+                    let pos = 1 + sig_multi(&s[1..], arrs, structs+1)?;
                     if pos == 1 || s.get(pos)? != &b')' { None? }
                     pos
                 },
@@ -152,12 +154,12 @@ fn sig_single(s: &[u8]) -> Option<usize> {
 }
 
 pub fn is_valid_signature_single(s: &[u8]) -> Result<(), ()> {
-    let pos = sig_single(s).ok_or(())?;
+    let pos = sig_single(s, 0, 0).ok_or(())?;
     return if pos == s.len() { Ok(()) } else { Err(()) }
 }
 
 pub fn is_valid_signature_multi(s: &[u8]) -> Result<(), ()> {
-    let pos = sig_multi(s).ok_or(())?;
+    let pos = sig_multi(s, 0, 0).ok_or(())?;
     return if pos == s.len() { Ok(()) } else { Err(()) }
 }
 
