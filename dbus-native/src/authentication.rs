@@ -43,33 +43,34 @@ impl Authentication {
             },
         }
     }
+
+    pub fn blocking<R: std::io::BufRead, W: std::io::Write>(r: &mut R, w: &mut W) -> Result<bool, Box<dyn std::error::Error>> {
+        let (mut a, s) = Authentication::new();
+        w.write_all(s.as_bytes())?;
+
+        let mut b = vec![];
+        r.read_until(b'\n', &mut b)?;
+        let s = a.handle(&b)?;
+        w.write_all(s.as_bytes())?;
+        debug_assert_eq!(a, Authentication::WaitingForAgreeUnixFD);
+
+        let mut b = vec![];
+        r.read_until(b'\n', &mut b)?;
+        a.handle(&b)?;
+        if let Authentication::Begin(ufd) = a { Ok(ufd) } else { unreachable!() }
+    }
 }
 
 
 #[test]
-#[ignore] // ignored by default, because older distros have abstract sockets, which rust does not
-// support. https://github.com/rust-lang/rust/issues/42048
 fn session_auth() {
     let addr = crate::address::read_session_address().unwrap();
-    assert!(addr.starts_with("unix:path="));
+    // dbus-deamon (not the systemd variant) has abstract sockets, which rust does not
+    // support. https://github.com/rust-lang/rust/issues/42048
+    if !addr.starts_with("unix:path=") { return; }
     let path = std::path::Path::new(&addr["unix:path=".len()..]);
-
-    use std::io::prelude::*;
-    let mut stream = std::os::unix::net::UnixStream::connect(&path).unwrap();
-    let (mut a, s) = Authentication::new();
-    stream.write_all(s.as_bytes()).unwrap();
+    let stream = std::os::unix::net::UnixStream::connect(&path).unwrap();
+    
     let mut reader = std::io::BufReader::new(&stream);
-
-    let mut b = vec![];
-    reader.read_until(b'\n', &mut b).unwrap();
-    let s = a.handle(&b).unwrap();
-    (&stream).write_all(s.as_bytes()).unwrap();
-    assert_eq!(a, Authentication::WaitingForAgreeUnixFD);
-
-    let mut b = vec![];
-    reader.read_until(b'\n', &mut b).unwrap();
-    a.handle(&b).unwrap();
-    assert_eq!(a, Authentication::Begin(true));
-    (&stream).write_all(s.as_bytes()).unwrap();
-
+    assert!(Authentication::blocking(&mut reader, &mut &stream).unwrap());
 }
