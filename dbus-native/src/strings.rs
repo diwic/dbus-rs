@@ -1,4 +1,9 @@
-// WIP
+pub fn is_valid_string(s: &str) -> Result<(), ()> {
+    // 134217728 (128 MiB) is the maximum length of a message, so it follows that
+    // a string can't be longer.
+    if s.len() >= 134217728 { Err(()) }
+    else if s.as_bytes().iter().any(|&b| b == 0) { Err(()) } else { Ok(()) }
+}
 
 fn is_az_(b: u8) -> Result<(), ()> {
     match b {
@@ -154,15 +159,23 @@ fn sig_single(s: &[u8], arrs: u8, structs: u8) -> Option<usize> {
 }
 
 pub fn is_valid_signature_single(s: &[u8]) -> Result<(), ()> {
+    if s.len() > 255 { Err(())? }
     let pos = sig_single(s, 0, 0).ok_or(())?;
     return if pos == s.len() { Ok(()) } else { Err(()) }
 }
 
 pub fn is_valid_signature_multi(s: &[u8]) -> Result<(), ()> {
+    if s.len() > 255 { Err(())? }
     let pos = sig_multi(s, 0, 0).ok_or(())?;
     return if pos == s.len() { Ok(()) } else { Err(()) }
 }
 
+#[test]
+fn string() {
+    assert!(is_valid_string("").is_ok());
+    assert!(is_valid_string("Hell\0").is_err());
+    assert!(is_valid_string("\u{ffff}").is_ok());
+}
 
 #[test]
 fn member() {
