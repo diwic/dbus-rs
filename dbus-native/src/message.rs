@@ -11,102 +11,20 @@ const ENDIAN: u8 = b'l';
 #[cfg(target_endian = "big")]
 const ENDIAN: u8 = b'B';
 
-enum State {
-    FixedHeader([u8; 16]),
-    VarHeader(u8),
-    _Body,
-}
-
-fn add_header_string(old_size: usize, x: &Option<Cow<str>>) -> usize {
+fn add_header_string<'a>(buf: &'a mut [u8], header_type: u8, x: &Option<Cow<str>>) -> &'a mut [u8] {
     if let Some(p) = x.as_ref() {
-        let n = (old_size + 7) & !7; // struct must start on 8-byte boundary
-        // u8 + padding + u32 (string length) + string + nul byte
-        n + 1 + 3 + 4 + p.len() + 1
-    } else { old_size }
-}
-
-impl State {
-    fn start(msg: &Message, serial: u32) -> Result<State, ()> {
-        let h1 = [ENDIAN, msg.msg_type, msg.flags, 1];
-
-        let b = msg.body.len();
-        if b >= 134217728 { Err(())? }
-        let h2 = (b as u32).to_ne_bytes();
-
-        let h3 = serial.to_ne_bytes();
-
-        let mut hs = 4; // array size
-        hs = add_header_string(hs, &msg.path);
-        hs = add_header_string(hs, &msg.interface);
-        hs = add_header_string(hs, &msg.member);
-        hs = add_header_string(hs, &msg.error_name);
-        if msg.reply_serial.is_some() {
-            hs = (hs + 7) & !7;
-            hs += 1 + 3 + 4;
-        }
-        hs = add_header_string(hs, &msg.destination);
-        hs = add_header_string(hs, &msg.sender);
-        if let Some(r) = msg.signature.as_ref() { // Signatures require no padding
-            hs = (hs + 7) & !7;
-            hs += 1 + 1 + r.len() + 1;
-        }
-        debug_assert!(hs <= 67108864); // All fields have lengths < 256
-        let h4 = hs.to_ne_bytes();
-
-        if hs + 16 + 8 + b > 134217728 { Err(())? }
-
-        let a = [
-            h1[0], h1[1], h1[2], h1[3],
-            h2[0], h2[1], h2[2], h2[3],
-            h3[0], h3[1], h3[2], h3[3],
-            h4[0], h4[1], h4[2], h4[3],
-        ];
-
-        Ok(State::FixedHeader(a))
-    }
-
-}
-
-pub struct WriteState<'b, 'a> {
-    state: State,
-    pos: usize,
-    msg: &'b Message<'a>,
-}
-
-impl WriteState<'_, '_> {
-    // Return true if finished
-    pub fn write<W: std::io::Write>(&mut self, w: &mut W) -> std::io::Result<bool> {
-        loop {
-            match self.state {
-                State::FixedHeader(h) => {
-                    let p = w.write(&h[self.pos..])?;
-                    self.pos += p;
-                    debug_assert!(self.pos <= 16);
-                    if self.pos == 16 {
-                        self.pos = 0;
-                        self.state = State::VarHeader(1);
-                    } else { return Ok(false) };
-                }
-                State::_Body => {
-                    let body_len = self.msg.body.len();
-                    debug_assert!(self.pos <= body_len);
-                    if self.pos == body_len { return Ok(true) };
-                    let p = w.write(&self.msg.body[self.pos..])?;
-                    self.pos += p;
-                    debug_assert!(self.pos <= body_len);
-                    return Ok(self.pos == body_len);
-                }
-                State::VarHeader(_) => todo!(),
-            }
-        }
-    }
+        use crate::types;
+        let s = types::Struct((header_type, types::Str(p.as_bytes())));
+        use crate::types::Marshal;
+        s.write_buf(buf)
+    } else { buf }
 }
 
 #[derive(Clone, Debug)]
 pub struct Message<'a> {
     msg_type: u8,
     flags: u8,
-    serial: u32,
+//    serial: Option<NonZeroU32>,
     path: Option<Cow<'a, str>>,
     interface: Option<Cow<'a, str>>,
     member: Option<Cow<'a, str>>,
@@ -119,12 +37,82 @@ pub struct Message<'a> {
     body: Cow<'a, [u8]>,
 }
 
+fn size_estimate(x: &Option<Cow<str>>) -> usize {
+    if let Some(s) = x.as_ref() { 7 + 1 + 3 + s.len() + 1 } else { 0 }
+}
+
 impl<'a> Message<'a> {
+
+    fn marshal_header(&self, serial: u32, f: impl FnOnce(&mut [u8])) -> Result<(), ()> {
+        const BIG_HEADER: usize = 256;
+
+        use crate::types;
+        use crate::types::Marshal;
+
+        // Estimate header size
+        // First 7 (pre-align) + 16 + 16 (reply serial) + 7 (post-align)
+        let mut size = 7 + 16 + 16 + 7;
+        size += size_estimate(&self.path);
+        size += size_estimate(&self.interface);
+        size += size_estimate(&self.member);
+        size += size_estimate(&self.error_name);
+        size += size_estimate(&self.destination);
+        size += size_estimate(&self.sender);
+        size += size_estimate(&self.signature);
+
+        let mut dyn_buf;
+        let mut stack_buf;
+        let b: &mut [u8] = if size >= BIG_HEADER {
+            dyn_buf = vec![0; size];
+            &mut *dyn_buf
+        } else {
+            stack_buf = [0; BIG_HEADER];
+            &mut stack_buf[..]
+        };
+
+        let mut b = types::align_buf_mut::<types::Struct::<(u8, u8)>>(b);
+
+        let p = ENDIAN.write_buf(&mut b);
+        let p = self.msg_type.write_buf(p);
+        let p = self.flags.write_buf(p);
+        let p = 1u8.write_buf(p);
+
+        let body_len = self.body.len();
+        if body_len >= 134217728 { Err(())? }
+        let p = (body_len as u32).write_buf(p);
+        let p = serial.write_buf(p);
+        let (arr_size_buf, mut p) = p.split_at_mut(4);
+        let arr_begin = p.as_ptr() as usize;
+        p = add_header_string(p, 1, &self.path);
+        p = add_header_string(p, 2, &self.interface);
+        p = add_header_string(p, 3, &self.member);
+        p = add_header_string(p, 4, &self.error_name);
+        if let Some(r) = self.reply_serial.as_ref() {
+            let s = types::Struct((5u8, *r));
+            p = s.write_buf(p)
+        }
+        p = add_header_string(p, 6, &self.destination);
+        p = add_header_string(p, 7, &self.sender);
+        if let Some(r) = self.signature.as_ref() {
+            let s = types::Struct((8u8, types::Signature(r.as_bytes())));
+            p = s.write_buf(p)
+        }
+
+        let arr_end = p.as_ptr() as usize;
+        let arr_size = arr_end - arr_begin;
+        (arr_size as u32).write_buf(arr_size_buf);
+        let header_size = types::align_up(arr_end, 8) - (b.as_ptr() as usize);
+        if body_len + header_size >= 134217728 { Err(())? }
+
+        f(&mut b[..header_size]);
+        Ok(())
+    }
+
     fn new_internal(t: u8) -> Self {
         Message {
             msg_type: t,
             flags: 0,
-            serial: 0,
+//            serial: 0,
             path: None,
             interface: None,
             member: None,
@@ -205,12 +193,17 @@ impl<'a> Message<'a> {
         Ok(())
     }
 
-    pub fn write<'b, W: std::io::Write>(&'b mut self, serial: std::num::NonZeroU32) -> Result<WriteState<'b, 'a>, ()> {
-        Ok(WriteState {
-            state: State::start(self, serial.get())?,
-            pos: 0,
-            msg: self
-        })
+    pub fn write_header<W: std::io::Write>(&self, w: &mut W, serial: std::num::NonZeroU32, mut offset: usize)
+    -> std::io::Result<Option<usize>> {
+        let mut res = Err(std::io::ErrorKind::InvalidData.into());
+        let _ = self.marshal_header(serial.get(), |buf| {
+            let buf = &buf[offset..];
+            res = w.write(buf).map(|written| {
+                offset += written;
+                if offset >= buf.len() { None } else { Some(offset) }
+            })
+        });
+        res
     }
 }
 
@@ -220,4 +213,8 @@ fn hello() {
     m.set_destination(Some("org.freedesktop.DBus".into())).unwrap();
     m.set_interface(Some("org.freedesktop.DBus".into())).unwrap();
 
+    let mut v = vec![];
+    m.write_header(&mut v, std::num::NonZeroU32::new(1u32).unwrap(), 0).unwrap();
+    println!("{:?}", v);
+    assert_eq!(v.len() % 8, 0);
 }

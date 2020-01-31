@@ -11,3 +11,5 @@ pub mod address;
 pub mod authentication;
 
 pub mod message;
+
+pub mod types;
