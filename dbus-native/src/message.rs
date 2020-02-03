@@ -2,6 +2,8 @@ use std::borrow::Cow;
 use crate::strings;
 use crate::types;
 use crate::types::Marshal;
+use std::convert::TryInto;
+use std::num::NonZeroU32;
 
 
 const METHOD_CALL: u8 = 1;
@@ -16,7 +18,7 @@ const ENDIAN: u8 = b'B';
 
 fn add_header_string<'a>(buf: &'a mut [u8], header_type: u8, x: &Option<Cow<str>>) -> &'a mut [u8] {
     if let Some(p) = x.as_ref() {
-        let s = types::Struct((header_type, types::Variant(types::Str(p.as_bytes()))));
+        let s = types::Struct((header_type, types::Variant(types::Str(p))));
         s.write_buf(buf)
     } else { buf }
 }
@@ -25,7 +27,7 @@ fn add_header_string<'a>(buf: &'a mut [u8], header_type: u8, x: &Option<Cow<str>
 pub struct Message<'a> {
     msg_type: u8,
     flags: u8,
-//    serial: Option<NonZeroU32>,
+    serial: Option<NonZeroU32>,
     path: Option<Cow<'a, str>>,
     interface: Option<Cow<'a, str>>,
     member: Option<Cow<'a, str>>,
@@ -36,81 +38,15 @@ pub struct Message<'a> {
     signature: Option<Cow<'a, str>>,
 //    unix_fds: Option<u32>,
     body: Cow<'a, [u8]>,
+    is_big_endian: bool,
 }
-/*
-fn size_estimate(x: &Option<Cow<str>>) -> usize {
-    if let Some(s) = x.as_ref() { 7 + 1 + 3 + s.len() + 1 } else { 0 }
-}
-*/
+
 impl<'a> Message<'a> {
-/*
-    fn marshal_header(&self, serial: u32, f: impl FnOnce(&mut [u8])) -> Result<(), ()> {
-        const BIG_HEADER: usize = 256;
-
-        // Estimate header size
-        // First 7 (pre-align) + 16 + 16 (reply serial) + 7 (post-align)
-        let mut size = 7 + 16 + 16 + 7;
-        size += size_estimate(&self.path);
-        size += size_estimate(&self.interface);
-        size += size_estimate(&self.member);
-        size += size_estimate(&self.error_name);
-        size += size_estimate(&self.destination);
-        size += size_estimate(&self.sender);
-        size += size_estimate(&self.signature);
-
-        let mut dyn_buf;
-        let mut stack_buf;
-        let b: &mut [u8] = if size >= BIG_HEADER {
-            dyn_buf = vec![0; size];
-            &mut *dyn_buf
-        } else {
-            stack_buf = [0; BIG_HEADER];
-            &mut stack_buf[..]
-        };
-
-        let mut b = types::align_buf_mut::<types::Struct::<(u8, u8)>>(b);
-
-        let p = ENDIAN.write_buf(&mut b);
-        let p = self.msg_type.write_buf(p);
-        let p = self.flags.write_buf(p);
-        let p = 1u8.write_buf(p);
-
-        let body_len = self.body.len();
-        if body_len >= 134217728 { Err(())? }
-        let p = (body_len as u32).write_buf(p);
-        let p = serial.write_buf(p);
-        let (arr_size_buf, mut p) = p.split_at_mut(4);
-        let arr_begin = p.as_ptr() as usize;
-        p = add_header_string(p, 1, &self.path);
-        p = add_header_string(p, 2, &self.interface);
-        p = add_header_string(p, 3, &self.member);
-        p = add_header_string(p, 4, &self.error_name);
-        if let Some(r) = self.reply_serial.as_ref() {
-            let s = types::Struct((5u8, *r));
-            p = s.write_buf(p)
-        }
-        p = add_header_string(p, 6, &self.destination);
-        p = add_header_string(p, 7, &self.sender);
-        if let Some(r) = self.signature.as_ref() {
-            let s = types::Struct((8u8, types::Signature(r.as_bytes())));
-            p = s.write_buf(p)
-        }
-
-        let arr_end = p.as_ptr() as usize;
-        let arr_size = arr_end - arr_begin;
-        (arr_size as u32).write_buf(arr_size_buf);
-        let header_size = types::align_up(arr_end, 8) - (b.as_ptr() as usize);
-        if body_len + header_size >= 134217728 { Err(())? }
-
-        f(&mut b[..header_size]);
-        Ok(())
-    }
-*/
     fn new_internal(t: u8) -> Self {
         Message {
             msg_type: t,
             flags: 0,
-//            serial: 0,
+            serial: None,
             path: None,
             interface: None,
             member: None,
@@ -121,6 +57,10 @@ impl<'a> Message<'a> {
             signature: None,
 //            unix_fds: None,
             body: Cow::Borrowed(&[]),
+            #[cfg(target_endian = "little")]
+            is_big_endian: false,
+            #[cfg(target_endian = "big")]
+            is_big_endian: true,
         }
     }
 
@@ -232,20 +172,56 @@ impl<'a> Message<'a> {
         Ok(&mut b[..header_size])
     }
 
-/*
-    pub fn write_header<W: std::io::Write>(&self, w: &mut W, serial: std::num::NonZeroU32, mut offset: usize)
-    -> std::io::Result<Option<usize>> {
-        let mut res = Err(std::io::ErrorKind::InvalidData.into());
-        let _ = self.marshal_header(serial.get(), |buf| {
-            let buf = &buf[offset..];
-            res = w.write(buf).map(|written| {
-                offset += written;
-                if offset >= buf.len() { None } else { Some(offset) }
-            })
-        });
-        res
+    pub fn body(&self) -> &[u8] { &self.body }
+
+    pub fn is_big_endian(&self) -> bool { self.is_big_endian }
+
+    // Should disconnect on error. If Ok(None) is returned, its a message that should be ignored.
+    pub fn parse(buf: &'a [u8]) -> Result<Option<Self>, &'static str> {
+        let start = message_start_parse(buf)?;
+        if buf.len() < start.total_size { Err("Not enough message data")? }
+        let msg_type = buf[1];
+        if msg_type < 1 || msg_type > 4 { return Ok(None) };
+        let mut m = Self::new_internal(msg_type);
+        m.is_big_endian = buf[0] == b'B';
+        m.flags = buf[2] & 0x7;
+        if buf[3] != 1 { Err("Invalid protocol version")? };
+        let serial = buf[8..12].try_into().unwrap();
+        let serial = if m.is_big_endian { u32::from_be_bytes(serial) } else { u32::from_le_bytes(serial) };
+        m.serial = Some(NonZeroU32::new(serial).ok_or("Serial cannot be zero")?);
+        m.body = Cow::Borrowed(&buf[start.body_start..start.total_size]);
+
+        let _header_fields = &buf[12..start.body_start];
+
+        Ok(Some(m))
     }
-    */
+}
+
+struct MsgStart {
+    body_start: usize,
+    total_size: usize,
+}
+
+fn message_start_parse(buf: &[u8]) -> Result<MsgStart, &'static str> {
+    if buf.len() < 16 { Err("Message start must be 16 bytes")? };
+    let body_len = buf[4..8].try_into().unwrap();
+    let arr_len = buf[12..16].try_into().unwrap();
+    let (body_len, arr_len) = match buf[0] {
+        b'l' => (u32::from_le_bytes(body_len), u32::from_le_bytes(arr_len)),
+        b'B' => (u32::from_be_bytes(body_len), u32::from_be_bytes(arr_len)),
+        _ => Err("Invalid first byte of message")?
+    };
+    let body_len = body_len as usize;
+    let body_start = types::align_up(arr_len as usize, 8) + 16;
+    let total_size = body_start + body_len;
+    if body_len >= 134217728 || arr_len >= 67108864 || total_size >= 134217728 {
+        Err("Message too large")?
+    }
+    Ok(MsgStart { total_size, body_start })
+}
+
+pub fn total_message_size(buf: &[u8]) -> Result<usize, &'static str> {
+    message_start_parse(buf).map(|x| x.total_size)
 }
 
 #[test]
