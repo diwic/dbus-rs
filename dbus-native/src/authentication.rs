@@ -1,14 +1,14 @@
 
 #[derive(Clone, Copy, Eq, Ord, PartialEq, PartialOrd, Hash, Debug)]
 pub enum Authentication {
-    WaitingForOK,
+    WaitingForOK(bool),
     WaitingForAgreeUnixFD,
     Error,
     Begin(bool),
 }
 
 impl Authentication {
-    pub fn new() -> (Self, String) {
+    pub fn new(do_unix_fd: bool) -> (Self, String) {
         let uid = unsafe { libc::getuid() };
         let uid = uid.to_string();
         let mut s = String::from("\0AUTH EXTERNAL ");
@@ -16,7 +16,7 @@ impl Authentication {
             s.push_str(&format!("{:2x}", c));
         }
         s.push_str("\r\n");
-        (Authentication::WaitingForOK, s)
+        (Authentication::WaitingForOK(do_unix_fd), s)
     }
     pub fn handle(&mut self, data: &[u8]) -> Result<&'static str, Box<dyn std::error::Error>> {
         let old_state = *self;
@@ -26,9 +26,14 @@ impl Authentication {
         let s = s.trim();
         match old_state {
             Authentication::Error | Authentication::Begin(_) => Err("D-Bus invalid authentication state")?,
-            Authentication::WaitingForOK => if s.starts_with("OK ") || s == "OK" {
-                *self = Authentication::WaitingForAgreeUnixFD;
-                Ok("NEGOTIATE_UNIX_FD\r\n")
+            Authentication::WaitingForOK(b) => if s.starts_with("OK ") || s == "OK" {
+                if b {
+                    *self = Authentication::WaitingForAgreeUnixFD;
+                    Ok("NEGOTIATE_UNIX_FD\r\n")
+                } else {
+                    *self = Authentication::Begin(false);
+                    Ok("BEGIN\r\n")
+                }
             } else {
                 Err(format!("D-Bus authentication error ({})", s))?
             },
@@ -44,19 +49,20 @@ impl Authentication {
         }
     }
 
-    pub fn blocking<R: std::io::BufRead, W: std::io::Write>(r: &mut R, w: &mut W) -> Result<bool, Box<dyn std::error::Error>> {
-        let (mut a, s) = Authentication::new();
+    pub fn blocking<R: std::io::BufRead, W: std::io::Write>(r: &mut R, w: &mut W, do_unix_fd: bool) -> Result<bool, Box<dyn std::error::Error>> {
+        let (mut a, s) = Authentication::new(do_unix_fd);
         w.write_all(s.as_bytes())?;
 
         let mut b = vec![];
         r.read_until(b'\n', &mut b)?;
         let s = a.handle(&b)?;
         w.write_all(s.as_bytes())?;
-        debug_assert_eq!(a, Authentication::WaitingForAgreeUnixFD);
-
-        let mut b = vec![];
-        r.read_until(b'\n', &mut b)?;
-        a.handle(&b)?;
+        if a == Authentication::WaitingForAgreeUnixFD {
+            let mut b = vec![];
+            r.read_until(b'\n', &mut b)?;
+            let s = a.handle(&b)?;
+            w.write_all(s.as_bytes())?;
+        }
         if let Authentication::Begin(ufd) = a { Ok(ufd) } else { unreachable!() }
     }
 }
@@ -70,7 +76,7 @@ fn session_auth() {
     if !addr.starts_with("unix:path=") { return; }
     let path = std::path::Path::new(&addr["unix:path=".len()..]);
     let stream = std::os::unix::net::UnixStream::connect(&path).unwrap();
-    
+
     let mut reader = std::io::BufReader::new(&stream);
-    assert!(Authentication::blocking(&mut reader, &mut &stream).unwrap());
+    assert!(Authentication::blocking(&mut reader, &mut &stream, true).unwrap());
 }

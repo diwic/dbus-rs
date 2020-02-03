@@ -1,5 +1,8 @@
 use std::borrow::Cow;
 use crate::strings;
+use crate::types;
+use crate::types::Marshal;
+
 
 const METHOD_CALL: u8 = 1;
 const METHOD_RETURN: u8 = 2;
@@ -13,9 +16,7 @@ const ENDIAN: u8 = b'B';
 
 fn add_header_string<'a>(buf: &'a mut [u8], header_type: u8, x: &Option<Cow<str>>) -> &'a mut [u8] {
     if let Some(p) = x.as_ref() {
-        use crate::types;
-        let s = types::Struct((header_type, types::Str(p.as_bytes())));
-        use crate::types::Marshal;
+        let s = types::Struct((header_type, types::Variant(types::Str(p.as_bytes()))));
         s.write_buf(buf)
     } else { buf }
 }
@@ -36,18 +37,15 @@ pub struct Message<'a> {
 //    unix_fds: Option<u32>,
     body: Cow<'a, [u8]>,
 }
-
+/*
 fn size_estimate(x: &Option<Cow<str>>) -> usize {
     if let Some(s) = x.as_ref() { 7 + 1 + 3 + s.len() + 1 } else { 0 }
 }
-
+*/
 impl<'a> Message<'a> {
-
+/*
     fn marshal_header(&self, serial: u32, f: impl FnOnce(&mut [u8])) -> Result<(), ()> {
         const BIG_HEADER: usize = 256;
-
-        use crate::types;
-        use crate::types::Marshal;
 
         // Estimate header size
         // First 7 (pre-align) + 16 + 16 (reply serial) + 7 (post-align)
@@ -107,7 +105,7 @@ impl<'a> Message<'a> {
         f(&mut b[..header_size]);
         Ok(())
     }
-
+*/
     fn new_internal(t: u8) -> Self {
         Message {
             msg_type: t,
@@ -193,6 +191,48 @@ impl<'a> Message<'a> {
         Ok(())
     }
 
+    pub fn write_header<'b>(&self, serial: std::num::NonZeroU32, buf: &'b mut [u8]) -> Result<&'b mut [u8], ()> {
+        let mut b = types::align_buf_mut::<types::Struct::<(u8, u8)>>(buf);
+
+        let p = ENDIAN.write_buf(&mut b);
+        let p = self.msg_type.write_buf(p);
+        let p = self.flags.write_buf(p);
+        let p = 1u8.write_buf(p);
+
+        let body_len = self.body.len();
+        if body_len >= 134217728 { Err(())? }
+        let p = (body_len as u32).write_buf(p);
+        let p = serial.get().write_buf(p);
+        let (arr_size_buf, mut p) = p.split_at_mut(4);
+        let arr_begin = p.as_ptr() as usize;
+        if let Some(r) = self.path.as_ref() {
+            let s = types::Struct((1u8, types::Variant(types::ObjectPath(r.as_bytes()))));
+            p = s.write_buf(p)
+        }
+        p = add_header_string(p, 2, &self.interface);
+        p = add_header_string(p, 3, &self.member);
+        p = add_header_string(p, 4, &self.error_name);
+        if let Some(r) = self.reply_serial.as_ref() {
+            let s = types::Struct((5u8, types::Variant(*r)));
+            p = s.write_buf(p)
+        }
+        p = add_header_string(p, 6, &self.destination);
+        p = add_header_string(p, 7, &self.sender);
+        if let Some(r) = self.signature.as_ref() {
+            let s = types::Struct((8u8, types::Variant(types::Signature(r.as_bytes()))));
+            p = s.write_buf(p)
+        }
+
+        let arr_end = p.as_ptr() as usize;
+        let arr_size = arr_end - arr_begin;
+        (arr_size as u32).write_buf(arr_size_buf);
+        let header_size = types::align_up(arr_end, 8) - (b.as_ptr() as usize);
+        if body_len + header_size >= 134217728 { Err(())? }
+
+        Ok(&mut b[..header_size])
+    }
+
+/*
     pub fn write_header<W: std::io::Write>(&self, w: &mut W, serial: std::num::NonZeroU32, mut offset: usize)
     -> std::io::Result<Option<usize>> {
         let mut res = Err(std::io::ErrorKind::InvalidData.into());
@@ -205,6 +245,7 @@ impl<'a> Message<'a> {
         });
         res
     }
+    */
 }
 
 #[test]
@@ -213,8 +254,8 @@ fn hello() {
     m.set_destination(Some("org.freedesktop.DBus".into())).unwrap();
     m.set_interface(Some("org.freedesktop.DBus".into())).unwrap();
 
-    let mut v = vec![];
-    m.write_header(&mut v, std::num::NonZeroU32::new(1u32).unwrap(), 0).unwrap();
+    let mut v_storage = vec![0u8; 256];
+    let v = m.write_header(std::num::NonZeroU32::new(1u32).unwrap(), &mut v_storage).unwrap();
     println!("{:?}", v);
     assert_eq!(v.len() % 8, 0);
 }
