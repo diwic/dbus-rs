@@ -5,6 +5,7 @@ use crate::types::Marshal;
 use std::convert::TryInto;
 use std::num::NonZeroU32;
 
+const FIXED_HEADER_SIZE: usize = 16;
 
 const METHOD_CALL: u8 = 1;
 const METHOD_RETURN: u8 = 2;
@@ -203,7 +204,7 @@ struct MsgStart {
 }
 
 fn message_start_parse(buf: &[u8]) -> Result<MsgStart, &'static str> {
-    if buf.len() < 16 { Err("Message start must be 16 bytes")? };
+    if buf.len() < FIXED_HEADER_SIZE { Err("Message start must be 16 bytes")? };
     let body_len = buf[4..8].try_into().unwrap();
     let arr_len = buf[12..16].try_into().unwrap();
     let (body_len, arr_len) = match buf[0] {
@@ -212,7 +213,7 @@ fn message_start_parse(buf: &[u8]) -> Result<MsgStart, &'static str> {
         _ => Err("Invalid first byte of message")?
     };
     let body_len = body_len as usize;
-    let body_start = types::align_up(arr_len as usize, 8) + 16;
+    let body_start = types::align_up(arr_len as usize, 8) + FIXED_HEADER_SIZE;
     let total_size = body_start + body_len;
     if body_len >= 134217728 || arr_len >= 67108864 || total_size >= 134217728 {
         Err("Message too large")?
@@ -222,6 +223,57 @@ fn message_start_parse(buf: &[u8]) -> Result<MsgStart, &'static str> {
 
 pub fn total_message_size(buf: &[u8]) -> Result<usize, &'static str> {
     message_start_parse(buf).map(|x| x.total_size)
+}
+
+#[derive(Debug, Clone)]
+pub struct MessageReader {
+    storage: Vec<u8>,
+    read_bytes: usize,
+    total_size: Option<usize>,
+}
+
+impl MessageReader {
+    pub fn new() -> Self {
+        MessageReader {
+            storage:  vec![0u8; 256],
+            read_bytes: 0,
+            total_size: None,
+        }
+    }
+    pub fn clear(&mut self) {
+        if self.storage.capacity() < 256 {
+            self.storage = vec![0u8; 256];
+        } else {
+            self.storage.clear();
+            self.storage.resize(256, 0);
+        }
+        self.read_bytes = 0;
+        self.total_size = None;
+    }
+    pub fn get_buf(&mut self) -> &mut [u8] {
+        if let Some(ts) = self.total_size {
+            &mut self.storage[self.read_bytes..ts]
+        } else {
+            &mut self.storage[self.read_bytes..FIXED_HEADER_SIZE]
+        }
+    }
+
+    pub fn buf_written_to(&mut self, count: usize) -> Result<Option<Vec<u8>>, &'static str> {
+        self.read_bytes += count;
+        if self.total_size.is_none() && self.read_bytes >= FIXED_HEADER_SIZE {
+            let start = message_start_parse(&self.storage)?;
+            self.total_size = Some(start.total_size);
+            self.storage.resize(start.total_size, 0);
+        }
+        if Some(self.read_bytes) == self.total_size {
+            let r = std::mem::replace(&mut self.storage, vec!());
+            assert_eq!(r.len(), self.read_bytes);
+            self.clear();
+            Ok(Some(r))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 #[test]

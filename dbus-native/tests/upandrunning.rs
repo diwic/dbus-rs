@@ -27,13 +27,17 @@ fn connect_to_session_bus() {
     writer.write_all(v).unwrap();
     writer.flush().unwrap();
 
-    let mut v_storage = vec![0u8; 256];
-    reader.read_exact(&mut v_storage[0..16]).unwrap();
-    let total_len = message::total_message_size(&v_storage[0..16]).unwrap();
-    reader.read_exact(&mut v_storage[16..total_len]).unwrap();
-    println!("{:?}", &v_storage[0..total_len]);
-
-    let reply = message::Message::parse(&v_storage[0..total_len]).unwrap().unwrap();
+    let mut mr = message::MessageReader::new();
+    let v = loop {
+        let buflen = {
+            let buf = mr.get_buf();
+            reader.read_exact(buf).unwrap();
+            buf.len()
+        };
+        if let Some(v) = mr.buf_written_to(buflen).unwrap() { break v; }
+    };
+    println!("{:?}", v);
+    let reply = message::Message::parse(&v).unwrap().unwrap();
     println!("{:?}", reply);
 
     let (r, q): (types::Str, _) = types::Demarshal::parse(reply.body(), reply.is_big_endian()).unwrap();
