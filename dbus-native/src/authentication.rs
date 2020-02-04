@@ -9,7 +9,7 @@ pub enum Authentication {
 
 impl Authentication {
     pub fn new(do_unix_fd: bool) -> (Self, String) {
-        let uid = unsafe { libc::getuid() };
+        let uid = crate::sys::getuid();
         let uid = uid.to_string();
         let mut s = String::from("\0AUTH EXTERNAL ");
         for c in uid.as_bytes() {

@@ -5,11 +5,7 @@ use dbus::{address, types, message, authentication};
 #[test]
 fn connect_to_session_bus() {
     let addr = address::read_session_address().unwrap();
-    // dbus-deamon (not the systemd variant) has abstract sockets, which rust does not
-    // support. https://github.com/rust-lang/rust/issues/42048
-    if !addr.starts_with("unix:path=") { return; }
-    let path = std::path::Path::new(&addr["unix:path=".len()..]);
-    let stream = std::os::unix::net::UnixStream::connect(&path).unwrap();
+    let stream = address::connect_blocking(&addr).unwrap();
 
     let mut reader = std::io::BufReader::new(&stream);
     let mut writer = &stream;

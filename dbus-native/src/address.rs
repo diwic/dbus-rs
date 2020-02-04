@@ -1,3 +1,5 @@
+use std::os::unix::net::UnixStream;
+
 pub fn read_session_address() -> Result<String, Box<dyn std::error::Error>> {
     for (key, value) in std::env::vars_os() {
         if key == "DBUS_SESSION_BUS_ADDRESS" {
@@ -16,6 +18,29 @@ pub fn read_system_address() -> Result<String, Box<dyn std::error::Error>> {
         }
     }
     Ok("unix:path=/var/run/dbus/system_bus_socket".into())
+}
+
+pub fn address_to_sockaddr(s: &str) -> Result<libc::sockaddr_un, Box<dyn std::error::Error>> {
+    let mut r = libc::sockaddr_un {
+        sun_family: libc::AF_UNIX as libc::sa_family_t,
+        sun_path: [0; 108],
+    };
+    let (start, bytes) = if s.starts_with("unix:path=") {
+        (0, &s.as_bytes()["unix:path=".len()..])
+    } else if s.starts_with("unix:abstract=") {
+        (1, &s.as_bytes()["unix:abstract=".len()..])
+    } else { Err(format!("unsupported address type: {}", s))? };
+
+    if start+bytes.len()+1 >= r.sun_path.len() { Err("Address too long")? }
+    for (i, &x) in bytes.into_iter().enumerate() {
+        r.sun_path[i+start] = x as libc::c_char;
+    }
+    Ok(r)
+}
+
+pub fn connect_blocking(addr: &str) -> Result<UnixStream, Box<dyn std::error::Error>> {
+    let sockaddr = address_to_sockaddr(addr)?;
+    crate::sys::connect_blocking(&sockaddr)
 }
 
 #[test]
