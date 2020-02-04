@@ -22,6 +22,9 @@ extern crate libc;
 #[allow(missing_docs)]
 extern crate libdbus_sys as ffi;
 
+#[cfg(feature = "native")]
+extern crate dbus_native as native;
+
 pub use crate::message::{Message, MessageType};
 
 pub mod message;

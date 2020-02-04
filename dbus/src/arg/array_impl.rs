@@ -38,7 +38,7 @@ fn array_append<T: Arg, F: FnMut(&T, &mut IterAppend)>(z: &[T], i: &mut IterAppe
     let a = (T::ARG_TYPE, mem::size_of::<T>());
     let can_fixed_array = (zlen > 1) && (z.len() == zlen as usize) && FIXED_ARRAY_ALIGNMENTS.iter().any(|&v| v == a);
 
-    i.append_container(ArgType::Array, Some(T::signature().as_cstr()), |s|
+    i.append_container(ArgType::Array, Some(T::signature().as_dstr()), |s|
         if can_fixed_array { unsafe { check("dbus_message_iter_append_fixed_array",
             ffi::dbus_message_iter_append_fixed_array(&mut s.0, a.0 as c_int, &zptr as *const _ as *const c_void, zlen)) }}
         else { for arg in z { f(arg, s); }}
@@ -119,7 +119,7 @@ impl<'a, T: FixedArray> Get<'a> for &'a [T] {
 pub struct Dict<'a, K: DictKey, V: Arg, I>(I, PhantomData<(&'a Message, *const K, *const V)>);
 
 impl<'a, K: DictKey, V: Arg, I> Dict<'a, K, V, I> {
-    fn entry_sig() -> String { format!("{{{}{}}}", K::signature(), V::signature()) } 
+    fn entry_sig() -> String { format!("{{{}{}}}", K::signature(), V::signature()) }
 }
 
 impl<'a, K: 'a + DictKey, V: 'a + Append + Arg, I: Iterator<Item=(K, V)>> Dict<'a, K, V, I> {
@@ -136,7 +136,10 @@ impl<'a, K: DictKey, V: Arg, I> Arg for Dict<'a, K, V, I> {
 impl<'a, K: 'a + DictKey + Append, V: 'a + Append + Arg, I: Iterator<Item=(K, V)> + Clone> Append for Dict<'a, K, V, I> {
     fn append_by_ref(&self, i: &mut IterAppend) {
         let z = self.0.clone();
-        i.append_container(Self::ARG_TYPE, Some(&CString::new(Self::entry_sig()).unwrap()), |s| for (k, v) in z {
+        let sig = Self::entry_sig();
+        #[cfg(not(feature="native"))]
+        let sig = CString::new(sig).unwrap();
+        i.append_container(Self::ARG_TYPE, Some(&sig), |s| for (k, v) in z {
             s.append_container(ArgType::DictEntry, None, |ss| {
                 k.append_by_ref(ss);
                 v.append_by_ref(ss);
@@ -160,7 +163,7 @@ impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Iterator for Dict<'a, K, V, Ite
             let k = si.get();
             if k.is_none() { return None };
             assert!(si.next());
-            let v = si.get(); 
+            let v = si.get();
             if v.is_none() { return None };
             Some((k.unwrap(), v.unwrap()))
         });
@@ -192,7 +195,9 @@ impl<K: DictKey + RefArg + Eq + Hash, V: RefArg + Arg, S: BuildHasher> RefArg fo
     fn arg_type(&self) -> ArgType { ArgType::Array }
     fn signature(&self) -> Signature<'static> { format!("a{{{}{}}}", <K as Arg>::signature(), <V as Arg>::signature()).into() }
     fn append(&self, i: &mut IterAppend) {
-        let sig = CString::new(format!("{{{}{}}}", <K as Arg>::signature(), <V as Arg>::signature())).unwrap();
+        let sig = format!("{{{}{}}}", <K as Arg>::signature(), <V as Arg>::signature());
+        #[cfg(not(feature="native"))]
+        let sig = CString::new(sig).unwrap();
         i.append_container(ArgType::Array, Some(&sig), |s| for (k, v) in self {
             s.append_container(ArgType::DictEntry, None, |ss| {
                 k.append(ss);
@@ -235,7 +240,7 @@ impl<'a, T: Arg + Get<'a>> Get<'a> for Vec<T> {
 
 
 #[derive(Copy, Clone, Debug)]
-/// Represents a D-Bus Array. Maximum flexibility (wraps an iterator of items to append). 
+/// Represents a D-Bus Array. Maximum flexibility (wraps an iterator of items to append).
 ///
 /// See the argument guide and module level documentation for details and alternatives.
 pub struct Array<'a, T, I>(I, PhantomData<(*const T, &'a Message)>);
@@ -253,7 +258,7 @@ impl<'a, T: Arg, I> Arg for Array<'a, T, I> {
 impl<'a, T: 'a + Arg + Append, I: Iterator<Item=T> + Clone> Append for Array<'a, T, I> {
     fn append_by_ref(&self, i: &mut IterAppend) {
         let z = self.0.clone();
-        i.append_container(ArgType::Array, Some(T::signature().as_cstr()), |s| for arg in z { arg.append_by_ref(s) });
+        i.append_container(ArgType::Array, Some(T::signature().as_dstr()), |s| for arg in z { arg.append_by_ref(s) });
     }
 }
 
@@ -281,7 +286,7 @@ impl<'a, T: 'a + Arg + fmt::Debug + RefArg, I: fmt::Debug + Clone + Iterator<Ite
     fn signature(&self) -> Signature<'static> { Signature::from(format!("a{}", <T as Arg>::signature())) }
     fn append(&self, i: &mut IterAppend) {
         let z = self.0.clone();
-        i.append_container(ArgType::Array, Some(<T as Arg>::signature().as_cstr()), |s|
+        i.append_container(ArgType::Array, Some(<T as Arg>::signature().as_dstr()), |s|
             for arg in z { RefArg::append(arg,s) }
         );
     }
@@ -338,8 +343,7 @@ impl RefArg for InternalDict<Box<dyn RefArg>> {
     fn arg_type(&self) -> ArgType { ArgType::Array }
     fn signature(&self) -> Signature<'static> { self.outer_sig.clone() }
     fn append(&self, i: &mut IterAppend) {
-        let inner_sig = &self.outer_sig.as_cstr().to_bytes_with_nul()[1..];
-        let inner_sig = CStr::from_bytes_with_nul(inner_sig).unwrap();
+        let inner_sig = dict_inner_sig(self.outer_sig.as_dstr());
         i.append_container(ArgType::Array, Some(inner_sig), |s| for (k, v) in &self.data {
             s.append_container(ArgType::DictEntry, None, |ss| {
                 k.append(ss);
@@ -363,13 +367,20 @@ impl RefArg for InternalDict<Box<dyn RefArg>> {
     }
 }
 
+fn dict_inner_sig(outer: &DStr) -> &DStr {
+    #[cfg(feature = "native")] { &outer[1..] }
+    #[cfg(not(feature = "native"))]
+    {
+        let z = &outer.to_bytes_with_nul()[1..];
+        unsafe { &CStr::from_bytes_with_nul_unchecked(z) }
+    }
+}
 
 impl<K: DictKey + RefArg + Clone + 'static> RefArg for InternalDict<K> {
     fn arg_type(&self) -> ArgType { ArgType::Array }
     fn signature(&self) -> Signature<'static> { self.outer_sig.clone() }
     fn append(&self, i: &mut IterAppend) {
-        let inner_sig = &self.outer_sig.as_cstr().to_bytes_with_nul()[1..];
-        let inner_sig = CStr::from_bytes_with_nul(inner_sig).unwrap();
+        let inner_sig = dict_inner_sig(self.outer_sig.as_dstr());
         i.append_container(ArgType::Array, Some(inner_sig), |s| for (k, v) in &self.data {
             s.append_container(ArgType::DictEntry, None, |ss| {
                 k.append(ss);
@@ -391,7 +402,7 @@ impl<K: DictKey + RefArg + Clone + 'static> RefArg for InternalDict<K> {
             outer_sig: self.outer_sig.clone(),
         })
     }
-} 
+}
 
 
 // Fallback for Arrays of Arrays and Arrays of Structs.
@@ -414,7 +425,7 @@ impl RefArg for InternalArray {
     fn arg_type(&self) -> ArgType { ArgType::Array }
     fn signature(&self) -> Signature<'static> { Signature::from(format!("a{}", self.inner_sig)) }
     fn append(&self, i: &mut IterAppend) {
-        i.append_container(ArgType::Array, Some(self.inner_sig.as_cstr()), |s|
+        i.append_container(ArgType::Array, Some(self.inner_sig.as_dstr()), |s|
             for arg in &self.data { RefArg::append(arg,s) }
         );
     }
@@ -480,5 +491,3 @@ pub fn get_array_refarg(i: &mut Iter) -> Box<dyn RefArg> {
     debug_assert_eq!(i.signature(), x.signature());
     x
 }
-
-

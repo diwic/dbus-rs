@@ -41,22 +41,21 @@ impl Message {
     where D: Into<BusName<'d>>, P: Into<Path<'p>>, I: Into<Interface<'i>>, M: Into<Member<'m>> {
         init_dbus();
         let (d, p, i, m) = (destination.into(), path.into(), iface.into(), method.into());
-        let ptr = unsafe {
-            ffi::dbus_message_new_method_call(d.as_ref().as_ptr(), p.as_ref().as_ptr(), i.as_ref().as_ptr(), m.as_ref().as_ptr())
-        };
-        if ptr.is_null() { Err("D-Bus error: dbus_message_new_method_call failed".into()) }
-        else { Ok(Message { msg: ptr}) }
+        Ok(Message::method_call(&d, &p, &i, &m))
     }
 
     /// Creates a new method call message.
     pub fn method_call(destination: &BusName, path: &Path, iface: &Interface, name: &Member) -> Message {
-        init_dbus();
-        let ptr = unsafe {
-            ffi::dbus_message_new_method_call(destination.as_ref().as_ptr(), path.as_ref().as_ptr(),
-                iface.as_ref().as_ptr(), name.as_ref().as_ptr())
-        };
-        if ptr.is_null() { panic!("D-Bus error: dbus_message_new_method_call failed") }
-        Message { msg: ptr}
+        #[cfg(feature="native")] { todo!() }
+        #[cfg(not(feature="native"))] {
+            init_dbus();
+            let ptr = unsafe {
+                ffi::dbus_message_new_method_call(destination.as_ref().as_ptr(), path.as_ref().as_ptr(),
+                    iface.as_ref().as_ptr(), name.as_ref().as_ptr())
+            };
+            if ptr.is_null() { panic!("D-Bus error: dbus_message_new_method_call failed") }
+            Message { msg: ptr }
+        }
     }
 
     /// Creates a new method call message.
@@ -69,29 +68,27 @@ impl Message {
 
 
     /// Creates a new signal message.
-    pub fn new_signal<P, I, M>(path: P, iface: I, name: M) -> Result<Message, String>
-    where P: Into<Vec<u8>>, I: Into<Vec<u8>>, M: Into<Vec<u8>> {
+    pub fn new_signal<'p, 'i, 'm, P, I, M>(path: P, iface: I, name: M) -> Result<Message, String>
+    where P: Into<Path<'p>>, I: Into<Interface<'i>>, M: Into<Member<'m>> {
         init_dbus();
 
-        let p = Path::new(path)?;
-        let i = Interface::new(iface)?;
-        let m = Member::new(name)?;
-
-        let ptr = unsafe {
-            ffi::dbus_message_new_signal(p.as_ref().as_ptr(), i.as_ref().as_ptr(), m.as_ref().as_ptr())
-        };
-        if ptr.is_null() { Err("D-Bus error: dbus_message_new_signal failed".into()) }
-        else { Ok(Message { msg: ptr}) }
+        let p = path.into();
+        let i = iface.into();
+        let m = name.into();
+        Ok(Message::signal(&p, &i, &m))
     }
 
     /// Creates a new signal message.
     pub fn signal(path: &Path, iface: &Interface, name: &Member) -> Message {
-        init_dbus();
-        let ptr = unsafe {
-            ffi::dbus_message_new_signal(path.as_ref().as_ptr(), iface.as_ref().as_ptr(), name.as_ref().as_ptr())
-        };
-        if ptr.is_null() { panic!("D-Bus error: dbus_message_new_signal failed") }
-        Message { msg: ptr}
+        #[cfg(feature="native")] { todo!() }
+        #[cfg(not(feature="native"))] {
+            init_dbus();
+            let ptr = unsafe {
+                ffi::dbus_message_new_signal(path.as_ref().as_ptr(), iface.as_ref().as_ptr(), name.as_ref().as_ptr())
+            };
+            if ptr.is_null() { panic!("D-Bus error: dbus_message_new_signal failed") }
+            Message { msg: ptr }
+        }
     }
 
     /// Creates a method reply for this method call.
@@ -117,9 +114,12 @@ impl Message {
 
     /// Creates a new error reply
     pub fn error(&self, error_name: &ErrorName, error_message: &CStr) -> Message {
-        let ptr = unsafe { ffi::dbus_message_new_error(self.msg, error_name.as_ref().as_ptr(), error_message.as_ptr()) };
-        if ptr.is_null() { panic!("D-Bus error: dbus_message_new_error failed") }
-        Message { msg: ptr}
+        #[cfg(feature="native")] { todo!() }
+        #[cfg(not(feature="native"))] {
+            let ptr = unsafe { ffi::dbus_message_new_error(self.msg, error_name.as_ref().as_ptr(), error_message.as_ptr()) };
+            if ptr.is_null() { panic!("D-Bus error: dbus_message_new_error failed") }
+            Message { msg: ptr}
+        }
     }
 
     /// Get the MessageItems that make up the message.
@@ -345,8 +345,11 @@ impl Message {
 
     /// Gets the name of the connection that originated this message.
     pub fn sender(&self) -> Option<BusName> {
-        self.msg_internal_str(unsafe { ffi::dbus_message_get_sender(self.msg) })
-            .map(|s| unsafe { BusName::from_slice_unchecked(s) })
+        #[cfg(feature="native")] { todo!() }
+        #[cfg(not(feature="native"))] {
+            self.msg_internal_str(unsafe { ffi::dbus_message_get_sender(self.msg) })
+                .map(|s| unsafe { BusName::from_slice_unchecked(s) })
+        }
     }
 
     /// Returns a tuple of (Message type, Path, Interface, Member) of the current message.
@@ -363,34 +366,49 @@ impl Message {
 
     /// Gets the object path this Message is being sent to.
     pub fn path(&self) -> Option<Path> {
-        self.msg_internal_str(unsafe { ffi::dbus_message_get_path(self.msg) })
-            .map(|s| unsafe { Path::from_slice_unchecked(s) })
+        #[cfg(feature="native")] { todo!() }
+        #[cfg(not(feature="native"))] {
+            self.msg_internal_str(unsafe { ffi::dbus_message_get_path(self.msg) })
+                .map(|s| unsafe { Path::from_slice_unchecked(s) })
+        }
     }
 
     /// Gets the destination this Message is being sent to.
     pub fn destination(&self) -> Option<BusName> {
-        self.msg_internal_str(unsafe { ffi::dbus_message_get_destination(self.msg) })
-            .map(|s| unsafe { BusName::from_slice_unchecked(s) })
+        #[cfg(feature="native")] { todo!() }
+        #[cfg(not(feature="native"))] {
+            self.msg_internal_str(unsafe { ffi::dbus_message_get_destination(self.msg) })
+                .map(|s| unsafe { BusName::from_slice_unchecked(s) })
+        }
     }
 
     /// Sets the destination of this Message
     ///
     /// If dest is none, that means broadcast to all relevant destinations.
     pub fn set_destination(&mut self, dest: Option<BusName>) {
-        let c_dest = dest.as_ref().map(|d| d.as_cstr().as_ptr()).unwrap_or(ptr::null());
-        assert!(unsafe { ffi::dbus_message_set_destination(self.msg, c_dest) } != 0);
+        #[cfg(feature="native")] { todo!() }
+        #[cfg(not(feature="native"))] {
+            let c_dest = dest.as_ref().map(|d| d.as_cstr().as_ptr()).unwrap_or(ptr::null());
+            assert!(unsafe { ffi::dbus_message_set_destination(self.msg, c_dest) } != 0);
+        }
     }
 
     /// Gets the interface this Message is being sent to.
     pub fn interface(&self) -> Option<Interface> {
-        self.msg_internal_str(unsafe { ffi::dbus_message_get_interface(self.msg) })
-            .map(|s| unsafe { Interface::from_slice_unchecked(s) })
+        #[cfg(feature="native")] { todo!() }
+        #[cfg(not(feature="native"))] {
+            self.msg_internal_str(unsafe { ffi::dbus_message_get_interface(self.msg) })
+                .map(|s| unsafe { Interface::from_slice_unchecked(s) })
+        }
     }
 
     /// Gets the interface member being called.
     pub fn member(&self) -> Option<Member> {
-        self.msg_internal_str(unsafe { ffi::dbus_message_get_member(self.msg) })
-            .map(|s| unsafe { Member::from_slice_unchecked(s) })
+        #[cfg(feature="native")] { todo!() }
+        #[cfg(not(feature="native"))] {
+            self.msg_internal_str(unsafe { ffi::dbus_message_get_member(self.msg) })
+                .map(|s| unsafe { Member::from_slice_unchecked(s) })
+        }
     }
 
     /// When the remote end returns an error, the message itself is

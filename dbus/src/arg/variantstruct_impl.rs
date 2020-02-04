@@ -22,20 +22,20 @@ impl<T:Default> Default for Variant<T> {
 
 impl<T> Arg for Variant<T> {
     const ARG_TYPE: ArgType = ArgType::Variant;
-    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"v\0") } }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_dstr_unchecked(b"v\0", "v") } }
 }
 
 impl<T: Arg + Append> Append for Variant<T> {
     fn append_by_ref(&self, i: &mut IterAppend) {
         let z = &self.0;
-        i.append_container(ArgType::Variant, Some(T::signature().as_cstr()), |s| z.append_by_ref(s));
+        i.append_container(ArgType::Variant, Some(T::signature().as_dstr()), |s| z.append_by_ref(s));
     }
 }
 
 impl Append for Variant<Box<dyn RefArg>> {
     fn append_by_ref(&self, i: &mut IterAppend) {
         let z = &self.0;
-        i.append_container(ArgType::Variant, Some(z.signature().as_cstr()), |s| z.append(s));
+        i.append_container(ArgType::Variant, Some(z.signature().as_dstr()), |s| z.append(s));
     }
 }
 
@@ -58,11 +58,11 @@ impl<'a> Get<'a> for Variant<Box<dyn RefArg>> {
 }
 */
 impl<T: RefArg> RefArg for Variant<T> {
-    fn arg_type(&self) -> ArgType { ArgType::Variant } 
-    fn signature(&self) -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"v\0") } }
+    fn arg_type(&self) -> ArgType { ArgType::Variant }
+    fn signature(&self) -> Signature<'static> { unsafe { Signature::from_dstr_unchecked(b"v\0", "v") } }
     fn append(&self, i: &mut IterAppend) {
         let z = &self.0;
-        i.append_container(ArgType::Variant, Some(z.signature().as_cstr()), |s| z.append(s));
+        i.append_container(ArgType::Variant, Some(z.signature().as_dstr()), |s| z.append(s));
     }
     #[inline]
     fn as_any(&self) -> &dyn any::Any where T: 'static { self }
@@ -89,7 +89,7 @@ impl<T: RefArg> RefArg for Variant<T> {
 macro_rules! struct_impl {
     ( $($n: ident $t: ident,)+ ) => {
 
-/// Tuples are represented as D-Bus structs. 
+/// Tuples are represented as D-Bus structs.
 impl<$($t: Arg),*> Arg for ($($t,)*) {
     const ARG_TYPE: ArgType = ArgType::Struct;
     fn signature() -> Signature<'static> {
@@ -198,4 +198,3 @@ impl RefArg for Vec<Box<dyn RefArg>> {
         Box::new(t)
     }
 }
-

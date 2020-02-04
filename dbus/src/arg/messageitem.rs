@@ -6,7 +6,7 @@
 //! whenever applicable. There is also a trait object design called `RefArg` in
 //! case the generic design is too inflexible.
 
-use crate::strings::{Signature, Path, Interface, BusName};
+use crate::strings::{Signature, Path, Interface, BusName, DStr};
 
 use crate::arg;
 use crate::arg::{Iter, IterAppend, Arg, ArgType, OwnedFd};
@@ -47,15 +47,19 @@ impl MessageItemArray {
         {
             let esig = a.element_signature();
             for i in &a.v {
-                if i.signature().as_cstr() != esig { return Err(ArrayError::DifferentElementTypes) }
+                if i.signature().as_dstr() != esig { return Err(ArrayError::DifferentElementTypes) }
             }
         }
         Ok(a)
     }
 
-    fn element_signature(&self) -> &CStr {
-        let z = &self.sig.as_cstr().to_bytes_with_nul()[1..];
-        unsafe { CStr::from_bytes_with_nul_unchecked(z) }
+    fn element_signature(&self) -> &DStr {
+        #[cfg(feature = "native")] { &self.sig[1..] }
+        #[cfg(not(feature = "native"))]
+        {
+            let z = &self.sig.as_cstr().to_bytes_with_nul()[1..];
+            unsafe { CStr::from_bytes_with_nul_unchecked(z) }
+        }
     }
 
     fn make_sig(m: &MessageItem) -> Signature<'static> {
@@ -103,9 +107,13 @@ impl MessageItemDict {
         Ok(a)
     }
 
-    fn element_signature(&self) -> &CStr {
-        let z = &self.sig.as_cstr().to_bytes_with_nul()[1..];
-        unsafe { CStr::from_bytes_with_nul_unchecked(z) }
+    fn element_signature(&self) -> &DStr {
+        #[cfg(feature = "native")] { &self.sig[1..] }
+        #[cfg(not(feature = "native"))]
+        {
+            let z = &self.sig.as_cstr().to_bytes_with_nul()[1..];
+            unsafe { CStr::from_bytes_with_nul_unchecked(z) }
+        }
     }
 
     /// Signature of array (full array signature)
@@ -460,7 +468,7 @@ impl arg::Append for MessageItem {
                 for v in a { v.append_by_ref(s); }
             }),
             MessageItem::Variant(a) => {
-                i.append_container(ArgType::Variant, Some(a.signature().as_cstr()), |s| a.append_by_ref(s))
+                i.append_container(ArgType::Variant, Some(a.signature().as_dstr()), |s| a.append_by_ref(s))
             },
             MessageItem::Dict(a) => a.append_by_ref(i),
             MessageItem::ObjectPath(a) => a.append_by_ref(i),
@@ -538,7 +546,7 @@ impl arg::Append for arg::Variant<MessageItem> {
     fn append_by_ref(&self, i: &mut IterAppend) {
         let z = &self.0;
         let asig = z.signature();
-        let sig = asig.as_cstr();
+        let sig = asig.as_dstr();
         i.append_container(ArgType::Variant, Some(&sig), |s| z.append_by_ref(s));
     }
 }

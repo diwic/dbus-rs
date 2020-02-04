@@ -6,7 +6,6 @@ use std::{ptr, any, mem};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_char, c_int};
 
-
 fn arg_append_basic<T>(i: *mut ffi::DBusMessageIter, arg_type: ArgType, v: T) {
     let p = &v as *const _ as *const c_void;
     unsafe {
@@ -23,12 +22,18 @@ fn arg_get_basic<T>(i: *mut ffi::DBusMessageIter, arg_type: ArgType) -> Option<T
     }
 }
 
+#[cfg(not(feature="native"))]
 fn arg_append_str(i: *mut ffi::DBusMessageIter, arg_type: ArgType, v: &CStr) {
     let p = v.as_ptr();
     let q = &p as *const _ as *const c_void;
     unsafe {
         check("dbus_message_iter_append_basic", ffi::dbus_message_iter_append_basic(i, arg_type as c_int, q));
     };
+}
+
+#[cfg(feature="native")]
+fn arg_append_str(i: *mut ffi::DBusMessageIter, arg_type: ArgType, v: &DStr) {
+    todo!()
 }
 
 unsafe fn arg_get_str<'a>(i: *mut ffi::DBusMessageIter, arg_type: ArgType) -> Option<&'a CStr> {
@@ -44,12 +49,12 @@ unsafe fn arg_get_str<'a>(i: *mut ffi::DBusMessageIter, arg_type: ArgType) -> Op
 // Implementation for basic types.
 
 macro_rules! integer_impl {
-    ($t: ident, $s: ident, $f: expr, $i: ident, $ii: expr, $u: ident, $uu: expr, $fff: ident, $ff: expr) => {
+    ($t: ident, $s: ident, $f: expr, $f2: expr, $i: ident, $ii: expr, $u: ident, $uu: expr, $fff: ident, $ff: expr) => {
 
 impl Arg for $t {
     const ARG_TYPE: ArgType = ArgType::$s;
     #[inline]
-    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked($f) } }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_dstr_unchecked($f, $f2) } }
 }
 
 impl Append for $t {
@@ -64,7 +69,7 @@ impl RefArg for $t {
     #[inline]
     fn arg_type(&self) -> ArgType { ArgType::$s }
     #[inline]
-    fn signature(&self) -> Signature<'static> { unsafe { Signature::from_slice_unchecked($f) } }
+    fn signature(&self) -> Signature<'static> { unsafe { Signature::from_dstr_unchecked($f, $f2) } }
     #[inline]
     fn append(&self, i: &mut IterAppend) { arg_append_basic(&mut i.0, ArgType::$s, *self) }
     #[inline]
@@ -86,13 +91,13 @@ unsafe impl FixedArray for $t {}
 
 }} // End of macro_rules
 
-integer_impl!(u8, Byte, b"y\0", i, Some(i as i64),    u, Some(u as u64), f, Some(f as f64));
-integer_impl!(i16, Int16, b"n\0", i, Some(i as i64),  _u, None,          f, Some(f as f64));
-integer_impl!(u16, UInt16, b"q\0", i, Some(i as i64), u, Some(u as u64), f, Some(f as f64));
-integer_impl!(i32, Int32, b"i\0", i, Some(i as i64),  _u, None,          f, Some(f as f64));
-integer_impl!(u32, UInt32, b"u\0", i, Some(i as i64), u, Some(u as u64), f, Some(f as f64));
-integer_impl!(i64, Int64, b"x\0", i, Some(i),         _u, None,          _f, None);
-integer_impl!(u64, UInt64, b"t\0", _i, None,          u, Some(u as u64), _f, None);
+integer_impl!(u8, Byte, b"y\0", "y", i, Some(i as i64),    u, Some(u as u64), f, Some(f as f64));
+integer_impl!(i16, Int16, b"n\0", "n", i, Some(i as i64),  _u, None,          f, Some(f as f64));
+integer_impl!(u16, UInt16, b"q\0", "q", i, Some(i as i64), u, Some(u as u64), f, Some(f as f64));
+integer_impl!(i32, Int32, b"i\0", "i", i, Some(i as i64),  _u, None,          f, Some(f as f64));
+integer_impl!(u32, UInt32, b"u\0", "u", i, Some(i as i64), u, Some(u as u64), f, Some(f as f64));
+integer_impl!(i64, Int64, b"x\0", "x", i, Some(i),         _u, None,          _f, None);
+integer_impl!(u64, UInt64, b"t\0", "t", _i, None,          u, Some(u as u64), _f, None);
 
 
 macro_rules! refarg_impl {
@@ -127,7 +132,7 @@ impl RefArg for $t {
 
 impl Arg for bool {
     const ARG_TYPE: ArgType = ArgType::Boolean;
-    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"b\0") } }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_dstr_unchecked(b"b\0", "b") } }
 }
 impl Append for bool {
     fn append_by_ref(&self, i: &mut IterAppend) { arg_append_basic(&mut i.0, ArgType::Boolean, if *self {1} else {0}) }
@@ -141,7 +146,7 @@ refarg_impl!(bool, _i, Some(if *_i { 1 } else { 0 }), None, Some(if *_i { 1 as u
 
 impl Arg for f64 {
     const ARG_TYPE: ArgType = ArgType::Double;
-    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"d\0") } }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_dstr_unchecked(b"d\0", "d") } }
 }
 impl Append for f64 {
     fn append_by_ref(&self, i: &mut IterAppend) { arg_append_basic(&mut i.0, ArgType::Double, *self) }
@@ -157,10 +162,11 @@ refarg_impl!(f64, _i, None, None, None, Some(*_i));
 /// Represents a D-Bus string.
 impl<'a> Arg for &'a str {
     const ARG_TYPE: ArgType = ArgType::String;
-    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"s\0") } }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_dstr_unchecked(b"s\0", "s") } }
 }
 
 impl<'a> Append for &'a str {
+    #[cfg(not(feature="native"))]
     fn append_by_ref(&self, i: &mut IterAppend) {
         use std::borrow::Cow;
         let b: &[u8] = self.as_bytes();
@@ -173,6 +179,10 @@ impl<'a> Append for &'a str {
         let z = unsafe { CStr::from_ptr(v.as_ptr() as *const c_char) };
         arg_append_str(&mut i.0, ArgType::String, &z)
     }
+    #[cfg(feature="native")]
+    fn append_by_ref(&self, i: &mut IterAppend) {
+        arg_append_str(&mut i.0, ArgType::String, self)
+    }
 }
 impl<'a> DictKey for &'a str {}
 impl<'a> Get<'a> for &'a str {
@@ -182,7 +192,7 @@ impl<'a> Get<'a> for &'a str {
 
 impl<'a> Arg for String {
     const ARG_TYPE: ArgType = ArgType::String;
-    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"s\0") } }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_dstr_unchecked(b"s\0", "s") } }
 }
 impl<'a> Append for String {
     fn append(mut self, i: &mut IterAppend) {
@@ -204,7 +214,7 @@ refarg_impl!(String, _i, None, Some(&_i), None, None);
 /// Represents a D-Bus string.
 impl<'a> Arg for &'a CStr {
     const ARG_TYPE: ArgType = ArgType::String;
-    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"s\0") } }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_dstr_unchecked(b"s\0", "s") } }
 }
 
 /*
@@ -223,7 +233,7 @@ impl<'a> Get<'a> for &'a CStr {
 
 impl Arg for OwnedFd {
     const ARG_TYPE: ArgType = ArgType::UnixFd;
-    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"h\0") } }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_dstr_unchecked(b"h\0", "h") } }
 }
 impl Append for OwnedFd {
     fn append_by_ref(&self, i: &mut IterAppend) {
@@ -240,17 +250,19 @@ impl<'a> Get<'a> for OwnedFd {
 refarg_impl!(OwnedFd, _i, { use std::os::unix::io::AsRawFd; Some(_i.as_raw_fd() as i64) }, None, None, None);
 
 macro_rules! string_impl {
-    ($t: ident, $s: ident, $f: expr) => {
+    ($t: ident, $s: ident, $f: expr, $f2: expr) => {
 
 impl<'a> Arg for $t<'a> {
     const ARG_TYPE: ArgType = ArgType::$s;
-    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked($f) } }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_dstr_unchecked($f, $f2) } }
 }
 
 impl RefArg for $t<'static> {
     fn arg_type(&self) -> ArgType { ArgType::$s }
-    fn signature(&self) -> Signature<'static> { unsafe { Signature::from_slice_unchecked($f) } }
-    fn append(&self, i: &mut IterAppend) { arg_append_str(&mut i.0, ArgType::$s, self.as_cstr()) }
+    fn signature(&self) -> Signature<'static> { unsafe { Signature::from_dstr_unchecked($f, $f2) } }
+    fn append(&self, i: &mut IterAppend) {
+        arg_append_str(&mut i.0, ArgType::$s, self.as_dstr())
+    }
     #[inline]
     fn as_any(&self) -> &dyn any::Any { self }
     #[inline]
@@ -265,7 +277,7 @@ impl<'a> DictKey for $t<'a> {}
 
 impl<'a> Append for $t<'a> {
     fn append_by_ref(&self, i: &mut IterAppend) {
-        arg_append_str(&mut i.0, ArgType::$s, self.as_cstr())
+        arg_append_str(&mut i.0, ArgType::$s, self.as_dstr())
     }
 }
 
@@ -280,17 +292,22 @@ impl<'a> Get<'a> for $t<'a> {
 */
 
 impl<'a> Get<'a> for $t<'static> {
-    fn get(i: &mut Iter<'a>) -> Option<$t<'static>> { unsafe {
-        arg_get_str(&mut i.0, ArgType::$s).map(|s| $t::from_slice_unchecked(s.to_bytes_with_nul()).into_static())
-    }}
+    fn get(i: &mut Iter<'a>) -> Option<$t<'static>> {
+        #[cfg(feature="native")] { todo!() }
+        #[cfg(not(feature="native"))] {
+            unsafe {
+                arg_get_str(&mut i.0, ArgType::$s).map(|s| $t::from_slice_unchecked(s.to_bytes_with_nul()).into_static())
+            }
+        }
+    }
 }
 
 
     }
 }
 
-string_impl!(Interface, String, b"s\0");
-string_impl!(ErrorName, String, b"s\0");
-string_impl!(Member, String, b"s\0");
-string_impl!(Path, ObjectPath, b"o\0");
-string_impl!(Signature, Signature, b"g\0");
+string_impl!(Interface, String, b"s\0", "s");
+string_impl!(ErrorName, String, b"s\0", "s");
+string_impl!(Member, String, b"s\0", "s");
+string_impl!(Path, ObjectPath, b"o\0", "o");
+string_impl!(Signature, Signature, b"g\0", "g");

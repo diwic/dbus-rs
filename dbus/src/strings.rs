@@ -11,12 +11,21 @@ use std::os::raw::c_char;
 
 #[cfg(not(feature = "no-string-validation"))]
 use crate::Error;
-#[cfg(not(feature = "no-string-validation"))]
-use crate::ffi;
 
-macro_rules! cstring_wrapper {
-    ($t: ident, $s: ident) => {
+#[cfg(feature="native")]
+pub (crate) type DStr = str;
 
+#[cfg(not(feature="native"))]
+pub (crate) type DStr = CStr;
+
+macro_rules! dstring_wrapper {
+    ($(#[$comments:meta])* $t: ident, $s: ident, $n: ident) => {
+
+$(#[$comments])*
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
+pub struct $t<'a>(Cow<'a, DStr>);
+
+#[cfg(not(feature="native"))]
 impl<'m> $t<'m> {
     #[cfg(feature = "no-string-validation")]
     fn check_valid(_: *const c_char) -> Result<(), String> { Ok(()) }
@@ -60,6 +69,14 @@ impl<'m> $t<'m> {
     /// View this struct as a CStr.
     pub fn as_cstr(&self) -> &CStr { &self.0 }
 
+    #[allow(dead_code)]
+    pub (crate) fn as_dstr(&self) -> &DStr { &self.0 }
+
+    #[allow(dead_code)]
+    pub (crate) unsafe fn from_dstr_unchecked(s: &'m [u8], _: &'m str) -> $t<'m> {
+        Self::from_slice_unchecked(s)
+    }
+
     /// Makes sure this string does not contain borrows.
     pub fn into_static(self) -> $t<'static> {
         $t(Cow::Owned(self.0.into_owned()))
@@ -67,6 +84,47 @@ impl<'m> $t<'m> {
 
     /// Converts this struct to a CString.
     pub fn into_cstring(self) -> CString { self.0.into_owned() }
+}
+
+
+#[cfg(feature="native")]
+impl<'m> $t<'m> {
+    /// Creates a new instance of this struct.
+    ///
+    /// Note: If the no-string-validation feature is activated, this string
+    /// will not be checked for conformance with the D-Bus specification.
+    pub fn new<S: Into<String>>(s: S) -> Result<$t<'m>, String> {
+        let c = s.into();
+        $t::check_valid(&c).map(|_| $t(Cow::Owned(c)))
+    }
+
+    fn check_valid(s: &str) -> Result<(), String> {
+        native::strings::$n(s.as_bytes()).map_err(|_| format!("'{}' is not a valid {}", s, stringify!($t)))
+    }
+
+    /// Creates a new instance of this struct. If you end it with \0,
+    /// it can borrow the slice without extra allocation.
+    ///
+    /// Note: If the no-string-validation feature is activated, this string
+    /// will not be checked for conformance with the D-Bus specification.
+    pub fn from_slice(s: &'m [u8]) -> Result<$t<'m>, String> {
+        let s = std::str::from_utf8(s).map_err(|e| e.to_string())?;
+        $t::check_valid(s).map(|_| {
+            $t(Cow::Borrowed(s))
+        })
+    }
+
+    /// Makes sure this string does not contain borrows.
+    pub fn into_static(self) -> $t<'static> {
+        $t(Cow::Owned(self.0.into_owned()))
+    }
+
+    pub (crate) fn as_dstr(&self) -> &DStr { &self.0 }
+
+    #[allow(dead_code)]
+    pub (crate) unsafe fn from_dstr_unchecked(_: &'m [u8], s: &'m str) -> $t<'m> {
+        $t(Cow::Borrowed(s))
+    }
 }
 
 /*
@@ -96,7 +154,7 @@ impl<'m> From<&'m str> for $t<'m> { fn from(s: &'m str) -> $t<'m> { $t::from_sli
 /// If given string is not valid.
 impl<'m> From<&'m CStr> for $t<'m> { fn from(s: &'m CStr) -> $t<'m> { $t::from_slice(s.to_bytes_with_nul()).unwrap() } }
 
-
+#[cfg(not(feature="native"))]
 impl<'m> From<$t<'m>> for CString { fn from(s: $t<'m>) -> CString { s.0.into_owned() } }
 
 
@@ -120,6 +178,9 @@ impl<'inner, 'm: 'inner> From<&'m $t<'inner>> for $t<'m> {
 
 impl<'m> ops::Deref for $t<'m> {
     type Target = str;
+    #[cfg(feature="native")]
+    fn deref(&self) -> &str { &self.0 }
+    #[cfg(not(feature="native"))]
     fn deref(&self) -> &str { str::from_utf8(self.0.to_bytes()).unwrap() }
 }
 
@@ -129,6 +190,7 @@ impl<'m> fmt::Display for $t<'m> {
     }
 }
 
+#[cfg(not(feature="native"))]
 impl<'m> AsRef<CStr> for $t<'m> {
     fn as_ref(&self) -> &CStr { &self.0 }
 }
@@ -141,68 +203,73 @@ impl<'m> hash::Hash for $t<'m> {
 
 }}
 
-/// A wrapper around a string that is guaranteed to be
-/// a valid (single) D-Bus type signature.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct Signature<'a>(Cow<'a, CStr>);
-
-cstring_wrapper!(Signature, dbus_signature_validate_single);
+dstring_wrapper!(
+    /// A wrapper around a string that is guaranteed to be
+    /// a valid (single) D-Bus type signature.
+    Signature, dbus_signature_validate_single, is_valid_signature_single
+);
 
 impl Signature<'static> {
     /// Makes a D-Bus signature that corresponds to A.
     pub fn make<A: super::arg::Arg>() -> Signature<'static> { A::signature() }
 }
 
-/// A wrapper around a string that is guaranteed to be
-/// a valid D-Bus object path.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct Path<'a>(Cow<'a, CStr>);
-
-cstring_wrapper!(Path, dbus_validate_path);
+dstring_wrapper!(
+    /// A wrapper around a string that is guaranteed to be
+    /// a valid D-Bus object path.
+    Path, dbus_validate_path, is_valid_object_path
+);
 
 // This is needed so one can make arrays of paths easily
 impl<'a> default::Default for Path<'a> {
-    fn default() -> Path<'a> { Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"/\0".as_ptr() as *const c_char)})) }
+    fn default() -> Path<'a> { unsafe { Path::from_dstr_unchecked(b"/\0", "/") } }
 }
 
-/// A wrapper around a string that is guaranteed to be
-/// a valid D-Bus member, i e, a signal or method name.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct Member<'a>(Cow<'a, CStr>);
+dstring_wrapper!(
+    /// A wrapper around a string that is guaranteed to be
+    /// a valid D-Bus member, i e, a signal or method name.
+    Member, dbus_validate_member, is_valid_member_name
+);
 
-cstring_wrapper!(Member, dbus_validate_member);
+dstring_wrapper!(
+    /// A wrapper around a string that is guaranteed to be
+    /// a valid D-Bus interface name.
+    Interface, dbus_validate_interface, is_valid_interface_name
+);
 
-/// A wrapper around a string that is guaranteed to be
-/// a valid D-Bus interface name.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct Interface<'a>(Cow<'a, CStr>);
+dstring_wrapper!(
+    /// A wrapper around a string that is guaranteed to be
+    /// a valid D-Bus bus name.
+    BusName, dbus_validate_bus_name, is_valid_bus_name
+);
 
-cstring_wrapper!(Interface, dbus_validate_interface);
-
-/// A wrapper around a string that is guaranteed to be
-/// a valid D-Bus bus name.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct BusName<'a>(Cow<'a, CStr>);
-
-cstring_wrapper!(BusName, dbus_validate_bus_name);
-
-/// A wrapper around a string that is guaranteed to be
-/// a valid D-Bus error name.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct ErrorName<'a>(Cow<'a, CStr>);
-
-cstring_wrapper!(ErrorName, dbus_validate_error_name);
+dstring_wrapper!(
+    /// A wrapper around a string that is guaranteed to be
+    /// a valid D-Bus error name.
+    ErrorName, dbus_validate_error_name, is_valid_error_name
+);
 
 #[test]
 fn some_path() {
     use std::os::raw::c_char;
     let p1: Path = "/valid".into();
     let p2 = Path::new("##invalid##");
-    assert_eq!(p1, Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"/valid\0".as_ptr() as *const c_char) })));
-    #[cfg(not(feature = "no-string-validation"))]
-    assert_eq!(p2, Err("Object path was not valid: '##invalid##'".into()));
-    #[cfg(feature = "no-string-validation")]
-    assert_eq!(p2, Ok(Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"##invalid##\0".as_ptr() as *const c_char) }))));
+
+    #[cfg(feature="native")] {
+        assert_eq!(p1, Path(Cow::Borrowed("/valid")));
+        #[cfg(not(feature = "no-string-validation"))]
+        assert_eq!(p2, Err("'##invalid##' is not a valid Path".into()));
+        #[cfg(feature = "no-string-validation")]
+        assert_eq!(p2, Ok(Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"##invalid##\0".as_ptr() as *const c_char) }))));
+    }
+    #[cfg(not(feature="native"))] {
+        let p3 = unsafe { CStr::from_ptr(b"/valid\0".as_ptr() as *const c_char) };
+        assert_eq!(p1, Path(Cow::Borrowed(p3)));
+        #[cfg(not(feature = "no-string-validation"))]
+        assert_eq!(p2, Err("Object path was not valid: '##invalid##'".into()));
+        #[cfg(feature = "no-string-validation")]
+        assert_eq!(p2, Ok(Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"##invalid##\0".as_ptr() as *const c_char) }))));
+    }
 }
 
 #[test]

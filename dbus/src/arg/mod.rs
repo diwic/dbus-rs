@@ -71,6 +71,7 @@ pub use self::variantstruct_impl::Variant;
 
 use std::{fmt, mem, ptr, error};
 use crate::{ffi, Message, Signature, Path};
+use crate::strings::DStr;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_void, c_int};
 use std::os::unix::io::{RawFd, AsRawFd, FromRawFd, IntoRawFd};
@@ -151,14 +152,17 @@ impl<'a> IterAppend<'a> {
     /// Appends the argument.
     pub fn append<T: Append>(&mut self, a: T) { a.append(self) }
 
-    fn append_container<F: FnOnce(&mut IterAppend<'a>)>(&mut self, arg_type: ArgType, sig: Option<&CStr>, f: F) {
-        let mut s = IterAppend(ffi_iter(), self.1);
-        let p = sig.map(|s| s.as_ptr()).unwrap_or(ptr::null());
-        check("dbus_message_iter_open_container",
-            unsafe { ffi::dbus_message_iter_open_container(&mut self.0, arg_type as c_int, p, &mut s.0) });
-        f(&mut s);
-        check("dbus_message_iter_close_container",
-            unsafe { ffi::dbus_message_iter_close_container(&mut self.0, &mut s.0) });
+    fn append_container<F: FnOnce(&mut IterAppend<'a>)>(&mut self, arg_type: ArgType, sig: Option<&DStr>, f: F) {
+        #[cfg(feature="native")] { todo!() }
+        #[cfg(not(feature="native"))] {
+            let mut s = IterAppend(ffi_iter(), self.1);
+            let p = sig.map(|s| s.as_ptr()).unwrap_or(ptr::null());
+            check("dbus_message_iter_open_container",
+                unsafe { ffi::dbus_message_iter_open_container(&mut self.0, arg_type as c_int, p, &mut s.0) });
+            f(&mut s);
+            check("dbus_message_iter_close_container",
+                unsafe { ffi::dbus_message_iter_close_container(&mut self.0, &mut s.0) });
+        }
     }
 
     /// Low-level function to append a variant.
@@ -170,7 +174,7 @@ impl<'a> IterAppend<'a> {
     /// the supplied `IterAppend` exactly once,
     /// and with a value which has the same signature as inner_sig.
     pub fn append_variant<F: FnOnce(&mut IterAppend<'a>)>(&mut self, inner_sig: &Signature, f: F) {
-        self.append_container(ArgType::Variant, Some(inner_sig.as_cstr()), f)
+        self.append_container(ArgType::Variant, Some(inner_sig.as_dstr()), f)
     }
 
     /// Low-level function to append an array.
@@ -181,7 +185,7 @@ impl<'a> IterAppend<'a> {
     /// In order not to get D-Bus errors: during the call to "f", you should only call "append" on
     /// the supplied `IterAppend` with values which has the same signature as inner_sig.
     pub fn append_array<F: FnOnce(&mut IterAppend<'a>)>(&mut self, inner_sig: &Signature, f: F) {
-        self.append_container(ArgType::Array, Some(inner_sig.as_cstr()), f)
+        self.append_container(ArgType::Array, Some(inner_sig.as_dstr()), f)
     }
 
     /// Low-level function to append a struct.
@@ -213,7 +217,9 @@ impl<'a> IterAppend<'a> {
     /// for the subiterator - do this as many times as the number of dict entries.
     pub fn append_dict<F: FnOnce(&mut IterAppend<'a>)>(&mut self, key_sig: &Signature, value_sig: &Signature, f: F) {
         let sig = format!("{{{}{}}}", key_sig, value_sig);
-        self.append_container(Array::<bool,()>::ARG_TYPE, Some(&CString::new(sig).unwrap()), f);
+        #[cfg(not(feature="native"))]
+        let sig = CString::new(sig).unwrap();
+        self.append_container(Array::<bool,()>::ARG_TYPE, Some(&sig), f);
     }
 }
 
@@ -269,13 +275,16 @@ impl<'a> Iter<'a> {
 
     /// Returns the type signature for the current argument.
     pub fn signature(&mut self) -> Signature<'static> {
-        unsafe {
-            let c = ffi::dbus_message_iter_get_signature(&mut self.0);
-            assert!(c != ptr::null_mut());
-            let cc = CStr::from_ptr(c);
-            let r = Signature::new(cc.to_bytes());
-            ffi::dbus_free(c as *mut c_void);
-            r.unwrap()
+        #[cfg(feature="native")] { todo!() }
+        #[cfg(not(feature="native"))] {
+            unsafe {
+                let c = ffi::dbus_message_iter_get_signature(&mut self.0);
+                assert!(c != ptr::null_mut());
+                let cc = CStr::from_ptr(c);
+                let r = Signature::new(cc.to_bytes());
+                ffi::dbus_free(c as *mut c_void);
+                r.unwrap()
+            }
         }
     }
 
