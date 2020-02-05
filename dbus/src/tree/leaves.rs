@@ -5,6 +5,7 @@ use crate::strings::{Interface as IfaceName, Member, Signature, Path};
 use crate::{arg, Message};
 use std::fmt;
 use std::cell::RefCell;
+#[cfg(not(feature = "native"))]
 use crate::ffidisp::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged;
 
 
@@ -328,6 +329,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
             .append1(&**p.iface.get_name())
     }
 
+    #[cfg(not(feature = "native"))]
     /// Adds this property to a list of PropertiesChanged signals.
     ///
     /// "v" is updated with the signal for this property. "new_value" is only called if self.emits is "true",

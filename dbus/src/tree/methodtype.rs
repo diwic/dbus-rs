@@ -2,6 +2,7 @@
 
 use std::fmt;
 use crate::Message;
+#[cfg(not(feature = "native"))]
 use crate::ffidisp::stdintf;
 use crate::arg::{Iter, IterAppend, TypeMismatchError};
 use std::marker::PhantomData;
@@ -231,7 +232,7 @@ impl<'a, M: 'a + MethodType<D>, D: 'a + DataType> MethodInfo<'a, M, D> {
     }
 }
 
-
+#[cfg(not(feature = "native"))]
 impl<'a, M: 'a + MethodType<D>, D: 'a + DataType> stdintf::OrgFreedesktopDBusIntrospectable for MethodInfo<'a, M, D> {
     type Err = MethodErr;
     fn introspect(&self) -> Result<String, Self::Err> { Ok(self.path.introspect(self.tree)) }
@@ -246,8 +247,7 @@ where
 {
     let i = factory.interface("org.freedesktop.DBus.Introspectable", data);
     let h = move |minfo: &super::MethodInfo<M, D>| {
-        let d: &dyn stdintf::OrgFreedesktopDBusIntrospectable<Err=super::MethodErr> = minfo;
-        let arg0 = d.introspect()?;
+        let arg0 = minfo.path.introspect(minfo.tree);
         let rm = minfo.msg.method_return();
         let rm = rm.append1(arg0);
         Ok(vec!(rm))

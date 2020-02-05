@@ -3,6 +3,7 @@ use super::{Factory, MethodType, MethodInfo, MethodResult, MethodErr, DataType, 
 use std::sync::{Arc, Mutex};
 use crate::{Message, MessageType, Error, arg, message, channel};
 use crate::strings::{Member, Path, Signature, Interface as IfaceName};
+#[cfg(not(feature = "native"))]
 use crate::ffidisp::{ConnectionItem, MsgHandler, Connection, MsgHandlerType, MsgHandlerResult};
 use std::fmt;
 use std::ffi::CStr;
@@ -371,6 +372,7 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
         self.paths.remove(p)
     }
 
+    #[cfg(not(feature = "native"))]
     /// Registers or unregisters all object paths in the tree to a ffidisp::Connection.
     pub fn set_registered(&self, c: &Connection, b: bool) -> Result<(), Error> {
         let mut regd_paths = Vec::new();
@@ -392,6 +394,8 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
         Ok(())
     }
 
+
+    #[cfg(not(feature = "native"))]
     /// This method takes an `ConnectionItem` iterator (you get it from `Connection::iter()`)
     /// and handles all matching items. Non-matching items (e g signals) are passed through.
     pub fn run<'a, I: Iterator<Item=ConnectionItem>>(&'a self, c: &'a Connection, i: I) -> TreeServer<'a, I, M, D> {
@@ -491,6 +495,7 @@ pub fn new_tree<M: MethodType<D>, D: DataType>(d: D::Tree) -> Tree<M, D> {
     Tree { paths: ArcMap::new(), data: d }
 }
 
+#[cfg(not(feature = "native"))]
 impl<M: MethodType<D>, D: DataType> MsgHandler for Tree<M, D> {
     fn handle_msg(&mut self, msg: &Message) -> Option<MsgHandlerResult> {
         self.handle(msg).map(|v| MsgHandlerResult { handled: true, done: false, reply: v })
@@ -498,6 +503,7 @@ impl<M: MethodType<D>, D: DataType> MsgHandler for Tree<M, D> {
     fn handler_type(&self) -> MsgHandlerType { MsgHandlerType::MsgType(MessageType::MethodCall) }
 }
 
+#[cfg(not(feature = "native"))]
 impl<M: MethodType<D>, D: DataType> MsgHandler for Arc<Tree<M, D>> {
     fn handle_msg(&mut self, msg: &Message) -> Option<MsgHandlerResult> {
         self.handle(msg).map(|v| MsgHandlerResult { handled: true, done: false, reply: v })
@@ -505,6 +511,7 @@ impl<M: MethodType<D>, D: DataType> MsgHandler for Arc<Tree<M, D>> {
     fn handler_type(&self) -> MsgHandlerType { MsgHandlerType::MsgType(MessageType::MethodCall) }
 }
 
+#[cfg(not(feature = "native"))]
 /// An iterator adapter that handles incoming method calls.
 ///
 /// Method calls that match an object path in the tree are handled and consumed by this
@@ -515,6 +522,7 @@ pub struct TreeServer<'a, I, M: MethodType<D> + 'a, D: DataType + 'a> {
     tree: &'a Tree<M, D>,
 }
 
+#[cfg(not(feature = "native"))]
 impl<'a, I: Iterator<Item=ConnectionItem>, M: 'a + MethodType<D>, D: DataType + 'a> Iterator for TreeServer<'a, I, M, D> {
     type Item = ConnectionItem;
 

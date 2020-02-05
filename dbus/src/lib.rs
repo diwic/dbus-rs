@@ -29,6 +29,7 @@ pub use crate::message::{Message, MessageType};
 
 pub mod message;
 
+#[cfg(not(feature = "native"))]
 pub mod ffidisp;
 
 mod error;

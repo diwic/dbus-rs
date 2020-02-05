@@ -31,5 +31,8 @@ mod factory;
 pub use self::utils::{Argument, Iter};
 pub use self::methodtype::{MethodErr, MethodInfo, PropInfo, MethodResult, MethodType, DataType, MTFn, MTFnMut, MTSync};
 pub use self::leaves::{Method, Signal, Property, Access, EmitsChangedSignal};
-pub use self::objectpath::{Interface, ObjectPath, Tree, TreeServer};
+pub use self::objectpath::{Interface, ObjectPath, Tree};
 pub use self::factory::Factory;
+
+#[cfg(not(feature = "native"))]
+pub use self::objectpath::TreeServer;
