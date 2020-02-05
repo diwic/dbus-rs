@@ -280,16 +280,16 @@ argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H 
 
 #[cfg(test)]
 mod test {
-    use crate::{ffidisp::Connection, ffidisp::ConnectionItem, Message, Path, Signature};
+    use crate::{channel::{Channel, BusType}, Message, Path, Signature};
+    use crate::message::MessageType;
     use crate::arg::{Array, Variant, Dict, Iter, ArgType, TypeMismatchError, RefArg, cast};
 
     use std::collections::HashMap;
 
     #[test]
     fn refarg() {
-        let c = Connection::new_session().unwrap();
-        c.register_object_path("/mooh").unwrap();
-        let m = Message::new_method_call(&c.unique_name(), "/mooh", "com.example.hello", "Hello").unwrap();
+        let c = Channel::get_private(BusType::Session).unwrap();
+        let m = Message::new_method_call(c.unique_name().unwrap(), "/mooh", "com.example.hello", "Hello").unwrap();
 
         let mut vv: Vec<Variant<Box<dyn RefArg>>> = vec!();
         vv.push(Variant(Box::new(5i32)));
@@ -311,8 +311,10 @@ mod test {
 
         c.send(m).unwrap();
 
-        for n in c.iter(1000) {
-            if let ConnectionItem::MethodCall(m) = n {
+        loop {
+            if let Some(m) = c.blocking_pop_message(std::time::Duration::from_millis(1000)).unwrap() {
+                if m.msg_type() != MessageType::MethodCall { continue; }
+
                 let rv: Vec<Box<dyn RefArg + 'static>> = m.iter_init().collect();
                 println!("Receiving {:?}", rv);
                 let rv0: &Variant<Box<dyn RefArg>> = cast(&rv[0]).unwrap();
@@ -345,9 +347,9 @@ mod test {
 
     #[test]
     fn message_types() {
-        let c = Connection::new_session().unwrap();
-        c.register_object_path("/hello").unwrap();
-        let m = Message::new_method_call(&c.unique_name(), "/hello", "com.example.hello", "Hello").unwrap();
+        let c = Channel::get_private(BusType::Session).unwrap();
+
+        let m = Message::new_method_call(c.unique_name().unwrap(), "/hello", "com.example.hello", "Hello").unwrap();
         let m = m.append1(2000u16);
         let m = m.append1(&Array::new(&vec![129u8, 5, 254]));
         let m = m.append2(Variant(&["Hello", "world"][..]), &[32768u16, 16u16, 12u16][..]);
@@ -362,48 +364,46 @@ mod test {
         println!("Sending {}", sending);
         c.send(m).unwrap();
 
-        for n in c.iter(1000) {
-            match n {
-                ConnectionItem::MethodCall(m) => {
-                    use super::Arg;
-                    let receiving = format!("{:?}", m.iter_init());
-                    println!("Receiving {}", receiving);
-                    assert_eq!(sending, receiving);
+        loop {
+            if let Some(m) = c.blocking_pop_message(std::time::Duration::from_millis(1000)).unwrap() {
+                if m.msg_type() != MessageType::MethodCall { continue; }
+                use super::Arg;
+                let receiving = format!("{:?}", m.iter_init());
+                println!("Receiving {}", receiving);
+                assert_eq!(sending, receiving);
 
-                    assert_eq!(2000u16, m.get1().unwrap());
-                    assert_eq!(m.get2(), (Some(2000u16), Some(&[129u8, 5, 254][..])));
-                    assert_eq!(m.read2::<u16, bool>().unwrap_err(),
-                        TypeMismatchError { position: 1, found: ArgType::Array, expected: ArgType::Boolean });
+                assert_eq!(2000u16, m.get1().unwrap());
+                assert_eq!(m.get2(), (Some(2000u16), Some(&[129u8, 5, 254][..])));
+                assert_eq!(m.read2::<u16, bool>().unwrap_err(),
+                    TypeMismatchError { position: 1, found: ArgType::Array, expected: ArgType::Boolean });
 
-                    let mut g = m.iter_init();
-                    let e = g.read::<u32>().unwrap_err();
-                    assert_eq!(e.pos(), 0);
-                    assert_eq!(e.expected_arg_type(), ArgType::UInt32);
-                    assert_eq!(e.found_arg_type(), ArgType::UInt16);
+                let mut g = m.iter_init();
+                let e = g.read::<u32>().unwrap_err();
+                assert_eq!(e.pos(), 0);
+                assert_eq!(e.expected_arg_type(), ArgType::UInt32);
+                assert_eq!(e.found_arg_type(), ArgType::UInt16);
 
-                    assert!(g.next() && g.next());
-                    let v: Variant<Iter> = g.get().unwrap();
-                    let mut viter = v.0;
-                    assert_eq!(viter.arg_type(), Array::<&str,()>::ARG_TYPE);
-                    let a: Array<&str, _> = viter.get().unwrap();
-                    assert_eq!(a.collect::<Vec<&str>>(), vec!["Hello", "world"]);
+                assert!(g.next() && g.next());
+                let v: Variant<Iter> = g.get().unwrap();
+                let mut viter = v.0;
+                assert_eq!(viter.arg_type(), Array::<&str,()>::ARG_TYPE);
+                let a: Array<&str, _> = viter.get().unwrap();
+                assert_eq!(a.collect::<Vec<&str>>(), vec!["Hello", "world"]);
 
-                    assert!(g.next());
-                    assert_eq!(g.get::<u16>(), None); // It's an array, not a single u16
-                    assert!(g.next() && g.next() && g.next() && g.next());
+                assert!(g.next());
+                assert_eq!(g.get::<u16>(), None); // It's an array, not a single u16
+                assert!(g.next() && g.next() && g.next() && g.next());
 
-                    assert_eq!(g.get(), Some((256i16, Variant(18_446_744_073_709_551_615u64))));
-                    assert!(g.next());
-                    assert_eq!(g.get(), Some(Path::new("/a/valid/path").unwrap()));
-                    assert!(g.next());
-                    assert_eq!(g.get(), Some(Signature::new("a{sv}").unwrap()));
-                    assert!(g.next());
-                    let d: Dict<u32, bool, _> = g.get().unwrap();
-                    let z2: HashMap<_, _> = d.collect();
-                    assert_eq!(z, z2);
-                    break;
-                }
-                _ => println!("Got {:?}", n),
+                assert_eq!(g.get(), Some((256i16, Variant(18_446_744_073_709_551_615u64))));
+                assert!(g.next());
+                assert_eq!(g.get(), Some(Path::new("/a/valid/path").unwrap()));
+                assert!(g.next());
+                assert_eq!(g.get(), Some(Signature::new("a{sv}").unwrap()));
+                assert!(g.next());
+                let d: Dict<u32, bool, _> = g.get().unwrap();
+                let z2: HashMap<_, _> = d.collect();
+                assert_eq!(z, z2);
+                break;
             }
         }
     }
