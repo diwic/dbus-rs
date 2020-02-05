@@ -63,6 +63,7 @@ mod basic_impl;
 mod variantstruct_impl;
 mod array_impl;
 
+#[cfg(not(feature="native"))]
 pub mod messageitem;
 
 pub use self::msgarg::{Arg, FixedArray, Get, DictKey, Append, RefArg, AppendAll, ReadAll, ArgAll, cast, cast_mut};

@@ -122,6 +122,8 @@ impl Message {
         }
     }
 
+
+    #[cfg(not(feature="native"))]
     /// Get the MessageItems that make up the message.
     ///
     /// Note: use `iter_init` or `get1`/`get2`/etc instead for faster access to the arguments.
@@ -165,6 +167,8 @@ impl Message {
         unsafe { ffi::dbus_message_set_auto_start(self.msg, if v { 1 } else { 0 }) }
     }
 
+
+    #[cfg(not(feature="native"))]
     /// Add one or more MessageItems to this Message.
     ///
     /// Note: using `append1`, `append2` or `append3` might be faster, especially for large arrays.
