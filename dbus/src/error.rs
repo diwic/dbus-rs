@@ -1,65 +1,108 @@
-use std::ptr;
-use crate::{tree, arg, to_c_str, c_str_to_slice, init_dbus};
-use crate::strings::ErrorName;
+use crate::{tree, arg};
 
-/// D-Bus Error wrapper.
-pub struct Error {
-    e: ffi::DBusError,
-}
+#[cfg(feature="native")]
+mod error_internal {
+    use crate::strings::ErrorName;
 
-unsafe impl Send for Error {}
-
-// Note! For this Sync impl to be safe, it requires that no functions that take &self,
-// actually calls into FFI. All functions that call into FFI with a ffi::DBusError
-// must take &mut self.
-
-unsafe impl Sync for Error {}
-
-impl Error {
-
-    /// Create a new custom D-Bus Error.
-    pub fn new_custom<'a, N: Into<ErrorName<'a>>>(name: N, message: &str) -> Error {
-        let n = to_c_str(&name.into());
-        let m = to_c_str(&message.replace("%","%%"));
-        let mut e = Error::empty();
-
-        unsafe { ffi::dbus_set_error(e.get_mut(), n.as_ptr(), m.as_ptr()) };
-        e
+    /// D-Bus Error wrapper.
+    pub struct Error {
+        name: ErrorName<'static>,
+        message: String,
     }
 
+    impl Error {
+        /// Create a new custom D-Bus Error.
+        pub fn new_custom<N: Into<ErrorName<'static>>, S: Into<String>>(name: N, message: S) -> Error {
+            Error { name: name.into(), message: message.into() }
+        }
+
+        /// Error name/type, e g 'org.freedesktop.DBus.Error.Failed'
+        pub fn name(&self) -> Option<&str> {
+            Some(&*self.name)
+        }
+
+        /// Custom message, e g 'Could not find a matching object path'
+        pub fn message(&self) -> Option<&str> {
+            Some(&*self.message)
+        }
+
+        #[deprecated]
+        pub (crate) fn empty() -> Error { todo!() }
+        #[deprecated]
+        pub (crate) fn get_mut(&mut self) -> &mut ffi::DBusError { todo!() }
+    }
+
+}
+
+#[cfg(not(feature="native"))]
+mod error_internal {
+    use std::ptr;
+    use crate::{to_c_str, c_str_to_slice, init_dbus};
+    use crate::strings::ErrorName;
+
+    /// D-Bus Error wrapper.
+    pub struct Error {
+        e: ffi::DBusError,
+    }
+
+    unsafe impl Send for Error {}
+
+    // Note! For this Sync impl to be safe, it requires that no functions that take &self,
+    // actually calls into FFI. All functions that call into FFI with a ffi::DBusError
+    // must take &mut self.
+
+    unsafe impl Sync for Error {}
+
+    impl Error {
+
+        /// Create a new custom D-Bus Error.
+        pub fn new_custom<'a, N: Into<ErrorName<'a>>>(name: N, message: &str) -> Error {
+            let n = to_c_str(&name.into());
+            let m = to_c_str(&message.replace("%","%%"));
+            let mut e = Error::empty();
+
+            unsafe { ffi::dbus_set_error(e.get_mut(), n.as_ptr(), m.as_ptr()) };
+            e
+        }
+
+        pub (crate) fn empty() -> Error {
+            init_dbus();
+            let mut e = ffi::DBusError {
+                name: ptr::null(),
+                message: ptr::null(),
+                dummy: 0,
+                padding1: ptr::null()
+            };
+            unsafe { ffi::dbus_error_init(&mut e); }
+            Error{ e: e }
+        }
+
+        /// Error name/type, e g 'org.freedesktop.DBus.Error.Failed'
+        pub fn name(&self) -> Option<&str> {
+            c_str_to_slice(&self.e.name)
+        }
+
+        /// Custom message, e g 'Could not find a matching object path'
+        pub fn message(&self) -> Option<&str> {
+            c_str_to_slice(&self.e.message)
+        }
+
+        pub (crate) fn get_mut(&mut self) -> &mut ffi::DBusError { &mut self.e }
+    }
+
+    impl Drop for Error {
+        fn drop(&mut self) {
+            unsafe { ffi::dbus_error_free(&mut self.e); }
+        }
+    }
+}
+
+pub use error_internal::Error;
+
+impl Error {
     /// Create a new generic D-Bus Error with "org.freedesktop.DBus.Error.Failed" as the Error name.
     pub fn new_failed(message: &str) -> Error {
         Error::new_custom("org.freedesktop.DBus.Error.Failed", message)
-    }
-
-    pub (crate) fn empty() -> Error {
-        init_dbus();
-        let mut e = ffi::DBusError {
-            name: ptr::null(),
-            message: ptr::null(),
-            dummy: 0,
-            padding1: ptr::null()
-        };
-        unsafe { ffi::dbus_error_init(&mut e); }
-        Error{ e: e }
-    }
-
-    /// Error name/type, e g 'org.freedesktop.DBus.Error.Failed'
-    pub fn name(&self) -> Option<&str> {
-        c_str_to_slice(&self.e.name)
-    }
-
-    /// Custom message, e g 'Could not find a matching object path'
-    pub fn message(&self) -> Option<&str> {
-        c_str_to_slice(&self.e.message)
-    }
-
-    pub (crate) fn get_mut(&mut self) -> &mut ffi::DBusError { &mut self.e }
-}
-
-impl Drop for Error {
-    fn drop(&mut self) {
-        unsafe { ffi::dbus_error_free(&mut self.e); }
     }
 }
 
@@ -91,7 +134,6 @@ impl From<arg::TypeMismatchError> for Error {
 
 impl From<tree::MethodErr> for Error {
     fn from(t: tree::MethodErr) -> Error {
-        Error::new_custom(t.errorname(), t.description())
+        Error::new_custom(t.errorname().clone(), t.description())
     }
 }
-
