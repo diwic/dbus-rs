@@ -145,9 +145,12 @@ pub struct IterAppend<'a>(ffi::DBusMessageIter, &'a Message);
 impl<'a> IterAppend<'a> {
     /// Creates a new IterAppend struct.
     pub fn new(m: &'a mut Message) -> IterAppend<'a> {
-        let mut i = ffi_iter();
-        unsafe { ffi::dbus_message_iter_init_append(m.ptr(), &mut i) };
-        IterAppend(i, m)
+        #[cfg(feature="native")] { todo!() }
+        #[cfg(not(feature="native"))] {
+            let mut i = ffi_iter();
+            unsafe { ffi::dbus_message_iter_init_append(m.ptr(), &mut i) };
+            IterAppend(i, m)
+        }
     }
 
     /// Appends the argument.
@@ -233,9 +236,12 @@ pub struct Iter<'a>(ffi::DBusMessageIter, &'a Message, u32);
 impl<'a> Iter<'a> {
     /// Creates a new struct for iterating over the arguments of a message, starting with the first argument.
     pub fn new(m: &'a Message) -> Iter<'a> {
-        let mut i = ffi_iter();
-        unsafe { ffi::dbus_message_iter_init(m.ptr(), &mut i) };
-        Iter(i, m, 0)
+        #[cfg(feature="native")] { todo!() }
+        #[cfg(not(feature="native"))] {
+            let mut i = ffi_iter();
+            unsafe { ffi::dbus_message_iter_init(m.ptr(), &mut i) };
+            Iter(i, m, 0)
+        }
     }
 
     /// Returns the current argument, if T is the argument type. Otherwise returns None.

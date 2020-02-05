@@ -5,6 +5,9 @@ use super::{ffi, Error, libc, to_c_str, c_str_to_slice, init_dbus};
 use crate::strings::{BusName, Path, Interface, Member, ErrorName};
 use std::ffi::CStr;
 
+#[cfg(feature="native")]
+use std::borrow::Cow;
+
 use super::arg::{Append, AppendAll, IterAppend, ReadAll, Get, Iter, Arg, RefArg, TypeMismatchError};
 
 #[derive(Copy, Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
@@ -30,6 +33,9 @@ pub use self::matchrule::MatchRule;
 /// A D-Bus message. A message contains headers - usually destination address, path, interface and member,
 /// and a list of arguments.
 pub struct Message {
+    #[cfg(feature="native")]
+    msg: native::message::Message<'static>,
+    #[cfg(not(feature="native"))]
     msg: *mut ffi::DBusMessage,
 }
 
@@ -46,12 +52,13 @@ impl Message {
 
     /// Creates a new method call message.
     pub fn method_call(destination: &BusName, path: &Path, iface: &Interface, name: &Member) -> Message {
-        #[cfg(feature="native")] { todo!()
-            /*
-            let mut m = native::message::Message::new_method_call(destination, name).unwrap();
-            m.set_destination(Some(destination)).unwrap();
-            m.set_interface(Some(iface)).unwrap();
-            Message { msg: m}  */
+        #[cfg(feature="native")] {
+            let (d, p, i, m): (Cow<_>, Cow<_>, Cow<_>, Cow<_>) =
+                ((&**destination).into(), (&**path).into(), (&**iface).into(), (&**name).into());
+            let mut m = native::message::Message::new_method_call(p.into_owned().into(), m.into_owned().into()).unwrap();
+            m.set_destination(Some(d.into_owned().into())).unwrap();
+            m.set_interface(Some(i.into_owned().into())).unwrap();
+            Message { msg: m }
         }
         #[cfg(not(feature="native"))] {
             init_dbus();
@@ -86,7 +93,10 @@ impl Message {
 
     /// Creates a new signal message.
     pub fn signal(path: &Path, iface: &Interface, name: &Member) -> Message {
-        #[cfg(feature="native")] { todo!() }
+        #[cfg(feature="native")] {
+            let (p, i, m): (Cow<_>, Cow<_>, Cow<_>) = ((&**path).into(), (&**iface).into(), (&**name).into());
+            Message { msg: native::message::Message::new_signal(p.into_owned().into(), i.into_owned().into(), m.into_owned().into()).unwrap() }
+        }
         #[cfg(not(feature="native"))] {
             init_dbus();
             let ptr = unsafe {
@@ -99,17 +109,23 @@ impl Message {
 
     /// Creates a method reply for this method call.
     pub fn new_method_return(m: &Message) -> Option<Message> {
-        let ptr = unsafe { ffi::dbus_message_new_method_return(m.msg) };
-        if ptr.is_null() { None } else { Some(Message { msg: ptr} ) }
+        #[cfg(feature="native")] {
+            m.msg.serial().map(|s|
+                Message { msg: native::message::Message::new_method_return(s) }
+            )
+        }
+        #[cfg(not(feature="native"))] {
+            let ptr = unsafe { ffi::dbus_message_new_method_return(m.msg) };
+            if ptr.is_null() { None } else { Some(Message { msg: ptr} ) }
+        }
     }
 
     /// Creates a method return (reply) for this method call.
     pub fn method_return(&self) -> Message {
-        let ptr = unsafe { ffi::dbus_message_new_method_return(self.msg) };
-        if ptr.is_null() { panic!("D-Bus error: dbus_message_new_method_return failed") }
-        Message {msg: ptr}
+        Self::new_method_return(self).expect("D-Bus error: cannot create method return")
     }
 
+    #[cfg(not(feature="native"))]
     /// The old way to create a new error reply
     #[deprecated]
     pub fn new_error(m: &Message, error_name: &str, error_message: &str) -> Option<Message> {
@@ -143,33 +159,57 @@ impl Message {
 
     /// Get the D-Bus serial of a message, if one was specified.
     pub fn get_serial(&self) -> Option<u32> {
-        let x = unsafe { ffi::dbus_message_get_serial(self.msg) };
-        if x == 0 { None } else { Some(x) }
+        #[cfg(feature="native")]
+        { self.msg.serial().map(|x| x.get()) }
+        #[cfg(not(feature="native"))] {
+            let x = unsafe { ffi::dbus_message_get_serial(self.msg) };
+            if x == 0 { None } else { Some(x) }
+        }
     }
 
     /// Get the serial of the message this message is a reply to, if present.
     pub fn get_reply_serial(&self) -> Option<u32> {
-        let s = unsafe { ffi::dbus_message_get_reply_serial(self.msg) };
-        if s == 0 { None } else { Some(s) }
+        #[cfg(feature="native")]
+        { self.msg.reply_serial().map(|x| x.get()) }
+        #[cfg(not(feature="native"))] {
+            let s = unsafe { ffi::dbus_message_get_reply_serial(self.msg) };
+            if s == 0 { None } else { Some(s) }
+        }
     }
 
     /// Returns true if the message does not expect a reply.
-    pub fn get_no_reply(&self) -> bool { unsafe { ffi::dbus_message_get_no_reply(self.msg) != 0 } }
+    pub fn get_no_reply(&self) -> bool {
+        #[cfg(feature="native")]
+        { (self.msg.flags() & 1) != 0 }
+        #[cfg(not(feature="native"))]
+        unsafe { ffi::dbus_message_get_no_reply(self.msg) != 0 }
+    }
 
     /// Set whether or not the message expects a reply.
     ///
     /// Set to true if you send a method call and do not want a reply.
     pub fn set_no_reply(&mut self, v: bool) {
+        #[cfg(feature="native")]
+        { self.msg.set_flags(if v { self.msg.flags() | 1 } else { self.msg.flags() & !1 }) }
+        #[cfg(not(feature="native"))]
         unsafe { ffi::dbus_message_set_no_reply(self.msg, if v { 1 } else { 0 }) }
     }
 
     /// Returns true if the message can cause a service to be auto-started.
-    pub fn get_auto_start(&self) -> bool { unsafe { ffi::dbus_message_get_auto_start(self.msg) != 0 } }
+    pub fn get_auto_start(&self) -> bool {
+        #[cfg(feature="native")]
+        { (self.msg.flags() & 2) != 0 }
+        #[cfg(not(feature="native"))]
+        unsafe { ffi::dbus_message_get_auto_start(self.msg) != 0 }
+    }
 
     /// Sets whether or not the message can cause a service to be auto-started.
     ///
     /// Defaults to true.
     pub fn set_auto_start(&mut self, v: bool) {
+        #[cfg(feature="native")]
+        { self.msg.set_flags(if v { self.msg.flags() | 2 } else { self.msg.flags() & !2 }) }
+        #[cfg(not(feature="native"))]
         unsafe { ffi::dbus_message_set_auto_start(self.msg, if v { 1 } else { 0 }) }
     }
 
@@ -339,7 +379,12 @@ impl Message {
 
     /// Gets the MessageType of the Message.
     pub fn msg_type(&self) -> MessageType {
-        match unsafe { ffi::dbus_message_get_type(self.msg) } {
+        #[cfg(feature="native")]
+        let x = self.msg.msg_type();
+        #[cfg(not(feature="native"))]
+        let x = unsafe { ffi::dbus_message_get_type(self.msg) };
+
+        match x {
             1 => MessageType::MethodCall,
             2 => MessageType::MethodReturn,
             3 => MessageType::Error,
@@ -362,6 +407,7 @@ impl Message {
         }
     }
 
+    #[cfg(not(feature="native"))]
     /// Returns a tuple of (Message type, Path, Interface, Member) of the current message.
     #[deprecated]
     pub fn headers(&self) -> (MessageType, Option<String>, Option<String>, Option<String>) {
@@ -430,13 +476,18 @@ impl Message {
     }
 
     pub (crate) fn set_error_from_msg(&self) -> Result<(), Error> {
-        let mut e = Error::empty();
-        if unsafe { ffi::dbus_set_error_from_message(e.get_mut(), self.msg) } != 0 { Err(e) }
-        else { Ok(()) }
+        #[cfg(feature="native")] { todo!() }
+        #[cfg(not(feature="native"))] {
+            let mut e = Error::empty();
+            if unsafe { ffi::dbus_set_error_from_message(e.get_mut(), self.msg) } != 0 { Err(e) }
+            else { Ok(()) }
+        }
     }
 
+    #[cfg(not(feature="native"))]
     pub (crate) fn ptr(&self) -> *mut ffi::DBusMessage { self.msg }
 
+    #[cfg(not(feature="native"))]
     pub (crate) fn from_ptr(ptr: *mut ffi::DBusMessage, add_ref: bool) -> Message {
         if add_ref {
             unsafe { ffi::dbus_message_ref(ptr) };
@@ -449,10 +500,13 @@ impl Message {
     /// However, this can be very useful in test code that is supposed to handle a method call.
     /// This way, you can create a method call and handle it without sending it to a real D-Bus instance.
     pub fn set_serial(&mut self, val: u32) {
+        #[cfg(feature="native")] { self.msg.set_serial(std::num::NonZeroU32::new(val)) }
+        #[cfg(not(feature="native"))]
         unsafe { ffi::dbus_message_set_serial(self.msg, val) };
     }
 }
 
+#[cfg(not(feature="native"))]
 impl Drop for Message {
     fn drop(&mut self) {
         unsafe {

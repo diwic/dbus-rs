@@ -97,6 +97,7 @@ impl Channel {
     /// Note: In case pop_message and send_with_reply_and_block is called in parallel from different threads,
     /// they might race to retreive the reply message from the internal queue.
     pub fn send_with_reply_and_block(&self, msg: Message, timeout: Duration) -> Result<Message, Error> {
+        let serial = self.send(msg).map_err(|_| Error::new_failed("Failed to send message"))?;
         todo!()
     }
 
