@@ -10,21 +10,21 @@ use crate::strings::{BusName, Path, Interface, Member};
 /// Listen to InterfacesRemoved signal from org.bluez.obex.
 ///
 /// ```rust,no_run
-/// use dbus::ffidisp::Connection;
+/// use dbus::blocking::Connection;
 /// use dbus::message::SignalArgs;
-/// use dbus::ffidisp::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
+/// use dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
+/// use std::time::Duration;
 ///
-/// let c = Connection::new_session().unwrap();
+/// let mut c = Connection::new_session().unwrap();
 /// // Add a match for this signal
-/// let mstr = IR::match_str(Some(&"org.bluez.obex".into()), None);
-/// c.add_match(&mstr).unwrap();
+/// let mr = IR::match_rule(Some(&c.unique_name().into()), Some(&"/hello".into())).static_clone();
+/// c.add_match(mr, |ir: IR, _, _| {
+///      println!("Interfaces {:?} have been removed from bluez on path {}.", ir.interfaces, ir.object);
+///      true
+/// });
 ///
 /// // Wait for the signal to arrive.
-/// for msg in c.incoming(1000) {
-///     if let Some(ir) = IR::from_message(&msg) {
-///         println!("Interfaces {:?} have been removed from bluez on path {}.", ir.interfaces, ir.object);
-///     }
-/// }
+/// loop { c.process(Duration::from_millis(1000)).unwrap(); }
 /// ```
 
 pub trait SignalArgs {
@@ -39,7 +39,7 @@ pub trait SignalArgs {
         let mut m = Message::signal(path, &Interface::from(Self::INTERFACE), &Member::from(Self::NAME));
         arg::AppendAll::append(self, &mut arg::IterAppend::new(&mut m));
         m
-    } 
+    }
 
     /// If the message is a signal of the correct type, return its arguments, otherwise return None.
     ///
@@ -78,23 +78,26 @@ pub trait SignalArgs {
 
 #[test]
 fn intf_removed() {
-    use crate::ffidisp::{Connection, BusType};
-    use crate::ffidisp::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
-    let c = Connection::get_private(BusType::Session).unwrap();
-    let mstr = IR::match_str(Some(&c.unique_name().into()), Some(&"/hello".into()));
-    println!("Match str: {}", mstr);
-    c.add_match(&mstr).unwrap();
+    use crate::blocking::LocalConnection;
+    use crate::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
+    use std::{time::Duration, cell::Cell, rc::Rc};
+    let mut c = LocalConnection::new_session().unwrap();
+
+    let mr = IR::match_rule(Some(&c.unique_name().into()), Some(&"/hello".into())).static_clone();
+    println!("Match: {:?}", mr);
+
     let ir = IR { object: "/hello".into(), interfaces: vec!("ABC.DEF".into(), "GHI.JKL".into()) };
+    let ir_msg = ir.to_emit_message(&"/hello".into());
+    let done = Rc::new(Cell::new(false));
+    let done2 = done.clone();
 
-    let cp = c.with_path("dbus.dummy", "/hello", 2000);
-    cp.emit(&ir).unwrap();
-
-    for msg in c.incoming(1000) {
-        if &*msg.sender().unwrap() != &*c.unique_name() { continue; }
-        if let Some(ir2) = IR::from_message(&msg) {
-            assert_eq!(ir2.object, ir.object);
-            assert_eq!(ir2.interfaces, ir.interfaces);
-            break;
-        }
-    }
+    c.add_match(mr, move |ir2: IR, _, _| {
+        assert_eq!(ir2.object, ir.object);
+        assert_eq!(ir2.interfaces, ir.interfaces);
+        done2.set(true);
+        false
+    }).unwrap();
+    use crate::channel::Sender;
+    c.send(ir_msg).expect("Failed to send message");
+    while !done.get() { c.process(Duration::from_millis(1000)).unwrap(); }
 }
