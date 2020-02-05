@@ -17,7 +17,7 @@ use crate::strings::{BusName, Path, Interface, Member};
 ///
 /// let mut c = Connection::new_session().unwrap();
 /// // Add a match for this signal
-/// let mr = IR::match_rule(Some(&c.unique_name().into()), Some(&"/hello".into())).static_clone();
+/// let mr = IR::match_rule(Some(&"org.bluez.obex".into()), None).static_clone();
 /// c.add_match(mr, |ir: IR, _, _| {
 ///      println!("Interfaces {:?} have been removed from bluez on path {}.", ir.interfaces, ir.object);
 ///      true
