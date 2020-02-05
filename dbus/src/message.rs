@@ -46,7 +46,13 @@ impl Message {
 
     /// Creates a new method call message.
     pub fn method_call(destination: &BusName, path: &Path, iface: &Interface, name: &Member) -> Message {
-        #[cfg(feature="native")] { todo!() }
+        #[cfg(feature="native")] { todo!()
+            /*
+            let mut m = native::message::Message::new_method_call(destination, name).unwrap();
+            m.set_destination(Some(destination)).unwrap();
+            m.set_interface(Some(iface)).unwrap();
+            Message { msg: m}  */
+        }
         #[cfg(not(feature="native"))] {
             init_dbus();
             let ptr = unsafe {
