@@ -27,7 +27,7 @@ pub struct Message<'a> {
     interface: Option<Cow<'a, strings::InterfaceName>>,
     member: Option<Cow<'a, strings::MemberName>>,
     error_name: Option<Cow<'a, strings::ErrorName>>,
-    reply_serial: Option<u32>,
+    reply_serial: Option<NonZeroU32>,
     destination: Option<Cow<'a, strings::BusName>>,
     sender: Option<Cow<'a, strings::BusName>>,
     signature: Option<Cow<'a, strings::SignatureMulti>>,
@@ -63,10 +63,33 @@ impl<'a> Message<'a> {
         todo!()
     }
 
+    pub fn msg_type(&self) -> u8 { self.msg_type }
+
     pub fn new_method_call(path: Cow<'a, strings::ObjectPath>, member: Cow<'a, strings::MemberName>) -> Result<Self, ()> {
         let mut m = Message::new_internal(METHOD_CALL);
         m.set_path(Some(path))?;
         m.set_member(Some(member))?;
+        Ok(m)
+    }
+
+    pub fn new_signal(path: Cow<'a, strings::ObjectPath>, interface: Cow<'a, strings::InterfaceName>, member: Cow<'a, strings::MemberName>) -> Result<Self, ()> {
+        let mut m = Message::new_internal(SIGNAL);
+        m.set_path(Some(path))?;
+        m.set_interface(Some(interface))?;
+        m.set_member(Some(member))?;
+        Ok(m)
+    }
+
+    pub fn new_method_return(reply_serial: NonZeroU32) -> Self {
+        let mut m = Message::new_internal(METHOD_RETURN);
+        m.reply_serial = Some(reply_serial);
+        m
+
+    }
+    pub fn new_error(error_name: Cow<'a, strings::ErrorName>, reply_serial: NonZeroU32) -> Result<Self, ()> {
+        let mut m = Message::new_internal(ERROR);
+        m.set_error_name(Some(error_name))?;
+        m.reply_serial = Some(reply_serial);
         Ok(m)
     }
 
@@ -99,13 +122,21 @@ impl<'a> Message<'a> {
         Ok(())
     }
 
-    pub fn set_reply_serial(&mut self, value: Option<u32>) -> Result<(), ()> {
+    pub fn set_reply_serial(&mut self, value: Option<NonZeroU32>) -> Result<(), ()> {
         if value.is_none() && (self.msg_type == ERROR || self.msg_type == METHOD_RETURN) { Err(())? }
         self.reply_serial = value;
         Ok(())
     }
 
-    pub fn reply_serial(&self) -> Option<u32> { self.reply_serial }
+    pub fn reply_serial(&self) -> Option<NonZeroU32> { self.reply_serial }
+
+    pub fn set_serial(&mut self, value: Option<std::num::NonZeroU32>) { self.serial = value; }
+
+    pub fn serial(&self) -> Option<std::num::NonZeroU32> { self.serial }
+
+    pub fn set_flags(&mut self, value: u8) { self.flags = value & 0x7; }
+
+    pub fn flags(&self) -> u8 { self.flags }
 
     pub fn write_header<B: io::Write + io::Seek>(&self, serial: std::num::NonZeroU32, buf: &mut B) -> io::Result<()> {
 
@@ -130,7 +161,7 @@ impl<'a> Message<'a> {
             add_header_field(b, 2, self.interface.as_ref(), |x| x.as_dbus_str())?;
             add_header_field(b, 3, self.member.as_ref(), |x| x.as_dbus_str())?;
             add_header_field(b, 4, self.error_name.as_ref(), |x| x.as_dbus_str())?;
-            add_header_field(b, 5, self.reply_serial.as_ref(), |x| *x)?;
+            add_header_field(b, 5, self.reply_serial.as_ref(), |x| x.get())?;
             add_header_field(b, 6, self.destination.as_ref(), |x| x.as_dbus_str())?;
             add_header_field(b, 7, self.sender.as_ref(), |x| x.as_dbus_str())?;
             add_header_field(b, 8, self.signature.as_ref(), |x| &**x)?;
@@ -173,7 +204,7 @@ impl<'a> Message<'a> {
                 2 => m.interface = Some(Cow::Borrowed(<&types::Str>::read_buf(&mut v)?.try_into()?)),
                 3 => m.member = Some(Cow::Borrowed(<&types::Str>::read_buf(&mut v)?.try_into()?)),
                 4 => m.error_name = Some(Cow::Borrowed(<&types::Str>::read_buf(&mut v)?.try_into()?)),
-                5 => m.reply_serial = Some(u32::read_buf(&mut v)?),
+                5 => m.reply_serial = NonZeroU32::new(u32::read_buf(&mut v)?),
                 6 => m.destination = Some(Cow::Borrowed(<&types::Str>::read_buf(&mut v)?.try_into()?)),
                 7 => m.sender = Some(Cow::Borrowed(<&types::Str>::read_buf(&mut v)?.try_into()?)),
                 8 => m.signature = Some(<&types::Signature>::read_buf(&mut v)?.into()),

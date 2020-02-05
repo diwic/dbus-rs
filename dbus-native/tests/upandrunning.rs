@@ -50,7 +50,7 @@ fn connect_to_session_bus() {
     let mut body = reply.demarshal_body();
     let r = body.read_str(b's').unwrap();
     assert!(body.finished());
-    assert_eq!(reply.reply_serial(), Some(1u32));
+    assert_eq!(reply.reply_serial().unwrap().get(), 1u32);
     assert!(r.starts_with(":1."));
     println!("Our ID is {}", &*r);
 
