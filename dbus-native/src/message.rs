@@ -33,7 +33,7 @@ pub struct Message<'a> {
     interface: Option<Cow<'a, str>>,
     member: Option<Cow<'a, str>>,
     error_name: Option<Cow<'a, str>>,
-    reply_serial: Option<u32>,
+    reply_serial: Option<NonZeroU32>,
     destination: Option<Cow<'a, str>>,
     sender: Option<Cow<'a, str>>,
     signature: Option<Cow<'a, str>>,
@@ -69,10 +69,33 @@ impl<'a> Message<'a> {
         todo!()
     }
 
+    pub fn msg_type(&self) -> u8 { self.msg_type }
+
     pub fn new_method_call(path: Cow<'a, str>, member: Cow<'a, str>) -> Result<Self, ()> {
         let mut m = Message::new_internal(METHOD_CALL);
         m.set_path(Some(path))?;
         m.set_member(Some(member))?;
+        Ok(m)
+    }
+
+    pub fn new_signal(path: Cow<'a, str>, interface: Cow<'a, str>, member: Cow<'a, str>) -> Result<Self, ()> {
+        let mut m = Message::new_internal(SIGNAL);
+        m.set_path(Some(path))?;
+        m.set_interface(Some(interface))?;
+        m.set_member(Some(member))?;
+        Ok(m)
+    }
+
+    pub fn new_method_return(reply_serial: NonZeroU32) -> Self {
+        let mut m = Message::new_internal(METHOD_RETURN);
+        m.reply_serial = Some(reply_serial);
+        m
+    }
+
+    pub fn new_error(error_name: Cow<'a, str>, reply_serial: NonZeroU32) -> Result<Self, ()> {
+        let mut m = Message::new_internal(ERROR);
+        m.set_error_name(Some(error_name))?;
+        m.reply_serial = Some(reply_serial);
         Ok(m)
     }
 
@@ -86,6 +109,8 @@ impl<'a> Message<'a> {
         Ok(())
     }
 
+    pub fn path(&self) -> Option<&str> { self.path.as_ref().map(|s| &**s) }
+
     pub fn set_interface(&mut self, value: Option<Cow<'a, str>>) -> Result<(), ()> {
         if let Some(v) = value.as_ref() {
             strings::is_valid_interface_name(v.as_bytes())?
@@ -95,6 +120,8 @@ impl<'a> Message<'a> {
         self.interface = value;
         Ok(())
     }
+
+    pub fn interface(&self) -> Option<&str> { self.interface.as_ref().map(|s| &**s) }
 
     pub fn set_member(&mut self, value: Option<Cow<'a, str>>) -> Result<(), ()> {
         if let Some(v) = value.as_ref() {
@@ -106,6 +133,8 @@ impl<'a> Message<'a> {
         Ok(())
     }
 
+    pub fn member(&self) -> Option<&str> { self.member.as_ref().map(|s| &**s) }
+
     pub fn set_destination(&mut self, value: Option<Cow<'a, str>>) -> Result<(), ()> {
         if let Some(v) = value.as_ref() {
             strings::is_valid_bus_name(v.as_bytes())?
@@ -113,6 +142,8 @@ impl<'a> Message<'a> {
         self.destination = value;
         Ok(())
     }
+
+    pub fn destination(&self) -> Option<&str> { self.destination.as_ref().map(|s| &**s) }
 
     pub fn set_error_name(&mut self, value: Option<Cow<'a, str>>) -> Result<(), ()> {
         if let Some(v) = value.as_ref() {
@@ -124,13 +155,25 @@ impl<'a> Message<'a> {
         Ok(())
     }
 
-    pub fn set_reply_serial(&mut self, value: Option<u32>) -> Result<(), ()> {
+    pub fn error_name(&self) -> Option<&str> { self.error_name.as_ref().map(|s| &**s) }
+
+    pub fn set_reply_serial(&mut self, value: Option<NonZeroU32>) -> Result<(), ()> {
         if value.is_none() && (self.msg_type == ERROR || self.msg_type == METHOD_RETURN) {
             Err(())?
         }
         self.reply_serial = value;
         Ok(())
     }
+
+    pub fn reply_serial(&self) -> Option<NonZeroU32> { self.reply_serial }
+
+    pub fn set_serial(&mut self, value: Option<std::num::NonZeroU32>) { self.serial = value; }
+
+    pub fn serial(&self) -> Option<std::num::NonZeroU32> { self.serial }
+
+    pub fn set_flags(&mut self, value: u8) { self.flags = value & 0x7; }
+
+    pub fn flags(&self) -> u8 { self.flags }
 
     pub fn write_header<'b>(&self, serial: std::num::NonZeroU32, buf: &'b mut [u8]) -> Result<&'b mut [u8], ()> {
         let mut b = types::align_buf_mut::<types::Struct::<(u8, u8)>>(buf);
@@ -154,8 +197,8 @@ impl<'a> Message<'a> {
         p = add_header_string(p, 3, &self.member);
         p = add_header_string(p, 4, &self.error_name);
         if let Some(r) = self.reply_serial.as_ref() {
-            let s = types::Struct((5u8, types::Variant(*r)));
-            p = s.write_buf(p)
+            let s = types::Struct((5u8, types::Variant(r.get())));
+            p = s.write_buf(p);
         }
         p = add_header_string(p, 6, &self.destination);
         p = add_header_string(p, 7, &self.sender);
