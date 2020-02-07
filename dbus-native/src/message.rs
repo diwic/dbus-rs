@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use crate::strings;
+use dbus_strings as strings;
 use crate::types;
 use crate::types::Marshal;
 use std::convert::TryInto;
@@ -17,7 +17,7 @@ const ENDIAN: u8 = b'l';
 #[cfg(target_endian = "big")]
 const ENDIAN: u8 = b'B';
 
-fn add_header_string<'a>(buf: &'a mut [u8], header_type: u8, x: &Option<Cow<str>>) -> &'a mut [u8] {
+fn add_header_string<'a>(buf: &'a mut [u8], header_type: u8, x: Option<&str>) -> &'a mut [u8] {
     if let Some(p) = x.as_ref() {
         let s = types::Struct((header_type, types::Variant(types::Str(p))));
         s.write_buf(buf)
@@ -29,14 +29,14 @@ pub struct Message<'a> {
     msg_type: u8,
     flags: u8,
     serial: Option<NonZeroU32>,
-    path: Option<Cow<'a, str>>,
-    interface: Option<Cow<'a, str>>,
-    member: Option<Cow<'a, str>>,
-    error_name: Option<Cow<'a, str>>,
+    path: Option<Cow<'a, strings::ObjectPath>>,
+    interface: Option<Cow<'a, strings::InterfaceName>>,
+    member: Option<Cow<'a, strings::MemberName>>,
+    error_name: Option<Cow<'a, strings::ErrorName>>,
     reply_serial: Option<u32>,
-    destination: Option<Cow<'a, str>>,
-    sender: Option<Cow<'a, str>>,
-    signature: Option<Cow<'a, str>>,
+    destination: Option<Cow<'a, strings::BusName>>,
+    sender: Option<Cow<'a, strings::BusName>>,
+    signature: Option<Cow<'a, strings::SignatureMulti>>,
 //    unix_fds: Option<u32>,
     body: Cow<'a, [u8]>,
     is_big_endian: bool,
@@ -69,65 +69,44 @@ impl<'a> Message<'a> {
         todo!()
     }
 
-    pub fn new_method_call(path: Cow<'a, str>, member: Cow<'a, str>) -> Result<Self, ()> {
+    pub fn new_method_call(path: Cow<'a, strings::ObjectPath>, member: Cow<'a, strings::MemberName>) -> Result<Self, ()> {
         let mut m = Message::new_internal(METHOD_CALL);
         m.set_path(Some(path))?;
         m.set_member(Some(member))?;
         Ok(m)
     }
 
-    pub fn set_path(&mut self, value: Option<Cow<'a, str>>) -> Result<(), ()> {
-        if let Some(v) = value.as_ref() {
-            strings::is_valid_object_path(v.as_bytes())?
-        } else if self.msg_type == METHOD_CALL || self.msg_type == SIGNAL {
-            Err(())?
-        }
+    pub fn set_path(&mut self, value: Option<Cow<'a, strings::ObjectPath>>) -> Result<(), ()> {
+        if value.is_none() && (self.msg_type == METHOD_CALL || self.msg_type == SIGNAL) { Err(())? }
         self.path = value;
         Ok(())
     }
 
-    pub fn set_interface(&mut self, value: Option<Cow<'a, str>>) -> Result<(), ()> {
-        if let Some(v) = value.as_ref() {
-            strings::is_valid_interface_name(v.as_bytes())?
-        } else if self.msg_type == SIGNAL {
-            Err(())?
-        }
+    pub fn set_interface(&mut self, value: Option<Cow<'a, strings::InterfaceName>>) -> Result<(), ()> {
+        if value.is_none() && self.msg_type == SIGNAL { Err(())? }
         self.interface = value;
         Ok(())
     }
 
-    pub fn set_member(&mut self, value: Option<Cow<'a, str>>) -> Result<(), ()> {
-        if let Some(v) = value.as_ref() {
-            strings::is_valid_member_name(v.as_bytes())?
-        } else if self.msg_type == METHOD_CALL || self.msg_type == SIGNAL {
-            Err(())?
-        }
+    pub fn set_member(&mut self, value: Option<Cow<'a, strings::MemberName>>) -> Result<(), ()> {
+        if value.is_none() && (self.msg_type == METHOD_CALL || self.msg_type == SIGNAL) { Err(())? }
         self.member = value;
         Ok(())
     }
 
-    pub fn set_destination(&mut self, value: Option<Cow<'a, str>>) -> Result<(), ()> {
-        if let Some(v) = value.as_ref() {
-            strings::is_valid_bus_name(v.as_bytes())?
-        };
+    pub fn set_destination(&mut self, value: Option<Cow<'a, strings::BusName>>) -> Result<(), ()> {
         self.destination = value;
         Ok(())
     }
 
-    pub fn set_error_name(&mut self, value: Option<Cow<'a, str>>) -> Result<(), ()> {
-        if let Some(v) = value.as_ref() {
-            strings::is_valid_error_name(v.as_bytes())?
-        } else if self.msg_type == ERROR {
-            Err(())?
-        }
+    pub fn set_error_name(&mut self, value: Option<Cow<'a, strings::ErrorName>>) -> Result<(), ()> {
+        if value.is_none() && self.msg_type == ERROR { Err(())? }
         self.error_name = value;
         Ok(())
     }
 
     pub fn set_reply_serial(&mut self, value: Option<u32>) -> Result<(), ()> {
-        if value.is_none() && (self.msg_type == ERROR || self.msg_type == METHOD_RETURN) {
-            Err(())?
-        }
+        if value.is_none() && (self.msg_type == ERROR || self.msg_type == METHOD_RETURN) { Err(())? }
         self.reply_serial = value;
         Ok(())
     }
@@ -150,15 +129,15 @@ impl<'a> Message<'a> {
             let s = types::Struct((1u8, types::Variant(types::ObjectPath(r.as_bytes()))));
             p = s.write_buf(p)
         }
-        p = add_header_string(p, 2, &self.interface);
-        p = add_header_string(p, 3, &self.member);
-        p = add_header_string(p, 4, &self.error_name);
+        p = add_header_string(p, 2, self.interface.as_ref().map(|x| &***x));
+        p = add_header_string(p, 3, self.member.as_ref().map(|x| &***x));
+        p = add_header_string(p, 4, self.error_name.as_ref().map(|x| &***x));
         if let Some(r) = self.reply_serial.as_ref() {
             let s = types::Struct((5u8, types::Variant(*r)));
             p = s.write_buf(p)
         }
-        p = add_header_string(p, 6, &self.destination);
-        p = add_header_string(p, 7, &self.sender);
+        p = add_header_string(p, 6, self.destination.as_ref().map(|x| &***x));
+        p = add_header_string(p, 7, self.sender.as_ref().map(|x| &***x));
         if let Some(r) = self.signature.as_ref() {
             let s = types::Struct((8u8, types::Variant(types::Signature(r.as_bytes()))));
             p = s.write_buf(p)
@@ -278,9 +257,14 @@ impl MessageReader {
 
 #[test]
 fn hello() {
-    let mut m = Message::new_method_call("/org/freedesktop/DBus".into(), "Hello".into()).unwrap();
-    m.set_destination(Some("org.freedesktop.DBus".into())).unwrap();
-    m.set_interface(Some("org.freedesktop.DBus".into())).unwrap();
+    use dbus_strings::StringLike;
+    let path = strings::ObjectPath::new("/org/freedesktop/DBus").unwrap();
+    let member = strings::MemberName::new("Hello").unwrap();
+    let dest = strings::BusName::new("org.freedesktop.DBus").unwrap();
+    let interface = strings::InterfaceName::new("org.freedesktop.DBus").unwrap();
+    let mut m = Message::new_method_call(path.into(), member.into()).unwrap();
+    m.set_destination(Some(dest.into())).unwrap();
+    m.set_interface(Some(interface.into())).unwrap();
 
     let mut v_storage = vec![0u8; 256];
     let v = m.write_header(std::num::NonZeroU32::new(1u32).unwrap(), &mut v_storage).unwrap();

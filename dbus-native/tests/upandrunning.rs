@@ -1,4 +1,5 @@
 use dbus_native as dbus;
+use dbus_strings as strings;
 
 use dbus::{address, types, message, authentication};
 
@@ -14,9 +15,14 @@ fn connect_to_session_bus() {
 
     // Send Hello message
 
-    let mut m = message::Message::new_method_call("/org/freedesktop/DBus".into(), "Hello".into()).unwrap();
-    m.set_destination(Some("org.freedesktop.DBus".into())).unwrap();
-    m.set_interface(Some("org.freedesktop.DBus".into())).unwrap();
+    use strings::StringLike;
+    let path = strings::ObjectPath::new("/org/freedesktop/DBus").unwrap();
+    let member = strings::MemberName::new("Hello").unwrap();
+    let dest = strings::BusName::new("org.freedesktop.DBus").unwrap();
+    let interface = strings::InterfaceName::new("org.freedesktop.DBus").unwrap();
+    let mut m = message::Message::new_method_call(path.into(), member.into()).unwrap();
+    m.set_destination(Some(dest.into())).unwrap();
+    m.set_interface(Some(interface.into())).unwrap();
     println!("{:?}", m);
 
     let mut v_storage = vec![0u8; 256];

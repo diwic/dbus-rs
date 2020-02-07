@@ -5,9 +5,6 @@
 ///
 /// No stability guarantees for this crate.
 
-
-pub mod strings;
-
 pub mod machineid;
 
 pub mod address;

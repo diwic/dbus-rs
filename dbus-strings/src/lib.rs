@@ -8,6 +8,7 @@ use std::borrow::Borrow;
 use std::fmt;
 use std::error::Error;
 use std::ops::Deref;
+use std::convert::TryFrom;
 
 mod validity;
 
@@ -80,9 +81,14 @@ macro_rules! string_wrapper_base {
             fn to_owned(&self) -> $towned { $towned(self.0.into()) }
         }
 
+        impl<'a> TryFrom<&'a str> for &'a $t {
+            type Error = InvalidStringError;
+            fn try_from(s: &'a str) -> Result<&'a $t, Self::Error> { $t::new(s) }
+        }
+
         $(#[$comment])*
         #[repr(transparent)]
-        #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+        #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Clone)]
         pub struct $towned(String);
 
         impl $towned {
@@ -102,6 +108,11 @@ macro_rules! string_wrapper_base {
 
         impl Borrow<$t> for $towned {
             fn borrow(&self) -> &$t { &self }
+        }
+
+        impl TryFrom<String> for $towned {
+            type Error = InvalidStringError;
+            fn try_from(s: String) -> Result<$towned, Self::Error> { $towned::new(s) }
         }
 
         impl<'a> From<$towned> for Cow<'a, $t> {
