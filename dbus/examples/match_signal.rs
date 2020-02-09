@@ -1,7 +1,5 @@
 /// Connects to the "server" example. Have the server example running when you're running this example.
 
-extern crate dbus;
-
 use dbus::arg;
 
 // First, let's autogenerate some code using the dbus-codegen-rust tool.

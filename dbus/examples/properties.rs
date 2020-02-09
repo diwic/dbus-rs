@@ -11,7 +11,7 @@ fn print_refarg(value: &dyn arg::RefArg) {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Connect to server and create a ConnPath. A ConnPath implements several interfaces,
+    // Connect to server and create a proxy object. A proxy implements several interfaces,
     // in this case we'll use OrgFreedesktopDBusProperties, which allows us to call "get".
     let c = Connection::new_session()?;
     let p = c.with_proxy("org.mpris.MediaPlayer2.rhythmbox", "/org/mpris/MediaPlayer2", Duration::from_millis(5000));
