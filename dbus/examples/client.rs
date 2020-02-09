@@ -1,5 +1,3 @@
-extern crate dbus;
-
 use dbus::blocking::Connection;
 use std::time::Duration;
 

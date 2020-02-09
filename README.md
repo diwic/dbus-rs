@@ -30,8 +30,6 @@ Client
 This example opens a connection to the session bus and asks for a list of all names currently present.
 
 ```rust
-extern crate dbus;
-
 use dbus::blocking::Connection;
 use std::time::Duration;
 
@@ -55,10 +53,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-You can try a similar example (which has more comments) by running:
+Examples of client code in the examples directory:
 
-    cargo run --example client
-
+ * [client.rs](https://github.com/diwic/dbus-rs/tree/master/dbus/examples/client.rs) (same as the above)
+ * [properties.rs](https://github.com/diwic/dbus-rs/tree/master/dbus/examples/properties.rs)
+ * [match_signal.rs](https://github.com/diwic/dbus-rs/tree/master/dbus/examples/match_signal.rs)
+ * [rtkit.rs](https://github.com/diwic/dbus-rs/tree/master/dbus/examples/rtkit.rs)
 
 Server
 ------

@@ -1,5 +1,3 @@
-extern crate dbus;
-
 use dbus::{blocking::Connection, arg};
 use std::collections::HashMap;
 use std::time::Duration;

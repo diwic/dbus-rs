@@ -2,9 +2,6 @@
    Rtkit puts a few limitations on us to let us become realtime, such as setting
    RLIMIT_RTTIME correctly, hence the syscalls. */
 
-extern crate dbus;
-extern crate libc;
-
 use std::cmp;
 use std::time::Duration;
 
