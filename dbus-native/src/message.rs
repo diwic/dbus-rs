@@ -4,6 +4,7 @@ use crate::types;
 use crate::types::Marshal;
 use std::convert::TryInto;
 use std::num::NonZeroU32;
+use std::io;
 
 const FIXED_HEADER_SIZE: usize = 16;
 
@@ -16,13 +17,6 @@ const SIGNAL: u8 = 4;
 const ENDIAN: u8 = b'l';
 #[cfg(target_endian = "big")]
 const ENDIAN: u8 = b'B';
-
-fn add_header_string<'a>(buf: &'a mut [u8], header_type: u8, x: Option<&str>) -> &'a mut [u8] {
-    if let Some(p) = x.as_ref() {
-        let s = types::Struct((header_type, types::Variant(types::Str(p))));
-        s.write_buf(buf)
-    } else { buf }
-}
 
 #[derive(Clone, Debug)]
 pub struct Message<'a> {
@@ -111,45 +105,38 @@ impl<'a> Message<'a> {
         Ok(())
     }
 
-    pub fn write_header<'b>(&self, serial: std::num::NonZeroU32, buf: &'b mut [u8]) -> Result<&'b mut [u8], ()> {
-        let mut b = types::align_buf_mut::<types::Struct::<(u8, u8)>>(buf);
+    pub fn write_header<B: io::Write + io::Seek>(&self, serial: std::num::NonZeroU32, buf: &mut B) -> io::Result<()> {
 
-        let p = ENDIAN.write_buf(&mut b);
-        let p = self.msg_type.write_buf(p);
-        let p = self.flags.write_buf(p);
-        let p = 1u8.write_buf(p);
+        fn add_header_field<B, Z, Y: Marshal, F>(b: &mut types::MarshalState<B>, header_type: u8, field: Option<Z>, f: F) -> io::Result<()>
+        where F: FnOnce(Z) -> Y, B: io::Write + io::Seek {
+            if let Some(field) = field {
+                let field = f(field);
+                let s = types::Struct((header_type, types::Variant(field)));
+                s.write_buf(b)
+            } else { Ok(()) }
+        }
 
+        let mut b = types::MarshalState::new(buf);
         let body_len = self.body.len();
-        if body_len >= 134217728 { Err(())? }
-        let p = (body_len as u32).write_buf(p);
-        let p = serial.get().write_buf(p);
-        let (arr_size_buf, mut p) = p.split_at_mut(4);
-        let arr_begin = p.as_ptr() as usize;
-        if let Some(r) = self.path.as_ref() {
-            let s = types::Struct((1u8, types::Variant(types::ObjectPath(r.as_bytes()))));
-            p = s.write_buf(p)
-        }
-        p = add_header_string(p, 2, self.interface.as_ref().map(|x| &***x));
-        p = add_header_string(p, 3, self.member.as_ref().map(|x| &***x));
-        p = add_header_string(p, 4, self.error_name.as_ref().map(|x| &***x));
-        if let Some(r) = self.reply_serial.as_ref() {
-            let s = types::Struct((5u8, types::Variant(*r)));
-            p = s.write_buf(p)
-        }
-        p = add_header_string(p, 6, self.destination.as_ref().map(|x| &***x));
-        p = add_header_string(p, 7, self.sender.as_ref().map(|x| &***x));
-        if let Some(r) = self.signature.as_ref() {
-            let s = types::Struct((8u8, types::Variant(types::Signature(r.as_bytes()))));
-            p = s.write_buf(p)
-        }
+        if body_len >= 134217728 { Err(io::ErrorKind::InvalidData)? }
 
-        let arr_end = p.as_ptr() as usize;
-        let arr_size = arr_end - arr_begin;
-        (arr_size as u32).write_buf(arr_size_buf);
-        let header_size = types::align_up(arr_end, 8) - (b.as_ptr() as usize);
-        if body_len + header_size >= 134217728 { Err(())? }
-
-        Ok(&mut b[..header_size])
+        b.write_single(&[ENDIAN, self.msg_type, self.flags, 1])?;
+        b.write_fixed(4, &(body_len as u32).to_ne_bytes())?;
+        b.write_fixed(4, &(serial.get()).to_ne_bytes())?;
+        b.write_array(|b| {
+            add_header_field(b, 1, self.path.as_ref(), |x| types::ObjectPath(&**x))?;
+            add_header_field(b, 2, self.interface.as_ref(), |x| types::Str(&**x))?;
+            add_header_field(b, 3, self.member.as_ref(), |x| types::Str(&**x))?;
+            add_header_field(b, 4, self.error_name.as_ref(), |x| types::Str(&**x))?;
+            add_header_field(b, 5, self.reply_serial.as_ref(), |x| *x)?;
+            add_header_field(b, 6, self.destination.as_ref(), |x| types::Str(&**x))?;
+            add_header_field(b, 7, self.sender.as_ref(), |x| types::Str(&**x))?;
+            add_header_field(b, 8, self.signature.as_ref(), |x| types::Signature(&**x))?;
+            Ok(())
+        })?;
+        b.write_single(b.align_buf(8))?;
+        if body_len + b.pos >= 134217728 { Err(io::ErrorKind::InvalidData)? }
+        Ok(())
     }
 
     pub fn body(&self) -> &[u8] { &self.body }
@@ -266,8 +253,17 @@ fn hello() {
     m.set_destination(Some(dest.into())).unwrap();
     m.set_interface(Some(interface.into())).unwrap();
 
-    let mut v_storage = vec![0u8; 256];
-    let v = m.write_header(std::num::NonZeroU32::new(1u32).unwrap(), &mut v_storage).unwrap();
+    let mut v_cursor = io::Cursor::new(vec!());
+    m.write_header(std::num::NonZeroU32::new(1u32).unwrap(), &mut v_cursor).unwrap();
+    assert_eq!(v_cursor.get_ref().len() as u64, v_cursor.position());
+    let v = v_cursor.into_inner();
     println!("{:?}", v);
     assert_eq!(v.len() % 8, 0);
+
+    assert_eq!(&*v, &[108, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 109, 0, 0, 0,
+        1, 1, 111, 0, 21, 0, 0, 0, 47, 111, 114, 103, 47, 102, 114, 101, 101, 100, 101, 115, 107, 116, 111, 112, 47, 68, 66, 117, 115, 0, 0, 0,
+        2, 1, 115, 0, 20, 0, 0, 0, 111, 114, 103, 46, 102, 114, 101, 101, 100, 101, 115, 107, 116, 111, 112, 46, 68, 66, 117, 115, 0, 0, 0, 0,
+        3, 1, 115, 0, 5, 0, 0, 0, 72, 101, 108, 108, 111, 0, 0, 0,
+        6, 1, 115, 0, 20, 0, 0, 0, 111, 114, 103, 46, 102, 114, 101, 101, 100, 101, 115, 107, 116, 111, 112, 46, 68, 66, 117, 115, 0, 0, 0, 0
+    ][..]);
 }

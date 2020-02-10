@@ -1,6 +1,8 @@
 use std::borrow::Cow;
 use std::convert::TryInto;
 
+use std::io::{Result as IoResult, Write, Seek, IoSlice, ErrorKind, SeekFrom};
+
 pub fn align_up(pos: usize, align: usize) -> usize {
     (pos + align - 1) & !(align - 1)
 }
@@ -19,12 +21,70 @@ pub fn align_buf<M: Marshal>(a: &[u8]) -> Result<&[u8], &'static str> {
     Ok(&a[(n-p)..])
 }
 
+pub struct MarshalState<B> {
+    pub buf: B,
+    pub pos: usize
+}
+
+const ZEROS: [u8; 8] = [0; 8];
+
+impl<B: Write + Seek> MarshalState<B> {
+    pub fn new(buf: B) -> Self {
+        MarshalState { buf, pos: 0 }
+    }
+    pub fn align_buf(&self, align: usize) -> &'static [u8] {
+        let x = align_up(self.pos, align);
+        &ZEROS[..(x-self.pos)]
+    }
+    pub fn write_single(&mut self, data: &[u8]) -> IoResult<()> {
+        let written = self.buf.write(data)?;
+        if written != data.len() { Err(ErrorKind::WriteZero)? }
+        self.pos += written;
+        Ok(())
+    }
+    pub fn write_vectored(&mut self, data: &[IoSlice]) -> IoResult<()> {
+        let total = data.iter().map(|x| x.len()).sum();
+        let written = self.buf.write_vectored(data)?;
+        if written != total { Err(ErrorKind::WriteZero)? }
+        self.pos += written;
+        Ok(())
+    }
+    pub fn write_str(&mut self, s: &str) -> IoResult<()> {
+        self.write_vectored(&[
+            IoSlice::new(self.align_buf(4)),
+            IoSlice::new(&(s.len() as u32).to_ne_bytes()[..]),
+            IoSlice::new(s.as_bytes()),
+            IoSlice::new(&[0])
+        ])
+    }
+    pub fn write_fixed(&mut self, align: usize, data: &[u8]) -> IoResult<()> {
+        self.write_vectored(&[
+            IoSlice::new(self.align_buf(align)),
+            IoSlice::new(data),
+        ])
+    }
+    pub fn write_array<F: FnOnce(&mut Self) -> IoResult<()>>(&mut self, f: F) -> IoResult<()> {
+        self.write_fixed(4, &[0, 0, 0, 0])?;
+        let arr_start = self.pos;
+        f(self)?;
+        let arr_end = self.pos;
+        let arr_size = arr_end - arr_start;
+        if arr_size > 67108864 { Err(ErrorKind::InvalidData)? };
+
+        // Go back and write the array size
+        self.buf.seek(SeekFrom::Current(-(arr_size as i64) - 4))?;
+        let written = self.buf.write(&((arr_end - arr_start) as u32).to_ne_bytes())?;
+        if written != 4 { Err(ErrorKind::WriteZero)? }
+        self.buf.seek(SeekFrom::Current(arr_size as i64))?;
+        Ok(())
+    }
+}
 
 pub trait Marshal {
     const ALIGN: usize;
     fn signature() -> Cow<'static, str>;
     // Expects a buffer filled with zeroes, that is sufficiently large
-    fn write_buf<'b>(&self, _: &'b mut [u8]) -> &'b mut [u8];
+    fn write_buf<B: Write + Seek>(&self, _: &mut MarshalState<B>) -> IoResult<()>;
 }
 
 pub trait Demarshal<'a>: Marshal + Sized {
@@ -43,12 +103,8 @@ impl Marshal for Str<'_> {
     fn signature() -> Cow<'static, str> {
         "s".into()
     }
-    fn write_buf<'b>(&self, buf: &'b mut [u8]) -> &'b mut [u8] {
-        let buf = align_buf_mut::<Self>(buf);
-        let len = self.0.len();
-        buf[0..4].copy_from_slice(&(len as u32).to_ne_bytes());
-        buf[4..len+4].copy_from_slice(self.0.as_bytes());
-        &mut buf[len+5..]
+    fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
+        b.write_str(self.0)
     }
 }
 
@@ -69,34 +125,32 @@ impl<'a> Demarshal<'a> for Str<'a> {
 }
 
 
-pub struct ObjectPath<'a>(pub (crate) &'a [u8]);
+pub struct ObjectPath<'a>(pub (crate) &'a str);
 impl Marshal for ObjectPath<'_> {
     const ALIGN: usize = 4;
     fn signature() -> Cow<'static, str> {
         "o".into()
     }
-    fn write_buf<'b>(&self, buf: &'b mut [u8]) -> &'b mut [u8] {
-        let buf = align_buf_mut::<Self>(buf);
-        let len = self.0.len();
-        buf[0..4].copy_from_slice(&(len as u32).to_ne_bytes());
-        buf[4..len+4].copy_from_slice(self.0);
-        &mut buf[len+5..]
+    fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
+        b.write_str(self.0)
     }
 }
 
 
-pub struct Signature<'a>(pub (crate) &'a [u8]);
+pub struct Signature<'a>(pub (crate) &'a str);
 
 impl Marshal for Signature<'_> {
     const ALIGN: usize = 1;
     fn signature() -> Cow<'static, str> {
         "g".into()
     }
-    fn write_buf<'b>(&self, buf: &'b mut [u8]) -> &'b mut [u8] {
-        let len = self.0.len();
-        buf[0] = len as u8;
-        buf[1..len+1].copy_from_slice(self.0);
-        &mut buf[len+2..]
+
+    fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
+        b.write_vectored(&[
+            IoSlice::new(&[self.0.len() as u8]),
+            IoSlice::new(self.0.as_bytes()),
+            IoSlice::new(&[0])
+        ])
     }
 }
 
@@ -105,10 +159,8 @@ impl Marshal for u32 {
     fn signature() -> Cow<'static, str> {
         "u".into()
     }
-    fn write_buf<'b>(&self, buf: &'b mut [u8]) -> &'b mut [u8] {
-        let buf = align_buf_mut::<Self>(buf);
-        buf[..4].copy_from_slice(&self.to_ne_bytes());
-        &mut buf[4..]
+    fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
+        b.write_fixed(4, &self.to_ne_bytes())
     }
 }
 
@@ -117,9 +169,8 @@ impl Marshal for u8 {
     fn signature() -> Cow<'static, str> {
         "y".into()
     }
-    fn write_buf<'b>(&self, buf: &'b mut [u8]) -> &'b mut [u8] {
-        buf[0] = *self;
-        &mut buf[1..]
+    fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
+        b.write_fixed(1, &[*self])
     }
 }
 
@@ -130,10 +181,10 @@ impl<T1: Marshal, T2: Marshal> Marshal for Struct<(T1, T2)> {
     fn signature() -> Cow<'static, str> {
         format!("({}{})", T1::signature(), T2::signature()).into()
     }
-    fn write_buf<'b>(&self, buf: &'b mut [u8]) -> &'b mut [u8] {
-        let buf = align_buf_mut::<Self>(buf);
-        let buf = (self.0).0.write_buf(buf);
-        (self.0).1.write_buf(buf)
+    fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
+        b.write_single(b.align_buf(8))?;
+        (self.0).0.write_buf(b)?;
+        (self.0).1.write_buf(b)
     }
 }
 
@@ -143,17 +194,13 @@ impl<'a, T: Marshal> Marshal for Array<&'a [T]> {
     fn signature() -> Cow<'static, str> {
         format!("a{}", T::signature()).into()
     }
-    fn write_buf<'b>(&self, buf: &'b mut [u8]) -> &'b mut [u8] {
-        let buf = align_buf_mut::<Self>(buf);
-        let (arr_size, mut buf) = buf.split_at_mut(4);
-        let start = buf.as_ptr() as usize;
-        for elem in self.0 {
-            buf = elem.write_buf(buf);
-        }
-        let end = buf.as_ptr() as usize;
-        if end - start > 67108864 { panic!("Array too large to write") }
-        arr_size.copy_from_slice(&((end - start) as u32).to_ne_bytes());
-        buf
+    fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
+        b.write_array(|b| {
+            for elem in self.0 {
+                elem.write_buf(b)?;
+            }
+            Ok(())
+        })
     }
 }
 /*
@@ -181,8 +228,8 @@ impl<T: Marshal> Marshal for Variant<T> {
     fn signature() -> Cow<'static, str> {
         "v".into()
     }
-    fn write_buf<'b>(&self, buf: &'b mut [u8]) -> &'b mut [u8] {
-        let buf = Signature(T::signature().as_bytes()).write_buf(buf);
-        self.0.write_buf(buf)
+    fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
+        Signature(&T::signature()).write_buf(b)?;
+        self.0.write_buf(b)
     }
 }

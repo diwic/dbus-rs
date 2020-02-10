@@ -25,12 +25,13 @@ fn connect_to_session_bus() {
     m.set_interface(Some(interface.into())).unwrap();
     println!("{:?}", m);
 
-    let mut v_storage = vec![0u8; 256];
-    let v = m.write_header(std::num::NonZeroU32::new(1u32).unwrap(), &mut v_storage).unwrap();
+    let mut v_cursor = std::io::Cursor::new(vec!());
+    m.write_header(std::num::NonZeroU32::new(1u32).unwrap(), &mut v_cursor).unwrap();
+    let v = &v_cursor.get_ref()[..(v_cursor.position() as usize)];
     println!("{:?}", v);
 
     use std::io::{Write, Read};
-    writer.write_all(v).unwrap();
+    writer.write_all(&v).unwrap();
     writer.flush().unwrap();
 
     let mut mr = message::MessageReader::new();
