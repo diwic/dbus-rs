@@ -76,11 +76,10 @@ impl<C: AsRef<Channel> + Process> IOResource<C> {
             },
         };
 
-        r.take_read_ready()?;
-        r.take_write_ready()?;
-
-        if w.read { let _ = r.poll_read_ready(ctx)?; };
-        if w.write { let _ = r.poll_write_ready(ctx)?; };
+        // poll both read and write each iteration, otherwise,
+        // we may not register wakeups on ctx.waker() on readable/writeable
+        r.poll_read_ready(ctx)?;
+        r.poll_write_ready(ctx)?;
 
         Ok(())
     }
