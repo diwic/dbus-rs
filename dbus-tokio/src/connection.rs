@@ -76,11 +76,10 @@ impl<C: AsRef<Channel> + Process> IOResource<C> {
             },
         };
 
-        r.take_read_ready()?;
-        r.take_write_ready()?;
-
-        if w.read { let _ = r.poll_read_ready(ctx)?; };
-        if w.write { let _ = r.poll_write_ready(ctx)?; };
+        // I'm not sure exactly why, but it seems to be best to poll both read and write regardless of
+        // read/write state of the watch. See https://github.com/diwic/dbus-rs/issues/233
+        let _ = r.poll_read_ready(ctx)?;
+        let _ = r.poll_write_ready(ctx)?;
 
         Ok(())
     }
