@@ -1,5 +1,7 @@
 use std::borrow::Cow;
 use std::convert::TryInto;
+use dbus_strings as strings;
+use std::fmt;
 
 use std::io::{Result as IoResult, Write, Seek, IoSlice, ErrorKind, SeekFrom};
 
@@ -21,9 +23,33 @@ pub fn align_buf<M: Marshal>(a: &[u8]) -> Result<&[u8], &'static str> {
     Ok(&a[(n-p)..])
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct MarshalState<B> {
     pub buf: B,
     pub pos: usize
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct DemarshalState<'a> {
+    pub signature: &'a str,
+    pub buf: &'a [u8],
+    pub pos: usize,
+    pub is_big_endian: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum DemarshalError {
+    NotEnoughData,
+    InvalidString,
+    InvalidProtocol,
+    WrongType,
+    NumberTooBig,
+}
+
+impl fmt::Display for DemarshalError {
+    fn fmt(&self, _: &mut fmt::Formatter) -> fmt::Result {
+        todo!()
+    }
 }
 
 const ZEROS: [u8; 8] = [0; 8];
@@ -63,8 +89,14 @@ impl<B: Write + Seek> MarshalState<B> {
             IoSlice::new(data),
         ])
     }
-    pub fn write_array<F: FnOnce(&mut Self) -> IoResult<()>>(&mut self, f: F) -> IoResult<()> {
-        self.write_fixed(4, &[0, 0, 0, 0])?;
+    pub fn write_array<F: FnOnce(&mut Self) -> IoResult<()>>(&mut self, el_align: usize, f: F) -> IoResult<()> {
+        let len_pos = self.pos;
+        self.write_vectored(&[
+            IoSlice::new(self.align_buf(4)),
+            IoSlice::new(&[0, 0, 0, 0]),
+        ])?;
+        self.write_single(self.align_buf(el_align))?;
+
         let arr_start = self.pos;
         f(self)?;
         let arr_end = self.pos;
@@ -72,13 +104,73 @@ impl<B: Write + Seek> MarshalState<B> {
         if arr_size > 67108864 { Err(ErrorKind::InvalidData)? };
 
         // Go back and write the array size
-        self.buf.seek(SeekFrom::Current(-(arr_size as i64) - 4))?;
-        let written = self.buf.write(&((arr_end - arr_start) as u32).to_ne_bytes())?;
+        let seek = (arr_end as i64) - (len_pos as i64);
+        self.buf.seek(SeekFrom::Current(-seek))?;
+        let written = self.buf.write(&(arr_size as u32).to_ne_bytes())?;
         if written != 4 { Err(ErrorKind::WriteZero)? }
-        self.buf.seek(SeekFrom::Current(arr_size as i64))?;
+        self.buf.seek(SeekFrom::Current(seek - 4))?;
         Ok(())
     }
 }
+
+impl<'a> DemarshalState<'a> {
+    pub fn new(buf: &'a [u8], pos: usize, signature: &'a str, is_big_endian: bool) -> Self {
+        DemarshalState { buf, pos, signature, is_big_endian }
+    }
+    pub fn align_buf(&mut self, align: usize) -> Result<(), DemarshalError> {
+        self.pos = align_up(self.pos, align);
+        if self.pos >= self.buf.len() { Err(DemarshalError::NotEnoughData) } else { Ok(()) }
+    }
+    pub fn read_single(&mut self, data_len: usize, align: usize) -> Result<&[u8], DemarshalError> {
+        let p = align_up(self.pos, align);
+        let p2 = p + data_len;
+        if p2 > self.buf.len() { Err(DemarshalError::NotEnoughData)? };
+        self.pos = p2;
+        Ok(&self.buf[p..p2])
+    }
+    pub fn read_str(&mut self, _sig: u8) -> Result<&'a str, DemarshalError> {
+        // if self.signature.as_bytes().get(0) != Some(&sig) { Err(DemarshalError::WrongType)? };
+        let x = self.read_single(4, 4)?;
+        let x: [u8; 4] = x.try_into().unwrap();
+        let z = (if self.is_big_endian { u32::from_be_bytes(x) } else { u32::from_le_bytes(x) }) as usize;
+        let new_pos = self.pos + z + 1;
+        if new_pos > self.buf.len() { Err(DemarshalError::NotEnoughData)? };
+        let r = &self.buf[self.pos..self.pos+z];
+        self.pos = new_pos;
+        let r = std::str::from_utf8(r).map_err(|_| DemarshalError::InvalidString)?;
+        Ok(r)
+    }
+    pub fn read_array(&mut self, el_align: usize) -> Result<DemarshalState<'a>, DemarshalError> {
+        if self.signature.as_bytes().get(0) != Some(&b'a') { Err(DemarshalError::WrongType)? };
+        let x = self.read_single(4, 4)?;
+        let x: [u8; 4] = x.try_into().unwrap();
+        let arr_size = (if self.is_big_endian { u32::from_be_bytes(x) } else { u32::from_le_bytes(x) }) as usize;
+        if arr_size > 67108864 { Err(DemarshalError::NumberTooBig)? };
+        let arr_start = align_up(self.pos, el_align);
+        let new_pos = self.pos + arr_size;
+        if new_pos > self.buf.len() { Err(DemarshalError::NotEnoughData)? };
+        self.pos = new_pos;
+
+        // FIXME: This signature should be cropped better
+        Ok(DemarshalState::new(&self.buf[..new_pos], arr_start, &self.signature[1..], self.is_big_endian))
+    }
+
+    pub fn read_variant(&mut self) -> Result<DemarshalState<'a>, DemarshalError> {
+        // if self.signature.as_bytes().get(0) != Some(&b'v') { Err(DemarshalError::WrongType)? };
+        let z = u8::read_buf(self)? as usize;
+        let new_pos = self.pos + z + 1;
+        if new_pos > self.buf.len() { Err(DemarshalError::NotEnoughData)? };
+        let r = &self.buf[self.pos..self.pos+z];
+        let r = std::str::from_utf8(r).map_err(|_| DemarshalError::InvalidString)?;
+        use strings::StringLike;
+        self.pos = new_pos;
+        strings::SignatureSingle::new(r).map_err(|_| DemarshalError::InvalidString)?;
+        let r = DemarshalState::new(&self.buf, new_pos, r, self.is_big_endian);
+        Ok(r)
+    }
+    pub fn finished(&self) -> bool { self.buf.len() <= self.pos }
+}
+
 
 pub trait Marshal {
     const ALIGN: usize;
@@ -88,8 +180,9 @@ pub trait Marshal {
 }
 
 pub trait Demarshal<'a>: Marshal + Sized {
-    fn parse(buf: &'a [u8], is_be: bool) -> Result<(Self, &'a[u8]), &'static str>;
+    fn read_buf(_: &mut DemarshalState<'a>) -> Result<Self, DemarshalError>;
 }
+
 
 pub struct Str<'a>(pub (crate) &'a str);
 
@@ -108,22 +201,14 @@ impl Marshal for Str<'_> {
     }
 }
 
+
 impl<'a> Demarshal<'a> for Str<'a> {
-    fn parse(buf: &'a [u8], is_be: bool) -> Result<(Self, &'a[u8]), &'static str> {
-        let buf = align_buf::<Self>(buf)?;
-        let src_len = buf.len();
-        if src_len < 5 { Err("Not enough message data (str length)")? }
-        let dest_len = buf[0..4].try_into().unwrap();
-        let dest_len = (if is_be { u32::from_be_bytes(dest_len) } else { u32::from_le_bytes(dest_len) }) as usize;
-        if src_len < 4 + dest_len + 1 { Err("Not enough message data (str)")? }
-        if buf[4+dest_len] != b'\0' { Err("Missing nul terminator")? }
-        let dest = &buf[4..4+dest_len];
-        if dest.iter().any(|&b| b == b'\0') { Err("Interior nul")? }
-        let dest = std::str::from_utf8(dest).map_err(|_| "String is not UTF-8")?;
-        Ok((Str(dest), &buf[5+dest_len..]))
+    fn read_buf(b: &mut DemarshalState<'a>) -> Result<Self, DemarshalError> {
+        let r = b.read_str(b's')?;
+        if r.as_bytes().iter().any(|&b| b == b'\0') { Err(DemarshalError::InvalidString)? }
+        Ok(Str(r))
     }
 }
-
 
 pub struct ObjectPath<'a>(pub (crate) &'a str);
 impl Marshal for ObjectPath<'_> {
@@ -154,6 +239,20 @@ impl Marshal for Signature<'_> {
     }
 }
 
+impl<'a> Demarshal<'a> for Signature<'a> {
+    fn read_buf(b: &mut DemarshalState<'a>) -> Result<Self, DemarshalError> {
+        let z = u8::read_buf(b)? as usize;
+        let new_pos = b.pos + z + 1;
+        if new_pos > b.buf.len() { Err(DemarshalError::NotEnoughData)? };
+        let r = &b.buf[b.pos..b.pos+z];
+        let r = std::str::from_utf8(r).map_err(|_| DemarshalError::InvalidString)?;
+        use strings::StringLike;
+        b.pos = new_pos;
+        strings::SignatureSingle::new(r).map_err(|_| DemarshalError::InvalidString)?;
+        Ok(Signature(r))
+    }
+}
+
 impl Marshal for u32 {
     const ALIGN: usize = 4;
     fn signature() -> Cow<'static, str> {
@@ -164,6 +263,15 @@ impl Marshal for u32 {
     }
 }
 
+impl Demarshal<'_> for u32 {
+    fn read_buf(b: &mut DemarshalState<'_>) -> Result<Self, DemarshalError> {
+        let x = b.read_single(4, 4)?;
+        let x: [u8; 4] = x.try_into().unwrap();
+        let z = (if b.is_big_endian { u32::from_be_bytes(x) } else { u32::from_le_bytes(x) }) as u32;
+        Ok(z)
+    }
+}
+
 impl Marshal for u8 {
     const ALIGN: usize = 1;
     fn signature() -> Cow<'static, str> {
@@ -171,6 +279,17 @@ impl Marshal for u8 {
     }
     fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
         b.write_fixed(1, &[*self])
+    }
+}
+
+impl Demarshal<'_> for u8 {
+    fn read_buf(b: &mut DemarshalState<'_>) -> Result<Self, DemarshalError> {
+        // if b.signature.as_bytes().get(0) != Some(&b'y') { Err(DemarshalError::WrongType)? };
+        if b.finished() { Err(DemarshalError::NotEnoughData)? };
+        let r = b.buf[b.pos];
+        b.pos += 1;
+        // b.signature = &b.signature[1..];
+        Ok(r)
     }
 }
 
@@ -195,7 +314,7 @@ impl<'a, T: Marshal> Marshal for Array<&'a [T]> {
         format!("a{}", T::signature()).into()
     }
     fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
-        b.write_array(|b| {
+        b.write_array(T::ALIGN, |b| {
             for elem in self.0 {
                 elem.write_buf(b)?;
             }

@@ -1,7 +1,7 @@
 use dbus_native as dbus;
 use dbus_strings as strings;
 
-use dbus::{address, types, message, authentication};
+use dbus::{address, message, authentication};
 
 #[test]
 fn connect_to_session_bus() {
@@ -44,11 +44,12 @@ fn connect_to_session_bus() {
         if let Some(v) = mr.buf_written_to(buflen).unwrap() { break v; }
     };
     println!("{:?}", v);
-    let reply = message::Message::parse(&v).unwrap().unwrap();
+    let reply = message::Message::demarshal(&v).unwrap().unwrap();
     println!("{:?}", reply);
 
-    let (r, q): (types::Str, _) = types::Demarshal::parse(reply.body(), reply.is_big_endian()).unwrap();
-    assert_eq!(q.len(), 0);
+    let mut body = reply.demarshal_body();
+    let r = body.read_str(b's').unwrap();
+    assert!(body.finished());
     assert!(r.starts_with(":1."));
     println!("Our ID is {}", &*r);
 
