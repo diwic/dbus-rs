@@ -32,9 +32,10 @@ pub enum ArrayError {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 /// An array of MessageItem where every MessageItem is of the same type.
 pub struct MessageItemArray {
-    v: Vec<MessageItem>,
-    // signature includes the "a"!
-    sig: Signature<'static>,
+    /// The MessageItems
+    pub v: Vec<MessageItem>,
+    /// The signature, includes the "a"!
+    pub sig: Signature<'static>,
 }
 
 impl MessageItemArray {
@@ -83,11 +84,12 @@ impl arg::Append for MessageItemArray {
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
-/// An array of MessageItem where every MessageItem is of the same type.
+/// An array of dictionary items, each of the same type.
 pub struct MessageItemDict {
-    v: Vec<(MessageItem, MessageItem)>,
-    // signature includes the "a"!
-    sig: Signature<'static>,
+    /// The dictionary items
+    pub v: Vec<(MessageItem, MessageItem)>,
+    /// The signature, includes the "a"!
+    pub sig: Signature<'static>,
 }
 
 impl MessageItemDict {
