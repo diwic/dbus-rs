@@ -93,6 +93,9 @@ Or a more advanced server example:
 
     cargo run --example adv_server
 
+More examples
+-------------
+
 More examples are available in the [examples](https://github.com/diwic/dbus-rs/tree/master/dbus/examples) directory.
 
 Features
