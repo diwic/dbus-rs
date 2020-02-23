@@ -59,6 +59,7 @@ Examples of client code in the examples directory:
  * [properties.rs](https://github.com/diwic/dbus-rs/tree/master/dbus/examples/properties.rs)
  * [match_signal.rs](https://github.com/diwic/dbus-rs/tree/master/dbus/examples/match_signal.rs)
  * [rtkit.rs](https://github.com/diwic/dbus-rs/tree/master/dbus/examples/rtkit.rs)
+ * [monitor.rs](https://github.com/diwic/dbus-rs/tree/master/dbus/examples/monitor.rs)
 
 Server
 ------
