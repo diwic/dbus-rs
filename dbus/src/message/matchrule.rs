@@ -21,6 +21,8 @@ pub struct MatchRule<'a> {
     pub interface: Option<Interface<'a>>,
     /// Match on message member (signal or method name)
     pub member: Option<Member<'a>>,
+    /// If true, also receive messages not intended for us. Defaults to false.
+    pub eavesdrop: bool,
     _more_fields_may_come: (),
 }
 
@@ -45,6 +47,7 @@ impl<'a> MatchRule<'a> {
         if let Some(ref x) = self.path { v.push((pn, &x)) };
         if let Some(ref x) = self.interface { v.push(("interface", &x)) };
         if let Some(ref x) = self.member { v.push(("member", &x)) };
+        if self.eavesdrop { v.push(("eavesdrop", "true")) };
 
         // For now we don't need to worry about internal quotes in strings as those are not valid names.
         // If we start matching against arguments, we need to worry.
@@ -109,6 +112,7 @@ impl<'a> MatchRule<'a> {
             interface: self.interface.as_ref().map(|x| x.clone().into_static()),
             member: self.member.as_ref().map(|x| x.clone().into_static()),
             path_is_namespace: self.path_is_namespace,
+            eavesdrop: self.eavesdrop,
             _more_fields_may_come: (),
         }
     }
