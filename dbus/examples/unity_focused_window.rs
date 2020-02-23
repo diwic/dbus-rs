@@ -2,7 +2,7 @@ extern crate dbus;
 
 // Tracks currently focused window under the Unity desktop by listening to the
 // FocusedWindowChanged signal. The signal contains "window_id", "app_id" and "stage",
-// we print only "app_id". 
+// we print only "app_id".
 
 use dbus::{ffidisp::Connection, Message, MessageType};
 
@@ -26,4 +26,3 @@ fn main() {
         }
     }
 }
-

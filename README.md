@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // to send method calls to a specific destination and path.
     let proxy = conn.with_proxy("org.freedesktop.DBus", "/", Duration::from_millis(5000));
 
-    // Now make the method call. The ListNames method call takes zero input parameters and 
+    // Now make the method call. The ListNames method call takes zero input parameters and
     // one output parameter which is an array of strings.
     // Therefore the input is a zero tuple "()", and the output is a single tuple "(names,)".
     let (names,): (Vec<String>,) = proxy.method_call("org.freedesktop.DBus", "ListNames", ())?;
@@ -86,15 +86,10 @@ tree.start_receive(&c);
 loop { c.process(Duration::from_millis(1000))?; }
 ```
 
-You can try a similar example (which has more comments) by running:
+Examples of server code in the examples directory:
 
-    cargo run --example server
-
-Or a more advanced server example:
-
-    cargo run --example adv_server
-
-More examples are available in the [examples](https://github.com/diwic/dbus-rs/tree/master/dbus/examples) directory.
+ * [server.rs](https://github.com/diwic/dbus-rs/tree/master/dbus/examples/server.rs)
+ * [adv_server.rs](https://github.com/diwic/dbus-rs/tree/master/dbus/examples/adv_server.rs)
 
 Features
 ========
