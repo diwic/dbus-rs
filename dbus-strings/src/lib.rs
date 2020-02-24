@@ -72,6 +72,10 @@ macro_rules! string_wrapper_base {
             fn deref(&self) -> &str { &self.0 }
         }
 
+        impl fmt::Display for $t {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.0.fmt(f) }
+        }
+
         impl AsRef<str> for $t {
             fn as_ref(&self) -> &str { &self.0 }
         }
@@ -110,6 +114,10 @@ macro_rules! string_wrapper_base {
             fn borrow(&self) -> &$t { &self }
         }
 
+        impl fmt::Display for $towned {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.0.fmt(f) }
+        }
+        
         impl TryFrom<String> for $towned {
             type Error = InvalidStringError;
             fn try_from(s: String) -> Result<$towned, Self::Error> { $towned::new(s) }
@@ -208,6 +216,15 @@ string_wrapper!(
     /// For exact rules see the D-Bus specification.
     BusName, BusNameBuf, is_valid_bus_name
 );
+
+impl<'a> From<&'a SignatureSingle> for &'a SignatureMulti {
+    fn from(s: &'a SignatureSingle) -> &'a SignatureMulti { SignatureMulti::new_unchecked(&s.0) }
+}
+
+impl From<SignatureSingleBuf> for SignatureMultiBuf {
+    fn from(s: SignatureSingleBuf) -> SignatureMultiBuf { SignatureMulti::new_unchecked_owned(s.0) }
+}
+
 
 string_wrapper!(
     /// A D-Bus type signature of a single type, e g "b" or "a{sv}" but not "ii"
