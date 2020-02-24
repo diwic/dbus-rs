@@ -105,6 +105,8 @@ impl<'a> Message<'a> {
         Ok(())
     }
 
+    pub fn reply_serial(&self) -> Option<u32> { self.reply_serial }
+
     pub fn write_header<B: io::Write + io::Seek>(&self, serial: std::num::NonZeroU32, buf: &mut B) -> io::Result<()> {
 
         fn add_header_field<B, Z, Y: Marshal, F>(b: &mut types::MarshalState<B>, header_type: u8, field: Option<Z>, f: F) -> io::Result<()>
@@ -124,14 +126,14 @@ impl<'a> Message<'a> {
         b.write_fixed(4, &(body_len as u32).to_ne_bytes())?;
         b.write_fixed(4, &(serial.get()).to_ne_bytes())?;
         b.write_array(8, |b| {
-            add_header_field(b, 1, self.path.as_ref(), |x| types::ObjectPath(&**x))?;
+            add_header_field(b, 1, self.path.as_ref(), |x| &**x)?;
             add_header_field(b, 2, self.interface.as_ref(), |x| types::Str(&**x))?;
             add_header_field(b, 3, self.member.as_ref(), |x| types::Str(&**x))?;
             add_header_field(b, 4, self.error_name.as_ref(), |x| types::Str(&**x))?;
             add_header_field(b, 5, self.reply_serial.as_ref(), |x| *x)?;
             add_header_field(b, 6, self.destination.as_ref(), |x| types::Str(&**x))?;
             add_header_field(b, 7, self.sender.as_ref(), |x| types::Str(&**x))?;
-            add_header_field(b, 8, self.signature.as_ref(), |x| types::Signature(&**x))?;
+            add_header_field(b, 8, self.signature.as_ref(), |x| &**x)?;
             Ok(())
         })?;
         b.write_single(b.align_buf(8))?;
@@ -145,6 +147,9 @@ impl<'a> Message<'a> {
 
     // Should disconnect on error. If Ok(None) is returned, its a message that should be ignored.
     pub fn demarshal(buf: &'a [u8]) -> Result<Option<Self>, types::DemarshalError> {
+        use types::Demarshal;
+        use strings::StringLike;
+
         let start = message_start_parse(buf)?;
         if buf.len() < start.total_size { Err(DemarshalError::NotEnoughData)? }
         let msg_type = buf[1];
@@ -162,15 +167,26 @@ impl<'a> Message<'a> {
         let mut ads = ds.read_array(8)?;
         while !ads.finished() {
             ads.align_buf(8)?;
-            use types::Demarshal;
-            use strings::StringLike;
             let n = u8::read_buf(&mut ads)?;
             let mut v = ads.read_variant()?;
             match n {
-                5 => {
-                    let s = u32::read_buf(&mut v)?;
-                    m.reply_serial = Some(s);
+                1 => m.path = Some(<&types::ObjectPath>::read_buf(&mut v)?.into()),
+                2 => {
+                    let s = types::Str::read_buf(&mut v)?.0;
+                    let s = strings::InterfaceName::new(s).map_err(|_| DemarshalError::InvalidString)?;
+                    m.interface = Some(s.into());
                 },
+                3 => {
+                    let s = types::Str::read_buf(&mut v)?.0;
+                    let s = strings::MemberName::new(s).map_err(|_| DemarshalError::InvalidString)?;
+                    m.member = Some(s.into());
+                },
+                4 => {
+                    let s = types::Str::read_buf(&mut v)?.0;
+                    let s = strings::ErrorName::new(s).map_err(|_| DemarshalError::InvalidString)?;
+                    m.error_name = Some(s.into());
+                },
+                5 => m.reply_serial = Some(u32::read_buf(&mut v)?),
                 6 => {
                     let s = types::Str::read_buf(&mut v)?.0;
                     let s = strings::BusName::new(s).map_err(|_| DemarshalError::InvalidString)?;
@@ -181,11 +197,8 @@ impl<'a> Message<'a> {
                     let s = strings::BusName::new(s).map_err(|_| DemarshalError::InvalidString)?;
                     m.sender = Some(s.into());
                 },
-                8 => {
-                    let s = types::Signature::read_buf(&mut v)?.0;
-                    let s = strings::SignatureMulti::new(s).map_err(|_| DemarshalError::InvalidString)?;
-                    m.signature = Some(s.into());
-                },
+
+                8 => m.signature = Some(<&types::Signature>::read_buf(&mut v)?.into()),
                 _ => todo!(), // Unknown header field, ignore
             }
             ads.pos = v.pos;

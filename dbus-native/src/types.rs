@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::convert::TryInto;
 use dbus_strings as strings;
 use std::fmt;
+use strings::{SignatureSingle, StringLike};
 
 use std::io::{Result as IoResult, Write, Seek, IoSlice, ErrorKind, SeekFrom};
 
@@ -162,7 +163,6 @@ impl<'a> DemarshalState<'a> {
         if new_pos > self.buf.len() { Err(DemarshalError::NotEnoughData)? };
         let r = &self.buf[self.pos..self.pos+z];
         let r = std::str::from_utf8(r).map_err(|_| DemarshalError::InvalidString)?;
-        use strings::StringLike;
         self.pos = new_pos;
         strings::SignatureSingle::new(r).map_err(|_| DemarshalError::InvalidString)?;
         let r = DemarshalState::new(&self.buf, new_pos, r, self.is_big_endian);
@@ -174,7 +174,7 @@ impl<'a> DemarshalState<'a> {
 
 pub trait Marshal {
     const ALIGN: usize;
-    fn signature() -> Cow<'static, str>;
+    fn signature() -> Cow<'static, SignatureSingle>;
     // Expects a buffer filled with zeroes, that is sufficiently large
     fn write_buf<B: Write + Seek>(&self, _: &mut MarshalState<B>) -> IoResult<()>;
 }
@@ -193,8 +193,8 @@ impl std::ops::Deref for Str<'_> {
 
 impl Marshal for Str<'_> {
     const ALIGN: usize = 4;
-    fn signature() -> Cow<'static, str> {
-        "s".into()
+    fn signature() -> Cow<'static, SignatureSingle> {
+        SignatureSingle::new_unchecked("s").into()
     }
     fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
         b.write_str(self.0)
@@ -210,53 +210,59 @@ impl<'a> Demarshal<'a> for Str<'a> {
     }
 }
 
-pub struct ObjectPath<'a>(pub (crate) &'a str);
-impl Marshal for ObjectPath<'_> {
+pub type ObjectPath = strings::ObjectPath;
+
+impl Marshal for &ObjectPath {
     const ALIGN: usize = 4;
-    fn signature() -> Cow<'static, str> {
-        "o".into()
+    fn signature() -> Cow<'static, SignatureSingle> {
+        SignatureSingle::new_unchecked("o").into()
     }
     fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
-        b.write_str(self.0)
+        b.write_str(&*self)
     }
 }
 
+impl<'a> Demarshal<'a> for &'a ObjectPath {
+    fn read_buf(b: &mut DemarshalState<'a>) -> Result<Self, DemarshalError> {
+        let r = b.read_str(b's')?;
+        Ok(ObjectPath::new(r).map_err(|_| DemarshalError::InvalidString)?)
+    }
+}
 
-pub struct Signature<'a>(pub (crate) &'a str);
+pub type Signature = strings::SignatureMulti;
 
-impl Marshal for Signature<'_> {
+impl Marshal for &Signature {
     const ALIGN: usize = 1;
-    fn signature() -> Cow<'static, str> {
-        "g".into()
+    fn signature() -> Cow<'static, SignatureSingle> {
+        SignatureSingle::new_unchecked("g").into()
     }
 
     fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
         b.write_vectored(&[
-            IoSlice::new(&[self.0.len() as u8]),
-            IoSlice::new(self.0.as_bytes()),
+            IoSlice::new(&[self.len() as u8]),
+            IoSlice::new(self.as_bytes()),
             IoSlice::new(&[0])
         ])
     }
 }
 
-impl<'a> Demarshal<'a> for Signature<'a> {
+impl<'a> Demarshal<'a> for &'a Signature {
     fn read_buf(b: &mut DemarshalState<'a>) -> Result<Self, DemarshalError> {
         let z = u8::read_buf(b)? as usize;
         let new_pos = b.pos + z + 1;
         if new_pos > b.buf.len() { Err(DemarshalError::NotEnoughData)? };
         let r = &b.buf[b.pos..b.pos+z];
         let r = std::str::from_utf8(r).map_err(|_| DemarshalError::InvalidString)?;
-        use strings::StringLike;
         b.pos = new_pos;
-        strings::SignatureSingle::new(r).map_err(|_| DemarshalError::InvalidString)?;
-        Ok(Signature(r))
+        let r = Signature::new(r).map_err(|_| DemarshalError::InvalidString)?;
+        Ok(r)
     }
 }
 
 impl Marshal for u32 {
     const ALIGN: usize = 4;
-    fn signature() -> Cow<'static, str> {
-        "u".into()
+    fn signature() -> Cow<'static, SignatureSingle> {
+        SignatureSingle::new_unchecked("u").into()
     }
     fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
         b.write_fixed(4, &self.to_ne_bytes())
@@ -274,8 +280,8 @@ impl Demarshal<'_> for u32 {
 
 impl Marshal for u8 {
     const ALIGN: usize = 1;
-    fn signature() -> Cow<'static, str> {
-        "y".into()
+    fn signature() -> Cow<'static, SignatureSingle> {
+        SignatureSingle::new_unchecked("y").into()
     }
     fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
         b.write_fixed(1, &[*self])
@@ -297,8 +303,9 @@ pub struct Struct<T>(pub T);
 
 impl<T1: Marshal, T2: Marshal> Marshal for Struct<(T1, T2)> {
     const ALIGN: usize = 8;
-    fn signature() -> Cow<'static, str> {
-        format!("({}{})", T1::signature(), T2::signature()).into()
+    fn signature() -> Cow<'static, SignatureSingle> {
+        let x = format!("({}{})", T1::signature(), T2::signature());
+        SignatureSingle::new_unchecked_owned(x).into()
     }
     fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
         b.write_single(b.align_buf(8))?;
@@ -310,8 +317,9 @@ impl<T1: Marshal, T2: Marshal> Marshal for Struct<(T1, T2)> {
 pub struct Array<T>(T);
 impl<'a, T: Marshal> Marshal for Array<&'a [T]> {
     const ALIGN: usize = 4;
-    fn signature() -> Cow<'static, str> {
-        format!("a{}", T::signature()).into()
+    fn signature() -> Cow<'static, SignatureSingle> {
+        let x = format!("a{}", T::signature());
+        SignatureSingle::new_unchecked_owned(x).into()
     }
     fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
         b.write_array(T::ALIGN, |b| {
@@ -344,11 +352,13 @@ impl<'a, T: Demarshal> Demarshal for Array<&'a [T]> {
 pub struct Variant<T>(pub T);
 impl<T: Marshal> Marshal for Variant<T> {
     const ALIGN: usize = 1;
-    fn signature() -> Cow<'static, str> {
-        "v".into()
+    fn signature() -> Cow<'static, SignatureSingle> {
+        SignatureSingle::new_unchecked("v").into()
     }
     fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
-        Signature(&T::signature()).write_buf(b)?;
+        let sig = T::signature();
+        let s: &Signature = (&*sig).into();
+        s.write_buf(b)?;
         self.0.write_buf(b)
     }
 }
