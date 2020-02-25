@@ -161,6 +161,22 @@ macro_rules! string_wrapper {
             fn from(s: &'a $t) -> &'a DBusStr { DBusStr::new_unchecked(&*s) }
         }
 
+        impl<'a> TryFrom<&'a DBusStr> for &'a $t {
+            type Error = InvalidStringError;
+            fn try_from(s: &'a DBusStr) -> Result<&'a $t, Self::Error> {
+                $t::new(&*s)
+            }
+        }
+
+        impl AsRef<DBusStr> for $t {
+            fn as_ref(&self) -> &DBusStr { DBusStr::new_unchecked(self) }
+        }
+
+        impl $t {
+            /// Type conversion to DBusStr.
+            pub fn as_dbus_str(&self) -> &DBusStr { DBusStr::new_unchecked(self) }
+        }
+
         impl From<$towned> for DBusString {
             fn from(s: $towned) -> DBusString { DBusStr::new_unchecked_owned(s.into_inner()) }
         }
