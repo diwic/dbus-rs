@@ -127,12 +127,12 @@ impl<'a> Message<'a> {
         b.write_fixed(4, &(serial.get()).to_ne_bytes())?;
         b.write_array(8, |b| {
             add_header_field(b, 1, self.path.as_ref(), |x| &**x)?;
-            add_header_field(b, 2, self.interface.as_ref(), |x| types::Str(&**x))?;
-            add_header_field(b, 3, self.member.as_ref(), |x| types::Str(&**x))?;
-            add_header_field(b, 4, self.error_name.as_ref(), |x| types::Str(&**x))?;
+            add_header_field(b, 2, self.interface.as_ref(), |x| x.as_dbus_str())?;
+            add_header_field(b, 3, self.member.as_ref(), |x| x.as_dbus_str())?;
+            add_header_field(b, 4, self.error_name.as_ref(), |x| x.as_dbus_str())?;
             add_header_field(b, 5, self.reply_serial.as_ref(), |x| *x)?;
-            add_header_field(b, 6, self.destination.as_ref(), |x| types::Str(&**x))?;
-            add_header_field(b, 7, self.sender.as_ref(), |x| types::Str(&**x))?;
+            add_header_field(b, 6, self.destination.as_ref(), |x| x.as_dbus_str())?;
+            add_header_field(b, 7, self.sender.as_ref(), |x| x.as_dbus_str())?;
             add_header_field(b, 8, self.signature.as_ref(), |x| &**x)?;
             Ok(())
         })?;
@@ -148,7 +148,6 @@ impl<'a> Message<'a> {
     // Should disconnect on error. If Ok(None) is returned, its a message that should be ignored.
     pub fn demarshal(buf: &'a [u8]) -> Result<Option<Self>, types::DemarshalError> {
         use types::Demarshal;
-        use strings::StringLike;
 
         let start = message_start_parse(buf)?;
         if buf.len() < start.total_size { Err(DemarshalError::NotEnoughData)? }
@@ -171,33 +170,12 @@ impl<'a> Message<'a> {
             let mut v = ads.read_variant()?;
             match n {
                 1 => m.path = Some(<&types::ObjectPath>::read_buf(&mut v)?.into()),
-                2 => {
-                    let s = types::Str::read_buf(&mut v)?.0;
-                    let s = strings::InterfaceName::new(s).map_err(|_| DemarshalError::InvalidString)?;
-                    m.interface = Some(s.into());
-                },
-                3 => {
-                    let s = types::Str::read_buf(&mut v)?.0;
-                    let s = strings::MemberName::new(s).map_err(|_| DemarshalError::InvalidString)?;
-                    m.member = Some(s.into());
-                },
-                4 => {
-                    let s = types::Str::read_buf(&mut v)?.0;
-                    let s = strings::ErrorName::new(s).map_err(|_| DemarshalError::InvalidString)?;
-                    m.error_name = Some(s.into());
-                },
+                2 => m.interface = Some(Cow::Borrowed(<&types::Str>::read_buf(&mut v)?.try_into()?)),
+                3 => m.member = Some(Cow::Borrowed(<&types::Str>::read_buf(&mut v)?.try_into()?)),
+                4 => m.error_name = Some(Cow::Borrowed(<&types::Str>::read_buf(&mut v)?.try_into()?)),
                 5 => m.reply_serial = Some(u32::read_buf(&mut v)?),
-                6 => {
-                    let s = types::Str::read_buf(&mut v)?.0;
-                    let s = strings::BusName::new(s).map_err(|_| DemarshalError::InvalidString)?;
-                    m.destination = Some(s.into());
-                },
-                7 => {
-                    let s = types::Str::read_buf(&mut v)?.0;
-                    let s = strings::BusName::new(s).map_err(|_| DemarshalError::InvalidString)?;
-                    m.sender = Some(s.into());
-                },
-
+                6 => m.destination = Some(Cow::Borrowed(<&types::Str>::read_buf(&mut v)?.try_into()?)),
+                7 => m.sender = Some(Cow::Borrowed(<&types::Str>::read_buf(&mut v)?.try_into()?)),
                 8 => m.signature = Some(<&types::Signature>::read_buf(&mut v)?.into()),
                 _ => todo!(), // Unknown header field, ignore
             }

@@ -53,6 +53,10 @@ impl fmt::Display for DemarshalError {
     }
 }
 
+impl From<strings::InvalidStringError> for DemarshalError {
+    fn from(_: strings::InvalidStringError) -> DemarshalError { DemarshalError::InvalidString }
+}
+
 const ZEROS: [u8; 8] = [0; 8];
 
 impl<B: Write + Seek> MarshalState<B> {
@@ -184,29 +188,23 @@ pub trait Demarshal<'a>: Marshal + Sized {
 }
 
 
-pub struct Str<'a>(pub (crate) &'a str);
+pub type Str = strings::DBusStr;
 
-impl std::ops::Deref for Str<'_> {
-    type Target = str;
-    fn deref(&self) -> &str { self.0 }
-}
-
-impl Marshal for Str<'_> {
+impl Marshal for &Str {
     const ALIGN: usize = 4;
     fn signature() -> Cow<'static, SignatureSingle> {
         SignatureSingle::new_unchecked("s").into()
     }
     fn write_buf<B: Write + Seek>(&self, b: &mut MarshalState<B>) -> IoResult<()> {
-        b.write_str(self.0)
+        b.write_str(self)
     }
 }
 
 
-impl<'a> Demarshal<'a> for Str<'a> {
+impl<'a> Demarshal<'a> for &'a Str {
     fn read_buf(b: &mut DemarshalState<'a>) -> Result<Self, DemarshalError> {
         let r = b.read_str(b's')?;
-        if r.as_bytes().iter().any(|&b| b == b'\0') { Err(DemarshalError::InvalidString)? }
-        Ok(Str(r))
+        Ok(Str::new(r).map_err(|_| DemarshalError::InvalidString)?)
     }
 }
 
