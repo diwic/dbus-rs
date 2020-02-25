@@ -117,7 +117,7 @@ macro_rules! string_wrapper_base {
         impl fmt::Display for $towned {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { self.0.fmt(f) }
         }
-        
+
         impl TryFrom<String> for $towned {
             type Error = InvalidStringError;
             fn try_from(s: String) -> Result<$towned, Self::Error> { $towned::new(s) }
@@ -226,6 +226,17 @@ impl From<SignatureSingleBuf> for SignatureMultiBuf {
 }
 
 
+impl SignatureMulti {
+    /// Splits this signature into the first and remaining parts.
+    ///
+    /// Returns none if the signature is empty.
+    pub fn single(&self) -> Option<(&SignatureSingle, &SignatureMulti)> {
+        validity::sig_single(self.as_bytes(), 0, 0).map(|x|
+            (SignatureSingle::new_unchecked(&self[0..x]), SignatureMulti::new_unchecked(&self[x..]))
+        )
+    }
+}
+
 string_wrapper!(
     /// A D-Bus type signature of a single type, e g "b" or "a{sv}" but not "ii"
     ///
@@ -267,4 +278,22 @@ fn type_conversions() {
 fn errors() {
     let q = MemberName::new("Hello.world").unwrap_err();
     assert_eq!(q.to_string(), "String is not a valid MemberName".to_string());
+}
+
+#[test]
+fn sig_split() {
+    let s = SignatureMulti::new("ua{sv}(ss)").unwrap();
+    let (a2, s2) = s.single().unwrap();
+    assert_eq!(&**a2, "u");
+    assert_eq!(&**s2, "a{sv}(ss)");
+
+    let (a3, s3) = s2.single().unwrap();
+    assert_eq!(&**a3, "a{sv}");
+    assert_eq!(&**s3, "(ss)");
+
+    let (a4, s4) = s3.single().unwrap();
+    assert_eq!(&**a4, "(ss)");
+    assert_eq!(&**s4, "");
+
+    assert!(s4.single().is_none());
 }

@@ -129,7 +129,7 @@ fn sig_multi(s: &[u8], arrs: u8, structs: u8) -> Option<usize> {
     Some(pos)
 }
 
-fn sig_single(s: &[u8], arrs: u8, structs: u8) -> Option<usize> {
+pub (crate) fn sig_single(s: &[u8], arrs: u8, structs: u8) -> Option<usize> {
     s.first().and_then(|c| {
         if BASIC_TYPES.into_iter().any(|x| x == c) { Some(1) }
         else {
