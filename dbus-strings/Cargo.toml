@@ -4,6 +4,10 @@ version = "0.1.0"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description = "Rust native implementation of different D-Bus string types"
+repository = "https://github.com/diwic/dbus-rs"
+documentation = "http://docs.rs/dbus-strings"
+keywords = ["D-Bus", "DBus", "IPC"]
+license = "Apache-2.0/MIT"
 
 [dependencies]

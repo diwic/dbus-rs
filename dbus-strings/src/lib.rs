@@ -63,6 +63,9 @@ pub trait StringLike: ToOwned {
 macro_rules! string_wrapper_base {
     ($(#[$comment:meta])* $t: ident, $towned: ident) => {
         $(#[$comment])*
+        ///
+        /// Like str and CStr, this struct is unsized, which means that the way to access
+        /// it is through a reference.
         #[repr(transparent)]
         #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
         pub struct $t(str);
@@ -91,6 +94,9 @@ macro_rules! string_wrapper_base {
         }
 
         $(#[$comment])*
+        ///
+        /// Like String and CString, this struct is an owned buffer. It Derefs to its unsized
+        /// variant.
         #[repr(transparent)]
         #[derive(Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Clone)]
         pub struct $towned(String);
@@ -179,6 +185,13 @@ macro_rules! string_wrapper {
 
         impl From<$towned> for DBusString {
             fn from(s: $towned) -> DBusString { DBusStr::new_unchecked_owned(s.into_inner()) }
+        }
+
+        impl TryFrom<DBusString> for $towned {
+            type Error = InvalidStringError;
+            fn try_from(s: DBusString) -> Result<$towned, Self::Error> {
+                $t::new_owned(s.into_inner())
+            }
         }
     }
 }
