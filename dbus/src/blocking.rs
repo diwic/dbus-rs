@@ -43,16 +43,14 @@ type
 impl $c {
 
     /// Create a new connection to the session bus.
-    pub fn new_session() -> Result<Self, Error> { Ok($c {
-        channel: Channel::get_private(BusType::Session)?,
-        filters: Default::default(),
-    })}
+    pub fn new_session() -> Result<Self, Error> {
+        Channel::get_private(BusType::Session).map(From::from)
+    }
 
     /// Create a new connection to the system-wide bus.
-    pub fn new_system() -> Result<Self, Error> { Ok($c {
-        channel: Channel::get_private(BusType::System)?,
-        filters: Default::default(),
-    })}
+    pub fn new_system() -> Result<Self, Error> {
+        Channel::get_private(BusType::System).map(From::from)
+    }
 
     /// Get the connection's unique name.
     ///
@@ -135,6 +133,12 @@ impl BlockingSender for $c {
     fn send_with_reply_and_block(&self, msg: Message, timeout: Duration) -> Result<Message, Error> {
         self.channel.send_with_reply_and_block(msg, timeout)
     }
+}
+
+impl From<Channel> for $c {
+    fn from(channel: Channel) -> $c { $c {
+        channel, filters: Default::default(),
+    } }
 }
 
 impl channel::Sender for $c {
