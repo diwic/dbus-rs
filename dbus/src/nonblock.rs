@@ -30,7 +30,8 @@ use std::time::Instant;
 use std::collections::HashMap;
 
 
-mod generated_org_freedesktop_notifications;
+#[allow(missing_docs)]
+mod generated_org_freedesktop_standard_interfaces;
 mod generated_org_freedesktop_dbus;
 
 
@@ -42,7 +43,7 @@ mod generated_org_freedesktop_dbus;
 pub mod stdintf {
     #[allow(missing_docs)]
     pub mod org_freedesktop_dbus {
-        pub use super::super::generated_org_freedesktop_notifications::*;
+        pub use super::super::generated_org_freedesktop_standard_interfaces::*;
         #[allow(unused_imports)]
         pub(crate) use super::super::generated_org_freedesktop_dbus::*;
 
