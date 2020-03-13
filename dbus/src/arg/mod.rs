@@ -478,8 +478,7 @@ impl error::Error for TypeMismatchError {
 
 impl fmt::Display for TypeMismatchError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} at position {}: expected {}, found {}",
-            error::Error::description(self),
+        write!(f, "D-Bus argument type mismatch at position {}: expected {}, found {}",
             self.position, self.expected.as_str(),
             if self.expected == self.found { "same but still different somehow" } else { self.found.as_str() }
         )

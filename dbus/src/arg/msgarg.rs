@@ -20,6 +20,7 @@ pub trait Arg {
 /// Helper trait to introspect many arguments.
 pub trait ArgAll {
     /// A tuple of &static str. Used for introspection.
+    #[allow(non_camel_case_types)] // Note: This should be changed for 0.9 - but for now, don't break backwards compatibility
     type strs;
     /// Enumerates all arguments with their signatures (introspection helper method).
     fn strs_sig<F: FnMut(&'static str, Signature<'static>)>(a: Self::strs, f: F);
