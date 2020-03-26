@@ -420,10 +420,11 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
         }).collect();
         if direct_only {
             r.sort_by_key(|v| &**v.name);
+            // println!("DEBUG before: {:?}", r.iter().map(|v| &**v.name).collect::<Vec<_>>());
             let mut prev: Option<&ObjectPath<M, D>> = None;
             r.retain(|v| {
                 let a = prev.map(|prev| !v.name.starts_with(&**prev.name)).unwrap_or(true);
-                prev = Some(v);
+                if a { prev = Some(v); }
                 a
             });
         }
