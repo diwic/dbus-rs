@@ -449,13 +449,16 @@ struct PropsPerIntf {
 }
 */
 
-use dbus::blocking::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged as PPC;
+use dbus::blocking::stdintf::org_freedesktop_dbus::{
+    PropertiesPropertiesChanged as PPC,
+    ObjectManagerInterfacesAdded as OMIA,
+    ObjectManagerInterfacesRemoved as OMIR};
 
 #[derive(Debug, Default)]
 struct SignalsPerPath {
     properties: HashMap<IfaceName<'static>, PPC>,
-    interfaces_removed: HashSet<CString>,
-    interfaces_added: HashMap<CString, HashMap<CString, Box<dyn arg::RefArg>>>,
+    interfaces_removed: HashMap<PathName<'static>, OMIR>,
+    interfaces_added: HashMap<PathName<'static>, OMIA>,
 }
 
 #[derive(Debug, Default)]
@@ -481,12 +484,36 @@ impl DBusSignals {
         if !inv.iter().any(|x| x == &propname) { inv.push(propname) }
     }
 
+    pub fn add_removed_interface(&mut self, path: PathName<'static>, subpath: PathName<'static>, iface: IfaceName<'static>) {
+        let sp2 = subpath.clone();
+        let e = &mut self.0.entry(path).or_default()
+            .interfaces_removed.entry(subpath).or_insert_with(|| {
+                OMIR { object: sp2, interfaces: Default::default() }
+            }).interfaces;
+        if !e.iter().any(|x| x == &*iface) { e.push(iface.to_string()) }
+    }
+
+    pub fn add_added_interface(&mut self, path: PathName<'static>, subpath: PathName<'static>, iface: IfaceName<'static>,
+        props: HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>) {
+        let sp2 = subpath.clone();
+        let e = &mut self.0.entry(path).or_default()
+            .interfaces_added.entry(subpath).or_insert_with(|| {
+                OMIA { object: sp2, interfaces: Default::default() }
+            }).interfaces.insert(iface.to_string(), props);
+    }
+
     pub fn into_messages(self) -> Vec<Message> {
         use dbus::message::SignalArgs;
         let mut result = vec!();
         for (pathname, sigs) in self.0 {
             for (_, props) in sigs.properties {
                 result.push(props.to_emit_message(&pathname));
+            }
+            for (_, ifaces) in sigs.interfaces_added {
+                result.push(ifaces.to_emit_message(&pathname));
+            }
+            for (_, ifaces) in sigs.interfaces_removed {
+                result.push(ifaces.to_emit_message(&pathname));
             }
         }
         result
