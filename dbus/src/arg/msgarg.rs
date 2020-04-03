@@ -64,12 +64,20 @@ pub trait RefArg: fmt::Debug {
     fn append(&self, _: &mut IterAppend);
     /// Transforms this argument to Any (which can be downcasted to read the current value).
     ///
-    /// Note: The internal representation of complex types (Array, Dict, Struct) is unstable
+    /// If the type is an array, and the element type is byte, numeric, boolean, or string, then the
+    /// representation is guaranteed to be a Vec<T>. Arrays of structs, dicts, and so on are not
+    /// safe to use with this.
+    ///
+    /// Note: The internal representation of complex types (Dict, Struct) is unstable
     /// and as_any should not be relied upon for these types. Use as_iter instead.
     fn as_any(&self) -> &dyn any::Any where Self: 'static;
     /// Transforms this argument to Any (which can be downcasted to read the current value).
     ///
-    /// Note: The internal representation of complex types (Array, Dict, Struct) is unstable
+    /// If the type is an array, and the element type is byte, numeric, boolean, or string, then the
+    /// representation is guaranteed to be a Vec<T>. Arrays of structs, dicts, and so on are not
+    /// safe to use with this.
+    ///
+    /// Note: The internal representation of complex types (Dict, Struct) is unstable
     /// and as_any should not be relied upon for these types. Use as_iter instead.
     ///
     /// # Panic
@@ -404,6 +412,56 @@ mod test {
                 let d: Dict<u32, bool, _> = g.get().unwrap();
                 let z2: HashMap<_, _> = d.collect();
                 assert_eq!(z, z2);
+                break;
+            }
+        }
+    }
+
+    #[test]
+    fn cast_vecs() {
+        let c = Channel::get_private(BusType::Session).unwrap();
+
+        let m = Message::new_method_call(c.unique_name().unwrap(), "/hello", "com.example.hello", "Hello").unwrap();
+        macro_rules! append_array {
+            ($m:expr, $t:ty) => {
+                $m.append1(Variant(&Array::<&$t, _>::new(&vec![Default::default()])));
+            };
+        }
+        let m = append_array!(m, bool);
+        let m = append_array!(m, u8);
+        let m = append_array!(m, u16);
+        let m = append_array!(m, i16);
+        let m = append_array!(m, u32);
+        let m = append_array!(m, i32);
+        let m = append_array!(m, f64);
+        let m = append_array!(m, String);
+        c.send(m).unwrap();
+        loop {
+            if let Some(m) = c.blocking_pop_message(std::time::Duration::from_millis(1000)).unwrap() {
+                if m.msg_type() != MessageType::MethodCall {
+                    continue;
+                }
+                let mut i = m.iter_init();
+
+                macro_rules! check_array {
+                    ($t:ty) => {
+                        let array: Variant<Box<dyn RefArg>> = i.read().unwrap();
+                        assert_eq!(
+                            cast::<Vec<$t>>(&(array.0)),
+                            Some(&vec![Default::default()]),
+                            "a variant containing an array of of {0} should be castable to a Vec<{0}>",
+                            std::any::type_name::<$t>()
+                        )
+                    };
+                }
+                check_array!(bool);
+                check_array!(u8);
+                check_array!(u16);
+                check_array!(i16);
+                check_array!(u32);
+                check_array!(i32);
+                check_array!(f64);
+                check_array!(String);
                 break;
             }
         }
