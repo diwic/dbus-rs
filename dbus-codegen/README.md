@@ -102,7 +102,7 @@ impl<M: tree::MethodType<D>, D> OrgExampleTest for tree::MethodInfo<M, D> {
 ```
 
  2. If `methodaccess` is `RefClosure`, then you need to supply a closure that returns a reference to the implementing struct.
-This is a good option if the struct is stored in tree (this means implementing `tree::DataType`). 
+This is a good option if the struct is stored in tree (this means implementing `tree::DataType`).
 
 ```rust
 myInterface = orgexampletest_server(&myFactory, (), |m| m.path.get_data());
@@ -112,6 +112,10 @@ myInterface = orgexampletest_server(&myFactory, (), |m| m.path.get_data());
 The object is dropped after the method is called. This works well with `Arc`/`Rc`, like this:
 
 ```rust
+impl AsRef<dyn OrgExampleTest + 'static> for Rc<MyStruct> {
+    fn as_ref(&self) -> &(dyn OrgExampleTest + 'static) { &**self }
+}
+
 let myRc = Rc::new(myStruct);
 myInterface = orgexampletest_server(&myFactory, (), move |_| myRc.clone());
 ```
@@ -146,4 +150,3 @@ See available options:
 ```
 dbus-codegen-rust --help
 ```
-
