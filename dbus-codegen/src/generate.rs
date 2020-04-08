@@ -513,7 +513,7 @@ fn write_server_access(s: &mut String, i: &Intf, saccess: ServerAccess, minfo_is
             *s += "        let d = dd.as_ref();\n";
         },
         ServerAccess::RefClosure => *s += &format!("        let d = fclone({}minfo);\n", z),
-        ServerAccess::MethodInfo => *s += &format!("        let d: &{} = {}minfo;\n", make_camel(&i.shortname), z),
+        ServerAccess::MethodInfo => *s += &format!("        let d: &dyn {} = {}minfo;\n", make_camel(&i.shortname), z),
     }
 }
 
