@@ -7,6 +7,8 @@ use crate::ffidisp::{ConnectionItem, MsgHandler, Connection, MsgHandlerType, Msg
 use std::fmt;
 use std::ffi::CStr;
 use super::leaves::prop_append_dict;
+use crate::channel::Channel;
+use std::time::Duration;
 
 fn introspect_map<I: fmt::Display, T: Introspect>
     (h: &ArcMap<I, T>, indent: &str) -> String {
@@ -406,6 +408,24 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
         if m.msg_type() != MessageType::MethodCall { None }
         else { m.path().and_then(|p| self.paths.get(&p).map(|s| s.handle(m, &self)
             .unwrap_or_else(|e| vec!(e.to_message(m))))) }
+    }
+
+    /// Tries to handle an incoming message from the provided channel if there is one. If there isn't one,
+    /// it will wait up to timeout
+    pub fn process_channel(&self, channel: &Channel, timeout: Duration) -> Result<bool, Error> {
+        if let Some(msg) = channel.blocking_pop_message(timeout)? {
+            if let Some(replies) = self.handle(&msg) {
+                for r in replies {
+                    let _ = channel.send(r);
+                }
+            } else if let Some(reply) = crate::channel::default_reply(&msg) {
+                let _ = channel.send(reply);
+            }
+
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
 

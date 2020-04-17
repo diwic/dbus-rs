@@ -127,6 +127,11 @@ impl $c {
             Ok(false)
         }
     }
+
+    /// The channel for this connection
+    pub fn channel(&self) -> &Channel {
+        &self.channel
+    }
 }
 
 impl BlockingSender for $c {
