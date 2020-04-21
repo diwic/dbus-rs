@@ -194,3 +194,65 @@ async fn timeout() {
     let e = e.unwrap_err();
     assert_eq!(e.name(), Some("org.freedesktop.DBus.Error.Timeout"));
 }
+
+#[tokio::test]
+async fn large_message() -> Result<(), Box<dyn std::error::Error>> {
+    use dbus::arg::Variant;
+    use futures::StreamExt;
+    use std::{
+        collections::HashMap,
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        },
+        time::Duration,
+    };
+
+    type BigProps<'a> = Vec<(dbus::Path<'a>, HashMap<String, Variant<Box<i32>>>)>;
+
+    // Simulate a big property list that something like connman would return.
+    fn make_big_reply<'a>() -> Result<BigProps<'a>, String> {
+        let prop_map: HashMap<String, Variant<Box<i32>>> = (0..500).map(|i| (format!("key {}", i), Variant(Box::new(i)))).collect();
+        (0..30u8).map(|i| Ok((dbus::strings::Path::new(format!("/{}", i))?, prop_map.clone()))).collect()
+    }
+
+    let mut server_conn = dbus::blocking::SyncConnection::new_session()?;
+
+    server_conn.request_name("com.example.dbusrs.tokiobigtest", false, true, false)?;
+    let f = dbus::tree::Factory::new_sync::<()>();
+    let tree =
+        f.tree(()).add(f.object_path("/", ()).add(f.interface("com.example.dbusrs.tokiobigtest", ()).add_m(f.method("Ping", (), |m| {
+            // println!("received ping!");
+            Ok(vec![m.msg.method_return().append1(make_big_reply().map_err(|err| dbus::tree::MethodErr::failed(&err))?)])
+        }))));
+    tree.start_receive_sync(&server_conn);
+
+    let done = Arc::new(AtomicBool::new(false));
+    let done2 = done.clone();
+    tokio::task::spawn_blocking(move || {
+        while !done2.load(Ordering::Acquire) {
+            server_conn.process(Duration::from_millis(100)).unwrap();
+        }
+    });
+
+    let (resource, client_conn) = new_session_sync()?;
+    tokio::spawn(async {
+        let err = resource.await;
+        panic!("Lost connection to D-Bus: {}", err);
+    });
+
+    let client_interval = tokio::time::interval(Duration::from_millis(10));
+    let proxy = dbus::nonblock::Proxy::new("com.example.dbusrs.tokiobigtest", "/", Duration::from_secs(1), client_conn);
+    client_interval
+        .take(10)
+        .for_each(|_| async {
+            println!("sending ping");
+            proxy.method_call::<(BigProps,), _, _, _>("com.example.dbusrs.tokiobigtest", "Ping", ()).await.unwrap();
+            println!("received prop list!");
+        })
+        .await;
+
+    done.store(true, Ordering::Release);
+
+    Ok(())
+}
