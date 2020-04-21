@@ -59,10 +59,22 @@ impl<C: AsRef<Channel> + Process> IOResource<C> {
     fn poll_internal(&mut self, ctx: &mut task::Context<'_>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let c: &Channel = (*self.connection).as_ref();
 
-        c.read_write(Some(Default::default())).map_err(|_| Error::new_failed("Read/write failed"))?;
-        self.connection.process_all();
+        let w = loop {
+            c.read_write(Some(Default::default())).map_err(|_| Error::new_failed("Read/write failed"))?;
+            self.connection.process_all();
+            let w = c.watch();
+            if !w.read { break w; }
 
-        let w = c.watch();
+            // Because libdbus is level-triggered and tokio is edge-triggered, we need to do read again
+            // in case libdbus did not read all available data. Maybe there is a better way to see if there
+            // is more incoming data than calling libc::recv?
+            // https://github.com/diwic/dbus-rs/issues/254
+            let mut x = 0u8;
+            let r = unsafe {
+                libc::recv(w.fd, &mut x as *mut _ as *mut libc::c_void, 1, libc::MSG_DONTWAIT + libc::MSG_PEEK)
+            };
+            if r != 1 { break w; }
+        };
 
         let r = match &self.registration {
             None => {

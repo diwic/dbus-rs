@@ -15,6 +15,7 @@ readme = "README.md"
 [dependencies]
 dbus = { path = "../dbus", version = "0.8", features=["futures"] }
 mio = "0.6.21"
+libc = "0.2.69"
 tokio = {version = "0.2.4", features=["time", "macros", "io-driver", "rt-core", "rt-util", "rt-threaded", "stream"]}
 
 [dev-dependencies]
