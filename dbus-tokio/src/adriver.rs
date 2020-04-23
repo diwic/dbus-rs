@@ -140,7 +140,7 @@ impl ADriver {
         let msgs = ConnMsgs { conn: &*self.conn, timeout_ms: None };
         for m in msgs {
             debug!("handle_msgs: {:?}", m);
-            if m.msg_type() == MessageType::MethodReturn {
+            if m.msg_type() == MessageType::MethodReturn || m.msg_type() == MessageType::Error {
                 let mut map = self.callmap.borrow_mut();
                 let serial = m.get_reply_serial().unwrap();
                 let r = map.remove(&serial);
