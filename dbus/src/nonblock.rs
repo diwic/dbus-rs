@@ -74,6 +74,7 @@ pub struct LocalConnection {
     filters: RefCell<Filters<LocalFilterCb>>,
     replies: RefCell<Replies<LocalRepliesCb>>,
     timeout_maker: Option<TimeoutMakerCb>,
+    waker: Option<WakerCb>,
 }
 
 /// A connection to D-Bus, async version, which is Send but not Sync.
@@ -82,6 +83,7 @@ pub struct Connection {
     filters: RefCell<Filters<FilterCb>>,
     replies: RefCell<Replies<RepliesCb>>,
     timeout_maker: Option<TimeoutMakerCb>,
+    waker: Option<WakerCb>,
 }
 
 /// A connection to D-Bus, Send + Sync + async version
@@ -90,6 +92,7 @@ pub struct SyncConnection {
     filters: Mutex<Filters<SyncFilterCb>>,
     replies: Mutex<Replies<SyncRepliesCb>>,
     timeout_maker: Option<TimeoutMakerCb>,
+    waker: Option<WakerCb>,
 }
 
 use stdintf::org_freedesktop_dbus::DBus;
@@ -109,6 +112,7 @@ impl From<Channel> for $c {
             replies: Default::default(),
             filters: Default::default(),
             timeout_maker: None,
+            waker: None,
         }
     }
 }
@@ -134,17 +138,30 @@ impl MatchingReceiver for $c {
 impl NonblockReply for $c {
     type F = $rcb;
     fn send_with_reply(&self, msg: Message, f: Self::F) -> Result<Token, ()> {
-        self.channel.send(msg).map(|x| {
-            let t = Token(x as usize);
-            self.replies_mut().insert(t, f);
-            t
-        })
+        let token = {
+            // We must hold the mutex from moment we send the message
+            // To moment we set a handler for the reply
+            // So reply can't arrive before we set handler
+            // TODO: Better use tokio mutex, but it will break runtime agnosticism
+            let mut replies = self.replies_mut();
+            self.channel.send(msg).map(|x| {
+                let t = Token(x as usize);
+                replies.insert(t, f);
+                t
+            })
+        };
+        // Wake up task that will do the flush
+        self.waker.as_ref().map(|wake| wake());
+        token
     }
     fn cancel_reply(&self, id: Token) -> Option<Self::F> { self.replies_mut().remove(&id) }
     fn make_f<G: FnOnce(Message, &Self) + Send + 'static>(g: G) -> Self::F { Box::new(g) }
     fn timeout_maker(&self) -> Option<TimeoutMakerCb> { self.timeout_maker }
     fn set_timeout_maker(&mut self, f: Option<TimeoutMakerCb>) -> Option<TimeoutMakerCb> {
         mem::replace(&mut self.timeout_maker, f)
+    }
+    fn set_waker(&mut self, f: Option<WakerCb>) -> Option<WakerCb> {
+        mem::replace(&mut self.waker, f)
     }
 }
 
@@ -267,6 +284,9 @@ impl SyncConnection {
 /// Internal callback for the executor when a timeout needs to be made.
 pub type TimeoutMakerCb = fn(timeout: Instant) -> pin::Pin<Box<dyn Future<Output=()> + Send + Sync + 'static>>;
 
+/// Internal callback for the executor when we need wakeup a task
+pub type WakerCb = Box<dyn Fn() + Send + Sync +'static>;
+
 /// Internal helper trait for async method replies.
 pub trait NonblockReply {
     /// Callback type
@@ -281,6 +301,8 @@ pub trait NonblockReply {
     fn set_timeout_maker(&mut self, f: Option<TimeoutMakerCb>) -> Option<TimeoutMakerCb>;
     /// Get the internal timeout maker
     fn timeout_maker(&self) -> Option<TimeoutMakerCb>;
+    /// Set the wakeup call
+    fn set_waker(&mut self, f: Option<WakerCb>) -> Option<WakerCb>;
 }
 
 
