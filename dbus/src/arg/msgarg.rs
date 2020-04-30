@@ -107,8 +107,15 @@ pub trait RefArg: fmt::Debug {
     /// Try to read the argument as an iterator.
     ///
     /// Works for: Array/Dict, Struct, Variant.
+    /// For Dicts, keys and values are interleaved.
     #[inline]
     fn as_iter<'a>(&'a self) -> Option<Box<dyn Iterator<Item=&'a dyn RefArg> + 'a>> { None }
+    /// Try to read the inner of an argument, as another argument, specifying an index.
+    ///
+    /// Works for: Variant, Array, Struct, Dict.
+    /// For Dicts, even indices gets a key, odd indices gets a value.
+    #[inline]
+    fn as_static_inner(&self, _index: usize) -> Option<&(dyn RefArg + 'static)> where Self: 'static { None }
     /// Deep clone of the RefArg, causing the result to be 'static.
     ///
     /// Usable as an escape hatch in case of lifetime problems with RefArg.
@@ -177,6 +184,8 @@ impl<'a, T: RefArg + ?Sized> RefArg for &'a T {
     #[inline]
     fn as_iter<'b>(&'b self) -> Option<Box<dyn Iterator<Item=&'b dyn RefArg> + 'b>> { (&**self).as_iter() }
     #[inline]
+    fn as_static_inner(&self, index: usize) -> Option<&(dyn RefArg + 'static)> where Self: 'static { (&**self).as_static_inner(index) }    
+    #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> { (&**self).box_clone() }
 }
 
@@ -206,6 +215,8 @@ impl<T: RefArg + ?Sized> RefArg for $t<T> {
     fn as_str(&self) -> Option<&str> { (&**self).as_str() }
     #[inline]
     fn as_iter<'a>(&'a self) -> Option<Box<dyn Iterator<Item=&'a dyn RefArg> + 'a>> { (&**self).as_iter() }
+    #[inline]
+    fn as_static_inner(&self, index: usize) -> Option<&(dyn RefArg + 'static)> where Self: 'static { (&**self).as_static_inner(index) }
     #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> { (&**self).box_clone() }
 }
@@ -442,6 +453,7 @@ mod test {
                     continue;
                 }
                 let mut i = m.iter_init();
+                let mut i2 = m.iter_init();
 
                 macro_rules! check_array {
                     ($t:ty) => {
@@ -451,7 +463,13 @@ mod test {
                             Some(&vec![Default::default()]),
                             "a variant containing an array of of {0} should be castable to a Vec<{0}>",
                             std::any::type_name::<$t>()
-                        )
+                        );
+                        let refarg = i2.get_refarg().unwrap();
+                        println!("refarg {:?}", refarg);
+                        let st_inner = refarg.as_static_inner(0).unwrap();
+                        println!("st_inner {:?}", st_inner);
+                        i2.next();
+                        assert_eq!(cast::<Vec<$t>>(st_inner), Some(&vec![Default::default()]));
                     };
                 }
                 check_array!(bool);

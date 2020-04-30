@@ -58,7 +58,7 @@ impl<'a> Get<'a> for Variant<Box<dyn RefArg>> {
 }
 */
 impl<T: RefArg> RefArg for Variant<T> {
-    fn arg_type(&self) -> ArgType { ArgType::Variant } 
+    fn arg_type(&self) -> ArgType { ArgType::Variant }
     fn signature(&self) -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"v\0") } }
     fn append(&self, i: &mut IterAppend) {
         let z = &self.0;
@@ -84,12 +84,16 @@ impl<T: RefArg> RefArg for Variant<T> {
     }
     #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> { Box::new(Variant(self.0.box_clone())) }
+    #[inline]
+    fn as_static_inner(&self, index: usize) -> Option<&(dyn RefArg + 'static)> where Self: 'static {
+        if index == 0 { Some(&self.0) } else { None }
+    }
 }
 
 macro_rules! struct_impl {
     ( $($n: ident $t: ident,)+ ) => {
 
-/// Tuples are represented as D-Bus structs. 
+/// Tuples are represented as D-Bus structs.
 impl<$($t: Arg),*> Arg for ($($t,)*) {
     const ARG_TYPE: ArgType = ArgType::Struct;
     fn signature() -> Signature<'static> {
@@ -145,6 +149,11 @@ impl<$($t: RefArg),*> RefArg for ($($t,)*) {
         );
         Some(Box::new(v.into_iter()))
     }
+    fn as_static_inner(&self, index: usize) -> Option<&(dyn RefArg + 'static)> where Self: 'static {
+        let &( $(ref $n,)*) = self;
+        let arr = [ $($n as &dyn RefArg,)*];
+        arr.get(index).map(|x| *x)
+    }
     #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> {
         let &( $(ref $n,)*) = self;
@@ -193,9 +202,12 @@ impl RefArg for Vec<Box<dyn RefArg>> {
         Some(Box::new(self.iter().map(|b| &**b)))
     }
     #[inline]
+    fn as_static_inner(&self, index: usize) -> Option<&(dyn RefArg + 'static)> where Self: 'static {
+        self.get(index).map(|x| x as &dyn RefArg)
+    }
+    #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> {
         let t: Vec<Box<dyn RefArg + 'static>> = self.iter().map(|x| x.box_clone()).collect();
         Box::new(t)
     }
 }
-

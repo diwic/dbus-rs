@@ -63,6 +63,10 @@ impl<'a, T: Arg + RefArg> RefArg for &'a [T] {
     fn as_any(&self) -> &dyn any::Any where Self: 'static { self }
     #[inline]
     fn as_any_mut(&mut self) -> &mut dyn any::Any where Self: 'static { self }
+    #[inline]
+    fn as_static_inner(&self, index: usize) -> Option<&(dyn RefArg + 'static)> where Self: 'static {
+        self.get(index).map(|x| x as &dyn RefArg)
+    }
 
     fn box_clone(&self) -> Box<dyn RefArg + 'static> {
         Box::new(InternalArray {
@@ -84,6 +88,10 @@ impl<T: Arg + RefArg> RefArg for Vec<T> {
     fn as_any_mut(&mut self) -> &mut dyn any::Any where Self: 'static { self }
     fn as_iter<'a>(&'a self) -> Option<Box<dyn Iterator<Item=&'a dyn RefArg> + 'a>> {
         Some(Box::new(self.iter().map(|b| b as &dyn RefArg)))
+    }
+    #[inline]
+    fn as_static_inner(&self, index: usize) -> Option<&(dyn RefArg + 'static)> where Self: 'static {
+        self.get(index).map(|x| x as &dyn RefArg)
     }
     #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> { (&**self).box_clone() }
@@ -119,7 +127,7 @@ impl<'a, T: FixedArray> Get<'a> for &'a [T] {
 pub struct Dict<'a, K: DictKey, V: Arg, I>(I, PhantomData<(&'a Message, *const K, *const V)>);
 
 impl<'a, K: DictKey, V: Arg, I> Dict<'a, K, V, I> {
-    fn entry_sig() -> String { format!("{{{}{}}}", K::signature(), V::signature()) } 
+    fn entry_sig() -> String { format!("{{{}{}}}", K::signature(), V::signature()) }
 }
 
 impl<'a, K: 'a + DictKey, V: 'a + Append + Arg, I: Iterator<Item=(K, V)>> Dict<'a, K, V, I> {
@@ -160,7 +168,7 @@ impl<'a, K: DictKey + Get<'a>, V: Arg + Get<'a>> Iterator for Dict<'a, K, V, Ite
             let k = si.get();
             if k.is_none() { return None };
             assert!(si.next());
-            let v = si.get(); 
+            let v = si.get();
             if v.is_none() { return None };
             Some((k.unwrap(), v.unwrap()))
         });
@@ -235,7 +243,7 @@ impl<'a, T: Arg + Get<'a>> Get<'a> for Vec<T> {
 
 
 #[derive(Copy, Clone, Debug)]
-/// Represents a D-Bus Array. Maximum flexibility (wraps an iterator of items to append). 
+/// Represents a D-Bus Array. Maximum flexibility (wraps an iterator of items to append).
 ///
 /// See the argument guide and module level documentation for details and alternatives.
 pub struct Array<'a, T, I>(I, PhantomData<(*const T, &'a Message)>);
@@ -354,6 +362,10 @@ impl RefArg for InternalDict<Box<dyn RefArg>> {
     fn as_iter<'b>(&'b self) -> Option<Box<dyn Iterator<Item=&'b dyn RefArg> + 'b>> {
         Some(Box::new(self.data.iter().flat_map(|(k, v)| vec![k as &dyn RefArg, v as &dyn RefArg].into_iter())))
     }
+    fn as_static_inner(&self, index: usize) -> Option<&(dyn RefArg + 'static)> where Self: 'static {
+        let (k, v) = self.data.get(index / 2)?;
+        Some(if index & 1 != 0 { v } else { k })
+    }
     #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> {
         Box::new(InternalDict {
@@ -384,6 +396,10 @@ impl<K: DictKey + RefArg + Clone + 'static> RefArg for InternalDict<K> {
     fn as_iter<'b>(&'b self) -> Option<Box<dyn Iterator<Item=&'b dyn RefArg> + 'b>> {
         Some(Box::new(self.data.iter().flat_map(|(k, v)| vec![k as &dyn RefArg, v as &dyn RefArg].into_iter())))
     }
+    fn as_static_inner(&self, index: usize) -> Option<&(dyn RefArg + 'static)> where Self: 'static {
+        let (k, v) = self.data.get(index / 2)?;
+        Some(if index & 1 != 0 { v } else { k })
+    }
     #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> {
         Box::new(InternalDict {
@@ -391,7 +407,7 @@ impl<K: DictKey + RefArg + Clone + 'static> RefArg for InternalDict<K> {
             outer_sig: self.outer_sig.clone(),
         })
     }
-} 
+}
 
 
 // Fallback for Arrays of Arrays and Arrays of Structs.
@@ -425,6 +441,9 @@ impl RefArg for InternalArray {
     fn as_iter<'a>(&'a self) -> Option<Box<dyn Iterator<Item=&'a dyn RefArg> + 'a>> {
         Some(Box::new(self.data.iter().map(|b| b as &dyn RefArg)))
     }
+    fn as_static_inner(&self, index: usize) -> Option<&(dyn RefArg + 'static)> where Self: 'static {
+        self.data.get(index).map(|x| x as &dyn RefArg)
+    }    
     #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> {
         Box::new(InternalArray {
@@ -480,5 +499,3 @@ pub fn get_array_refarg(i: &mut Iter) -> Box<dyn RefArg> {
     debug_assert_eq!(i.signature(), x.signature());
     x
 }
-
-
