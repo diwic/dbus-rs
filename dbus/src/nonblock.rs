@@ -142,7 +142,6 @@ impl NonblockReply for $c {
             // We must hold the mutex from moment we send the message
             // To moment we set a handler for the reply
             // So reply can't arrive before we set handler
-            // TODO: Better use tokio mutex, but it will break runtime agnosticism
             let mut replies = self.replies_mut();
             self.channel.send(msg).map(|x| {
                 let t = Token(x as usize);
