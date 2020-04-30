@@ -100,15 +100,25 @@ impl<C: AsRef<Channel> + Process> IOResource<C> {
         // Make a promise that we process all events recieved before this moment
         // If new event arrives after calls to poll_*_ready, tokio will wake us up.
         let read_ready = is_poll_ready(watch_reg.poll_read_ready(ctx)?);
-        let write_ready = is_poll_ready(watch_reg.poll_write_ready(ctx)?);
         let send_ready = is_poll_ready(waker_reg.poll_read_ready(ctx)?);
 
-        if read_ready || write_ready || send_ready {
+        // If we were woken up by write ready - reset it
+        let _ = watch_reg.take_write_ready()?;
+
+        if read_ready || send_ready {
             loop {
                 c.read_write(Some(Default::default())).map_err(|_| Error::new_failed("Read/write failed"))?;
                 self.connection.process_all();
-                // Enforce DBus to send all messages. If we don't send them now we may never wake up again
-                c.flush();
+
+                if c.has_messages_to_send() {
+                    // DBus has unsent messages
+                    // Assume it's because a write to fd would block
+                    // Ask tokio to notify us when fd will became writable
+                    if is_poll_ready(watch_reg.poll_write_ready(ctx)?) {
+                        // try again immediately
+                        continue
+                    }
+                }
 
                 // Because libdbus is level-triggered and tokio is edge-triggered, we need to do read again
                 // in case libdbus did not read all available data. Maybe there is a better way to see if there

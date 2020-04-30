@@ -298,6 +298,11 @@ impl Channel {
         }
     }
 
+    /// Gets whether the output message buffer is non-empty
+    pub fn has_messages_to_send(&self) -> bool {
+        unsafe { ffi::dbus_connection_has_messages_to_send(self.conn()) == 1 }
+    }
+
     /// Removes a message from the incoming queue, or returns None if the queue is empty.
     ///
     /// Use "read_write" first, so that messages are put into the incoming queue.
