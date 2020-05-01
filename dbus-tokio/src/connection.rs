@@ -69,6 +69,7 @@ enum IOResourceRegistration {
 pub struct IOResource<C> {
     connection: Arc<C>,
     registration: IOResourceRegistration,
+    write_pending: bool,
 }
 
 fn is_poll_ready(i: task::Poll<mio::Ready>) -> bool {
@@ -101,16 +102,17 @@ impl<C: AsRef<Channel> + Process> IOResource<C> {
         // If new event arrives after calls to poll_*_ready, tokio will wake us up.
         let read_ready = is_poll_ready(watch_reg.poll_read_ready(ctx)?);
         let send_ready = is_poll_ready(waker_reg.poll_read_ready(ctx)?);
-
         // If we were woken up by write ready - reset it
-        let _ = watch_reg.take_write_ready()?;
+        let write_ready = watch_reg.take_write_ready()?.map(|r| r.is_writable()).unwrap_or(false);
 
-        if read_ready || send_ready {
+        if read_ready || send_ready || (self.write_pending && write_ready) {
             loop {
+                self.write_pending = false;
                 c.read_write(Some(Default::default())).map_err(|_| Error::new_failed("Read/write failed"))?;
                 self.connection.process_all();
 
                 if c.has_messages_to_send() {
+                    self.write_pending = true;
                     // DBus has unsent messages
                     // Assume it's because a write to fd would block
                     // Ask tokio to notify us when fd will became writable
@@ -166,12 +168,16 @@ pub fn new<C: From<Channel> + NonblockReply>(b: BusType) -> Result<(IOResource<C
     // When we send async messages from other tasks we must wake up this one to do the flush
     let (waker_resource, waker) = mio::Registration::new2();
     conn.set_waker({ Some(Box::new(
-        move || waker.set_readiness(mio::Ready::readable()).unwrap()
+        move || waker.set_readiness(mio::Ready::readable()).map_err(|_| ())
     ))});
 
     let conn = Arc::new(conn);
 
-    let res = IOResource { connection: conn.clone(), registration: IOResourceRegistration::Unregistered(IOResourceUnregistered{watch_fd, waker_resource})};
+    let res = IOResource {
+        connection: conn.clone(),
+        registration: IOResourceRegistration::Unregistered(IOResourceUnregistered{watch_fd, waker_resource}),
+        write_pending: false,
+    };
     Ok((res, conn))
 }
 

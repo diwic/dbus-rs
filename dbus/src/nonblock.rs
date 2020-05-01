@@ -149,8 +149,13 @@ impl NonblockReply for $c {
                 t
             })
         };
-        // Wake up task that will do the flush
-        self.waker.as_ref().map(|wake| wake());
+        if self.channel.has_messages_to_send() {
+            // Non-blocking send failed
+            // Wake up task that will send the message
+            if self.waker.as_ref().map(|wake| wake().is_err() ).unwrap_or(false) {
+                return Err(());
+            }
+        }
         token
     }
     fn cancel_reply(&self, id: Token) -> Option<Self::F> { self.replies_mut().remove(&id) }
@@ -284,7 +289,7 @@ impl SyncConnection {
 pub type TimeoutMakerCb = fn(timeout: Instant) -> pin::Pin<Box<dyn Future<Output=()> + Send + Sync + 'static>>;
 
 /// Internal callback for the executor when we need wakeup a task
-pub type WakerCb = Box<dyn Fn() + Send + Sync +'static>;
+pub type WakerCb = Box<dyn Fn() -> Result<(), ()> + Send + Sync +'static>;
 
 /// Internal helper trait for async method replies.
 pub trait NonblockReply {
