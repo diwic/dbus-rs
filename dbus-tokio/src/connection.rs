@@ -45,6 +45,22 @@ use std::time::Instant;
 
 use tokio::io::Registration;
 
+struct IOResourceUnregistered {
+    watch_fd: std::os::unix::io::RawFd,
+    waker_resource: mio::Registration,
+}
+
+struct IOResourceRegistered {
+    watch_fd: std::os::unix::io::RawFd,
+    watch_reg: Registration,
+    waker_reg: Registration,
+}
+
+enum IOResourceRegistration {
+    Unregistered(IOResourceUnregistered),
+    Registered(IOResourceRegistered),
+}
+
 /// The I/O Resource should be spawned onto a Tokio compatible reactor.
 ///
 /// If you need to ever cancel this resource (i e disconnect from D-Bus),
@@ -52,46 +68,71 @@ use tokio::io::Registration;
 /// contact with the D-Bus server.
 pub struct IOResource<C> {
     connection: Arc<C>,
-    registration: Option<(Registration, std::os::unix::io::RawFd)>,
+    registration: IOResourceRegistration,
+    write_pending: bool,
+}
+
+fn is_poll_ready(i: task::Poll<mio::Ready>) -> bool {
+    match i {
+        task::Poll::Ready(r) => !r.is_empty(),
+        task::Poll::Pending => false,
+    }
 }
 
 impl<C: AsRef<Channel> + Process> IOResource<C> {
     fn poll_internal(&mut self, ctx: &mut task::Context<'_>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let c: &Channel = (*self.connection).as_ref();
 
-        let w = loop {
-            c.read_write(Some(Default::default())).map_err(|_| Error::new_failed("Read/write failed"))?;
-            self.connection.process_all();
-            let w = c.watch();
-            if !w.read { break w; }
-
-            // Because libdbus is level-triggered and tokio is edge-triggered, we need to do read again
-            // in case libdbus did not read all available data. Maybe there is a better way to see if there
-            // is more incoming data than calling libc::recv?
-            // https://github.com/diwic/dbus-rs/issues/254
-            let mut x = 0u8;
-            let r = unsafe {
-                libc::recv(w.fd, &mut x as *mut _ as *mut libc::c_void, 1, libc::MSG_DONTWAIT + libc::MSG_PEEK)
-            };
-            if r != 1 { break w; }
-        };
-
-        let r = match &self.registration {
-            None => {
-                let reg = Registration::new(&mio::unix::EventedFd(&w.fd))?;
-                self.registration = Some((reg, w.fd));
-                &self.registration.as_ref().unwrap().0
-            }
-            Some((reg, fd)) => {
-                assert_eq!(*fd, w.fd);
-                reg
+        // Register all wake-up events in reactor
+        let IOResourceRegistered{watch_fd, watch_reg, waker_reg} = match &self.registration {
+            IOResourceRegistration::Unregistered(IOResourceUnregistered{watch_fd, waker_resource}) => {
+                let watch_fd = *watch_fd;
+                let watch_reg = Registration::new(&mio::unix::EventedFd(&watch_fd))?;
+                let waker_reg = Registration::new(waker_resource)?;
+                self.registration = IOResourceRegistration::Registered(IOResourceRegistered{watch_fd, watch_reg, waker_reg});
+                match &self.registration {
+                    IOResourceRegistration::Registered(res) => res,
+                    _ => unreachable!(),
+                }
             },
+            IOResourceRegistration::Registered(res) => res,
         };
 
-        // I'm not sure exactly why, but it seems to be best to poll both read and write regardless of
-        // read/write state of the watch. See https://github.com/diwic/dbus-rs/issues/233
-        let _ = r.poll_read_ready(ctx)?;
-        let _ = r.poll_write_ready(ctx)?;
+        // Make a promise that we process all events recieved before this moment
+        // If new event arrives after calls to poll_*_ready, tokio will wake us up.
+        let read_ready = is_poll_ready(watch_reg.poll_read_ready(ctx)?);
+        let send_ready = is_poll_ready(waker_reg.poll_read_ready(ctx)?);
+        // If we were woken up by write ready - reset it
+        let write_ready = watch_reg.take_write_ready()?.map(|r| r.is_writable()).unwrap_or(false);
+
+        if read_ready || send_ready || (self.write_pending && write_ready) {
+            loop {
+                self.write_pending = false;
+                c.read_write(Some(Default::default())).map_err(|_| Error::new_failed("Read/write failed"))?;
+                self.connection.process_all();
+
+                if c.has_messages_to_send() {
+                    self.write_pending = true;
+                    // DBus has unsent messages
+                    // Assume it's because a write to fd would block
+                    // Ask tokio to notify us when fd will became writable
+                    if is_poll_ready(watch_reg.poll_write_ready(ctx)?) {
+                        // try again immediately
+                        continue
+                    }
+                }
+
+                // Because libdbus is level-triggered and tokio is edge-triggered, we need to do read again
+                // in case libdbus did not read all available data. Maybe there is a better way to see if there
+                // is more incoming data than calling libc::recv?
+                // https://github.com/diwic/dbus-rs/issues/254
+                let mut x = 0u8;
+                let r = unsafe {
+                    libc::recv(*watch_fd, &mut x as *mut _ as *mut libc::c_void, 1, libc::MSG_DONTWAIT | libc::MSG_PEEK)
+                };
+                if r != 1 { break; }
+            }
+        }
 
         Ok(())
     }
@@ -118,12 +159,25 @@ fn make_timeout(timeout: Instant) -> pin::Pin<Box<dyn future::Future<Output=()> 
 pub fn new<C: From<Channel> + NonblockReply>(b: BusType) -> Result<(IOResource<C>, Arc<C>), Error> {
     let mut channel = Channel::get_private(b)?;
     channel.set_watch_enabled(true);
+    let watch = channel.watch();
+    let watch_fd = watch.fd;
 
     let mut conn = C::from(channel);
     conn.set_timeout_maker(Some(make_timeout));
 
+    // When we send async messages from other tasks we must wake up this one to do the flush
+    let (waker_resource, waker) = mio::Registration::new2();
+    conn.set_waker({ Some(Box::new(
+        move || waker.set_readiness(mio::Ready::readable()).map_err(|_| ())
+    ))});
+
     let conn = Arc::new(conn);
-    let res = IOResource { connection: conn.clone(), registration: None };
+
+    let res = IOResource {
+        connection: conn.clone(),
+        registration: IOResourceRegistration::Unregistered(IOResourceUnregistered{watch_fd, waker_resource}),
+        write_pending: false,
+    };
     Ok((res, conn))
 }
 
