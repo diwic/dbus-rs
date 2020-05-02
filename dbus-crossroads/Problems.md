@@ -162,4 +162,56 @@ not static which means that you easily run into borrow check issues.
 
 == Changing the tree itself from a method ==
 
+But wait, there's more. Actually, it's not that uncommon that a method changes the tree,
+e g by adding or removing an interface to the same path, or even adding or removing other
+paths! This means another issue w r t mutability. I e, peeling the banana might cause another
+`/shells/banana1` object to show up.
+
+== Async ==
+
+I almost forgot. Async methods is the new big thing. It means that methods could
+await things before they reply. This and mutability combined things even more complex.
+
+It also means borrowing the `Connection` for the duration of the method running, or
+perhaps holding an `Arc`/`Rc` to it. Because how would you else send the reply once
+you're done?
+
 == Mocking and client/server ==
+
+TBD
+
+= Solution decisions =
+
+ * At this point let's make the tree `Send + 'static` (but not `Sync`). This seems
+   to be the most common combination.
+ * Let's make `Context` be these things:
+   * `Message`
+   * Clones of strings for path/interface/method
+   * Storage for the reply, signals etc
+   * `Arc<IfaceDesc>` (we need to clone it anyway, so)
+   * For async: a `Arc<dyn Sender>` so the replies can be sent
+   * For getprop / getpropall: a message to append arguments to
+ * Let's make a `Path` be these things:
+   * A name
+   * A list of supported interfaces `Vec<Arc<IfaceDesc>>`
+   * An optional random object `Option<Box<Any + Send + 'static>>`
+ * Let's make an `IfaceDesc` be the name, list of methods, properties and signals
+ * Let's make the method be this:
+   * `Fn(Context, &mut Tree) -> Option<Context> + Send + 'static`
+   * Same for get_prop / set_prop
+ * Use clever generics (or possibly macros) to:
+   * look up the path
+   * downcast the random object
+   * type cast arguments
+   * call method on the random object
+   * check for errors (potentially after async)
+   * type cast reply (potentially after async)          
+
+
+
+Cost for calling a method:
+ * Looking up the path twice (three for getprop/setprop) (btreemap)
+ * Looking up the interface once (twice for getprop/setprop) (vec/linear)
+ * Looking up the method once (hashmap)
+ * One `Arc` ref up/down for regular methods, one more for async
+ *  
