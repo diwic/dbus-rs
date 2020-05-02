@@ -188,12 +188,12 @@ TBD
    * `Message`
    * Clones of strings for path/interface/method
    * Storage for the reply, signals etc
-   * `Arc<IfaceDesc>` (we need to clone it anyway, so)
+   * `IfaceToken` (because why not)
    * For async: a `Arc<dyn Sender>` so the replies can be sent
    * For getprop / getpropall: a message to append arguments to
  * Let's make a `Path` be these things:
    * A name
-   * A list of supported interfaces `Vec<Arc<IfaceDesc>>`
+   * A list of supported interfaces `HashSet<IfaceToken>`
    * An optional random object `Option<Box<Any + Send + 'static>>`
  * Let's make an `IfaceDesc` be the name, list of methods, properties and signals
  * Let's make the method be this:
