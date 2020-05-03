@@ -33,17 +33,22 @@ impl Registry {
         x.cb = Some(CallbackDbg(cb));
     }
 
-    pub fn prop_names(&self, t: usize) -> Vec<String> {
-        todo!()
+    pub fn prop_names_readable(&self, t: usize) -> Vec<String> {
+        self.0[t].properties.iter().filter_map(|(k, v)| {
+            if v.access != Access::Write && v.get_cb.is_some() { Some(k.clone()) } else { None }
+        }).collect()
     }
 
     pub fn take_getprop(&mut self, t: usize, name: &str) -> Result<Callback, MethodErr> {
-        todo!()
+        let pdesc = self.0[t].properties.get_mut(name).ok_or_else(|| MethodErr::no_property(name))?;
+        let cb = pdesc.get_cb.take();
+        let cb = cb.ok_or_else(|| MethodErr::failed(&format!("Detected recursive call to get property {}", name)))?;
+        Ok(cb.0)
     }
 
     pub fn give_getprop(&mut self, t: usize, name: &str, cb: Callback) {
-        todo!()
-    }    
+        self.0[t].properties.get_mut(name).unwrap().get_cb = Some(CallbackDbg(cb));
+    }
 }
 
 pub type Callback = Box<dyn FnMut(Context, &mut Crossroads) -> Option<Context> + Send + 'static>;
@@ -81,30 +86,35 @@ pub struct SignalDesc {
     annotations: Option<Annotations>,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Debug)]
+/// The possible access characteristics a Property can have.
+pub enum Access {
+    /// The Property can only be read (Get).
+    Read,
+    /// The Property can be read or written.
+    ReadWrite,
+    /// The Property can only be written (Set).
+    Write,
+}
+
+
+#[derive(Debug)]
+pub struct PropDesc {
+    annotations: Option<Annotations>,
+    sig: dbus::Signature<'static>,
+    get_cb: Option<CallbackDbg>,
+    set_cb: Option<CallbackDbg>,
+    access: Access,
+}
+
 #[derive(Debug)]
 pub struct IfaceDesc {
     name: Option<dbus::strings::Interface<'static>>,
     annotations: Option<Annotations>,
     methods: HashMap<dbus::strings::Member<'static>, MethodDesc>,
     signals: HashMap<dbus::strings::Member<'static>, SignalDesc>,
+    properties: HashMap<String, PropDesc>,
 }
-
-/*
-impl IfaceDesc {
-    pub fn new<N: Into<dbus::strings::Interface<'static>>>(name: N, annotations: Option<Annotations>) -> Self {
-        IfaceDesc { name: Some(name.into()), annotations, methods: Default::default() }
-    }
-
-    pub fn method<IA, OA, N, CB>(mut self, name: N, annotations: Option<Annotations>, cb: CB) -> Self
-    where N: Into<dbus::strings::Member<'static>>, CB: MethodFactory<IA, OA>,
-    {
-        let (input_args, output_args, cb) = cb.make_method();
-        let md = MethodDesc { cb: Some(CallbackDbg(cb)), input_args, output_args, annotations };
-        self.methods.insert(name.into(), md);
-        self
-    }
-}
-*/
 
 fn build_argvec<A: dbus::arg::ArgAll>(a: A::strs) -> Arguments {
     let mut v = vec!();
@@ -114,10 +124,47 @@ fn build_argvec<A: dbus::arg::ArgAll>(a: A::strs) -> Arguments {
     Arguments(v)
 }
 
+
+#[derive(Debug)]
+pub struct PropBuilder<'a, T:'static, A: 'static>(&'a mut PropDesc, PhantomData<&'static (T, A)>);
+
+impl<T: std::marker::Send, A: dbus::arg::Arg +  dbus::arg::RefArg + dbus::arg::Append> PropBuilder<'_, T, A> {
+    pub fn get<CB>(self, mut cb: CB) -> Self
+    where CB: FnMut(&mut Context, &mut T) -> Result<A, MethodErr> + Send + 'static {
+        self.get_with_cr(move |ctx, cr| {
+            let data = cr.data_mut(ctx.path()).ok_or_else(|| MethodErr::no_path(ctx.path()))?;
+            cb(ctx, data)
+        })
+    }
+
+    pub fn get_with_cr<CB>(mut self, mut cb: CB) -> Self
+    where CB: FnMut(&mut Context, &mut Crossroads) -> Result<A, MethodErr> + Send + 'static {
+        self.0.get_cb = Some(CallbackDbg(Box::new(move |mut ctx, cr| {
+            let _ = ctx.check(|ctx| {
+                let r = cb(ctx, cr)?;
+                ctx.prop_ctx().add_get_result(r);
+                Ok(())
+            });
+            Some(ctx)
+        })));
+        self
+    }
+}
+
 #[derive(Debug)]
 pub struct IfaceBuilder<T: Send + 'static>(IfaceDesc, PhantomData<&'static T>);
 
 impl<T: Send + 'static> IfaceBuilder<T> {
+    pub fn property<A: dbus::arg::Arg, N: Into<String>>(&mut self, name: N) -> PropBuilder<T, A> {
+        PropBuilder(self.0.properties.entry(name.into()).or_insert(PropDesc {
+            access: Access::Read,
+            annotations: None,
+            get_cb: None,
+            set_cb: None,
+            sig: A::signature(),
+        }), PhantomData)
+    }
+
     pub fn method<IA, OA, N, CB>(&mut self, name: N, input_args: IA::strs, output_args: OA::strs, mut cb: CB) -> &mut MethodDesc
     where IA: dbus::arg::ArgAll + dbus::arg::ReadAll, OA: dbus::arg::ArgAll + dbus::arg::AppendAll,
     N: Into<dbus::strings::Member<'static>>,
@@ -136,7 +183,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
             let _ = ctx.check(|ctx| {
                 let ia = ctx.message().read_all()?;
                 let oa = cb(ctx, cr, ia)?;
-                ctx.set_reply(|mut msg| oa.append(&mut dbus::arg::IterAppend::new(&mut msg)));
+                ctx.do_reply(|mut msg| oa.append(&mut dbus::arg::IterAppend::new(&mut msg)));
                 Ok(())
             });
             Some(ctx)
@@ -155,7 +202,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
     CB: FnMut(Context, &mut Crossroads, IA) -> Option<Context> + Send + 'static {
         let boxed = Box::new(move |mut ctx: Context, cr: &mut Crossroads| {
             match ctx.check(|ctx| Ok(ctx.message().read_all()?)) {
-                Ok(ia) => { cb(ctx, cr, ia); None },
+                Ok(ia) => cb(ctx, cr, ia),
                 Err(_) => Some(ctx),
             }
         });
@@ -182,6 +229,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
             annotations: None,
             methods: Default::default(),
             signals: Default::default(),
+            properties: Default::default(),
         }, PhantomData);
         f(&mut b);
         b.0

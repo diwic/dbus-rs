@@ -12,12 +12,14 @@ pub fn introspectable(cr: &mut Crossroads) -> IfaceToken<()> {
     })
 }
 
+#[derive(Debug)]
 pub (crate) struct PropCtx {
     iface_token: usize,
 
     prop_names: Vec<String>,
     prop_name: Option<String>,
     getall_result: Option<Props>,
+    get_msg: Option<dbus::Message>,
 }
 
 impl PropCtx {
@@ -29,6 +31,7 @@ impl PropCtx {
             prop_names: vec!(),
             prop_name: None,
             getall_result: None,
+            get_msg: None,
         })
     }
 
@@ -40,11 +43,12 @@ impl PropCtx {
             Ok(cb) => cb,
             Err(_) => return Some((ctx, self))
         };
-        ctx.give_propctx(self);
+        ctx.give_prop_ctx(self);
         let octx = cb(ctx, cr);
+        dbg!(&octx);
         cr.registry().give_getprop(token, prop_name, cb);
         octx.map(|mut ctx| {
-            let prop_ctx = ctx.take_propctx().unwrap();
+            let prop_ctx = ctx.take_prop_ctx();
             (ctx, prop_ctx)
         })
     }
@@ -58,12 +62,21 @@ impl PropCtx {
                 self = x.1;
                 if ctx.has_reply() { return Some(ctx) }
             } else {
-                ctx.set_reply(|mut msg| {
+                ctx.do_reply(|mut msg| {
                     let p = self.getall_result.unwrap();
                     IterAppend::new(&mut msg).append(p);
+                    dbg!(&msg);
                 });
                 return Some(ctx)
             }
+        }
+    }
+
+    pub (crate) fn add_get_result<V: 'static + dbus::arg::Arg + dbus::arg::Append + dbus::arg::RefArg>(&mut self, v: V) {
+        if let Some(map) = self.getall_result.as_mut() {
+            map.insert(self.prop_name.take().unwrap(), Variant(Box::new(v)));
+        } else if let Some(get_msg) = self.get_msg.as_mut() {
+            IterAppend::new(get_msg).append(&Variant(v));
         }
     }
 }
@@ -71,8 +84,18 @@ impl PropCtx {
 // fn get(ctx: &mut Context, cr: &mut Crossroads, (interface_name: &str, property_name: &str))
 type Props = HashMap<String, Variant<Box<dyn RefArg>>>;
 
-fn get(ctx: Context, cr: &mut Crossroads, (interface_name, property_name): (String, String)) -> Option<Context> {
-    todo!()
+fn get(mut ctx: Context, cr: &mut Crossroads, (interface_name, property_name): (String, String)) -> Option<Context> {
+    let mut propctx = match ctx.check(|ctx| { PropCtx::new(cr, ctx.path(), interface_name)}) {
+        Ok(p) => p,
+        Err(_) => return Some(ctx),
+    };
+    if !ctx.message().get_no_reply() {
+        propctx.get_msg = Some(ctx.message().method_return());
+    }
+    propctx.call_getprop(ctx, cr, &property_name).map(|(mut ctx, propctx)| {
+        if !ctx.has_reply() { ctx.set_reply(propctx.get_msg, true, true) }
+        ctx
+    })
 }
 
 fn getall(mut ctx: Context, cr: &mut Crossroads, (interface_name,): (String,)) -> Option<Context> {
@@ -80,7 +103,7 @@ fn getall(mut ctx: Context, cr: &mut Crossroads, (interface_name,): (String,)) -
         Ok(p) => p,
         Err(_) => return Some(ctx),
     };
-    propctx.prop_names = cr.registry().prop_names(propctx.iface_token);
+    propctx.prop_names = cr.registry().prop_names_readable(propctx.iface_token);
     propctx.getall_result = Some(HashMap::new());
     propctx.run_getall(ctx, cr)
 }
@@ -91,7 +114,7 @@ fn set(ctx: Context, cr: &mut Crossroads, (interface_name, property_name, value)
 
 
 pub fn properties(cr: &mut Crossroads) -> IfaceToken<()> {
-    cr.register("org.freedesktop.DBus.Introspectable", |b| {
+    cr.register("org.freedesktop.DBus.Properties", |b| {
         b.method_with_cr_async::<_, (Variant<u8>,), _, _>("Get", ("interface_name", "property_name"), ("value",), get);
         b.method_with_cr_async::<_, (Props,), _, _>("GetAll", ("interface_name",), ("props",), getall);
         b.method_with_cr_async::<_, (), _, _>("Set", ("interface_name", "property_name", "value"), (), set);

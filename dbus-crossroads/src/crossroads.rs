@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::any::Any;
 
 const INTROSPECTABLE: usize = 0;
+const PROPERTIES: usize = 1;
 
 #[derive(Debug, Copy, Clone, Eq, Ord, Hash, PartialEq, PartialOrd)]
 pub struct IfaceToken<T: Send + 'static>(usize, PhantomData<&'static T>);
@@ -29,7 +30,9 @@ impl Crossroads {
             registry: Default::default(),
         };
         let t0 = stdimpl::introspectable(&mut cr);
+        let t1 = stdimpl::properties(&mut cr);
         debug_assert_eq!(t0.0, INTROSPECTABLE);
+        debug_assert_eq!(t1.0, PROPERTIES);
         cr
     }
 
@@ -80,6 +83,7 @@ impl Crossroads {
     }
 
     pub fn introspectable<T: Send + 'static>(&self) -> IfaceToken<T> { IfaceToken(INTROSPECTABLE, PhantomData) }
+    pub fn properties<T: Send + 'static>(&self) -> IfaceToken<T> { IfaceToken(PROPERTIES, PhantomData) }
 }
 
 
@@ -88,6 +92,8 @@ mod test {
     use crate::*;
     use dbus::Message;
     use std::cell::RefCell;
+    use dbus::arg::{Variant, RefArg};
+    use std::collections::HashMap;
 
     #[test]
     fn test_send() {
@@ -123,9 +129,16 @@ mod test {
                 score.1 += 1;
                 Ok((score.0, score.1))
             });
+            b.property::<u16, _>("Score").get(|_, score| { Ok(score.0) });
         });
 
-        cr.insert("/".into(), &[iface, cr.introspectable()], Score(7, 0));
+        cr.insert("/".into(), &[iface, cr.introspectable(), cr.properties()], Score(7, 0));
+
+        let msg = Message::call_with_args("com.example.dbusrs.crossroads.score", "/",
+            "org.freedesktop.DBus.Properties", "Get", ("com.example.dbusrs.crossroads.score", "Score"));
+        let r = dispatch_helper(&mut cr, msg);
+        let q: Variant<u16> = r.read1().unwrap();
+        assert_eq!(q.0, 7);
 
         let msg = Message::call_with_args("com.example.dbusrs.crossroads.score", "/",
             "com.example.dbusrs.crossroads.score", "UpdateScore", (5u16,));
@@ -133,6 +146,13 @@ mod test {
         let (new_score, call_times): (u16, u32) = r.read2().unwrap();
         assert_eq!(new_score, 12);
         assert_eq!(call_times, 1);
+
+        let msg = Message::call_with_args("com.example.dbusrs.crossroads.score", "/",
+            "org.freedesktop.DBus.Properties", "GetAll", ("com.example.dbusrs.crossroads.score",));
+        let r = dispatch_helper(&mut cr, msg);
+        let q: HashMap<String, Variant<Box<dyn RefArg>>> = r.read1().unwrap();
+        assert_eq!(q.get("Score").unwrap().0.as_u64(), Some(12));
+
     }
 
 }
