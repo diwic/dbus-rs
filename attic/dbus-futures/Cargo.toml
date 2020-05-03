@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 futures-preview = { version = "0.3.0-alpha.16" }
-dbus = { path = "../dbus" }
+dbus = { path = "../../dbus" }
 
 [dependencies.thin_main_loop]
 # git = "https://github.com/diwic/thin_main_loop.git"
