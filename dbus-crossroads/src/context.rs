@@ -1,5 +1,6 @@
-use std::sync::Arc;
-use crate::{MethodErr, IfaceDesc};
+
+use crate::{MethodErr};
+use crate::stdimpl::PropCtx;
 
 pub struct Context {
     path: dbus::Path<'static>,
@@ -7,8 +8,7 @@ pub struct Context {
     method: dbus::strings::Member<'static>,
     message: dbus::Message,
 
-    pub (crate) iface_desc: Option<Arc<IfaceDesc>>,
-
+    prop_ctx: Option<PropCtx>,
     reply: Option<dbus::Message>,
 }
 
@@ -24,7 +24,7 @@ impl Context {
             method: m,
             message: msg,
             reply: None,
-            iface_desc: None,
+            prop_ctx: None,
         })
     }
 
@@ -55,4 +55,9 @@ impl Context {
     pub fn interface(&self) -> Option<&dbus::strings::Interface<'static>> { self.interface.as_ref() }
     pub fn method(&self) -> &dbus::strings::Member<'static> { &self.method }
     pub fn message(&self) -> &dbus::Message { &self.message }
+
+    pub fn has_reply(&self) -> bool { self.reply.is_some() }
+
+    pub (crate) fn take_propctx(&mut self) -> Option<PropCtx> { self.prop_ctx.take() }
+    pub (crate) fn give_propctx(&mut self, p: PropCtx) { self.prop_ctx = Some(p); }
 }

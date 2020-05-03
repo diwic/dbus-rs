@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use crate::{Context, MethodErr, IfaceBuilder};
+use crate::{Context, MethodErr, IfaceBuilder,stdimpl};
 use crate::ifacedesc::Registry;
 use std::collections::{BTreeMap, HashSet};
 use std::any::Any;
@@ -16,7 +16,7 @@ struct Object {
     data: Box<dyn Any + Send + 'static>
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Crossroads {
     map: BTreeMap<dbus::Path<'static>, Object>,
     registry: Registry,
@@ -24,12 +24,13 @@ pub struct Crossroads {
 
 impl Crossroads {
     pub fn new() -> Crossroads {
-        let mut registry: Registry = Default::default();
-        registry.push(crate::stdimpl::introspectable());
-        Crossroads {
+        let mut cr = Crossroads {
             map: Default::default(),
-            registry
-        }
+            registry: Default::default(),
+        };
+        let t0 = stdimpl::introspectable(&mut cr);
+        debug_assert_eq!(t0.0, INTROSPECTABLE);
+        cr
     }
 
     pub fn register<T, N, F>(&mut self, name: N, f: F) -> IfaceToken<T>
@@ -54,11 +55,20 @@ impl Crossroads {
         self.map.insert(name, Object { ifaces, data: Box::new(data)});
     }
 
+    pub (crate) fn find_iface_token(&self,
+        path: &dbus::Path<'static>,
+        interface: Option<&dbus::strings::Interface<'static>>)
+    -> Result<usize, MethodErr> {
+        let obj = self.map.get(path).ok_or_else(|| MethodErr::no_path(path))?;
+        self.registry.find_token(interface, &obj.ifaces)
+    }
+
+    pub (crate) fn registry(&mut self) -> &mut Registry { &mut self.registry }
+
     pub fn handle_message<S: dbus::channel::Sender>(&mut self, message: dbus::Message, conn: &S) -> Result<(), ()> {
         let mut ctx = Context::new(message).ok_or(())?;
         let (itoken, mut cb) = ctx.check(|ctx| {
-            let obj = self.map.get_mut(ctx.path()).ok_or_else(|| MethodErr::no_path(ctx.path()))?;
-            let itoken = self.registry.find_token(ctx.interface(), &obj.ifaces)?;
+            let itoken = self.find_iface_token(ctx.path(), ctx.interface())?;
             let cb = self.registry.take_method(itoken, ctx.method())?;
             Ok((itoken, cb))
         })?;
@@ -72,28 +82,57 @@ impl Crossroads {
     pub fn introspectable<T: Send + 'static>(&self) -> IfaceToken<T> { IfaceToken(INTROSPECTABLE, PhantomData) }
 }
 
-#[test]
-fn test_send() {
-    fn is_send<T: Send>(_: &T) {}
-    let c = Crossroads::new();
-    dbg!(&c);
-    is_send(&c);
-}
 
-#[test]
-fn score() {
-    struct Score(u16, u32);
+#[cfg(test)]
+mod test {
+    use crate::*;
+    use dbus::Message;
+    use std::cell::RefCell;
 
-    let mut cr = Crossroads::new();
+    #[test]
+    fn test_send() {
+        fn is_send<T: Send>(_: &T) {}
+        let c = Crossroads::new();
+        dbg!(&c);
+        is_send(&c);
+    }
 
-    let iface = cr.register("com.example.dbusrs.crossroads.score", |b: &mut IfaceBuilder<Score>| {
-        b.method("UpdateScore", ("change",), ("new_score", "call_times"), |_, score, (change,): (u16,)| {
-            score.0 += change;
-            score.1 += 1;
-            Ok((score.0, score.1))
+    fn dispatch_helper2(cr: &mut Crossroads, mut msg: Message) -> Vec<Message> {
+        msg.set_serial(57);
+        let r = RefCell::new(vec!());
+        cr.handle_message(msg, &r).unwrap();
+        r.into_inner()
+    }
+
+    fn dispatch_helper(cr: &mut Crossroads, msg: Message) -> Message {
+        let mut r = dispatch_helper2(cr, msg);
+        assert_eq!(r.len(), 1);
+        r[0].as_result().unwrap();
+        r.into_iter().next().unwrap()
+    }
+
+    #[test]
+    fn score() {
+        struct Score(u16, u32);
+
+        let mut cr = Crossroads::new();
+
+        let iface = cr.register("com.example.dbusrs.crossroads.score", |b: &mut IfaceBuilder<Score>| {
+            b.method("UpdateScore", ("change",), ("new_score", "call_times"), |_, score, (change,): (u16,)| {
+                score.0 += change;
+                score.1 += 1;
+                Ok((score.0, score.1))
+            });
         });
-    });
 
-    cr.insert("/".into(), &[iface, cr.introspectable()], Score(7u16, 0));
+        cr.insert("/".into(), &[iface, cr.introspectable()], Score(7, 0));
+
+        let msg = Message::call_with_args("com.example.dbusrs.crossroads.score", "/",
+            "com.example.dbusrs.crossroads.score", "UpdateScore", (5u16,));
+        let r = dispatch_helper(&mut cr, msg);
+        let (new_score, call_times): (u16, u32) = r.read2().unwrap();
+        assert_eq!(new_score, 12);
+        assert_eq!(call_times, 1);
+    }
 
 }
