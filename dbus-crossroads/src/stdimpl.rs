@@ -2,7 +2,23 @@ use std::collections::HashMap;
 use crate::{IfaceToken, Crossroads, Context, MethodErr};
 use dbus::arg::{Variant, RefArg, IterAppend};
 
-fn introspect(cr: &Crossroads, path: &dbus::Path<'static>) -> String { todo!() }
+fn introspect(cr: &Crossroads, path: &dbus::Path<'static>) -> String {
+    let mut children = cr.get_children(path);
+    let mut childstr = String::new();
+    children.sort_unstable();
+    for c in children {
+        childstr += &format!("  <node name=\"{}\"/>\n", c);
+    }
+    let (reg, ifaces) = cr.registry_and_ifaces(path);
+    let ifacestr = reg.introspect(ifaces);
+
+    let nodestr = format!(
+r##"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node name="{}">
+{}{}</node>"##, path, ifacestr, childstr);
+    nodestr
+}
 
 pub fn introspectable(cr: &mut Crossroads) -> IfaceToken<()> {
     cr.register("org.freedesktop.DBus.Introspectable", |b| {
@@ -116,7 +132,7 @@ fn set(ctx: Context, cr: &mut Crossroads, (interface_name, property_name, value)
 pub fn properties(cr: &mut Crossroads) -> IfaceToken<()> {
     cr.register("org.freedesktop.DBus.Properties", |b| {
         b.method_with_cr_async::<_, (Variant<u8>,), _, _>("Get", ("interface_name", "property_name"), ("value",), get);
-        b.method_with_cr_async::<_, (Props,), _, _>("GetAll", ("interface_name",), ("props",), getall);
+        b.method_with_cr_async::<_, (Props,), _, _>("GetAll", ("interface_name",), ("properties",), getall);
         b.method_with_cr_async::<_, (), _, _>("Set", ("interface_name", "property_name", "value"), (), set);
         b.signal::<(String, Props, Vec<String>), _>("PropertiesChanged",
             ("interface_name", "changed_properties", "invalidated_properties"));

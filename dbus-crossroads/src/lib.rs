@@ -12,3 +12,6 @@ pub use dbus::tree::MethodErr as MethodErr;
 pub use context::Context;
 pub use crossroads::{Crossroads, IfaceToken};
 pub use ifacedesc::{IfaceDesc, Arguments, Callback, IfaceBuilder};
+
+#[cfg(test)]
+mod test;

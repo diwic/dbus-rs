@@ -80,6 +80,26 @@ impl Crossroads {
 
     pub (crate) fn registry(&mut self) -> &mut Registry { &mut self.registry }
 
+    pub (crate) fn registry_and_ifaces(&self, path: &dbus::Path<'static>)
+    -> (&Registry, &HashSet<usize>) {
+        let obj = self.map.get(path).unwrap();
+        (&self.registry, &obj.ifaces)
+    }
+
+    pub (crate) fn get_children(&self, path: &dbus::Path<'static>) -> Vec<&str> {
+        use std::ops::Bound;
+        let mut range = self.map.range((Bound::Excluded(path), Bound::Unbounded));
+        let p2 = path.as_bytes();
+        let mut r = vec!();
+        while let Some((c, _)) = range.next() {
+            if !c.as_bytes().starts_with(p2) { break; }
+            let csub: &str = &c[p2.len()..];
+            if csub.len() == 0 || csub.as_bytes()[0] != b'/' { continue; }
+            r.push(&csub[1..]);
+        };
+        r
+    }
+
     pub fn handle_message<S: dbus::channel::Sender>(&mut self, message: dbus::Message, conn: &S) -> Result<(), ()> {
         let mut ctx = Context::new(message).ok_or(())?;
         let (itoken, mut cb) = ctx.check(|ctx| {
@@ -96,75 +116,4 @@ impl Crossroads {
 
     pub fn introspectable<T: Send + 'static>(&self) -> IfaceToken<T> { IfaceToken(INTROSPECTABLE, PhantomData) }
     pub fn properties<T: Send + 'static>(&self) -> IfaceToken<T> { IfaceToken(PROPERTIES, PhantomData) }
-}
-
-
-#[cfg(test)]
-mod test {
-    use crate::*;
-    use dbus::Message;
-    use std::cell::RefCell;
-    use dbus::arg::{Variant, RefArg};
-    use std::collections::HashMap;
-
-    #[test]
-    fn test_send() {
-        fn is_send<T: Send>(_: &T) {}
-        let c = Crossroads::new();
-        dbg!(&c);
-        is_send(&c);
-    }
-
-    fn dispatch_helper2(cr: &mut Crossroads, mut msg: Message) -> Vec<Message> {
-        msg.set_serial(57);
-        let r = RefCell::new(vec!());
-        cr.handle_message(msg, &r).unwrap();
-        r.into_inner()
-    }
-
-    fn dispatch_helper(cr: &mut Crossroads, msg: Message) -> Message {
-        let mut r = dispatch_helper2(cr, msg);
-        assert_eq!(r.len(), 1);
-        r[0].as_result().unwrap();
-        r.into_iter().next().unwrap()
-    }
-
-    #[test]
-    fn score() {
-        struct Score(u16, u32);
-
-        let mut cr = Crossroads::new();
-
-        let iface = cr.register("com.example.dbusrs.crossroads.score", |b: &mut IfaceBuilder<Score>| {
-            b.method("UpdateScore", ("change",), ("new_score", "call_times"), |_, score, (change,): (u16,)| {
-                score.0 += change;
-                score.1 += 1;
-                Ok((score.0, score.1))
-            });
-            b.property::<u16, _>("Score").get(|_, score| { Ok(score.0) });
-        });
-
-        cr.insert("/", &[iface], Score(7, 0));
-
-        let msg = Message::call_with_args("com.example.dbusrs.crossroads.score", "/",
-            "org.freedesktop.DBus.Properties", "Get", ("com.example.dbusrs.crossroads.score", "Score"));
-        let r = dispatch_helper(&mut cr, msg);
-        let q: Variant<u16> = r.read1().unwrap();
-        assert_eq!(q.0, 7);
-
-        let msg = Message::call_with_args("com.example.dbusrs.crossroads.score", "/",
-            "com.example.dbusrs.crossroads.score", "UpdateScore", (5u16,));
-        let r = dispatch_helper(&mut cr, msg);
-        let (new_score, call_times): (u16, u32) = r.read2().unwrap();
-        assert_eq!(new_score, 12);
-        assert_eq!(call_times, 1);
-
-        let msg = Message::call_with_args("com.example.dbusrs.crossroads.score", "/",
-            "org.freedesktop.DBus.Properties", "GetAll", ("com.example.dbusrs.crossroads.score",));
-        let r = dispatch_helper(&mut cr, msg);
-        let q: HashMap<String, Variant<Box<dyn RefArg>>> = r.read1().unwrap();
-        assert_eq!(q.get("Score").unwrap().0.as_u64(), Some(12));
-
-    }
-
 }

@@ -35,7 +35,7 @@ impl Registry {
 
     pub fn prop_names_readable(&self, t: usize) -> Vec<String> {
         self.0[t].properties.iter().filter_map(|(k, v)| {
-            if v.access != Access::Write && v.get_cb.is_some() { Some(k.clone()) } else { None }
+            if v.get_cb.is_some() { Some(k.clone()) } else { None }
         }).collect()
     }
 
@@ -51,6 +51,58 @@ impl Registry {
     }
 
     pub fn has_props(&self, t: usize) -> bool { !self.0[t].properties.is_empty() }
+
+    pub fn introspect(&self, ifaces: &HashSet<usize>) -> String {
+        let mut v: Vec<_> = ifaces.iter().filter_map(|&t| self.0[t].name.as_ref().map(|n| (n, t))).collect();
+        v.sort_unstable();
+        let mut r = String::new();
+        for (n, t) in v.into_iter() {
+            r += &format!("  <interface name=\"{}\">\n", n);
+            let desc = &self.0[t];
+
+            let mut v2: Vec<_> = desc.methods.keys().collect();
+            v2.sort_unstable();
+            for name in v2.into_iter() {
+                r += &format!("    <method name=\"{}\">\n", name);
+                let x = &desc.methods[name];
+                r += &x.input_args.introspect(Some("in"), "      ");
+                r += &x.output_args.introspect(Some("out"), "      ");
+                r += &x.annotations.introspect("      ");
+                r += "    </method>\n";
+            }
+
+            let mut v2: Vec<_> = desc.signals.keys().collect();
+            v2.sort_unstable();
+            for name in v2.into_iter() {
+                r += &format!("    <signal name=\"{}\">\n", name);
+                let x = &desc.signals[name];
+                r += &x.args.introspect(None, "      ");
+                r += &x.annotations.introspect("      ");
+                r += "    </signal>\n";
+            }
+
+            let mut v2: Vec<_> = desc.properties.keys().collect();
+            v2.sort_unstable();
+            for name in v2.into_iter() {
+                let x = &desc.properties[name];
+                let a = match (x.get_cb.is_some(), x.set_cb.is_some()) {
+                    (true, true) => "readwrite",
+                    (true, false) => "read",
+                    (false, true) => "write",
+                    _ => unreachable!(),
+                };
+                r += &format!("    <property name=\"{}\" type=\"{}\" access=\"{}\"", name, x.sig, a);
+                if x.annotations.is_empty() {
+                    r += "/>\n";
+                } else {
+                    r += &format!(">\n{}    </property>\n",  x.annotations.introspect("      "));
+                }
+            }
+            desc.annotations.introspect("    ");
+            r += "  </interface>\n";
+        };
+        r
+    }
 }
 
 pub type Callback = Box<dyn FnMut(Context, &mut Crossroads) -> Option<Context> + Send + 'static>;
@@ -62,57 +114,100 @@ impl fmt::Debug for CallbackDbg {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct Annotations(HashMap<String, String>);
+pub struct Annotations(Option<HashMap<String, String>>);
+
+impl Annotations {
+    pub fn insert<K: Into<String>, V: Into<String>>(&mut self, k: K, v: V) {
+        let mut x = self.0.take().unwrap_or_default();
+        x.insert(k.into(), v.into());
+        self.0 = Some(x);
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.as_ref().map(|s| s.len()).unwrap_or(0) == 0
+    }
+
+    fn introspect(&self, prefix: &str) -> String {
+        let mut r = String::new();
+        if let Some(anns) = &self.0 {
+            for (k, v) in anns.iter() {
+                r += &format!("{}<annotation name=\"{}\" value=\"{}\"/>\n", prefix, k, v);
+            }
+        }
+        r
+    }
+}
 
 #[derive(Debug, Clone)]
 struct Argument {
     name: Cow<'static, str>,
     sig: dbus::Signature<'static>,
-    annotations: Option<Annotations>,
+    annotations: Annotations,
 }
 
 #[derive(Debug, Clone)]
 pub struct Arguments(Vec<Argument>);
+
+impl Arguments {
+    fn introspect(&self, dir: Option<&str>, prefix: &str) -> String {
+        let mut r = String::new();
+        for a in &self.0 {
+            r += &format!("{}<arg name=\"{}\" type=\"{}\"", prefix, a.name, a.sig);
+            if let Some(dir) = dir { r += &format!(" direction=\"{}\"", dir); }
+            if a.annotations.is_empty() {
+                r += "/>\n";
+            } else {
+                let inner_prefix = format!("{}  ", prefix);
+                r += &format!(">\n{}{}</arg>\n", a.annotations.introspect(&inner_prefix), prefix);
+            }
+        }
+        r
+    }
+}
 
 #[derive(Debug)]
 pub struct MethodDesc {
     cb: Option<CallbackDbg>,
     input_args: Arguments,
     output_args: Arguments,
-    annotations: Option<Annotations>,
+    annotations: Annotations,
 }
+
+impl MethodDesc {
+    pub fn annotate<N: Into<String>, V: Into<String>>(&mut self, name: N, value: V) -> &mut Self {
+        self.annotations.insert(name, value);
+        self
+    }
+    pub fn deprecated(&mut self) -> &mut Self { self.annotate(DEPRECATED, "true") }
+}
+
 
 #[derive(Debug)]
 pub struct SignalDesc {
     args: Arguments,
-    annotations: Option<Annotations>,
+    annotations: Annotations,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Ord, PartialOrd, Debug)]
-/// The possible access characteristics a Property can have.
-pub enum Access {
-    /// The Property can only be read (Get).
-    Read,
-    /// The Property can be read or written.
-    ReadWrite,
-    /// The Property can only be written (Set).
-    Write,
+impl SignalDesc {
+    pub fn annotate<N: Into<String>, V: Into<String>>(&mut self, name: N, value: V) -> &mut Self {
+        self.annotations.insert(name, value);
+        self
+    }
+    pub fn deprecated(&mut self) -> &mut Self { self.annotate(DEPRECATED, "true") }
 }
-
 
 #[derive(Debug)]
 pub struct PropDesc {
-    annotations: Option<Annotations>,
+    annotations: Annotations,
     sig: dbus::Signature<'static>,
     get_cb: Option<CallbackDbg>,
     set_cb: Option<CallbackDbg>,
-    access: Access,
 }
 
 #[derive(Debug)]
 pub struct IfaceDesc {
     name: Option<dbus::strings::Interface<'static>>,
-    annotations: Option<Annotations>,
+    annotations: Annotations,
     methods: HashMap<dbus::strings::Member<'static>, MethodDesc>,
     signals: HashMap<dbus::strings::Member<'static>, SignalDesc>,
     properties: HashMap<String, PropDesc>,
@@ -121,7 +216,7 @@ pub struct IfaceDesc {
 fn build_argvec<A: dbus::arg::ArgAll>(a: A::strs) -> Arguments {
     let mut v = vec!();
     A::strs_sig(a, |name, sig| {
-        v.push(Argument { name: name.into(), sig, annotations: None })
+        v.push(Argument { name: name.into(), sig, annotations: Default::default() })
     });
     Arguments(v)
 }
@@ -130,7 +225,14 @@ fn build_argvec<A: dbus::arg::ArgAll>(a: A::strs) -> Arguments {
 #[derive(Debug)]
 pub struct PropBuilder<'a, T:'static, A: 'static>(&'a mut PropDesc, PhantomData<&'static (T, A)>);
 
-impl<T: std::marker::Send, A: dbus::arg::Arg +  dbus::arg::RefArg + dbus::arg::Append> PropBuilder<'_, T, A> {
+impl<T, A> Drop for PropBuilder<'_, T, A> {
+    fn drop(&mut self) {
+        // Need to set at least one callback!
+        assert!(self.0.get_cb.is_some() || self.0.set_cb.is_some());
+    }
+}
+
+impl<T: std::marker::Send, A: dbus::arg::Arg + dbus::arg::RefArg + dbus::arg::Append> PropBuilder<'_, T, A> {
     pub fn get<CB>(self, mut cb: CB) -> Self
     where CB: FnMut(&mut Context, &mut T) -> Result<A, MethodErr> + Send + 'static {
         self.get_with_cr(move |ctx, cr| {
@@ -153,14 +255,51 @@ impl<T: std::marker::Send, A: dbus::arg::Arg +  dbus::arg::RefArg + dbus::arg::A
     }
 }
 
+const EMITS_CHANGED: &'static str = "org.freedesktop.DBus.Property.EmitsChangedSignal";
+const DEPRECATED: &'static str = "org.freedesktop.DBus.Deprecated";
+
+impl<T: std::marker::Send, A: dbus::arg::Arg + for <'x> dbus::arg::Get<'x>> PropBuilder<'_, T, A> {
+    pub fn set<CB>(self, mut cb: CB) -> Self
+    where CB: FnMut(&mut Context, &mut T, A) -> Result<(), MethodErr> + Send + 'static {
+        self.set_with_cr(move |ctx, cr, a| {
+            let data = cr.data_mut(ctx.path()).ok_or_else(|| MethodErr::no_path(ctx.path()))?;
+            cb(ctx, data, a)
+        })
+    }
+
+    pub fn set_with_cr<CB>(mut self, mut cb: CB) -> Self
+    where CB: FnMut(&mut Context, &mut Crossroads, A) -> Result<(), MethodErr> + Send + 'static {
+        self.0.set_cb = Some(CallbackDbg(Box::new(move |mut ctx, cr| {
+            let _ = ctx.check(|ctx| {
+                let mut i = ctx.message().iter_init();
+                i.next(); i.next();
+                let a = i.read()?;
+                let r = cb(ctx, cr, a)?;
+                Ok(())
+            });
+            Some(ctx)
+        })));
+        self
+    }
+
+    pub fn annotate<N: Into<String>, V: Into<String>>(self, name: N, value: V) -> Self {
+        self.0.annotations.insert(name, value);
+        self
+    }
+    pub fn deprecated(self) -> Self { self.annotate(DEPRECATED, "true") }
+    pub fn emits_changed_false(self) -> Self { self.annotate(EMITS_CHANGED, "false") }
+    pub fn emits_changed_const(self) -> Self { self.annotate(EMITS_CHANGED, "const") }
+    pub fn emits_changed_invalidates(self) -> Self { self.annotate(EMITS_CHANGED, "invalidates") }
+    pub fn emits_changed_true(self) -> Self { self.annotate(EMITS_CHANGED, "true") }
+}
+
 #[derive(Debug)]
 pub struct IfaceBuilder<T: Send + 'static>(IfaceDesc, PhantomData<&'static T>);
 
 impl<T: Send + 'static> IfaceBuilder<T> {
     pub fn property<A: dbus::arg::Arg, N: Into<String>>(&mut self, name: N) -> PropBuilder<T, A> {
         PropBuilder(self.0.properties.entry(name.into()).or_insert(PropDesc {
-            access: Access::Read,
-            annotations: None,
+            annotations: Default::default(),
             get_cb: None,
             set_cb: None,
             sig: A::signature(),
@@ -191,7 +330,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
             Some(ctx)
         });
         self.0.methods.entry(name.into()).or_insert(MethodDesc {
-            annotations: None,
+            annotations: Default::default(),
             input_args: build_argvec::<IA>(input_args),
             output_args: build_argvec::<OA>(output_args),
             cb: Some(CallbackDbg(boxed)),
@@ -209,7 +348,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
             }
         });
         self.0.methods.entry(name.into()).or_insert(MethodDesc {
-            annotations: None,
+            annotations: Default::default(),
             input_args: build_argvec::<IA>(input_args),
             output_args: build_argvec::<OA>(output_args),
             cb: Some(CallbackDbg(boxed)),
@@ -219,16 +358,22 @@ impl<T: Send + 'static> IfaceBuilder<T> {
     pub fn signal<A, N>(&mut self, name: N, args: A::strs) -> &mut SignalDesc
     where A: dbus::arg::ArgAll, N: Into<dbus::strings::Member<'static>> {
         self.0.signals.entry(name.into()).or_insert(SignalDesc {
-            annotations: None,
+            annotations: Default::default(),
             args: build_argvec::<A>(args),
         })
     }
+
+    pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
+        self.0.annotations.insert(name, value);
+        self
+    }
+    pub fn deprecated(self) -> Self { self.annotate(DEPRECATED, "true") }
 
     pub (crate) fn build<F>(name: Option<dbus::strings::Interface<'static>>, f: F) -> IfaceDesc
     where F: FnOnce(&mut IfaceBuilder<T>) {
         let mut b = IfaceBuilder(IfaceDesc {
             name,
-            annotations: None,
+            annotations: Default::default(),
             methods: Default::default(),
             signals: Default::default(),
             properties: Default::default(),

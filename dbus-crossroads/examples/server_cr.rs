@@ -26,7 +26,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     c.request_name("com.example.dbustest", false, true, false)?;
 
     // Create a new crossroads instance.
-    // The instance is configured so that introspection and properties interfaces by default on object path additions.
+    // The instance is configured so that introspection and properties interfaces
+    // are added by default on object path additions.
     let mut cr = Crossroads::new();
 
     // Let's build a new interface, which can be used for "Hello" objects.
@@ -51,7 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         });
     });
 
-    // Let's add the "/hello" path, which which implements the com.example.dbustest interface
+    // Let's add the "/hello" path, which implements the com.example.dbustest interface,
     // to the crossroads instance.
     cr.insert("/hello", &[iface_token], Hello { called_count: 0});
 
