@@ -49,6 +49,8 @@ impl Registry {
     pub fn give_getprop(&mut self, t: usize, name: &str, cb: Callback) {
         self.0[t].properties.get_mut(name).unwrap().get_cb = Some(CallbackDbg(cb));
     }
+
+    pub fn has_props(&self, t: usize) -> bool { !self.0[t].properties.is_empty() }
 }
 
 pub type Callback = Box<dyn FnMut(Context, &mut Crossroads) -> Option<Context> + Send + 'static>;

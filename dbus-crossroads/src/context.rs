@@ -11,6 +11,7 @@ pub struct Context {
 
     prop_ctx: Option<PropCtx>,
     reply: Option<dbus::Message>,
+    send_extra: Vec<dbus::Message>,
 }
 
 impl Context {
@@ -26,6 +27,7 @@ impl Context {
             message: msg,
             reply: None,
             prop_ctx: None,
+            send_extra: vec!(),
         })
     }
 
@@ -55,8 +57,22 @@ impl Context {
         if let Some(msg) = self.reply.take() {
             conn.send(msg)?;
         }
+        for msg in self.send_extra.drain(..) {
+            conn.send(msg)?;
+        }
         Ok(())
     }
+
+
+    pub fn make_signal<'b, A, N>(&self, name: N, args: A) -> dbus::Message
+    where A: dbus::arg::AppendAll, N: Into<dbus::strings::Member<'b>> {
+        let mut msg = dbus::Message::signal(&self.path, self.interface.as_ref().unwrap(), &name.into());
+        args.append(&mut dbus::arg::IterAppend::new(&mut msg));
+        msg
+    }
+
+    /// Adds an extra message to send together with the message reply, e g, a custom signal.
+    pub fn push_msg(&mut self, msg: dbus::Message) { self.send_extra.push(msg); }
 
     pub fn path(&self) -> &dbus::Path<'static> { &self.path }
     pub fn interface(&self) -> Option<&dbus::strings::Interface<'static>> { self.interface.as_ref() }

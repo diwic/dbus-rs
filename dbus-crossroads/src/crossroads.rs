@@ -21,6 +21,7 @@ struct Object {
 pub struct Crossroads {
     map: BTreeMap<dbus::Path<'static>, Object>,
     registry: Registry,
+    add_standard_ifaces: bool,
 }
 
 impl Crossroads {
@@ -28,12 +29,17 @@ impl Crossroads {
         let mut cr = Crossroads {
             map: Default::default(),
             registry: Default::default(),
+            add_standard_ifaces: true,
         };
         let t0 = stdimpl::introspectable(&mut cr);
         let t1 = stdimpl::properties(&mut cr);
         debug_assert_eq!(t0.0, INTROSPECTABLE);
         debug_assert_eq!(t1.0, PROPERTIES);
         cr
+    }
+
+    pub fn set_add_standard_ifaces(&mut self, enable: bool) {
+        self.add_standard_ifaces = enable;
     }
 
     pub fn register<T, N, F>(&mut self, name: N, f: F) -> IfaceToken<T>
@@ -50,12 +56,18 @@ impl Crossroads {
         obj.data.downcast_mut()
     }
 
-    pub fn insert<'z, D, I>(&mut self, name: dbus::Path<'static>, ifaces: I, data: D)
-    where D: Any + Send + 'static, I: IntoIterator<Item = &'z IfaceToken<D>>
+    pub fn insert<'z, D, I, N>(&mut self, name: N, ifaces: I, data: D)
+    where D: Any + Send + 'static, N: Into<dbus::Path<'static>>, I: IntoIterator<Item = &'z IfaceToken<D>>
     {
         let ifaces = ifaces.into_iter().map(|x| x.0);
-        let ifaces = std::iter::FromIterator::from_iter(ifaces);
-        self.map.insert(name, Object { ifaces, data: Box::new(data)});
+        let mut ifaces: HashSet<usize> = std::iter::FromIterator::from_iter(ifaces);
+        if self.add_standard_ifaces {
+            ifaces.insert(INTROSPECTABLE);
+            if ifaces.iter().any(|u| self.registry().has_props(*u)) {
+                ifaces.insert(PROPERTIES);
+            }
+        }
+        self.map.insert(name.into(), Object { ifaces, data: Box::new(data)});
     }
 
     pub (crate) fn find_iface_token(&self,
@@ -132,7 +144,7 @@ mod test {
             b.property::<u16, _>("Score").get(|_, score| { Ok(score.0) });
         });
 
-        cr.insert("/".into(), &[iface, cr.introspectable(), cr.properties()], Score(7, 0));
+        cr.insert("/", &[iface], Score(7, 0));
 
         let msg = Message::call_with_args("com.example.dbusrs.crossroads.score", "/",
             "org.freedesktop.DBus.Properties", "Get", ("com.example.dbusrs.crossroads.score", "Score"));
