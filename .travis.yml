@@ -15,3 +15,4 @@ script:
   - cargo update
   - cargo check --all
   - cargo test --all -- --nocapture --color always
+  - cd dbus-codegen && cargo test --all --no-default-features -- --nocapture --color always

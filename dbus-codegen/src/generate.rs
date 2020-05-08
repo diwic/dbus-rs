@@ -1,8 +1,8 @@
-
-use std::{io, error, iter};
 use std::collections::HashSet;
-use dbus::arg::ArgType;
+use std::{error, io, iter};
 use xml;
+
+use strum_macros::{Display, EnumIter, EnumString, EnumVariantNames};
 
 fn find_attr<'a>(a: &'a Vec<xml::attribute::OwnedAttribute>, n: &str) -> Result<&'a str, Box<dyn error::Error>> {
     a.into_iter().find(|q| q.name.local_name == n).map(|f| &*f.value).ok_or_else(|| format!("attribute not found: {:?}", n).into())
@@ -43,19 +43,74 @@ struct Intf {
     signals: Vec<Signal>,
 }
 
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, EnumIter)]
+enum ArgType {
+    Array = 'a' as u8,
+    Variant = 'v' as u8,
+    Boolean = 'b' as u8,
+    Invalid = '\0' as u8,
+    String = 's' as u8,
+    DictEntry = 'e' as u8,
+    Byte = 'y' as u8,
+    Int16 = 'n' as u8,
+    UInt16 = 'q' as u8,
+    Int32 = 'i' as u8,
+    UInt32 = 'u' as u8,
+    Int64 = 'x' as u8,
+    UInt64 = 't' as u8,
+    Double = 'd' as u8,
+    UnixFd = 'h' as u8,
+    Struct = 'r' as u8,
+    ObjectPath = 'o' as u8,
+    Signature = 'g' as u8,
+}
+
+const ALL_ARG_TYPES: [(ArgType, &str); 18] = [
+    (ArgType::Variant, "Variant"),
+    (ArgType::Array, "Array/Dict"),
+    (ArgType::Struct, "Struct"),
+    (ArgType::String, "String"),
+    (ArgType::DictEntry, "Dict entry"),
+    (ArgType::ObjectPath, "Path"),
+    (ArgType::Signature, "Signature"),
+    (ArgType::UnixFd, "OwnedFd"),
+    (ArgType::Boolean, "bool"),
+    (ArgType::Byte, "u8"),
+    (ArgType::Int16, "i16"),
+    (ArgType::Int32, "i32"),
+    (ArgType::Int64, "i64"),
+    (ArgType::UInt16, "u16"),
+    (ArgType::UInt32, "u32"),
+    (ArgType::UInt64, "u64"),
+    (ArgType::Double, "f64"),
+    (ArgType::Invalid, "nothing"),
+];
+
+impl ArgType {
+    /// Converts an i32 to an ArgType (or an error).
+    pub fn from_i32(i: i32) -> Result<ArgType, String> {
+        for &(a, _) in &ALL_ARG_TYPES {
+            if a as i32 == i {
+                return Ok(a);
+            }
+        }
+        Err(format!("Invalid ArgType {} ({})", i, i as u8 as char))
+    }
+}
+
 /// Server access code generation option
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Display, EnumIter, EnumString, EnumVariantNames)]
 pub enum ServerAccess {
     /// Supply a closure from ref to ref
     RefClosure,
     /// Supply a closure from ref to owned object which asrefs
     AsRefClosure,
     /// The interface is implemented for MethodInfo
-    MethodInfo
+    MethodInfo,
 }
 
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Display, EnumIter, EnumString, EnumVariantNames)]
 pub enum ConnectionType {
     Ffidisp,
     Blocking,
@@ -818,6 +873,8 @@ mod tests {
 
 use super::{generate, GenOpts};
 
+use strum::IntoEnumIterator;
+
 static FROM_DBUS: &'static str = r#"
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
 "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
@@ -939,5 +996,24 @@ static FROM_DBUS: &'static str = r#"
         let s = generate(FROM_DBUS, &GenOpts { methodtype: Some("MTSync".into()), ..Default::default() }).unwrap();
         println!("{}", s);
         //assert_eq!(s, "fdjsf");
+    }
+
+    #[cfg(feature = "dbus")]
+    #[test]
+    fn argtype_is_complete() {
+        let mut foreign = dbus::arg::ArgType::iter().map(|e| e as u8).collect::<Vec<_>>();
+        let mut internal = super::ArgType::iter().map(|e| e as u8).collect::<Vec<_>>();
+        foreign.sort_unstable();
+        internal.sort_unstable();
+        assert_eq!(foreign, internal);
+    }
+
+    #[test]
+    fn all_arg_types_up_to_date() {
+        let mut actual = super::ArgType::iter().map(|v| v as u8).collect::<Vec<_>>();
+        let mut presented = super::ALL_ARG_TYPES.iter().map(|e| e.0 as u8).collect::<Vec<_>>();
+        actual.sort_unstable();
+        presented.sort_unstable();
+        assert_eq!(actual, presented);
     }
 }

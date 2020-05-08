@@ -1,6 +1,6 @@
 [package]
 name = "dbus-codegen"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 description = "Binary crate to generate Rust code from XML introspection data"
 license = "Apache-2.0/MIT"
@@ -9,6 +9,9 @@ repository = "https://github.com/diwic/dbus-rs"
 keywords = ["D-Bus", "DBus"]
 readme = "README.md"
 edition = "2018"
+
+[features]
+default = ["dbus"]
 
 [lib]
 path = "src/lib.rs"
@@ -19,8 +22,13 @@ path = "src/main.rs"
 
 [dependencies]
 xml-rs = "0.3"
-dbus = { path = "../dbus", version = "0.8" }
-clap = "2.20"
+dbus = { path = "../dbus", version = "0.8", optional = true }
+structopt = "0.3"
+strum = "0.18"
+strum_macros = "0.18"
+
+[dev-dependencies]
+dbus = { path = "../dbus", version = "0.8" } # Same as above, but not optional
 
 [badges]
 is-it-maintained-open-issues = { repository = "diwic/dbus-rs" }

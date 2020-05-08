@@ -75,6 +75,8 @@ use std::ffi::{CStr, CString};
 use std::os::raw::{c_void, c_int};
 use std::os::unix::io::{RawFd, AsRawFd, FromRawFd, IntoRawFd};
 
+use strum_macros::EnumIter;
+
 fn check(f: &str, i: u32) { if i == 0 { panic!("D-Bus error: '{}' failed", f) }}
 
 fn ffi_iter() -> ffi::DBusMessageIter {
@@ -372,7 +374,7 @@ impl<'a> Iterator for Iter<'a> {
 ///
 /// use this to figure out, e g, which type of argument is at the current position of Iter.
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, EnumIter)]
 pub enum ArgType {
     /// Dicts are Arrays of dict entries, so Dict types will have Array as ArgType.
     Array = ffi::DBUS_TYPE_ARRAY as u8,
@@ -500,4 +502,19 @@ fn test_compile() {
     q.append(Array::new(&[5u8, 6, 7]));
     q.append((8u8, &[9u8, 6, 7][..]));
     q.append(Variant((6u8, 7u8)));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use strum::IntoEnumIterator;
+
+    #[test]
+    fn all_arg_types_up_to_date() {
+        let mut actual = ArgType::iter().map(|v| v as u8).collect::<Vec<_>>();
+        let mut presented = ALL_ARG_TYPES.iter().map(|e| e.0 as u8).collect::<Vec<_>>();
+        actual.sort_unstable();
+        presented.sort_unstable();
+        assert_eq!(actual, presented);
+    }
 }

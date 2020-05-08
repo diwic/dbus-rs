@@ -1,7 +1,7 @@
-extern crate dbus;
 extern crate xml;
+#[cfg(feature = "dbus")]
+extern crate dbus;
 
 mod generate;
 
-pub use crate::generate::{generate, GenOpts, ServerAccess, ConnectionType};
-
+pub use crate::generate::{generate, ConnectionType, GenOpts, ServerAccess};
