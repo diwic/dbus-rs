@@ -438,6 +438,11 @@ impl ArgType {
         ALL_ARG_TYPES.iter().skip_while(|a| a.0 != self).next().unwrap().1
     }
 
+    /// Returns a Vec of all possible argtypes.
+    pub fn all() -> Vec<Self> {
+        ALL_ARG_TYPES.iter().map(|x| x.0).collect()
+    }
+
     /// Converts an i32 to an ArgType (or an error).
     pub fn from_i32(i: i32) -> Result<ArgType, String> {
         for &(a, _) in &ALL_ARG_TYPES {
