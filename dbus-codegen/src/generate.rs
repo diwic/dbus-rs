@@ -1001,7 +1001,7 @@ static FROM_DBUS: &'static str = r#"
     #[cfg(feature = "dbus")]
     #[test]
     fn argtype_is_complete() {
-        let mut foreign = dbus::arg::ArgType::iter().map(|e| e as u8).collect::<Vec<_>>();
+        let mut foreign = dbus::arg::ArgType::all().iter().map(|e| *e as u8).collect::<Vec<_>>();
         let mut internal = super::ArgType::iter().map(|e| e as u8).collect::<Vec<_>>();
         foreign.sort_unstable();
         internal.sort_unstable();

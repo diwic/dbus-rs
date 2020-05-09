@@ -111,13 +111,8 @@ struct Args {
 }
 
 /// This program was previously documented as accepting lowercase strings for enums, so it would be a breaking change
-/// to stop accepting them. If any enum variants are named the same but with different casing this will panic.
+/// to stop accepting them.
 fn lowercase_to_enum<T: IntoEnumIterator + Display>(src: &str) -> T {
-    assert!({
-        let mut lower_names = T::iter().map(|s| s.to_string().to_lowercase()).collect::<Vec<_>>();
-        lower_names.sort_unstable();
-        lower_names.windows(2).all(|w| w[0] != w[1])
-    });
     let src = src.to_lowercase();
     for variant in T::iter() {
         if src == variant.to_string().to_lowercase() {
