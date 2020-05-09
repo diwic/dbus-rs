@@ -373,6 +373,7 @@ impl<'a> Iterator for Iter<'a> {
 /// use this to figure out, e g, which type of argument is at the current position of Iter.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[cfg_attr(test, derive(strum_macros::EnumIter))]
 pub enum ArgType {
     /// Dicts are Arrays of dict entries, so Dict types will have Array as ArgType.
     Array = ffi::DBUS_TYPE_ARRAY as u8,
@@ -500,4 +501,19 @@ fn test_compile() {
     q.append(Array::new(&[5u8, 6, 7]));
     q.append((8u8, &[9u8, 6, 7][..]));
     q.append(Variant((6u8, 7u8)));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use strum::IntoEnumIterator;
+
+    #[test]
+    fn all_arg_types_up_to_date() {
+        let mut actual = ArgType::iter().map(|v| v as u8).collect::<Vec<_>>();
+        let mut presented = ALL_ARG_TYPES.iter().map(|e| e.0 as u8).collect::<Vec<_>>();
+        actual.sort_unstable();
+        presented.sort_unstable();
+        assert_eq!(actual, presented);
+    }
 }
