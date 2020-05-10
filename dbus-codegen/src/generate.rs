@@ -1,7 +1,6 @@
 
 use std::{io, error, iter};
 use std::collections::HashSet;
-use dbus::arg::ArgType;
 use xml;
 
 fn find_attr<'a>(a: &'a Vec<xml::attribute::OwnedAttribute>, n: &str) -> Result<&'a str, Box<dyn error::Error>> {
@@ -217,9 +216,8 @@ struct GenVars {
 fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<dyn error::Error>> {
 
     let c = i.next().ok_or_else(|| "unexpected end of signature")?;
-    let atype = ArgType::from_i32(c as i32);
-    let result = match (atype, c) {
-        (Err(_), '(') => {
+    Ok(match (c, out) {
+        ('(', _) => {
             let mut s: Vec<String> = vec!();
             while i.peek() != Some(&')') {
                 let n = xml_to_rust_type(i, out, genvars)?;
@@ -228,47 +226,41 @@ fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool
             i.next().unwrap();
             format!("({})", s.join(", "))
         },
-        (Err(_), a @ _) => return Err(format!("Unknown character in signature {:?}", a).into()),
-        (Ok(a @ _), _) => match (a, out) {
-            (ArgType::Byte, _) => "u8".into(),
-            (ArgType::Boolean, _) => "bool".into(),
-            (ArgType::Int16, _) => "i16".into(),
-            (ArgType::UInt16, _) => "u16".into(),
-            (ArgType::Int32, _) => "i32".into(),
-            (ArgType::UInt32, _) => "u32".into(),
-            (ArgType::Int64, _) => "i64".into(),
-            (ArgType::UInt64, _) => "u64".into(),
-            (ArgType::Double, _) => "f64".into(),
-            (ArgType::UnixFd, _) => "arg::OwnedFd".into(),
-            (ArgType::String, false) => "&str".into(),
-            (ArgType::String, true) => "String".into(),
-            (ArgType::ObjectPath, false) => "dbus::Path".into(),
-            (ArgType::ObjectPath, true) => "dbus::Path<'static>".into(),
-            (ArgType::Signature, false) => "dbus::Signature".into(),
-            (ArgType::Signature, true) => "dbus::Signature<'static>".into(),
-            (ArgType::Variant, _) => if let &mut Some(ref mut g) = genvars {
-                let t = format!("{}", g.prefix);
-                // let t = format!("arg::Variant<{}>", g.prefix);
-                g.gen.push(g.prefix.clone());
-                g.prefix = format!("{}X", g.prefix);
-                t
-            } else if out { "arg::Variant<Box<dyn arg::RefArg + 'static>>".into() }
-            else { "arg::Variant<Box<dyn arg::RefArg>>".into() }
-            (ArgType::Array, _) => if i.peek() == Some(&'{') {
-                i.next();
-                let n1 = xml_to_rust_type(i, out, &mut None)?;
-                let n2 = xml_to_rust_type(i, out, &mut None)?;
-                if i.next() != Some('}') { return Err("No end of dict".into()); }
-                format!("::std::collections::HashMap<{}, {}>", n1, n2)
-            } else {
-                format!("Vec<{}>", xml_to_rust_type(i, out, &mut None)?)
-            },
-            (ArgType::Invalid, _) |
-            (ArgType::Struct, _) |
-            (ArgType::DictEntry, _) => return Err(format!("Unexpected character in signature {:?}", a).into())
-        }
-    };
-    Ok(result)
+        ('y', _) => "u8".into(),
+        ('b', _) => "bool".into(),
+        ('n', _) => "i16".into(),
+        ('q', _) => "u16".into(),
+        ('i', _) => "i32".into(),
+        ('u', _) => "u32".into(),
+        ('x', _) => "i64".into(),
+        ('t', _) => "u64".into(),
+        ('d', _) => "f64".into(),
+        ('h', _) => "arg::OwnedFd".into(),
+        ('s', false) => "&str".into(),
+        ('s', true) => "String".into(),
+        ('o', false) => "dbus::Path".into(),
+        ('o', true) => "dbus::Path<'static>".into(),
+        ('g', false) => "dbus::Signature".into(),
+        ('g', true) => "dbus::Signature<'static>".into(),
+        ('v', _) => if let &mut Some(ref mut g) = genvars {
+            let t = format!("{}", g.prefix);
+            // let t = format!("arg::Variant<{}>", g.prefix);
+            g.gen.push(g.prefix.clone());
+            g.prefix = format!("{}X", g.prefix);
+            t
+        } else if out { "arg::Variant<Box<dyn arg::RefArg + 'static>>".into() }
+        else { "arg::Variant<Box<dyn arg::RefArg>>".into() },
+        ('a', _) => if i.peek() == Some(&'{') {
+            i.next();
+            let n1 = xml_to_rust_type(i, out, &mut None)?;
+            let n2 = xml_to_rust_type(i, out, &mut None)?;
+            if i.next() != Some('}') { return Err("No end of dict".into()); }
+            format!("::std::collections::HashMap<{}, {}>", n1, n2)
+        } else {
+            format!("Vec<{}>", xml_to_rust_type(i, out, &mut None)?)
+        },
+        (_, _) => return Err(format!("Unknown character in signature {:?}", c).into()),
+    })
 }
 
 fn make_type(s: &str, out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<dyn error::Error>> {
