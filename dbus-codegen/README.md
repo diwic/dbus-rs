@@ -1,6 +1,7 @@
 # dbus-codegen-rust
 
-This program takes D-Bus XML Introspection data and generates Rust code for calling and implementing the interfaces in the introspection data.
+This program takes D-Bus XML Introspection data and generates Rust code
+for calling and implementing the interfaces in the introspection data.
 
 ## Example
 
@@ -127,7 +128,11 @@ or all three (called `Generic`). Or not generate a server function at all (`None
 
 # Usage
 
-Once you have installed dbus-codegen-rust, use the following command to import your XML:
+This code can be used both as a library and as a binary executable.
+
+## Binary executable
+
+Once you have installed dbus-codegen-rust (`cargo install dbus-codegen`), use the following command to import your XML:
 
 ```
 dbus-codegen-rust < mydefinition.xml
@@ -150,3 +155,18 @@ See available options:
 ```
 dbus-codegen-rust --help
 ```
+
+## Library usage
+
+```
+let opts = Default::default();
+let code = dbus_codegen::generate(xml_str, &opts)?;
+```
+
+See [documentation](https://docs.rs/dbus-codegen/) for what options are available.
+
+# Features
+
+The `dbus` feature is enabled by default. If you turn it off (with the `--no-default-features` argument to cargo),
+this program (or library) no longer binds to the D-Bus C development headers, meaning you don't need these to be installed.
+This also means you can no longer fetch the xml definition from other programs when you run the binary.

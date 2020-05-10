@@ -1,4 +1,3 @@
-extern crate dbus;
 extern crate xml;
 
 mod generate;

@@ -2,6 +2,7 @@ mod generate;
 
 use crate::generate::{ServerAccess, ConnectionType};
 
+#[cfg(feature = "dbus")]
 mod connect_to_dbus {
 
     use dbus::blocking;
@@ -30,15 +31,9 @@ mod connect_to_dbus {
 // Unwrapping is fine here, this is just a test program.
 
 fn main() {
-    let matches = clap::App::new("D-Bus Rust code generator").about("Generates Rust code from xml introspection data")
-        .arg(clap::Arg::with_name("destination").short("d").long("destination").takes_value(true).value_name("BUSNAME")
-             .help("If present, connects to the supplied service to get introspection data. Reads from stdin otherwise."))
-        .arg(clap::Arg::with_name("path").short("p").long("path").takes_value(true).value_name("PATH")
-             .help("The path to ask for introspection data. Defaults to '/'. (Ignored if destination is not specified.)"))
+    let app = clap::App::new("D-Bus Rust code generator").about("Generates Rust code from xml introspection data")
         .arg(clap::Arg::with_name("interfaces").short("f").long("interfaces").takes_value(true).value_name("FILTER")
             .help("Comma separated list of filter strings. Only matching interfaces are generated if set."))
-        .arg(clap::Arg::with_name("systembus").short("s").long("system-bus")
-             .help("Connects to system bus, if not specified, the session bus will be used. (Ignored if destination is not specified.)"))
         .arg(clap::Arg::with_name("genericvariant").short("g").long("generic-variant")
              .help("If present, will try to make variant arguments generic instead of Variant<Box<dyn RefArg>>. \
 Experimental, does not work with server methods (other than None)."))
@@ -58,16 +53,29 @@ Defaults to 'RefClosure'."))
         .arg(clap::Arg::with_name("output").short("o").long("output").takes_value(true).value_name("FILE")
              .help("Write output into the specified file"))
         .arg(clap::Arg::with_name("file").long("file").required(false).takes_value(true).value_name("FILE")
-            .help("D-Bus XML Introspection file"))
-        .get_matches();
+            .help("D-Bus XML Introspection file"));
+
+    #[cfg(feature = "dbus")]
+    let app = app
+        .arg(clap::Arg::with_name("destination").short("d").long("destination").takes_value(true).value_name("BUSNAME")
+             .help("If present, connects to the supplied service to get introspection data. Reads from stdin otherwise."))
+        .arg(clap::Arg::with_name("path").short("p").long("path").takes_value(true).value_name("PATH")
+             .help("The path to ask for introspection data. Defaults to '/'. (Ignored if destination is not specified.)"))
+        .arg(clap::Arg::with_name("systembus").short("s").long("system-bus")
+             .help("Connects to system bus, if not specified, the session bus will be used. (Ignored if destination is not specified.)"));
+
+    let matches = app.get_matches();
 
     let s = match (matches.value_of("destination"), matches.value_of("file")) {
-        (Some(_), Some(_)) => panic!("'destination' and 'file' are mutually exclusive arguments - you can't provide both."),
+        (Some(_), Some(_)) => panic!("'destination' and 'file' are mutually exclusive arguments - you can't provide both"),
         (None, Some(file_path)) => std::fs::read_to_string(file_path.to_string()).unwrap(),
+        #[cfg(feature = "dbus")]
         (Some(dest), None) => {
             let path = matches.value_of("path").unwrap_or("/");
             connect_to_dbus::do_introspect(path, dest, matches.is_present("systembus"))
         },
+        #[cfg(not(feature = "dbus"))]
+        (Some(_), None) => unreachable!(),
         (None, None) => {
             let mut s = String::new();
             std::io::Read::read_to_string(&mut std::io::stdin(),&mut s).unwrap();
