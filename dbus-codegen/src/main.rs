@@ -1,30 +1,31 @@
-extern crate xml;
-extern crate dbus;
-extern crate clap;
-
 mod generate;
-
-use dbus::ffidisp::Connection;
 
 use crate::generate::{ServerAccess, ConnectionType};
 
-// Copy-pasted from the output of this program :-)
-pub trait OrgFreedesktopDBusIntrospectable {
-    fn introspect(&self) -> Result<String, ::dbus::Error>;
-}
+mod connect_to_dbus {
 
-impl<'a, C: ::std::ops::Deref<Target=::dbus::ffidisp::Connection>> OrgFreedesktopDBusIntrospectable for ::dbus::ffidisp::ConnPath<'a, C> {
+    use dbus::blocking;
 
-    fn introspect(&self) -> Result<String, ::dbus::Error> {
-        let mut m = self.method_call_with_args(&"org.freedesktop.DBus.Introspectable".into(), &"Introspect".into(), |_| {
-        })?;
-        m.as_result()?;
-        let mut i = m.iter_init();
-        let a0: String = i.read()?;
-        Ok(a0)
+    // This code was copy-pasted from the output of this program. :-)
+    pub trait OrgFreedesktopDBusIntrospectable {
+        fn introspect(&self) -> Result<String, dbus::Error>;
+    }
+
+    impl<'a, C: ::std::ops::Deref<Target=blocking::Connection>> OrgFreedesktopDBusIntrospectable for blocking::Proxy<'a, C> {
+
+        fn introspect(&self) -> Result<String, dbus::Error> {
+            self.method_call("org.freedesktop.DBus.Introspectable", "Introspect", ())
+                .and_then(|r: (String, )| Ok(r.0, ))
+        }
+    }
+
+    pub fn do_introspect(dest: &str, path: &str, systembus: bool) -> String {
+        let c = if systembus { blocking::Connection::new_system() } else { blocking::Connection::new_session() };
+        let c = c.unwrap();
+        let p = c.with_proxy(dest, path, std::time::Duration::from_secs(10));
+        p.introspect().unwrap()
     }
 }
-
 
 // Unwrapping is fine here, this is just a test program.
 
@@ -60,23 +61,18 @@ Defaults to 'RefClosure'."))
             .help("D-Bus XML Introspection file"))
         .get_matches();
 
-    if matches.is_present("destination") && matches.is_present("file") {
-        panic!("Expected either xml file path as argument or destination option. But both are provided.");
-    }
-
-    let s =
-    if let Some(dest) = matches.value_of("destination") {
-        let path = matches.value_of("path").unwrap_or("/");
-        let c = if matches.is_present("systembus") { Connection::new_system() } else { Connection::new_session() };
-        let c = c.unwrap();
-        let p = c.with_path(dest, path, 10000);
-        p.introspect().unwrap()
-    } else if let Some(file_path) = matches.value_of("file")  {
-        std::fs::read_to_string(file_path.to_string()).unwrap()
-    } else {
-        let mut s = String::new();
-        std::io::Read::read_to_string(&mut std::io::stdin(),&mut s).unwrap();
-        s
+    let s = match (matches.value_of("destination"), matches.value_of("file")) {
+        (Some(_), Some(_)) => panic!("'destination' and 'file' are mutually exclusive arguments - you can't provide both."),
+        (None, Some(file_path)) => std::fs::read_to_string(file_path.to_string()).unwrap(),
+        (Some(dest), None) => {
+            let path = matches.value_of("path").unwrap_or("/");
+            connect_to_dbus::do_introspect(path, dest, matches.is_present("systembus"))
+        },
+        (None, None) => {
+            let mut s = String::new();
+            std::io::Read::read_to_string(&mut std::io::stdin(),&mut s).unwrap();
+            s
+        }
     };
 
     let dbuscrate = matches.value_of("dbuscrate").unwrap_or("dbus");
@@ -110,8 +106,11 @@ Defaults to 'RefClosure'."))
 
     let interfaces = matches.value_of("interfaces").map(|s| s.split(",").map(|e| e.trim().to_owned()).collect());
 
-    let opts = generate::GenOpts { methodtype: mtype.map(|x| x.into()), dbuscrate: dbuscrate.into(),
-        skipprefix: matches.value_of("skipprefix").map(|x| x.into()), serveraccess: maccess,
+    let opts = generate::GenOpts {
+        methodtype: mtype.map(|x| x.into()),
+        dbuscrate: dbuscrate.into(),
+        skipprefix: matches.value_of("skipprefix").map(|x| x.into()),
+        serveraccess: maccess,
         genericvariant: matches.is_present("genericvariant"),
         futures: false,
         connectiontype: client,
