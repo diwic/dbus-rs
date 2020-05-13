@@ -255,7 +255,9 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
 }
 
 impl<M: MethodType<D>, D: DataType> ObjectPath<M, D>
-where <D as DataType>::Interface: Default, <D as DataType>::Method: Default
+where <D as DataType>::Interface: Default,
+      <D as DataType>::Method: Default,
+      <D as DataType>::Signal: Default
 {
     /// Adds introspection support for this object path.
     pub fn introspectable(self) -> Self {
@@ -317,6 +319,10 @@ where <D as DataType>::Interface: Default, <D as DataType>::Method: Default
                 .inarg::<&str,_>("interface_name")
                 .inarg::<&str,_>("property_name")
                 .inarg::<Variant<bool>,_>("value"))
+            .add_s(super::leaves::new_signal("PropertiesChanged".into(), Default::default())
+                .sarg::<&str, _>("interface_name")
+                .sarg::<Dict<&str, Variant<()>, ()>, _>("changed_properties")
+                .sarg::<Vec<&str>, _>("invalidated_properties"))
         });
         self.ifaces.insert(z.name.clone(), z);
     }
@@ -627,6 +633,11 @@ fn test_introspection() {
       <arg name="property_name" type="s" direction="in"/>
       <arg name="value" type="v" direction="in"/>
     </method>
+    <signal name="PropertiesChanged">
+      <arg name="interface_name" type="s"/>
+      <arg name="changed_properties" type="a{sv}"/>
+      <arg name="invalidated_properties" type="as"/>
+    </signal>
   </interface>
   <node name="subpath"/>
 </node>"##;
