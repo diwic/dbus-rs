@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use crate::{IfaceToken, Crossroads, Context, MethodErr};
-use dbus::arg::{Variant, RefArg, IterAppend};
+use dbus::arg::{Variant, RefArg, IterAppend, Arg};
 
 fn introspect(cr: &Crossroads, path: &dbus::Path<'static>) -> String {
     let mut children = cr.get_children(path);
@@ -34,7 +34,6 @@ pub (crate) struct PropCtx {
 
     prop_names: Vec<String>,
     prop_name: Option<String>,
-    // getall_result: Option<Props>,
     get_msg: Option<dbus::Message>,
 }
 
@@ -46,7 +45,6 @@ impl PropCtx {
             iface_token,
             prop_names: vec!(),
             prop_name: None,
-//            getall_result: None,
             get_msg: None,
         })
     }
@@ -72,16 +70,34 @@ impl PropCtx {
     fn run_getall(mut self, mut ctx: Context, cr: &mut Crossroads) -> Option<Context> {
         loop {
             if let Some(next_name) = self.prop_names.pop() {
+                if let Some(temp_msg) = self.get_msg.as_mut() {
+                    IterAppend::new(temp_msg).append(&next_name);
+                }
                 self.prop_name = Some(next_name.clone());
                 let x = self.call_getprop(ctx, cr, &next_name)?;
                 ctx = x.0;
                 self = x.1;
                 if ctx.has_reply() { return Some(ctx) }
             } else {
-                ctx.do_reply(|_msg| {
-            /*        let p = self.getall_result.unwrap();
-                    IterAppend::new(&mut msg).append(p);
-                    dbg!(&msg);*/
+                ctx.do_reply(|mut msg| {
+                    // This is quite silly, but I found no other way around the combination of
+                    // Async + Send + RefArg being !Send than to first append it to one message
+                    // and then read it just to append it to another...
+                    let mut a1 = IterAppend::new(&mut msg);
+                    a1.append_dict(&<String as Arg>::signature(), &<Variant<()> as Arg>::signature(), |a2| {
+                        if let Some(temp_msg) = self.get_msg.take() {
+                            let mut i = temp_msg.iter_init();
+                            while let Ok(k) = i.read::<&str>() {
+                                let v = i.get_refarg().unwrap();
+                                a2.append_dict_entry(|a3| {
+                                    a3.append(k);
+                                    v.append(a3);
+                                });
+                                i.next();
+                            }
+                        }
+                    });
+                    dbg!(&msg);
                 });
                 return Some(ctx)
             }
@@ -89,15 +105,12 @@ impl PropCtx {
     }
 
     pub (crate) fn add_get_result<V: 'static + dbus::arg::Arg + dbus::arg::Append + dbus::arg::RefArg>(&mut self, v: V) {
-        /* if let Some(map) = self.getall_result.as_mut() {
-            map.insert(self.prop_name.take().unwrap(), Variant(v.sync_clone()));
-        } else */ if let Some(get_msg) = self.get_msg.as_mut() {
+        if let Some(get_msg) = self.get_msg.as_mut() {
             IterAppend::new(get_msg).append(&Variant(v));
         }
     }
 }
 
-// fn get(ctx: &mut Context, cr: &mut Crossroads, (interface_name: &str, property_name: &str))
 type Props = HashMap<String, Variant<Box<dyn RefArg>>>;
 
 fn get(mut ctx: Context, cr: &mut Crossroads, (interface_name, property_name): (String, String)) -> Option<Context> {
@@ -120,7 +133,10 @@ fn getall(mut ctx: Context, cr: &mut Crossroads, (interface_name,): (String,)) -
         Err(_) => return Some(ctx),
     };
     propctx.prop_names = cr.registry().prop_names_readable(propctx.iface_token);
-//    propctx.getall_result = Some(HashMap::new());
+    if !ctx.message().get_no_reply() {
+        propctx.get_msg = Some(ctx.message().method_return());
+    }
+
     propctx.run_getall(ctx, cr)
 }
 

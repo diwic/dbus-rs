@@ -31,7 +31,6 @@ fn dispatch_helper(cr: &mut Crossroads, msg: Message) -> Message {
 }
 
 #[test]
-#[ignore] // Need to fix get_all first
 fn score() {
     struct Score(u16, u32);
 
