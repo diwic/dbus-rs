@@ -42,10 +42,16 @@ fn score() {
             score.1 += 1;
             Ok((score.0, score.1))
         });
-        b.property::<u16, _>("Score").get(|_, score| { Ok(score.0) });
+        b.property::<u16, _>("Score")
+            .get(|_, score| { Ok(score.0) })
+            .set(|_, score, val| { score.0 = val; Ok(()) });
     });
 
-    cr.insert("/", &[iface], Score(7, 0));
+    cr.insert("/", &[iface], Score(2, 0));
+
+    let msg = Message::call_with_args("com.example.dbusrs.crossroads.score", "/",
+        "org.freedesktop.DBus.Properties", "Set", ("com.example.dbusrs.crossroads.score", "Score", Variant(7u16)));
+    let r = dispatch_helper(&mut cr, msg);
 
     let msg = Message::call_with_args("com.example.dbusrs.crossroads.score", "/",
         "org.freedesktop.DBus.Properties", "Get", ("com.example.dbusrs.crossroads.score", "Score"));

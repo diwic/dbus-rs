@@ -4,6 +4,7 @@ use crate::{Context, MethodErr, Crossroads};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::borrow::Cow;
+use dbus::arg;
 
 #[derive(Default, Debug)]
 pub struct Registry(Vec<IfaceDesc>);
@@ -40,15 +41,17 @@ impl Registry {
         }).collect()
     }
 
-    pub fn take_getprop(&mut self, t: usize, name: &str) -> Result<Callback, MethodErr> {
+    pub fn take_prop(&mut self, t: usize, name: &str, is_set: bool) -> Result<Callback, MethodErr> {
         let pdesc = self.0[t].properties.get_mut(name).ok_or_else(|| MethodErr::no_property(name))?;
-        let cb = pdesc.get_cb.take();
+        let cb = if is_set { pdesc.set_cb.take() } else { pdesc.get_cb.take() };
         let cb = cb.ok_or_else(|| MethodErr::failed(&format!("Detected recursive call to get property {}", name)))?;
         Ok(cb.0)
     }
 
-    pub fn give_getprop(&mut self, t: usize, name: &str, cb: Callback) {
-        self.0[t].properties.get_mut(name).unwrap().get_cb = Some(CallbackDbg(cb));
+    pub fn give_prop(&mut self, t: usize, name: &str, cb: Callback, is_set: bool) {
+        let x = self.0[t].properties.get_mut(name).unwrap();
+        let cb = Some(CallbackDbg(cb));
+        if is_set { x.set_cb = cb } else { x.get_cb = cb };
     }
 
     pub fn has_props(&self, t: usize) -> bool { !self.0[t].properties.is_empty() }
@@ -214,7 +217,7 @@ pub struct IfaceDesc {
     properties: HashMap<String, PropDesc>,
 }
 
-fn build_argvec<A: dbus::arg::ArgAll>(a: A::strs) -> Arguments {
+fn build_argvec<A: arg::ArgAll>(a: A::strs) -> Arguments {
     let mut v = vec!();
     A::strs_sig(a, |name, sig| {
         v.push(Argument { name: name.into(), sig, annotations: Default::default() })
@@ -233,7 +236,7 @@ impl<T, A> Drop for PropBuilder<'_, T, A> {
     }
 }
 
-impl<T: std::marker::Send, A: dbus::arg::Arg + dbus::arg::RefArg + dbus::arg::Append> PropBuilder<'_, T, A> {
+impl<T: std::marker::Send, A: arg::Arg + arg::RefArg + arg::Append> PropBuilder<'_, T, A> {
     pub fn get<CB>(self, mut cb: CB) -> Self
     where CB: FnMut(&mut Context, &mut T) -> Result<A, MethodErr> + Send + 'static {
         self.get_with_cr(move |ctx, cr| {
@@ -259,7 +262,7 @@ impl<T: std::marker::Send, A: dbus::arg::Arg + dbus::arg::RefArg + dbus::arg::Ap
 const EMITS_CHANGED: &'static str = "org.freedesktop.DBus.Property.EmitsChangedSignal";
 const DEPRECATED: &'static str = "org.freedesktop.DBus.Deprecated";
 
-impl<T: std::marker::Send, A: dbus::arg::Arg + for <'x> dbus::arg::Get<'x>> PropBuilder<'_, T, A> {
+impl<T: std::marker::Send, A: arg::Arg + for <'x> arg::Get<'x>> PropBuilder<'_, T, A> {
     pub fn set<CB>(self, mut cb: CB) -> Self
     where CB: FnMut(&mut Context, &mut T, A) -> Result<(), MethodErr> + Send + 'static {
         self.set_with_cr(move |ctx, cr, a| {
@@ -274,8 +277,8 @@ impl<T: std::marker::Send, A: dbus::arg::Arg + for <'x> dbus::arg::Get<'x>> Prop
             let _ = ctx.check(|ctx| {
                 let mut i = ctx.message().iter_init();
                 i.next(); i.next();
-                let a = i.read()?;
-                let r = cb(ctx, cr, a)?;
+                let a: arg::Variant<_> = i.read()?;
+                let r = cb(ctx, cr, a.0)?;
                 Ok(())
             });
             Some(ctx)
@@ -298,7 +301,7 @@ impl<T: std::marker::Send, A: dbus::arg::Arg + for <'x> dbus::arg::Get<'x>> Prop
 pub struct IfaceBuilder<T: Send + 'static>(IfaceDesc, PhantomData<&'static T>);
 
 impl<T: Send + 'static> IfaceBuilder<T> {
-    pub fn property<A: dbus::arg::Arg, N: Into<String>>(&mut self, name: N) -> PropBuilder<T, A> {
+    pub fn property<A: arg::Arg, N: Into<String>>(&mut self, name: N) -> PropBuilder<T, A> {
         PropBuilder(self.0.properties.entry(name.into()).or_insert(PropDesc {
             annotations: Default::default(),
             get_cb: None,
@@ -308,7 +311,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
     }
 
     pub fn method<IA, OA, N, CB>(&mut self, name: N, input_args: IA::strs, output_args: OA::strs, mut cb: CB) -> &mut MethodDesc
-    where IA: dbus::arg::ArgAll + dbus::arg::ReadAll, OA: dbus::arg::ArgAll + dbus::arg::AppendAll,
+    where IA: arg::ArgAll + arg::ReadAll, OA: arg::ArgAll + arg::AppendAll,
     N: Into<dbus::strings::Member<'static>>,
     CB: FnMut(&mut Context, &mut T, IA) -> Result<OA, MethodErr> + Send + 'static {
         self.method_with_cr(name, input_args, output_args, move |ctx, cr, ia| {
@@ -318,14 +321,14 @@ impl<T: Send + 'static> IfaceBuilder<T> {
     }
 
     pub fn method_with_cr<IA, OA, N, CB>(&mut self, name: N, input_args: IA::strs, output_args: OA::strs, mut cb: CB) -> &mut MethodDesc
-    where IA: dbus::arg::ArgAll + dbus::arg::ReadAll, OA: dbus::arg::ArgAll + dbus::arg::AppendAll,
+    where IA: arg::ArgAll + arg::ReadAll, OA: arg::ArgAll + arg::AppendAll,
     N: Into<dbus::strings::Member<'static>>,
     CB: FnMut(&mut Context, &mut Crossroads, IA) -> Result<OA, MethodErr> + Send + 'static {
         let boxed = Box::new(move |mut ctx: Context, cr: &mut Crossroads| {
             let _ = ctx.check(|ctx| {
                 let ia = ctx.message().read_all()?;
                 let oa = cb(ctx, cr, ia)?;
-                ctx.do_reply(|mut msg| oa.append(&mut dbus::arg::IterAppend::new(&mut msg)));
+                ctx.do_reply(|mut msg| oa.append(&mut arg::IterAppend::new(&mut msg)));
                 Ok(())
             });
             Some(ctx)
@@ -339,7 +342,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
     }
 
     pub fn method_with_cr_custom<IA, OA, N, CB>(&mut self, name: N, input_args: IA::strs, output_args: OA::strs, mut cb: CB) -> &mut MethodDesc
-    where IA: dbus::arg::ArgAll + dbus::arg::ReadAll, OA: dbus::arg::ArgAll + dbus::arg::AppendAll,
+    where IA: arg::ArgAll + arg::ReadAll, OA: arg::ArgAll + arg::AppendAll,
     N: Into<dbus::strings::Member<'static>>,
     CB: FnMut(Context, &mut Crossroads, IA) -> Option<Context> + Send + 'static {
         let boxed = Box::new(move |mut ctx: Context, cr: &mut Crossroads| {
@@ -357,7 +360,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
     }
 
     pub fn method_with_cr_async<IA, OA, N, R, CB>(&mut self, name: N, input_args: IA::strs, output_args: OA::strs, cb: CB) -> &mut MethodDesc
-    where IA: dbus::arg::ArgAll + dbus::arg::ReadAll, OA: dbus::arg::ArgAll + dbus::arg::AppendAll,
+    where IA: arg::ArgAll + arg::ReadAll, OA: arg::ArgAll + arg::AppendAll,
     N: Into<dbus::strings::Member<'static>>,
     CB: for<'x> FnMut(&'x mut Context, &mut Crossroads, IA) -> R + Send + 'static,
     R: Future<Output = Result<OA, MethodErr>> + Send {
@@ -366,7 +369,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
 
 
     pub fn signal<A, N>(&mut self, name: N, args: A::strs) -> &mut SignalDesc
-    where A: dbus::arg::ArgAll, N: Into<dbus::strings::Member<'static>> {
+    where A: arg::ArgAll, N: Into<dbus::strings::Member<'static>> {
         self.0.signals.entry(name.into()).or_insert(SignalDesc {
             annotations: Default::default(),
             args: build_argvec::<A>(args),

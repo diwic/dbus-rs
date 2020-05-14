@@ -49,10 +49,10 @@ impl PropCtx {
         })
     }
 
-    fn call_getprop(self, mut ctx: Context, cr: &mut Crossroads, prop_name: &str) -> Option<(Context, Self)> {
+    fn call_prop(self, mut ctx: Context, cr: &mut Crossroads, prop_name: &str, is_set: bool) -> Option<(Context, Self)> {
         let token = self.iface_token;
         let mut cb = match ctx.check(|ctx| {
-            cr.registry().take_getprop(token, prop_name)
+            cr.registry().take_prop(token, prop_name, is_set)
         }) {
             Ok(cb) => cb,
             Err(_) => return Some((ctx, self))
@@ -60,7 +60,7 @@ impl PropCtx {
         ctx.give_prop_ctx(self);
         let octx = cb(ctx, cr);
         dbg!(&octx);
-        cr.registry().give_getprop(token, prop_name, cb);
+        cr.registry().give_prop(token, prop_name, cb, is_set);
         octx.map(|mut ctx| {
             let prop_ctx = ctx.take_prop_ctx();
             (ctx, prop_ctx)
@@ -74,7 +74,7 @@ impl PropCtx {
                     IterAppend::new(temp_msg).append(&next_name);
                 }
                 self.prop_name = Some(next_name.clone());
-                let x = self.call_getprop(ctx, cr, &next_name)?;
+                let x = self.call_prop(ctx, cr, &next_name, false)?;
                 ctx = x.0;
                 self = x.1;
                 if ctx.has_reply() { return Some(ctx) }
@@ -121,7 +121,7 @@ fn get(mut ctx: Context, cr: &mut Crossroads, (interface_name, property_name): (
     if !ctx.message().get_no_reply() {
         propctx.get_msg = Some(ctx.message().method_return());
     }
-    propctx.call_getprop(ctx, cr, &property_name).map(|(mut ctx, propctx)| {
+    propctx.call_prop(ctx, cr, &property_name, false).map(|(mut ctx, propctx)| {
         if !ctx.has_reply() { ctx.set_reply(propctx.get_msg, true, true) }
         ctx
     })
@@ -140,8 +140,15 @@ fn getall(mut ctx: Context, cr: &mut Crossroads, (interface_name,): (String,)) -
     propctx.run_getall(ctx, cr)
 }
 
-fn set(ctx: Context, cr: &mut Crossroads, (interface_name, property_name, value): (String, String, Variant<Box<dyn RefArg>>)) -> Option<Context> {
-    todo!()
+fn set(mut ctx: Context, cr: &mut Crossroads, (interface_name, property_name, value): (String, String, Variant<Box<dyn RefArg>>)) -> Option<Context> {
+    let propctx = match ctx.check(|ctx| { PropCtx::new(cr, ctx.path(), interface_name)}) {
+        Ok(p) => p,
+        Err(_) => return Some(ctx),
+    };
+    propctx.call_prop(ctx, cr, &property_name, true).map(|(mut ctx, propctx)| {
+        ctx.do_reply(|_| {});
+        ctx
+    })
 }
 
 
