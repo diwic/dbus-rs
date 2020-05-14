@@ -17,13 +17,18 @@ dbus = { path = "../dbus", version = "0.8", features=["futures"] }
 mio = "0.6.21"
 libc = "0.2.69"
 tokio = {version = "0.2.4", features=["time", "macros", "io-driver", "rt-core", "rt-util", "rt-threaded", "stream"]}
+dbus-crossroads = { path = "../dbus-crossroads", optional = true }
 
 [dev-dependencies]
 futures = "0.3.1"
 tokio = {version = "0.2.4", features=["time", "macros", "io-driver", "rt-core", "rt-util", "rt-threaded", "stream", "blocking"]}
-# dbus-crossroads = { path = "../dbus-crossroads" }
+
 
 [badges]
 is-it-maintained-open-issues = { repository = "diwic/dbus-rs" }
 is-it-maintained-issue-resolution = { repository = "diwic/dbus-rs" }
 travis-ci = { repository = "diwic/dbus-rs" }
+
+[[example]]
+name = "tokio02_server_cr"
+required-features = ["dbus-crossroads"]

@@ -34,7 +34,7 @@ pub (crate) struct PropCtx {
 
     prop_names: Vec<String>,
     prop_name: Option<String>,
-    getall_result: Option<Props>,
+    // getall_result: Option<Props>,
     get_msg: Option<dbus::Message>,
 }
 
@@ -46,7 +46,7 @@ impl PropCtx {
             iface_token,
             prop_names: vec!(),
             prop_name: None,
-            getall_result: None,
+//            getall_result: None,
             get_msg: None,
         })
     }
@@ -78,10 +78,10 @@ impl PropCtx {
                 self = x.1;
                 if ctx.has_reply() { return Some(ctx) }
             } else {
-                ctx.do_reply(|mut msg| {
-                    let p = self.getall_result.unwrap();
+                ctx.do_reply(|_msg| {
+            /*        let p = self.getall_result.unwrap();
                     IterAppend::new(&mut msg).append(p);
-                    dbg!(&msg);
+                    dbg!(&msg);*/
                 });
                 return Some(ctx)
             }
@@ -89,9 +89,9 @@ impl PropCtx {
     }
 
     pub (crate) fn add_get_result<V: 'static + dbus::arg::Arg + dbus::arg::Append + dbus::arg::RefArg>(&mut self, v: V) {
-        if let Some(map) = self.getall_result.as_mut() {
-            map.insert(self.prop_name.take().unwrap(), Variant(Box::new(v)));
-        } else if let Some(get_msg) = self.get_msg.as_mut() {
+        /* if let Some(map) = self.getall_result.as_mut() {
+            map.insert(self.prop_name.take().unwrap(), Variant(v.sync_clone()));
+        } else */ if let Some(get_msg) = self.get_msg.as_mut() {
             IterAppend::new(get_msg).append(&Variant(v));
         }
     }
@@ -120,7 +120,7 @@ fn getall(mut ctx: Context, cr: &mut Crossroads, (interface_name,): (String,)) -
         Err(_) => return Some(ctx),
     };
     propctx.prop_names = cr.registry().prop_names_readable(propctx.iface_token);
-    propctx.getall_result = Some(HashMap::new());
+//    propctx.getall_result = Some(HashMap::new());
     propctx.run_getall(ctx, cr)
 }
 
@@ -131,9 +131,9 @@ fn set(ctx: Context, cr: &mut Crossroads, (interface_name, property_name, value)
 
 pub fn properties(cr: &mut Crossroads) -> IfaceToken<()> {
     cr.register("org.freedesktop.DBus.Properties", |b| {
-        b.method_with_cr_async::<_, (Variant<u8>,), _, _>("Get", ("interface_name", "property_name"), ("value",), get);
-        b.method_with_cr_async::<_, (Props,), _, _>("GetAll", ("interface_name",), ("properties",), getall);
-        b.method_with_cr_async::<_, (), _, _>("Set", ("interface_name", "property_name", "value"), (), set);
+        b.method_with_cr_custom::<_, (Variant<u8>,), _, _>("Get", ("interface_name", "property_name"), ("value",), get);
+        b.method_with_cr_custom::<_, (Props,), _, _>("GetAll", ("interface_name",), ("properties",), getall);
+        b.method_with_cr_custom::<_, (), _, _>("Set", ("interface_name", "property_name", "value"), (), set);
         b.signal::<(String, Props, Vec<String>), _>("PropertiesChanged",
             ("interface_name", "changed_properties", "invalidated_properties"));
     })

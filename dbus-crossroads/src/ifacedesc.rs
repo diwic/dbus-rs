@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::marker::PhantomData;
 use crate::{Context, MethodErr, Crossroads};
 use std::collections::{HashMap, HashSet};
@@ -337,7 +338,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
         })
     }
 
-    pub fn method_with_cr_async<IA, OA, N, CB>(&mut self, name: N, input_args: IA::strs, output_args: OA::strs, mut cb: CB) -> &mut MethodDesc
+    pub fn method_with_cr_custom<IA, OA, N, CB>(&mut self, name: N, input_args: IA::strs, output_args: OA::strs, mut cb: CB) -> &mut MethodDesc
     where IA: dbus::arg::ArgAll + dbus::arg::ReadAll, OA: dbus::arg::ArgAll + dbus::arg::AppendAll,
     N: Into<dbus::strings::Member<'static>>,
     CB: FnMut(Context, &mut Crossroads, IA) -> Option<Context> + Send + 'static {
@@ -354,6 +355,15 @@ impl<T: Send + 'static> IfaceBuilder<T> {
             cb: Some(CallbackDbg(boxed)),
         })
     }
+
+    pub fn method_with_cr_async<IA, OA, N, R, CB>(&mut self, name: N, input_args: IA::strs, output_args: OA::strs, cb: CB) -> &mut MethodDesc
+    where IA: dbus::arg::ArgAll + dbus::arg::ReadAll, OA: dbus::arg::ArgAll + dbus::arg::AppendAll,
+    N: Into<dbus::strings::Member<'static>>,
+    CB: for<'x> FnMut(&'x mut Context, &mut Crossroads, IA) -> R + Send + 'static,
+    R: Future<Output = Result<OA, MethodErr>> + Send {
+        todo!()
+    }
+
 
     pub fn signal<A, N>(&mut self, name: N, args: A::strs) -> &mut SignalDesc
     where A: dbus::arg::ArgAll, N: Into<dbus::strings::Member<'static>> {
