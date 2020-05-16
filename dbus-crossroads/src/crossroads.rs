@@ -1,8 +1,14 @@
+use std::pin::Pin;
+use std::sync::Arc;
+use dbus::channel::Sender;
+use dbus::arg;
+use std::future::Future;
 use std::marker::PhantomData;
 use crate::{Context, MethodErr, IfaceBuilder,stdimpl};
 use crate::ifacedesc::Registry;
 use std::collections::{BTreeMap, HashSet};
 use std::any::Any;
+use std::fmt;
 
 const INTROSPECTABLE: usize = 0;
 const PROPERTIES: usize = 1;
@@ -17,11 +23,23 @@ struct Object {
     data: Box<dyn Any + Send + 'static>
 }
 
+pub type BoxedSpawn = Box<dyn Fn(Pin<Box<dyn Future<Output = ()> + Send + 'static>>) + Send + 'static>;
+
+struct AsyncSupport {
+    sender: Arc<dyn Sender + Send + Sync + 'static>,
+    spawner: BoxedSpawn,
+}
+
+impl fmt::Debug for AsyncSupport {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "AsyncSupport") }
+}
+
 #[derive(Debug)]
 pub struct Crossroads {
     map: BTreeMap<dbus::Path<'static>, Object>,
     registry: Registry,
     add_standard_ifaces: bool,
+    async_support: Option<AsyncSupport>,
 }
 
 impl Crossroads {
@@ -30,6 +48,7 @@ impl Crossroads {
             map: Default::default(),
             registry: Default::default(),
             add_standard_ifaces: true,
+            async_support: None,
         };
         let t0 = stdimpl::introspectable(&mut cr);
         let t1 = stdimpl::properties(&mut cr);
@@ -116,4 +135,35 @@ impl Crossroads {
 
     pub fn introspectable<T: Send + 'static>(&self) -> IfaceToken<T> { IfaceToken(INTROSPECTABLE, PhantomData) }
     pub fn properties<T: Send + 'static>(&self) -> IfaceToken<T> { IfaceToken(PROPERTIES, PhantomData) }
+
+    pub fn spawn_method<OA: arg::AppendAll, F>(&self, mut ctx: Context, f: F) -> Result<PhantomData<OA>, Context>
+    where F: Future<Output=Result<OA, MethodErr>> + Send + 'static {
+        let support = match self.async_support.as_ref() {
+            Some(x) => x,
+            None => {
+                let _ = ctx.check::<(),_>(|_| Err(MethodErr::failed(&"Async support not set")));
+                return Err(ctx);
+            }
+        };
+        let sender = support.sender.clone();
+        let boxed = Box::pin(async move {
+            let r = f.await;
+            if let Ok(oa) = ctx.check(|_| {Ok(r?) }) {
+                ctx.do_reply(|mut msg| oa.append(&mut arg::IterAppend::new(&mut msg)));
+            }
+            let _ = ctx.flush_messages(&*sender);
+            ()
+        });
+        (support.spawner)(boxed);
+        Ok(PhantomData)
+    }
+
+    pub fn set_async_support(&mut self, x: Option<(Arc<dyn Sender + Send + Sync + 'static>, BoxedSpawn)>) -> Option<(Arc<dyn Sender + Send + Sync + 'static>, BoxedSpawn)> {
+        let a = self.async_support.take();
+        self.async_support = x.map(|x| AsyncSupport {
+            sender: x.0,
+            spawner: x.1
+        });
+        a.map(|x| (x.sender, x.spawner))
+    }
 }

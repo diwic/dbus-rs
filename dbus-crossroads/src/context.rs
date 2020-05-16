@@ -53,7 +53,7 @@ impl Context {
         self.reply = msg;
     }
 
-    pub fn flush_messages<S: dbus::channel::Sender>(&mut self, conn: &S) -> Result<(), ()> {
+    pub fn flush_messages<S: dbus::channel::Sender + ?Sized>(&mut self, conn: &S) -> Result<(), ()> {
         if let Some(msg) = self.reply.take() {
             conn.send(msg)?;
         }
@@ -62,7 +62,6 @@ impl Context {
         }
         Ok(())
     }
-
 
     pub fn make_signal<'b, A, N>(&self, name: N, args: A) -> dbus::Message
     where A: dbus::arg::AppendAll, N: Into<dbus::strings::Member<'b>> {
