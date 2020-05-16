@@ -72,7 +72,7 @@ Defaults to 'RefClosure'."))
         #[cfg(feature = "dbus")]
         (Some(dest), None) => {
             let path = matches.value_of("path").unwrap_or("/");
-            connect_to_dbus::do_introspect(path, dest, matches.is_present("systembus"))
+            connect_to_dbus::do_introspect(dest, path, matches.is_present("systembus"))
         },
         #[cfg(not(feature = "dbus"))]
         (Some(_), None) => unreachable!(),
