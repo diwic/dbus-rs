@@ -4,7 +4,10 @@ use std::collections::HashSet;
 use xml;
 
 fn find_attr<'a>(a: &'a Vec<xml::attribute::OwnedAttribute>, n: &str) -> Result<&'a str, Box<dyn error::Error>> {
-    a.into_iter().find(|q| q.name.local_name == n).map(|f| &*f.value).ok_or_else(|| format!("attribute not found: {:?}", n).into())
+    a.into_iter()
+        .find(|q| q.name.prefix.is_none() && q.name.local_name == n)
+        .map(|f| &*f.value)
+        .ok_or_else(|| format!("attribute not found: {:?}", n).into())
 }
 
 struct Arg {
@@ -704,6 +707,8 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
     let parser = EventReader::new(io::Cursor::new(xmldata));
     for e in parser {
         match e? {
+            XmlEvent::StartElement { ref name, .. } if name.prefix.is_some() => (),
+            XmlEvent::EndElement { ref name, .. } if name.prefix.is_some() => (),
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "interface" => {
                 if curm.is_some() { Err("Start of Interface inside method")? };
                 if curintf.is_some() { Err("Start of Interface inside interface")? };

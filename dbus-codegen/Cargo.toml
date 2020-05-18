@@ -21,7 +21,7 @@ path = "src/main.rs"
 default = ["dbus"]
 
 [dependencies]
-xml-rs = "0.3"
+xml-rs = "0.8.3"
 dbus = { path = "../dbus", version = "0.8", optional = true }
 clap = "2.20"
 
