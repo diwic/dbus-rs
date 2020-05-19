@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::marker::PhantomData;
 use crate::{Context, MethodErr, Crossroads};
 use std::collections::{HashMap, HashSet};
@@ -358,12 +359,17 @@ impl<T: Send + 'static> IfaceBuilder<T> {
         })
     }
 
-    pub fn method_with_cr_async<IA, OA, N, CB>(&mut self, name: N, input_args: IA::strs, output_args: OA::strs, mut cb: CB) -> &mut MethodDesc
+    pub fn method_with_cr_async<IA, OA, N, R, CB>(&mut self, name: N, input_args: IA::strs, output_args: OA::strs, mut cb: CB) -> &mut MethodDesc
     where IA: arg::ArgAll + arg::ReadAll, OA: arg::ArgAll + arg::AppendAll,
     N: Into<dbus::strings::Member<'static>>,
-    CB: FnMut(Context, &mut Crossroads, IA) -> Result<PhantomData<OA>, Context> + Send + 'static {
+    CB: FnMut(Context, &mut Crossroads, IA) -> R + Send + 'static,
+    R: Future<Output=PhantomData<OA>> + Send + 'static {
         self.method_with_cr_custom::<IA, OA, _, _>(name, input_args, output_args, move |ctx, cr, ia| {
-            cb(ctx, cr, ia).err()
+            cr.run_async_method(ctx, |ctx, cr| {
+                let r = cb(ctx, cr, ia);
+                async move { r.await; }
+            });
+            None
         })
     }
 

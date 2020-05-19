@@ -1,11 +1,10 @@
 use dbus_tokio::connection;
 use futures::future;
 use tokio::time::delay_for;
-use dbus::channel::{MatchingReceiver, Sender};
+use dbus::channel::MatchingReceiver;
 use dbus::message::MatchRule;
-use dbus_crossroads::{Crossroads, Context};
+use dbus_crossroads::Crossroads;
 use std::time::Duration;
-use std::sync::Arc;
 
 // This is our "Hello" object that we are going to store inside the crossroads instance.
 struct Hello { called_count: u32 }
@@ -32,9 +31,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut cr = Crossroads::new();
 
     // Enable async support for the crossroads instance.
-    let c = Arc::new(c);
-    let cclone: Arc<dyn Sender + Send + Sync + 'static> = c.clone() as Arc<dyn Sender + Send + Sync + 'static>;
-    cr.set_async_support(Some((cclone, Box::new(|x| { tokio::spawn(x); }))));
+    cr.set_async_support(Some((c.clone(), Box::new(|x| { tokio::spawn(x); }))));
 
     // Let's build a new interface, which can be used for "Hello" objects.
     let iface_token = cr.register("com.example.dbustest", |b| {
@@ -51,15 +48,16 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Incoming hello call from {}!", name);
             hello.called_count += 1;
             let s = format!("Hello {}! This API has been used {} times.", name, hello.called_count);
-            cr.spawn_method(ctx, async move {
+            async move {
                 // Let's wait half a second just to show off how async we are.
                 delay_for(Duration::from_millis(500)).await;
                 // The ctx parameter can be used to conveniently send extra messages.
-                // let signal_msg = ctx.make_signal("HelloHappened", (name,));
-                // ctx.push_msg(signal_msg);
+                let signal_msg = ctx.make_signal("HelloHappened", (name,));
+                ctx.push_msg(signal_msg);
                 // And the return value is a tuple of the output arguments.
-                Ok((s,))
-            })
+                ctx.reply_ok((s,))
+                // The reply is sent when ctx is dropped / goes out of scope.
+            }
         });
     });
 

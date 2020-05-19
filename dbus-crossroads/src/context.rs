@@ -1,6 +1,17 @@
 
+use std::marker::PhantomData;
+use dbus::arg::AppendAll;
+use dbus::channel::Sender;
+use std::sync::Arc;
+use std::fmt;
 use crate::{MethodErr};
 use crate::stdimpl::PropCtx;
+
+struct Dbg<T>(T);
+
+impl<T> fmt::Debug for Dbg<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "...") }
+}
 
 #[derive(Debug)]
 pub struct Context {
@@ -12,6 +23,7 @@ pub struct Context {
     prop_ctx: Option<PropCtx>,
     reply: Option<dbus::Message>,
     send_extra: Vec<dbus::Message>,
+    send_on_drop: Option<Dbg<Arc<dyn Sender + Send + Sync>>>,
 }
 
 impl Context {
@@ -27,16 +39,13 @@ impl Context {
             message: msg,
             reply: None,
             prop_ctx: None,
+            send_on_drop: None,
             send_extra: vec!(),
         })
     }
 
     pub fn check<R, F: FnOnce(&mut Context) -> Result<R, MethodErr>>(&mut self, f: F) -> Result<R, ()> {
-        f(self).map_err(|e| {
-            if !self.message.get_no_reply() {
-                self.reply = Some(e.to_message(&self.message))
-            };
-        })
+        f(self).map_err(|e| { self.reply_err(e); })
     }
 
     pub fn do_reply<F: FnOnce(&mut dbus::Message)>(&mut self, f: F) {
@@ -45,6 +54,18 @@ impl Context {
         let mut msg = self.message.method_return();
         f(&mut msg);
         self.reply = Some(msg);
+    }
+
+    // Returns PhantomData just to aid the type system
+    pub fn reply_ok<OA: AppendAll>(&mut self, oa: OA) -> PhantomData<OA> {
+        self.do_reply(|mut msg| { oa.append(&mut dbus::arg::IterAppend::new(&mut msg)) });
+        PhantomData
+    }
+
+    pub fn reply_err(&mut self, err: MethodErr) {
+        if !self.message.get_no_reply() {
+            self.reply = Some(err.to_message(&self.message))
+        };
     }
 
     pub fn set_reply(&mut self, msg: Option<dbus::Message>, check_no_reply: bool, check_set: bool) {
@@ -83,5 +104,15 @@ impl Context {
     pub (crate) fn take_prop_ctx(&mut self) -> PropCtx { self.prop_ctx.take().unwrap() }
     pub (crate) fn give_prop_ctx(&mut self, p: PropCtx) { self.prop_ctx = Some(p); }
     pub (crate) fn prop_ctx(&mut self) -> &mut PropCtx { self.prop_ctx.as_mut().unwrap() }
+    pub (crate) fn set_on_drop(&mut self, value: Arc<dyn Sender + Send + Sync>) {
+        self.send_on_drop = Some(Dbg(value));
+    }
+}
 
+impl Drop for Context {
+    fn drop(&mut self) {
+        if let Some(sender) = self.send_on_drop.take() {
+            let _ = self.flush_messages(&*sender.0);
+        }
+    }
 }

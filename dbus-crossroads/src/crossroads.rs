@@ -119,6 +119,18 @@ impl Crossroads {
         r
     }
 
+    pub (crate) fn run_async_method<F, R>(&mut self, mut ctx: Context, f: F)
+    where F: FnOnce(Context, &mut Crossroads) -> R,
+    R: Future<Output=()> + Send + 'static
+    {
+        let sender = self.async_support.as_ref().expect("Async support not set").sender.clone();
+        ctx.set_on_drop(sender);
+        let future = f(ctx, self);
+        let spawner = &self.async_support.as_ref().expect("Async support not set").spawner;
+        let boxed = Box::pin(async move { future.await });
+        (spawner)(boxed)
+    }
+
     pub fn handle_message<S: dbus::channel::Sender>(&mut self, message: dbus::Message, conn: &S) -> Result<(), ()> {
         let mut ctx = Context::new(message).ok_or(())?;
         let (itoken, mut cb) = ctx.check(|ctx| {
