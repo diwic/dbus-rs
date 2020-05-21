@@ -88,6 +88,10 @@ macro_rules! string_wrapper_base {
             fn to_owned(&self) -> $towned { $towned(self.0.into()) }
         }
 
+        impl From<&$t> for $towned {
+            fn from(a: &$t) -> $towned { $towned(a.0.into()) }
+        }
+
         impl<'a> TryFrom<&'a str> for &'a $t {
             type Error = InvalidStringError;
             fn try_from(s: &'a str) -> Result<&'a $t, Self::Error> { $t::new(s) }
@@ -217,6 +221,14 @@ impl StringLike for DBusStr {
     }
 }
 
+impl Default for &DBusStr {
+    fn default() -> Self { DBusStr::new_unchecked("") }
+}
+
+impl Default for DBusString {
+    fn default() -> Self { DBusString(String::new()) }
+}
+
 string_wrapper!(
     /// A D-Bus interface name is usually something like "org.freedesktop.DBus"
     ///
@@ -264,6 +276,14 @@ impl SignatureMulti {
             (SignatureSingle::new_unchecked(&self[0..x]), SignatureMulti::new_unchecked(&self[x..]))
         )
     }
+}
+
+impl Default for &SignatureMulti {
+    fn default() -> Self { SignatureMulti::new_unchecked("") }
+}
+
+impl Default for SignatureMultiBuf {
+    fn default() -> Self { SignatureMultiBuf(String::new()) }
 }
 
 string_wrapper!(
