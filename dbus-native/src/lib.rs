@@ -15,5 +15,7 @@ pub mod message;
 
 pub mod types;
 
+mod marshalled;
+
 #[allow(unsafe_code)]
 mod sys;

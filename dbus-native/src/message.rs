@@ -5,6 +5,7 @@ use crate::types::{Marshal, DemarshalError};
 use std::convert::TryInto;
 use std::num::NonZeroU32;
 use std::io;
+use crate::marshalled::Multi;
 
 const FIXED_HEADER_SIZE: usize = 16;
 
@@ -216,10 +217,15 @@ impl<'a> Message<'a> {
         Ok(Some(m))
     }
 
+    pub fn read_body<'b>(&'b self) -> Multi<'b> {
+        let sig = self.signature.as_ref().map(|x| &**x).unwrap_or(Default::default());
+        Multi::new(sig, &self.body, self.is_big_endian())
+    }
+/*
     pub fn demarshal_body<'b>(&'b self) -> types::DemarshalState<'b> {
         let sig = self.signature.as_ref().map(|x| &***x).unwrap_or("");
         types::DemarshalState::new(&self.body, 0, sig, self.is_big_endian())
-    }
+    } */
 }
 
 struct MsgStart {

@@ -43,6 +43,7 @@ pub enum DemarshalError {
     NotEnoughData,
     InvalidString,
     InvalidProtocol,
+    InvalidBoolean,
     WrongType,
     NumberTooBig,
 }

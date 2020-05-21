@@ -47,11 +47,12 @@ fn connect_to_session_bus() {
     let reply = message::Message::demarshal(&v).unwrap().unwrap();
     println!("{:?}", reply);
 
-    let mut body = reply.demarshal_body();
-    let r = body.read_str(b's').unwrap();
-    assert!(body.finished());
+    let mut body = reply.read_body();
+    let r = body.next().unwrap().unwrap();
+    let r2 = r.parse().unwrap();
+    assert!(body.next().is_none());
     assert_eq!(reply.reply_serial().unwrap().get(), 1u32);
-    assert!(r.starts_with(":1."));
-    println!("Our ID is {}", &*r);
+    assert!(r2.as_dbus_str().unwrap().starts_with(":1."));
+    println!("Our ID is {}", r2.as_dbus_str().unwrap());
 
 }
