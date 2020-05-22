@@ -47,7 +47,7 @@ fn connect_to_session_bus() {
     let reply = message::Message::demarshal(&v).unwrap().unwrap();
     println!("{:?}", reply);
 
-    let mut body = reply.read_body();
+    let mut body = reply.read_body().iter();
     let r = body.next().unwrap().unwrap();
     let r2 = r.parse().unwrap();
     assert!(body.next().is_none());

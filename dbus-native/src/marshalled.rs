@@ -9,8 +9,13 @@ use crate::types::DemarshalError;
 pub struct Multi<'a> {
     sig: &'a SignatureMulti,
     data: &'a [u8],
-    start_pos: usize,
     is_big_endian: bool,
+}
+
+#[derive(Clone, Debug, Copy)]
+pub struct MultiIter<'a> {
+    inner: Multi<'a>,
+    start_pos: usize,
 }
 
 #[derive(Clone, Debug, Copy)]
@@ -23,35 +28,40 @@ pub struct Single<'a> {
 
 impl<'a> Multi<'a> {
     pub fn new(sig: &'a SignatureMulti, data: &'a [u8], is_big_endian: bool) -> Self {
-        Multi { sig, data, is_big_endian, start_pos: 0 }
+        Multi { sig, data, is_big_endian }
     }
 
-    fn get_real_length(mut self) -> Result<usize, DemarshalError> {
+    fn get_real_length(&self) -> Result<usize, DemarshalError> {
         let x = self.data.len();
-        while let Some(r) = self.next() { r?; }
-        Ok(x - self.data.len())
+        let mut iter = self.iter();
+        while let Some(r) = iter.next() { r?; }
+        Ok(x - iter.inner.data.len())
+    }
+
+    pub fn iter(&self) -> MultiIter<'a> {
+        MultiIter { inner: *self, start_pos: 0 }
     }
 }
 
-impl<'a> Iterator for Multi<'a> {
+impl<'a> Iterator for MultiIter<'a> {
     type Item = Result<Single<'a>, DemarshalError>;
     fn next(&mut self) -> Option<Self::Item> {
-        self.sig.single().map(|(first, rest)| {
+        self.inner.sig.single().map(|(first, rest)| {
             let mut s = Single {
                 sig: first,
-                data: self.data,
+                data: self.inner.data,
                 start_pos: self.start_pos,
-                is_big_endian: self.is_big_endian,
+                is_big_endian: self.inner.is_big_endian,
             };
             let mut len = s.get_real_length()?;
             if rest.len() > 0 {
                 len = align_up(len + self.start_pos, align_of(rest.as_bytes()[0])) - self.start_pos;
             }
-            if len > self.data.len() { Err(DemarshalError::NotEnoughData)? }
-            let (fdata, rdata) = self.data.split_at(len);
+            if len > self.inner.data.len() { Err(DemarshalError::NotEnoughData)? }
+            let (fdata, rdata) = self.inner.data.split_at(len);
             s.data = fdata;
-            self.data = rdata;
-            self.sig = rest;
+            self.inner.data = rdata;
+            self.inner.sig = rest;
             self.start_pos += len;
             Ok(s)
         })
@@ -133,7 +143,6 @@ impl Single<'_> {
         Multi {
             sig: SignatureMulti::new_unchecked(s),
             data: self.data,
-            start_pos: self.start_pos,
             is_big_endian: self.is_big_endian,
         }
     }
