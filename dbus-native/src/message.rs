@@ -351,10 +351,21 @@ impl MessageReader {
             Ok(None)
         }
     }
+
+    pub fn block_until_next_message<R: std::io::Read>(&mut self, reader: &mut R) -> Result<Vec<u8>, std::io::Error> {
+        loop {
+            let buflen = {
+                let buf = self.get_buf();
+                reader.read_exact(buf)?;
+                buf.len()
+            };
+            if let Some(v) = self.buf_written_to(buflen)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))? { return Ok(v); }
+        };
+    }
 }
 
-#[test]
-fn hello() {
+pub fn get_hello_message() -> Message<'static> {
     use dbus_strings::StringLike;
     let path = strings::ObjectPath::new("/org/freedesktop/DBus").unwrap();
     let member = strings::MemberName::new("Hello").unwrap();
@@ -363,6 +374,12 @@ fn hello() {
     let mut m = Message::new_method_call(path.into(), member.into()).unwrap();
     m.set_destination(Some(dest.into())).unwrap();
     m.set_interface(Some(interface.into())).unwrap();
+    m
+}
+
+#[test]
+fn hello() {
+    let m = get_hello_message();
 
     let header1 = m.marshal(std::num::NonZeroU32::new(1u32).unwrap(), false).unwrap();
     assert_eq!(header1.len() % 8, 0);

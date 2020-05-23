@@ -48,9 +48,13 @@ pub enum DemarshalError {
     NumberTooBig,
 }
 
+impl std::error::Error for DemarshalError {
+
+}
+
 impl fmt::Display for DemarshalError {
-    fn fmt(&self, _: &mut fmt::Formatter) -> fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
     }
 }
 
