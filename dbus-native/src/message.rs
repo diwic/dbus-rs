@@ -5,7 +5,7 @@ use crate::types::{Marshal, DemarshalError};
 use std::convert::TryInto;
 use std::num::NonZeroU32;
 use std::io;
-use crate::marshalled::{Multi, MultiBuf, ArrayBuf, StructBuf, VariantBuf};
+use crate::marshalled::{Multi, MultiBuf, DictBuf, StructBuf, VariantBuf};
 
 const FIXED_HEADER_SIZE: usize = 16;
 
@@ -174,14 +174,11 @@ impl<'a> Message<'a> {
     }
 
     pub fn marshal(&self, serial: std::num::NonZeroU32, header_only: bool) -> Result<Vec<u8>, types::DemarshalError> {
-        fn add_header_field<'a, Z, F>(arr: &mut ArrayBuf, header_type: u8, field: Option<Z>, f: F)
+        fn add_header_field<'a, Z, F>(arr: &mut DictBuf, header_type: u8, field: Option<Z>, f: F)
         where F: FnOnce(Z) -> VariantBuf {
             if let Some(field) = field {
                 let field = f(field);
-                let mut m = MultiBuf::new();
-                m.append(&header_type).unwrap();
-                m.append(&field).unwrap();
-                arr.append(&StructBuf::new(m).unwrap()).unwrap();
+                arr.append(&header_type, &field).unwrap();
             }
         }
 
@@ -191,8 +188,8 @@ impl<'a> Message<'a> {
         buf.extend_from_slice(&[ENDIAN, self.msg_type, self.flags, 1]);
         buf.extend_from_slice(&(body_len as u32).to_ne_bytes());
         buf.extend_from_slice(&(serial.get()).to_ne_bytes());
-        use crate::strings::StringLike;
-        let mut arr = ArrayBuf::new(crate::strings::SignatureSingle::new_unchecked("(yv)")).unwrap();
+        use crate::strings::{StringLike, SignatureSingle};
+        let mut arr = DictBuf::new(SignatureSingle::new_unchecked_owned("y".into()), SignatureSingle::new_unchecked_owned("v".into())).unwrap();
         add_header_field(&mut arr, 1, self.path.as_ref(), |x| VariantBuf::new(&**x).unwrap());
         add_header_field(&mut arr, 2, self.interface.as_ref(), |x| VariantBuf::new(x.as_dbus_str()).unwrap());
         add_header_field(&mut arr, 3, self.member.as_ref(), |x| VariantBuf::new(x.as_dbus_str()).unwrap());
