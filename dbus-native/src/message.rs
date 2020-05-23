@@ -5,7 +5,7 @@ use crate::types::{Marshal, DemarshalError};
 use std::convert::TryInto;
 use std::num::NonZeroU32;
 use std::io;
-use crate::marshalled::Multi;
+use crate::marshalled::{Multi, MultiBuf, ArrayBuf, StructBuf, VariantBuf};
 
 const FIXED_HEADER_SIZE: usize = 16;
 
@@ -173,6 +173,42 @@ impl<'a> Message<'a> {
         Ok(())
     }
 
+    pub fn marshal(&self, serial: std::num::NonZeroU32, header_only: bool) -> Result<Vec<u8>, types::DemarshalError> {
+        fn add_header_field<'a, Z, F>(arr: &mut ArrayBuf, header_type: u8, field: Option<Z>, f: F)
+        where F: FnOnce(Z) -> VariantBuf {
+            if let Some(field) = field {
+                let field = f(field);
+                let mut m = MultiBuf::new();
+                m.append(&header_type).unwrap();
+                m.append(&field).unwrap();
+                arr.append(&StructBuf::new(m).unwrap()).unwrap();
+            }
+        }
+
+        let body_len = self.body.len();
+        if body_len >= 134217728 { Err(types::DemarshalError::NumberTooBig)? }
+        let mut buf = Vec::with_capacity(256);
+        buf.extend_from_slice(&[ENDIAN, self.msg_type, self.flags, 1]);
+        buf.extend_from_slice(&(body_len as u32).to_ne_bytes());
+        buf.extend_from_slice(&(serial.get()).to_ne_bytes());
+        use crate::strings::StringLike;
+        let mut arr = ArrayBuf::new(crate::strings::SignatureSingle::new_unchecked("(yv)")).unwrap();
+        add_header_field(&mut arr, 1, self.path.as_ref(), |x| VariantBuf::new(&**x).unwrap());
+        add_header_field(&mut arr, 2, self.interface.as_ref(), |x| VariantBuf::new(x.as_dbus_str()).unwrap());
+        add_header_field(&mut arr, 3, self.member.as_ref(), |x| VariantBuf::new(x.as_dbus_str()).unwrap());
+        add_header_field(&mut arr, 4, self.error_name.as_ref(), |x| VariantBuf::new(x.as_dbus_str()).unwrap());
+        add_header_field(&mut arr, 5, self.reply_serial.as_ref(), |x| VariantBuf::new(&x.get()).unwrap());
+        add_header_field(&mut arr, 6, self.destination.as_ref(), |x| VariantBuf::new(x.as_dbus_str()).unwrap());
+        add_header_field(&mut arr, 7, self.sender.as_ref(), |x| VariantBuf::new(x.as_dbus_str()).unwrap());
+        add_header_field(&mut arr, 8, self.signature.as_ref(), |x| VariantBuf::new(&**x).unwrap());
+        crate::marshalled::Marshal::append_data_to(&arr, &mut buf);
+        crate::marshalled::align_buf(&mut buf, 8);
+        if !header_only {
+            buf.extend_from_slice(&self.body);
+        }
+        Ok(buf)
+    }
+
     pub fn body(&self) -> &[u8] { &self.body }
 
     pub fn is_big_endian(&self) -> bool { self.is_big_endian }
@@ -220,6 +256,17 @@ impl<'a> Message<'a> {
     pub fn read_body<'b>(&'b self) -> Multi<'b> {
         let sig = self.signature.as_ref().map(|x| &**x).unwrap_or(Default::default());
         Multi::new(sig, &self.body, self.is_big_endian())
+    }
+
+    pub fn set_body(&mut self, body: MultiBuf) {
+        let (sig, data) = body.into_inner();
+        if sig.len() == 0 {
+            self.signature = None;
+            self.body = Default::default();
+        } else {
+            self.signature = Some(Cow::Owned(sig));
+            self.body = data.into();
+        }
     }
 /*
     pub fn demarshal_body<'b>(&'b self) -> types::DemarshalState<'b> {
@@ -316,6 +363,16 @@ fn hello() {
     let mut m = Message::new_method_call(path.into(), member.into()).unwrap();
     m.set_destination(Some(dest.into())).unwrap();
     m.set_interface(Some(interface.into())).unwrap();
+
+    let header1 = m.marshal(std::num::NonZeroU32::new(1u32).unwrap(), false).unwrap();
+    assert_eq!(header1.len() % 8, 0);
+
+    assert_eq!(&*header1, &[108, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 109, 0, 0, 0,
+        1, 1, 111, 0, 21, 0, 0, 0, 47, 111, 114, 103, 47, 102, 114, 101, 101, 100, 101, 115, 107, 116, 111, 112, 47, 68, 66, 117, 115, 0, 0, 0,
+        2, 1, 115, 0, 20, 0, 0, 0, 111, 114, 103, 46, 102, 114, 101, 101, 100, 101, 115, 107, 116, 111, 112, 46, 68, 66, 117, 115, 0, 0, 0, 0,
+        3, 1, 115, 0, 5, 0, 0, 0, 72, 101, 108, 108, 111, 0, 0, 0,
+        6, 1, 115, 0, 20, 0, 0, 0, 111, 114, 103, 46, 102, 114, 101, 101, 100, 101, 115, 107, 116, 111, 112, 46, 68, 66, 117, 115, 0, 0, 0, 0
+    ][..]);
 
     let mut v_cursor = io::Cursor::new(vec!());
     m.write_header(std::num::NonZeroU32::new(1u32).unwrap(), &mut v_cursor).unwrap();

@@ -279,23 +279,39 @@ impl ArrayBuf {
         Ok(ArrayBuf { outer_sig: x, data: vec!() })
     }
 
-    pub fn append<T: Marshal>(&mut self, value: T) -> Result<(), DemarshalError> {
-        let mut x = Default::default();
-        value.append_sig_to(&mut x)?;
-        if &self.outer_sig[1..] != &**x { return Err(DemarshalError::WrongType); }
-        let old_len = self.data.len();
-        value.append_data_to(&mut self.data);
+    fn verify_array_size(&mut self, old_len: usize) -> Result<(), DemarshalError> {
         if self.data.len() > ARRAY_MAX_LEN {
             self.data.truncate(old_len);
             Err(DemarshalError::NumberTooBig)
         } else { Ok(()) }
     }
+
+    pub fn append<T: Marshal + ?Sized>(&mut self, value: &T) -> Result<(), DemarshalError> {
+        if &self.outer_sig[1..] != &**value.signature() { return Err(DemarshalError::WrongType); }
+        let old_len = self.data.len();
+        value.append_data_to(&mut self.data);
+        self.verify_array_size(old_len)
+    }
+
+    pub fn from_iter<'a, T, I>(iter: I) -> Result<Self, DemarshalError>
+    where T: Marshal + ?Sized + 'a,
+    &'a T: Default,
+    I: IntoIterator<Item=&'a T>
+    {
+        let def = <&T>::default();
+        let defsig = def.signature();
+        let mut r = ArrayBuf::new(defsig)?;
+        for x in iter.into_iter() {
+            if x.signature() != defsig { return Err(DemarshalError::WrongType); }
+            x.append_data_to(&mut r.data);
+        }
+        r.verify_array_size(0)?;
+        Ok(r)
+    }
 }
 
 impl Marshal for ArrayBuf {
-    fn append_sig_to(&self, s: &mut SignatureMultiBuf) -> Result<(), DemarshalError> {
-        checked_sig_append(s, &self.outer_sig)
-    }
+    fn signature(&self) -> &SignatureSingle { &self.outer_sig }
     fn append_data_to(&self, v: &mut Vec<u8>) {
         let slen = self.data.len() as u32;
         slen.append_data_to(v);
@@ -323,13 +339,9 @@ impl DictBuf {
         Ok(DictBuf { key_sig, value_sig, outer_sig: x, data: vec!() })
     }
 
-    pub fn append<K: Marshal, V: Marshal>(&mut self, key: K, value: V) -> Result<(), DemarshalError> {
-        let mut x = Default::default();
-        value.append_sig_to(&mut x)?;
-        if &**self.value_sig != &**x { return Err(DemarshalError::WrongType); }
-        let mut x = Default::default();
-        key.append_sig_to(&mut x)?;
-        if &**self.key_sig != &**x { return Err(DemarshalError::WrongType); }
+    pub fn append<K: Marshal + ?Sized, V: Marshal + ?Sized>(&mut self, key: &K, value: &V) -> Result<(), DemarshalError> {
+        if &*self.value_sig != value.signature() { return Err(DemarshalError::WrongType); }
+        if &*self.key_sig != key.signature() { return Err(DemarshalError::WrongType); }
         let old_len = self.data.len();
         align_buf(&mut self.data, 8);
         key.append_data_to(&mut self.data);
@@ -342,9 +354,7 @@ impl DictBuf {
 }
 
 impl Marshal for DictBuf {
-    fn append_sig_to(&self, s: &mut SignatureMultiBuf) -> Result<(), DemarshalError> {
-        checked_sig_append(s, &self.outer_sig)
-    }
+    fn signature(&self) -> &SignatureSingle { &self.outer_sig }
     fn append_data_to(&self, v: &mut Vec<u8>) {
         let slen = self.data.len() as u32;
         slen.append_data_to(v);
@@ -353,6 +363,58 @@ impl Marshal for DictBuf {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct StructBuf {
+    inner: MultiBuf,
+    outer_sig: SignatureSingleBuf,
+}
+
+impl StructBuf {
+    pub fn new(inner: MultiBuf) -> Result<Self, DemarshalError> {
+        let mut outer_sig = String::with_capacity(inner.sig.len() + 2);
+        outer_sig.push('(');
+        outer_sig.push_str(&inner.sig);
+        outer_sig.push(')');
+        let outer_sig = SignatureSingle::new_owned(outer_sig).map_err(|_| DemarshalError::InvalidString)?;
+        Ok(StructBuf {
+            inner, outer_sig
+        })
+    }
+}
+
+impl Marshal for StructBuf {
+    fn signature(&self) -> &SignatureSingle { &self.outer_sig }
+    fn append_data_to(&self, v: &mut Vec<u8>) {
+        align_buf(v, 8);
+        v.extend_from_slice(&self.inner.data)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct VariantBuf {
+    sig: SignatureSingleBuf,
+    data: Vec<u8>,
+}
+
+impl VariantBuf {
+    pub fn new<T: Marshal + ?Sized>(value: &T) -> Result<Self, DemarshalError> {
+        let mut data = vec!();
+        value.append_data_to(&mut data);
+        Ok(VariantBuf {
+            sig: value.signature().into(),
+            data
+        })
+    }
+}
+
+impl Marshal for VariantBuf {
+    fn signature(&self) -> &SignatureSingle { SignatureSingle::new_unchecked("v") }
+    fn append_data_to(&self, v: &mut Vec<u8>) {
+        (&*self.sig).append_data_to(v);
+        align_buf(v, align_of(self.sig.as_bytes()[0]));
+        v.extend_from_slice(&self.data);
+    }
+}
 
 /// Contains multiple keys and values, where every key is of the same type
 /// and every value is of the same type.
@@ -418,23 +480,36 @@ impl Parsed<'_> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MultiBuf {
     sig: SignatureMultiBuf,
     data: Vec<u8>,
 }
 
 impl MultiBuf {
+    pub fn new() -> Self { Default::default() }
     pub fn multi(&self) -> Multi {
         Multi { sig: &self.sig, data: &self.data, is_big_endian: IS_BIG_ENDIAN }
     }
-    pub fn append<T: Marshal>(&mut self, value: T) -> Result<(), DemarshalError> {
-        value.append_sig_to(&mut self.sig)?;
+    pub fn append<T: Marshal + ?Sized>(&mut self, value: &T) -> Result<(), DemarshalError> {
+        // Adding two signatures does not increase depth, so we don't need to re-verify the
+        // entire signature, just check that the length is not too big.
+        let new_sig = value.signature();
+        if self.sig.len() + new_sig.len() > 255 { return Err(DemarshalError::NumberTooBig)}
+        let temp = mem::replace(&mut self.sig, Default::default());
+        let mut temp = temp.into_inner();
+        temp.push_str(new_sig);
+        debug_assert!(SignatureMulti::is_valid(&temp).is_ok());
+        self.sig = SignatureMulti::new_unchecked_owned(temp);
+
         value.append_data_to(&mut self.data);
         Ok(())
     }
+    pub fn into_inner(self) -> (SignatureMultiBuf, Vec<u8>) {
+        (self.sig, self.data)
+    }
 }
-
+/*
 fn checked_sig_append(s: &mut SignatureMultiBuf, s2: &str)  -> Result<(), DemarshalError>
 {
     let temp = mem::replace(s, Default::default());
@@ -450,7 +525,7 @@ fn checked_sig_append(s: &mut SignatureMultiBuf, s2: &str)  -> Result<(), Demars
         }
     }
 }
-
+*/
 const ZEROS: [u8; 8] = [0; 8];
 
 pub fn align_buf(v: &mut Vec<u8>, align: usize) {
@@ -460,15 +535,16 @@ pub fn align_buf(v: &mut Vec<u8>, align: usize) {
 }
 
 pub trait Marshal {
-    fn append_sig_to(&self, s: &mut SignatureMultiBuf) -> Result<(), DemarshalError>;
+    fn signature(&self) -> &SignatureSingle;
+//    fn append_sig_to(&self, s: &mut SignatureMultiBuf) -> Result<(), DemarshalError>;
     fn append_data_to(&self, v: &mut Vec<u8>);
 }
 
 macro_rules! marshal_impl {
     ($t: ty, $s: expr, $a: expr) => {
         impl Marshal for $t {
-            fn append_sig_to(&self, s: &mut SignatureMultiBuf) -> Result<(), DemarshalError> {
-                checked_sig_append(s, $s)
+            fn signature(&self) -> &SignatureSingle {
+                SignatureSingle::new_unchecked($s)
             }
             fn append_data_to(&self, v: &mut Vec<u8>) {
                 align_buf(v, $a);
@@ -482,16 +558,13 @@ marshal_impl!(u8, "y", 1);
 marshal_impl!(u16, "q", 2);
 marshal_impl!(u32, "u", 4);
 marshal_impl!(u64, "t", 8);
-marshal_impl!(i8, "b", 1);
 marshal_impl!(i16, "n", 2);
 marshal_impl!(i32, "i", 4);
 marshal_impl!(i64, "x", 8);
 marshal_impl!(f64, "d", 8);
 
 impl Marshal for DBusStr {
-    fn append_sig_to(&self, s: &mut SignatureMultiBuf) -> Result<(), DemarshalError> {
-        checked_sig_append(s, "s")
-    }
+    fn signature(&self) -> &SignatureSingle { SignatureSingle::new_unchecked("s") }
     fn append_data_to(&self, v: &mut Vec<u8>) {
         let slen = self.len() as u32;
         slen.append_data_to(v);
@@ -501,18 +574,23 @@ impl Marshal for DBusStr {
 }
 
 impl Marshal for dbus_strings::ObjectPath {
-    fn append_sig_to(&self, s: &mut SignatureMultiBuf) -> Result<(), DemarshalError> {
-        checked_sig_append(s, "o")
-    }
+    fn signature(&self) -> &SignatureSingle { SignatureSingle::new_unchecked("o") }
     fn append_data_to(&self, v: &mut Vec<u8>) {
         self.as_dbus_str().append_data_to(v);
     }
 }
 
 impl Marshal for SignatureMulti {
-    fn append_sig_to(&self, s: &mut SignatureMultiBuf) -> Result<(), DemarshalError> {
-        checked_sig_append(s, "g")
+    fn signature(&self) -> &SignatureSingle { SignatureSingle::new_unchecked("g") }
+    fn append_data_to(&self, v: &mut Vec<u8>) {
+        v.push(self.len() as u8);
+        v.extend_from_slice(self.as_bytes());
+        v.push(0);
     }
+}
+
+impl Marshal for SignatureSingle {
+    fn signature(&self) -> &SignatureSingle { SignatureSingle::new_unchecked("g") }
     fn append_data_to(&self, v: &mut Vec<u8>) {
         v.push(self.len() as u8);
         v.extend_from_slice(self.as_bytes());

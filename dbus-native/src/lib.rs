@@ -15,7 +15,12 @@ pub mod message;
 
 pub mod types;
 
-mod marshalled;
+pub mod marshalled;
+
+pub mod strings {
+    //! Re-export of the dbus_strings crate
+    pub use dbus_strings::*;
+}
 
 #[allow(unsafe_code)]
 mod sys;
