@@ -5,7 +5,7 @@ use crate::types::{Marshal, DemarshalError};
 use std::convert::TryInto;
 use std::num::NonZeroU32;
 use std::io;
-use crate::marshalled::{Multi, MultiBuf, DictBuf, StructBuf, VariantBuf};
+use crate::marshalled::{Multi, MultiBuf, DictBuf, VariantBuf, Parsed, Single};
 
 const FIXED_HEADER_SIZE: usize = 16;
 
@@ -212,41 +212,55 @@ impl<'a> Message<'a> {
 
     // Should disconnect on error. If Ok(None) is returned, its a message that should be ignored.
     pub fn demarshal(buf: &'a [u8]) -> Result<Option<Self>, types::DemarshalError> {
-        use types::Demarshal;
-
         let start = message_start_parse(buf)?;
         if buf.len() < start.total_size { Err(DemarshalError::NotEnoughData)? }
         let msg_type = buf[1];
         if msg_type < 1 || msg_type > 4 { return Ok(None) };
         let mut m = Self::new_internal(msg_type);
-        m.is_big_endian = buf[0] == b'B';
+        m.is_big_endian = start.is_big_endian;
         m.flags = buf[2] & 0x7;
-        if buf[3] != 1 { Err(DemarshalError::InvalidProtocol)? };
-        let serial = buf[8..12].try_into().unwrap();
-        let serial = if m.is_big_endian { u32::from_be_bytes(serial) } else { u32::from_le_bytes(serial) };
-        m.serial = Some(NonZeroU32::new(serial).ok_or(DemarshalError::InvalidProtocol)?);
+        m.serial = Some(start.serial);
         m.body = Cow::Borrowed(&buf[start.body_start..start.total_size]);
 
-        let mut ds = types::DemarshalState::new(&buf[..start.body_start], 12, "a(yv)", m.is_big_endian);
-        let mut ads = ds.read_array(8)?;
-        while !ads.finished() {
-            ads.align_buf(8)?;
-            let n = u8::read_buf(&mut ads)?;
-            let mut v = ads.read_variant()?;
-            match n {
-                1 => m.path = Some(<&types::ObjectPath>::read_buf(&mut v)?.into()),
-                2 => m.interface = Some(Cow::Borrowed(<&types::Str>::read_buf(&mut v)?.try_into()?)),
-                3 => m.member = Some(Cow::Borrowed(<&types::Str>::read_buf(&mut v)?.try_into()?)),
-                4 => m.error_name = Some(Cow::Borrowed(<&types::Str>::read_buf(&mut v)?.try_into()?)),
-                5 => m.reply_serial = NonZeroU32::new(u32::read_buf(&mut v)?),
-                6 => m.destination = Some(Cow::Borrowed(<&types::Str>::read_buf(&mut v)?.try_into()?)),
-                7 => m.sender = Some(Cow::Borrowed(<&types::Str>::read_buf(&mut v)?.try_into()?)),
-                8 => m.signature = Some(<&types::Signature>::read_buf(&mut v)?.into()),
-                _ => todo!(), // Unknown header field, ignore
+        use strings::StringLike;
+        let dictsig = strings::SignatureSingle::new_unchecked("a{yv}");
+        let single = Single::new(dictsig, &buf[12..start.body_start], 12, m.is_big_endian);
+        let parsed = single.parse()?;
+        let dict = if let Parsed::Dict(dict) = parsed { dict } else { Err(DemarshalError::InvalidProtocol)? };
+        for entry in dict {
+            let (key, value) = entry?;
+            let (key, value) = (key.parse()?, value.parse()?);
+            let key = if let Parsed::Byte(key) = key { key } else { Err(DemarshalError::InvalidProtocol)? };
+            let value = if let Parsed::Variant(value) = value { value } else { Err(DemarshalError::InvalidProtocol)? };
+            let value = value.parse()?;
+            match key {
+                1 => if let Parsed::ObjectPath(x) = value {
+                    m.path = Some(Cow::Borrowed(x))
+                } else { Err(DemarshalError::WrongType)? },
+                2 => if let Parsed::String(x) = value {
+                    m.interface = Some(Cow::Borrowed(x.try_into()?))
+                } else { Err(DemarshalError::WrongType)? },
+                3 => if let Parsed::String(x) = value {
+                    m.member = Some(Cow::Borrowed(x.try_into()?))
+                } else { Err(DemarshalError::WrongType)? },
+                4 => if let Parsed::String(x) = value {
+                    m.error_name = Some(Cow::Borrowed(x.try_into()?))
+                } else { Err(DemarshalError::WrongType)? },
+                5 => if let Parsed::UInt32(x) = value {
+                    m.reply_serial = NonZeroU32::new(x)
+                } else { Err(DemarshalError::WrongType)? }
+                6 => if let Parsed::String(x) = value {
+                    m.destination = Some(Cow::Borrowed(x.try_into()?))
+                } else { Err(DemarshalError::WrongType)? },
+                7 => if let Parsed::String(x) = value {
+                    m.sender = Some(Cow::Borrowed(x.try_into()?))
+                } else { Err(DemarshalError::WrongType)? },
+                8 => if let Parsed::Signature(x) = value {
+                    m.signature = Some(Cow::Borrowed(x))
+                } else { Err(DemarshalError::WrongType)? }
+                _ => {},
             }
-            ads.pos = v.pos;
         }
-
         Ok(Some(m))
     }
 
@@ -274,16 +288,20 @@ impl<'a> Message<'a> {
 
 struct MsgStart {
     body_start: usize,
+    is_big_endian: bool,
+    serial: NonZeroU32,
     total_size: usize,
 }
 
 fn message_start_parse(buf: &[u8]) -> Result<MsgStart, DemarshalError> {
     if buf.len() < FIXED_HEADER_SIZE { Err(DemarshalError::NotEnoughData)? };
+    if buf[3] != 1 { Err(DemarshalError::InvalidProtocol)? };
     let body_len = buf[4..8].try_into().unwrap();
+    let serial = buf[8..12].try_into().unwrap();
     let arr_len = buf[12..16].try_into().unwrap();
-    let (body_len, arr_len) = match buf[0] {
-        b'l' => (u32::from_le_bytes(body_len), u32::from_le_bytes(arr_len)),
-        b'B' => (u32::from_be_bytes(body_len), u32::from_be_bytes(arr_len)),
+    let (is_big_endian, body_len, serial, arr_len) = match buf[0] {
+        b'l' => (false, u32::from_le_bytes(body_len), u32::from_le_bytes(serial), u32::from_le_bytes(arr_len)),
+        b'B' => (true, u32::from_be_bytes(body_len), u32::from_be_bytes(serial), u32::from_be_bytes(arr_len)),
         _ => Err(DemarshalError::InvalidProtocol)?
     };
     let body_len = body_len as usize;
@@ -292,7 +310,8 @@ fn message_start_parse(buf: &[u8]) -> Result<MsgStart, DemarshalError> {
     if body_len >= 134217728 || arr_len >= 67108864 || total_size >= 134217728 {
         Err(DemarshalError::NumberTooBig)?
     }
-    Ok(MsgStart { total_size, body_start })
+    let serial = NonZeroU32::new(serial).ok_or(DemarshalError::NotEnoughData)?;
+    Ok(MsgStart { total_size, serial, body_start, is_big_endian })
 }
 
 pub fn total_message_size(buf: &[u8]) -> Result<usize, DemarshalError> {
