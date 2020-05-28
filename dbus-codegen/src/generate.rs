@@ -403,9 +403,13 @@ fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box
     } else if opts.futures {
         *s += &format!("\nimpl<'a> {} for dbusf::ConnPath<'a> {{\n",
             make_camel(&i.shortname));
+    } else if module == "blocking" {
+        *s += &format!("\nimpl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target=T>> {} for {}::{}<'a, C> {{\n",
+            make_camel(&i.shortname), module, proxy);
     } else {
-        *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target={}::Connection>{}> {} for {}::{}<'a, C> {{\n",
-            module, if module == "nonblock" { " + Clone" } else { "" }, make_camel(&i.shortname), module, proxy);
+        assert_eq!(module, "ffidisp");
+        *s += &format!("\nimpl<'a, C: ::std::ops::Deref<Target=ffidisp::Connection>> {} for ffidisp::ConnPath<'a, C> {{\n",
+            make_camel(&i.shortname));
     }
     for m in &i.methods {
         *s += "\n";
