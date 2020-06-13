@@ -63,10 +63,9 @@ impl Message {
     pub fn call_with_args<'d, 'p, 'i, 'm, A, D, P, I, M>(destination: D, path: P, iface: I, method: M, args: A) -> Message
     where D: Into<BusName<'d>>, P: Into<Path<'p>>, I: Into<Interface<'i>>, M: Into<Member<'m>>, A: AppendAll {
         let mut msg = Message::method_call(&destination.into(), &path.into(), &iface.into(), &method.into());
-        args.append(&mut IterAppend::new(&mut msg));
+        msg.append_all(args);
         msg
     }
-
 
     /// Creates a new signal message.
     pub fn new_signal<P, I, M>(path: P, iface: I, name: M) -> Result<Message, String>
@@ -105,6 +104,15 @@ impl Message {
         let ptr = unsafe { ffi::dbus_message_new_method_return(self.msg) };
         if ptr.is_null() { panic!("D-Bus error: dbus_message_new_method_return failed") }
         Message {msg: ptr}
+    }
+
+    /// Creates a reply for a method call message.
+    ///
+    /// Panics if called for a message which is not a method call.
+    pub fn return_with_args<A: AppendAll>(&self, args: A) -> Message {
+        let mut m = self.method_return();
+        m.append_all(args);
+        m
     }
 
     /// The old way to create a new error reply
@@ -214,6 +222,12 @@ impl Message {
             }
         }
         self
+    }
+
+    /// Appends arguments to a message.
+    pub fn append_all<A: AppendAll>(&mut self, a: A) {
+        let mut m = IterAppend::new(self);
+        a.append(&mut m);
     }
 
     /// Gets the first argument from the message, if that argument is of type G1.
