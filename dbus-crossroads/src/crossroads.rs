@@ -161,7 +161,7 @@ impl Crossroads {
         let boxed = Box::pin(async move {
             let r = f.await;
             if let Ok(oa) = ctx.check(|_| {Ok(r?) }) {
-                ctx.do_reply(|mut msg| oa.append(&mut arg::IterAppend::new(&mut msg)));
+                ctx.do_reply(|msg| msg.append_all(oa));
             }
             let _ = ctx.flush_messages(&*sender);
             ()

@@ -58,7 +58,7 @@ impl Context {
 
     // Returns PhantomData just to aid the type system
     pub fn reply_ok<OA: AppendAll>(&mut self, oa: OA) -> PhantomData<OA> {
-        self.do_reply(|mut msg| { oa.append(&mut dbus::arg::IterAppend::new(&mut msg)) });
+        self.do_reply(|msg| { msg.append_all(oa); });
         PhantomData
     }
 
@@ -87,7 +87,7 @@ impl Context {
     pub fn make_signal<'b, A, N>(&self, name: N, args: A) -> dbus::Message
     where A: dbus::arg::AppendAll, N: Into<dbus::strings::Member<'b>> {
         let mut msg = dbus::Message::signal(&self.path, self.interface.as_ref().unwrap(), &name.into());
-        args.append(&mut dbus::arg::IterAppend::new(&mut msg));
+        msg.append_all(args);
         msg
     }
 

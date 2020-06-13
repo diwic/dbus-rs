@@ -71,7 +71,7 @@ impl PropCtx {
         loop {
             if let Some(next_name) = self.prop_names.pop() {
                 if let Some(temp_msg) = self.get_msg.as_mut() {
-                    IterAppend::new(temp_msg).append(&next_name);
+                    temp_msg.append_all((&next_name,));
                 }
                 self.prop_name = Some(next_name.clone());
                 let x = self.call_prop(ctx, cr, &next_name, false)?;
@@ -106,7 +106,7 @@ impl PropCtx {
 
     pub (crate) fn add_get_result<V: 'static + dbus::arg::Arg + dbus::arg::Append + dbus::arg::RefArg>(&mut self, v: V) {
         if let Some(get_msg) = self.get_msg.as_mut() {
-            IterAppend::new(get_msg).append(&Variant(v));
+            get_msg.append_all((&Variant(v),));
         }
     }
 }
