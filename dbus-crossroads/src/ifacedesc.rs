@@ -328,7 +328,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
             let _ = ctx.check(|ctx| {
                 let ia = ctx.message().read_all()?;
                 let oa = cb(ctx, cr, ia)?;
-                ctx.do_reply(|mut msg| oa.append(&mut arg::IterAppend::new(&mut msg)));
+                ctx.do_reply(|msg| msg.append_all(oa));
                 Ok(())
             });
             Some(ctx)
