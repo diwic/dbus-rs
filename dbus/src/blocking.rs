@@ -112,7 +112,10 @@ impl $c {
 
     /// Tries to handle an incoming message if there is one. If there isn't one,
     /// it will wait up to timeout
-    pub fn process(&mut self, timeout: Duration) -> Result<bool, Error> {
+    ///
+    /// This method only takes "&self" instead of "&mut self", but it is a logic error to call
+    /// it recursively and might lead to panics or deadlocks.
+    pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
         if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
             let ff = self.filters_mut().remove_matching(&msg);
             if let Some(mut ff) = ff {
@@ -335,7 +338,7 @@ fn test_conn_send_sync() {
 
 #[test]
 fn test_peer() {
-    let mut c = Connection::new_session().unwrap();
+    let c = Connection::new_session().unwrap();
 
     let c_name = c.unique_name().into_static();
     use std::sync::Arc;

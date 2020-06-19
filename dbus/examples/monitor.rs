@@ -5,7 +5,7 @@ use std::time::Duration;
 // This programs implements the equivalent of running the "dbus-monitor" tool
 fn main() {
     // First open up a connection to the session bus.
-    let mut conn = Connection::new_session().expect("D-Bus connection failed");
+    let conn = Connection::new_session().expect("D-Bus connection failed");
 
     // Second create a rule to match messages we want to receive; in this example we add no
     // further requirements, so all messages will match

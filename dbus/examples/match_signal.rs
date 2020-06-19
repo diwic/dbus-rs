@@ -40,7 +40,7 @@ use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Let's start by starting up a connection to the session bus.
-    let mut c = Connection::new_session()?;
+    let c = Connection::new_session()?;
 
     {
         let proxy = c.with_proxy("com.example.dbustest", "/hello", Duration::from_millis(5000));

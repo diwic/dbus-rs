@@ -15,7 +15,7 @@ use crate::strings::{BusName, Path, Interface, Member};
 /// use dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
 /// use std::time::Duration;
 ///
-/// let mut c = Connection::new_session().unwrap();
+/// let c = Connection::new_session().unwrap();
 /// // Add a match for this signal
 /// let mr = IR::match_rule(Some(&"org.bluez.obex".into()), None).static_clone();
 /// c.add_match(mr, |ir: IR, _, _| {
@@ -81,7 +81,7 @@ fn intf_removed() {
     use crate::blocking::LocalConnection;
     use crate::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved as IR;
     use std::{time::Duration, cell::Cell, rc::Rc};
-    let mut c = LocalConnection::new_session().unwrap();
+    let c = LocalConnection::new_session().unwrap();
 
     let mr = IR::match_rule(Some(&c.unique_name().into()), Some(&"/hello".into())).static_clone();
     println!("Match: {:?}", mr);

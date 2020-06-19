@@ -270,7 +270,7 @@ async fn large_message() -> Result<(), Box<dyn std::error::Error>> {
         (0..30u8).map(|i| Ok((dbus::strings::Path::new(format!("/{}", i))?, prop_map.clone()))).collect()
     }
 
-    let mut server_conn = dbus::blocking::SyncConnection::new_session()?;
+    let server_conn = dbus::blocking::SyncConnection::new_session()?;
 
     server_conn.request_name("com.example.dbusrs.tokiobigtest", false, true, false)?;
     let f = dbus::tree::Factory::new_sync::<()>();

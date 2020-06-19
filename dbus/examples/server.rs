@@ -18,7 +18,7 @@ use std::time::Duration;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Let's start by starting up a connection to the session bus and request a name.
-    let mut c = LocalConnection::new_session()?;
+    let c = LocalConnection::new_session()?;
     c.request_name("com.example.dbustest", false, true, false)?;
 
     // The choice of factory tells us what type of tree we want,
