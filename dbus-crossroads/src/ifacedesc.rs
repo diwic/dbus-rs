@@ -186,6 +186,7 @@ impl Arguments {
     }
 }
 
+/// Struct used to describe a method when building an interface.
 #[derive(Debug)]
 pub struct MethodDesc {
     cb: Option<CallbackDbg>,
@@ -203,6 +204,9 @@ impl MethodDesc {
 }
 
 
+/// Struct used to describe a signal when building an interface.
+///
+/// For now, this is only used for introspection.
 #[derive(Debug)]
 pub struct SignalDesc {
     args: Arguments,
@@ -242,7 +246,7 @@ fn build_argvec<A: arg::ArgAll>(a: A::strs) -> Arguments {
     Arguments(v)
 }
 
-
+/// Struct used to describe a property when building an interface.
 #[derive(Debug)]
 pub struct PropBuilder<'a, T:'static, A: 'static>(&'a mut PropDesc, PhantomData<&'static (T, A)>);
 
@@ -369,6 +373,20 @@ impl<T: std::marker::Send, A> PropBuilder<'_, T, A> {
     pub fn emits_changed_true(self) -> Self { self.annotate(EMITS_CHANGED, "true") }
 }
 
+/// Struct used to build an interface.
+///
+/// You get an instance of this struct in the call to Crossroads::register.
+///
+/// Register new methods, properties and signals using the corresponding functions on this struct.
+/// You might find several similar functions, e g `method`, `method_with_cr`, `method_with_cr_async` and
+/// `method_with_cr_custom`. Methods that have "with_cr" will allow you to access the full mutable Crossroads
+/// instance, but beware - trying to recursively handle methods from within a method handler is not allowed
+/// and may cause panics.
+///
+/// Methods that have "_async" will allow you to defer the result of your method. During await points,
+/// other tasks with method calls can run as separate tasks. Remember to call Crossroads::set_async_support
+/// when using async methods.  
+///
 #[derive(Debug)]
 pub struct IfaceBuilder<T: Send + 'static>(IfaceDesc, PhantomData<&'static T>);
 

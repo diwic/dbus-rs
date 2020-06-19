@@ -4,7 +4,7 @@ use dbus::channel::Sender;
 use dbus::arg;
 use std::future::Future;
 use std::marker::PhantomData;
-use crate::{Context, MethodErr, IfaceBuilder,stdimpl};
+use crate::{Context, MethodErr, IfaceBuilder, stdimpl};
 use crate::ifacedesc::Registry;
 use std::collections::{BTreeMap, HashSet};
 use std::any::Any;
@@ -13,6 +13,7 @@ use std::fmt;
 const INTROSPECTABLE: usize = 0;
 const PROPERTIES: usize = 1;
 
+/// Contains a reference to a registered interface.
 #[derive(Debug, Copy, Clone, Eq, Ord, Hash, PartialEq, PartialOrd)]
 pub struct IfaceToken<T: Send + 'static>(usize, PhantomData<&'static T>);
 
@@ -34,6 +35,14 @@ impl fmt::Debug for AsyncSupport {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "AsyncSupport") }
 }
 
+/// Crossroads is the "main" object, containing object paths, a registry of interfaces, and
+/// a crossreference of which object paths implement which interfaces.
+///
+/// You can store some arbitrary data with every object path if you like. This data can then be
+/// accessed from within the method callbacks. If you do not want this, just pass `()` as your data.
+///
+/// Crossroads can contain callbacks and data which is Send, but Sync is not required. Hence
+/// Crossroads itself is Send but not Sync.
 #[derive(Debug)]
 pub struct Crossroads {
     map: BTreeMap<dbus::Path<'static>, Object>,
@@ -43,6 +52,7 @@ pub struct Crossroads {
 }
 
 impl Crossroads {
+    /// Create a new Crossroads instance.
     pub fn new() -> Crossroads {
         let mut cr = Crossroads {
             map: Default::default(),
@@ -197,7 +207,7 @@ impl Crossroads {
         Ok(PhantomData)
     }
 
-    /// Enables this crossroads instance to run asynchronous methods (and get/set of properties).
+    /// Enables this crossroads instance to run asynchronous methods (and setting properties).
     ///
     /// Incoming method calls are spawned as separate tasks if necessary. This provides the necessary
     /// abstractions needed to spawn a new tasks, and to send the reply when the task has finished.

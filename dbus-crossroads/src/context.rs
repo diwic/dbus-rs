@@ -15,6 +15,9 @@ impl<T> fmt::Debug for Dbg<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "...") }
 }
 
+/// Context is the struct that accompanies you through your method call handler,
+/// providing helpful information about the message sent from the client, as well as
+/// some methods to send extra messages (typically signals) in return.
 #[derive(Debug)]
 pub struct Context {
     path: dbus::Path<'static>,
@@ -147,11 +150,22 @@ impl Context {
     /// Adds an extra message to send together with the message reply, e g, a custom signal.
     pub fn push_msg(&mut self, msg: dbus::Message) { self.send_extra.push(msg); }
 
+    /// The current object path.
     pub fn path(&self) -> &dbus::Path<'static> { &self.path }
+
+    /// The current interface name.
+    ///
+    /// The D-Bus specfication allows for the interface to be unspecified, hence this returns an
+    /// option. This is very rarely used in practice.
     pub fn interface(&self) -> Option<&dbus::strings::Interface<'static>> { self.interface.as_ref() }
+
+    /// The current method name.
     pub fn method(&self) -> &dbus::strings::Member<'static> { &self.method }
+
+    /// The message that caused this method to be called.
     pub fn message(&self) -> &dbus::Message { &self.message }
 
+    /// True if a reply (error or method return) has been set.
     pub fn has_reply(&self) -> bool { self.reply.is_some() }
 
     /// Returns true is "reply_err" has been called, or "check" ever returned an error
