@@ -104,7 +104,7 @@ impl PropCtx {
         }
     }
 
-    pub (crate) fn add_get_result<V: 'static + dbus::arg::Arg + dbus::arg::Append + dbus::arg::RefArg>(&mut self, v: V) {
+    pub (crate) fn add_get_result<V: dbus::arg::Arg + dbus::arg::Append>(&mut self, v: V) {
         if let Some(get_msg) = self.get_msg.as_mut() {
             get_msg.append_all((&Variant(v),));
         }

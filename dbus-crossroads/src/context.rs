@@ -1,4 +1,6 @@
 
+use dbus::arg::Arg;
+use dbus::arg::Append;
 use std::marker::PhantomData;
 use dbus::arg::AppendAll;
 use dbus::channel::Sender;
@@ -27,6 +29,9 @@ pub struct Context {
 }
 
 impl Context {
+    /// Creates a new Context.
+    ///
+    /// Usually you're not creating your own context, as the crossroads instance is creating one for you.
     pub fn new(msg: dbus::Message) -> Option<Self> {
         if msg.msg_type() != dbus::MessageType::MethodCall { return None; }
         let p = msg.path()?.into_static();
@@ -44,10 +49,13 @@ impl Context {
         })
     }
 
+    /// Convenience method that sets an error reply if the closure returns an error.
     pub fn check<R, F: FnOnce(&mut Context) -> Result<R, MethodErr>>(&mut self, f: F) -> Result<R, ()> {
         f(self).map_err(|e| { self.reply_err(e); })
     }
 
+    /// If the reply is not already set, creates a new method return message and calls the closure
+    /// so that the closure can fill in the arguments.
     pub fn do_reply<F: FnOnce(&mut dbus::Message)>(&mut self, f: F) {
         if self.message.get_no_reply() { return; }
         if self.reply.is_some() { return; }
@@ -56,12 +64,25 @@ impl Context {
         self.reply = Some(msg);
     }
 
-    // Returns PhantomData just to aid the type system
+    /// Replies ok to the incoming message, if the reply is not already set.
+    /// This is what you'll normally have last in your async method.
+    ///
+    /// Returns PhantomData just to aid the type system.
     pub fn reply_ok<OA: AppendAll>(&mut self, oa: OA) -> PhantomData<OA> {
         self.do_reply(|msg| { msg.append_all(oa); });
         PhantomData
     }
 
+    /// Reply to a "get" result.
+    /// This is what you'll normally have last in your async get property handler.
+    ///
+    /// Returns PhantomData just to aid the type system.
+    pub (crate) fn reply_get<A: Arg + Append>(&mut self, a: A) -> PhantomData<(A, ())> {
+        self.prop_ctx().add_get_result(a);
+        PhantomData
+    }
+
+    /// Replies to the incoming message with an error.
     pub fn reply_err(&mut self, err: MethodErr) {
         if !self.message.get_no_reply() {
             self.reply = Some(err.to_message(&self.message))
@@ -84,6 +105,7 @@ impl Context {
         Ok(())
     }
 
+    /// Makes a new signal with the current interface and path
     pub fn make_signal<'b, A, N>(&self, name: N, args: A) -> dbus::Message
     where A: dbus::arg::AppendAll, N: Into<dbus::strings::Member<'b>> {
         let mut msg = dbus::Message::signal(&self.path, self.interface.as_ref().unwrap(), &name.into());

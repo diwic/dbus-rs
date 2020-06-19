@@ -245,18 +245,43 @@ impl<T: std::marker::Send, A: arg::Arg + arg::RefArg + arg::Append> PropBuilder<
         })
     }
 
-    pub fn get_with_cr<CB>(mut self, mut cb: CB) -> Self
+    pub fn get_with_cr<CB>(self, mut cb: CB) -> Self
     where CB: FnMut(&mut Context, &mut Crossroads) -> Result<A, MethodErr> + Send + 'static {
-        self.0.get_cb = Some(CallbackDbg(Box::new(move |mut ctx, cr| {
+        self.get_custom(move |mut ctx, cr| {
             let _ = ctx.check(|ctx| {
                 let r = cb(ctx, cr)?;
-                ctx.prop_ctx().add_get_result(r);
+                ctx.reply_get(r);
                 Ok(())
             });
             Some(ctx)
+        })
+    }
+
+    pub (crate) fn get_custom<CB>(mut self, mut cb: CB) -> Self
+    where CB: FnMut(Context, &mut Crossroads) -> Option<Context> + Send + 'static {
+        self.0.get_cb = Some(CallbackDbg(Box::new(move |ctx, cr| {
+            cb(ctx, cr)
         })));
         self
     }
+
+    /*
+     Does not work yet
+
+    pub fn get_with_cr_async<R, CB>(self, mut cb: CB) -> Self
+    where
+        CB: FnMut(Context, &mut Crossroads) -> R + Send + 'static,
+        R: Future<Output=PhantomData<(A, ())>> + Send + 'static
+    {
+        self.get_custom(move |ctx, cr| {
+            cr.run_async_method(ctx, |ctx, cr| {
+                let r = cb(ctx, cr);
+                async move { r.await; }
+            });
+            None
+        })
+    }
+    */
 }
 
 const EMITS_CHANGED: &'static str = "org.freedesktop.DBus.Property.EmitsChangedSignal";
@@ -271,20 +296,47 @@ impl<T: std::marker::Send, A: arg::Arg + for <'x> arg::Get<'x>> PropBuilder<'_, 
         })
     }
 
-    pub fn set_with_cr<CB>(mut self, mut cb: CB) -> Self
+    pub fn set_with_cr<CB>(self, mut cb: CB) -> Self
     where CB: FnMut(&mut Context, &mut Crossroads, A) -> Result<(), MethodErr> + Send + 'static {
+        self.set_custom(move |mut ctx, cr, a| {
+            let _ = ctx.check(|ctx| cb(ctx, cr, a));
+            Some(ctx)
+        })
+    }
+
+    pub fn set_custom<CB>(mut self, mut cb: CB) -> Self
+    where CB: FnMut(Context, &mut Crossroads, A) -> Option<Context> + Send + 'static {
         self.0.set_cb = Some(CallbackDbg(Box::new(move |mut ctx, cr| {
-            let _ = ctx.check(|ctx| {
+            match ctx.check(|ctx| {
                 let mut i = ctx.message().iter_init();
                 i.next(); i.next();
                 let a: arg::Variant<_> = i.read()?;
-                let r = cb(ctx, cr, a.0)?;
-                Ok(())
-            });
-            Some(ctx)
+                Ok(a)
+            }) {
+                Ok(a) => cb(ctx, cr, a.0),
+                Err(_) => Some(ctx),
+            }
         })));
         self
     }
+
+    pub fn set_with_cr_async<CB, R>(self, mut cb: CB) -> Self
+    where
+        CB: FnMut(Context, &mut Crossroads, A) -> R + Send + 'static,
+        R: Future<Output=()> + Send + 'static
+    {
+        self.set_custom(move |ctx, cr, a| {
+            cr.run_async_method(ctx, |ctx, cr| {
+                let r = cb(ctx, cr, a);
+                async move { r.await; }
+            });
+            None
+        })
+    }
+
+}
+
+impl<T: std::marker::Send, A> PropBuilder<'_, T, A> {
 
     pub fn annotate<N: Into<String>, V: Into<String>>(self, name: N, value: V) -> Self {
         self.0.annotations.insert(name, value);

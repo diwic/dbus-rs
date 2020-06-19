@@ -57,10 +57,14 @@ impl Crossroads {
         cr
     }
 
+    /// If set to true (the default), will make paths implement the standard "Introspectable" and,
+    /// if the path has interfaces with properties, the "Properties" interfaces.
     pub fn set_add_standard_ifaces(&mut self, enable: bool) {
         self.add_standard_ifaces = enable;
     }
 
+    /// Registers a new interface into the interface registry. The closure receives an
+    /// IfaceBuilder that you can add methods, signals and properties to.
     pub fn register<T, N, F>(&mut self, name: N, f: F) -> IfaceToken<T>
     where T: Send + 'static, N: Into<dbus::strings::Interface<'static>>,
     F: FnOnce(&mut IfaceBuilder<T>)
@@ -70,11 +74,17 @@ impl Crossroads {
         IfaceToken(x, PhantomData)
     }
 
+    /// Access the data of a certain path.
+    ///
+    /// Will return none both if the path was not found, and if the found data was of another type.
     pub fn data_mut<D: Any + Send + 'static>(&mut self, name: &dbus::Path<'static>) -> Option<&mut D> {
         let obj = self.map.get_mut(name)?;
         obj.data.downcast_mut()
     }
 
+    /// Inserts a new path.
+    ///
+    /// If the path already exists, it is overwritten.
     pub fn insert<'z, D, I, N>(&mut self, name: N, ifaces: I, data: D)
     where D: Any + Send + 'static, N: Into<dbus::Path<'static>>, I: IntoIterator<Item = &'z IfaceToken<D>>
     {
@@ -87,6 +97,17 @@ impl Crossroads {
             }
         }
         self.map.insert(name.into(), Object { ifaces, data: Box::new(data)});
+    }
+
+    /// Removes an existing path.
+    ///
+    /// Returns None if the path was not found.
+    /// In case of a type mismatch, the path will be removed, but None will be returned.
+    pub fn remove<D>(&mut self, name: &dbus::Path<'static>) -> Option<D>
+    where D: Any + Send + 'static {
+        let x = self.map.remove(name)?;
+        let r: Box<D> = x.data.downcast().ok()?;
+        Some(*r)
     }
 
     pub (crate) fn find_iface_token(&self,
@@ -131,6 +152,9 @@ impl Crossroads {
         (spawner)(boxed)
     }
 
+    /// Handles an incoming message call.
+    ///
+    /// Returns Err if the message is not a method call.
     pub fn handle_message<S: dbus::channel::Sender>(&mut self, message: dbus::Message, conn: &S) -> Result<(), ()> {
         let mut ctx = Context::new(message).ok_or(())?;
         let (itoken, mut cb) = ctx.check(|ctx| {
@@ -145,10 +169,13 @@ impl Crossroads {
         if let Some(mut ctx) = ctx { ctx.flush_messages(conn) } else { Ok(()) }
     }
 
+    /// The token representing the built-in implementation of "org.freedesktop.DBus.Introspectable".
     pub fn introspectable<T: Send + 'static>(&self) -> IfaceToken<T> { IfaceToken(INTROSPECTABLE, PhantomData) }
+
+    /// The token representing the built-in implementation of "org.freedesktop.DBus.Properties".
     pub fn properties<T: Send + 'static>(&self) -> IfaceToken<T> { IfaceToken(PROPERTIES, PhantomData) }
 
-    pub fn spawn_method<OA: arg::AppendAll, F>(&self, mut ctx: Context, f: F) -> Result<PhantomData<OA>, Context>
+    pub (crate) fn spawn_method<OA: arg::AppendAll, F>(&self, mut ctx: Context, f: F) -> Result<PhantomData<OA>, Context>
     where F: Future<Output=Result<OA, MethodErr>> + Send + 'static {
         let support = match self.async_support.as_ref() {
             Some(x) => x,
@@ -170,6 +197,10 @@ impl Crossroads {
         Ok(PhantomData)
     }
 
+    /// Enables this crossroads instance to run asynchronous methods (and get/set of properties).
+    ///
+    /// Incoming method calls are spawned as separate tasks if necessary. This provides the necessary
+    /// abstractions needed to spawn a new tasks, and to send the reply when the task has finished.
     pub fn set_async_support(&mut self, x: Option<(Arc<dyn Sender + Send + Sync + 'static>, BoxedSpawn)>) -> Option<(Arc<dyn Sender + Send + Sync + 'static>, BoxedSpawn)> {
         let a = self.async_support.take();
         self.async_support = x.map(|x| AsyncSupport {
