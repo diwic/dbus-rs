@@ -145,7 +145,7 @@ impl Crossroads {
     R: Future<Output=()> + Send + 'static
     {
         let sender = self.async_support.as_ref().expect("Async support not set").sender.clone();
-        ctx.set_on_drop(sender);
+        ctx.set_send_on_drop(sender);
         let future = f(ctx, self);
         let spawner = &self.async_support.as_ref().expect("Async support not set").spawner;
         let boxed = Box::pin(async move { future.await });

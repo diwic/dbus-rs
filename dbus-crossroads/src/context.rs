@@ -22,10 +22,12 @@ pub struct Context {
     method: dbus::strings::Member<'static>,
     message: dbus::Message,
 
+    has_error: bool,
     prop_ctx: Option<PropCtx>,
     reply: Option<dbus::Message>,
     send_extra: Vec<dbus::Message>,
     send_on_drop: Option<Dbg<Arc<dyn Sender + Send + Sync>>>,
+    pre_flush: Option<Dbg<Box<dyn FnOnce(&mut Context) + Send>>>
 }
 
 impl Context {
@@ -45,7 +47,9 @@ impl Context {
             reply: None,
             prop_ctx: None,
             send_on_drop: None,
+            pre_flush: None,
             send_extra: vec!(),
+            has_error: false,
         })
     }
 
@@ -73,29 +77,56 @@ impl Context {
         PhantomData
     }
 
-    /// Reply to a "get" result.
+    /// Reply to a "get" result. (Does not work yet)
     /// This is what you'll normally have last in your async get property handler.
     ///
     /// Returns PhantomData just to aid the type system.
-    pub (crate) fn reply_get<A: Arg + Append>(&mut self, a: A) -> PhantomData<(A, ())> {
+    pub (crate) fn reply_get_prop<A: Arg + Append>(&mut self, a: A) -> PhantomData<(A, ())> {
         self.prop_ctx().add_get_result(a);
+        PhantomData
+    }
+
+    /// Reply to a "set property" call
+    /// This is what you'll normally have last in your async set property handler - for synchronous
+    /// methods this is handled automatically.
+    ///
+    /// Set "new_value" to the new value of the property, or to "None" if you don't want to send an
+    /// EmitsChangedSignal. If you selected "const" for emits_changed, new_value must be None.
+    ///
+    /// Returns PhantomData just to aid the type system.
+    pub (crate) fn reply_set_prop<A: Arg + Append>(&mut self, new_value: Option<A>) -> PhantomData<Option<A>> {
+        if let Some(a) = new_value {
+            if let Some(msg) = self.prop_ctx.as_ref().unwrap().make_emits_message(self, a) {
+                self.send_extra.push(msg);
+            }
+        }
         PhantomData
     }
 
     /// Replies to the incoming message with an error.
     pub fn reply_err(&mut self, err: MethodErr) {
+        self.has_error = true;
         if !self.message.get_no_reply() {
             self.reply = Some(err.to_message(&self.message))
         };
     }
 
+    /// Low-level function to set a reply
+    ///
+    /// You should probably prefer do_reply, or reply_ok / reply_err for async methods.
     pub fn set_reply(&mut self, msg: Option<dbus::Message>, check_no_reply: bool, check_set: bool) {
         if check_no_reply && self.message.get_no_reply() { return; }
         if check_set && self.reply.is_some() { return; }
         self.reply = msg;
     }
 
+    /// Low-level function to flush set messages
+    ///
+    /// This is called internally, you should probably not use it.
     pub fn flush_messages<S: dbus::channel::Sender + ?Sized>(&mut self, conn: &S) -> Result<(), ()> {
+        if let Some(f) = self.pre_flush.take() {
+            (f.0)(self)
+        }
         if let Some(msg) = self.reply.take() {
             conn.send(msg)?;
         }
@@ -123,11 +154,17 @@ impl Context {
 
     pub fn has_reply(&self) -> bool { self.reply.is_some() }
 
+    /// Returns true is "reply_err" has been called, or "check" ever returned an error
+    pub fn has_error(&self) -> bool { self.has_error }
+
     pub (crate) fn take_prop_ctx(&mut self) -> PropCtx { self.prop_ctx.take().unwrap() }
     pub (crate) fn give_prop_ctx(&mut self, p: PropCtx) { self.prop_ctx = Some(p); }
     pub (crate) fn prop_ctx(&mut self) -> &mut PropCtx { self.prop_ctx.as_mut().unwrap() }
-    pub (crate) fn set_on_drop(&mut self, value: Arc<dyn Sender + Send + Sync>) {
+    pub (crate) fn set_send_on_drop(&mut self, value: Arc<dyn Sender + Send + Sync>) {
         self.send_on_drop = Some(Dbg(value));
+    }
+    pub (crate) fn set_pre_flush(&mut self, value: Box<dyn FnOnce(&mut Context) + Send>) {
+        self.pre_flush = Some(Dbg(value));
     }
 }
 

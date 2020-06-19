@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use crate::{IfaceToken, Crossroads, Context, MethodErr};
 use dbus::arg::{Variant, RefArg, IterAppend, Arg};
+use crate::ifacedesc::EMITS_CHANGED;
 
 fn introspect(cr: &Crossroads, path: &dbus::Path<'static>) -> String {
     let mut children = cr.get_children(path);
@@ -31,6 +32,7 @@ pub fn introspectable(cr: &mut Crossroads) -> IfaceToken<()> {
 #[derive(Debug)]
 pub (crate) struct PropCtx {
     iface_token: usize,
+    emits_changed: Option<String>,
 
     prop_names: Vec<String>,
     prop_name: Option<String>,
@@ -46,21 +48,23 @@ impl PropCtx {
             prop_names: vec!(),
             prop_name: None,
             get_msg: None,
+            emits_changed: None
         })
     }
 
-    fn call_prop(self, mut ctx: Context, cr: &mut Crossroads, prop_name: &str, is_set: bool) -> Option<(Context, Self)> {
+    fn call_prop(mut self, mut ctx: Context, cr: &mut Crossroads, prop_name: String, is_set: bool) -> Option<(Context, Self)> {
         let token = self.iface_token;
+        let pname = prop_name.clone();
+        self.prop_name = Some(prop_name);
         let mut cb = match ctx.check(|ctx| {
-            cr.registry().take_prop(token, prop_name, is_set)
+            cr.registry().take_prop(token, &pname, is_set)
         }) {
             Ok(cb) => cb,
             Err(_) => return Some((ctx, self))
         };
         ctx.give_prop_ctx(self);
         let octx = cb(ctx, cr);
-        dbg!(&octx);
-        cr.registry().give_prop(token, prop_name, cb, is_set);
+        cr.registry().give_prop(token, &pname, cb, is_set);
         octx.map(|mut ctx| {
             let prop_ctx = ctx.take_prop_ctx();
             (ctx, prop_ctx)
@@ -74,7 +78,7 @@ impl PropCtx {
                     temp_msg.append_all((&next_name,));
                 }
                 self.prop_name = Some(next_name.clone());
-                let x = self.call_prop(ctx, cr, &next_name, false)?;
+                let x = self.call_prop(ctx, cr, next_name, false)?;
                 ctx = x.0;
                 self = x.1;
                 if ctx.has_reply() { return Some(ctx) }
@@ -97,7 +101,6 @@ impl PropCtx {
                             }
                         }
                     });
-                    dbg!(&msg);
                 });
                 return Some(ctx)
             }
@@ -108,6 +111,22 @@ impl PropCtx {
         if let Some(get_msg) = self.get_msg.as_mut() {
             get_msg.append_all((&Variant(v),));
         }
+    }
+
+    pub (crate) fn make_emits_message<V: dbus::arg::Arg + dbus::arg::Append>(&self, ctx: &Context, v: V) -> Option<dbus::Message> {
+        let arr = [self.prop_name.as_ref().unwrap()];
+        let (d, i) = match self.emits_changed.as_ref().map(|x| &**x) {
+            Some("false") => return None,
+            Some("invalidates") => (None, &arr[..]),
+            None | Some("true") => (Some((arr[0], Variant(&v))), &[][..]),
+            _ => panic!("Invalid value of EmitsChangedSignal: {:?}", self.emits_changed)
+        };
+
+        use dbus::message::SignalArgs;
+        use dbus::blocking::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged as PPC;
+        let s: &str = ctx.message().read1().unwrap();
+        Some(dbus::Message::signal(ctx.path(), &PPC::INTERFACE.into(), &PPC::NAME.into())
+            .append3(s, dbus::arg::Dict::new(d), i))
     }
 }
 
@@ -121,7 +140,7 @@ fn get(mut ctx: Context, cr: &mut Crossroads, (interface_name, property_name): (
     if !ctx.message().get_no_reply() {
         propctx.get_msg = Some(ctx.message().method_return());
     }
-    propctx.call_prop(ctx, cr, &property_name, false).map(|(mut ctx, propctx)| {
+    propctx.call_prop(ctx, cr, property_name, false).map(|(mut ctx, propctx)| {
         if !ctx.has_reply() { ctx.set_reply(propctx.get_msg, true, true) }
         ctx
     })
@@ -141,16 +160,19 @@ fn getall(mut ctx: Context, cr: &mut Crossroads, (interface_name,): (String,)) -
 }
 
 fn set(mut ctx: Context, cr: &mut Crossroads, (interface_name, property_name, value): (String, String, Variant<Box<dyn RefArg>>)) -> Option<Context> {
-    let propctx = match ctx.check(|ctx| { PropCtx::new(cr, ctx.path(), interface_name)}) {
+    let mut propctx = match ctx.check(|ctx| { PropCtx::new(cr, ctx.path(), interface_name) }) {
         Ok(p) => p,
         Err(_) => return Some(ctx),
     };
-    propctx.call_prop(ctx, cr, &property_name, true).map(|(mut ctx, propctx)| {
+    propctx.emits_changed = cr.registry()
+        .find_annotation(propctx.iface_token, EMITS_CHANGED, Some(&property_name))
+        .map(|x| x.into());
+    ctx.set_pre_flush(Box::new(|ctx| {
+        if ctx.has_error() { return; }
         ctx.do_reply(|_| {});
-        ctx
-    })
+    }));
+    propctx.call_prop(ctx, cr, property_name, true).map(|(ctx, _)| { ctx })
 }
-
 
 pub fn properties(cr: &mut Crossroads) -> IfaceToken<()> {
     cr.register("org.freedesktop.DBus.Properties", |b| {

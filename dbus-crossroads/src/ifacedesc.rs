@@ -44,7 +44,8 @@ impl Registry {
     pub fn take_prop(&mut self, t: usize, name: &str, is_set: bool) -> Result<Callback, MethodErr> {
         let pdesc = self.0[t].properties.get_mut(name).ok_or_else(|| MethodErr::no_property(name))?;
         let cb = if is_set { pdesc.set_cb.take() } else { pdesc.get_cb.take() };
-        let cb = cb.ok_or_else(|| MethodErr::failed(&format!("Detected recursive call to get property {}", name)))?;
+        let rw = if is_set { "writable" } else { "readable" };
+        let cb = cb.ok_or_else(|| MethodErr::failed(&format!("Property {} is not {}", name, rw)))?;
         Ok(cb.0)
     }
 
@@ -55,6 +56,18 @@ impl Registry {
     }
 
     pub fn has_props(&self, t: usize) -> bool { !self.0[t].properties.is_empty() }
+
+    pub fn find_annotation(&self, t: usize, annotation_name: &str, prop_name: Option<&str>) -> Option<&str> {
+        let desc = &self.0[t];
+        if let Some(prop_name) = prop_name {
+            if let Some(prop) = desc.properties.get(prop_name) {
+                if let Some(value) = prop.annotations.get(annotation_name) {
+                    return Some(value);
+                }
+            }
+        }
+        desc.annotations.get(annotation_name)
+    }
 
     pub fn introspect(&self, ifaces: &HashSet<usize>) -> String {
         let mut v: Vec<_> = ifaces.iter().filter_map(|&t| self.0[t].name.as_ref().map(|n| (n, t))).collect();
@@ -125,6 +138,10 @@ impl Annotations {
         let mut x = self.0.take().unwrap_or_default();
         x.insert(k.into(), v.into());
         self.0 = Some(x);
+    }
+
+    pub fn get(&self, key: &str) -> Option<&str> {
+        self.0.as_ref()?.get(key).map(|x| &**x)
     }
 
     fn is_empty(&self) -> bool {
@@ -250,7 +267,7 @@ impl<T: std::marker::Send, A: arg::Arg + arg::RefArg + arg::Append> PropBuilder<
         self.get_custom(move |mut ctx, cr| {
             let _ = ctx.check(|ctx| {
                 let r = cb(ctx, cr)?;
-                ctx.reply_get(r);
+                ctx.reply_get_prop(r);
                 Ok(())
             });
             Some(ctx)
@@ -284,12 +301,12 @@ impl<T: std::marker::Send, A: arg::Arg + arg::RefArg + arg::Append> PropBuilder<
     */
 }
 
-const EMITS_CHANGED: &'static str = "org.freedesktop.DBus.Property.EmitsChangedSignal";
+pub const EMITS_CHANGED: &'static str = "org.freedesktop.DBus.Property.EmitsChangedSignal";
 const DEPRECATED: &'static str = "org.freedesktop.DBus.Deprecated";
 
-impl<T: std::marker::Send, A: arg::Arg + for <'x> arg::Get<'x>> PropBuilder<'_, T, A> {
+impl<T: std::marker::Send, A: arg::Append + arg::Arg + for <'x> arg::Get<'x>> PropBuilder<'_, T, A> {
     pub fn set<CB>(self, mut cb: CB) -> Self
-    where CB: FnMut(&mut Context, &mut T, A) -> Result<(), MethodErr> + Send + 'static {
+    where CB: FnMut(&mut Context, &mut T, A) -> Result<Option<A>, MethodErr> + Send + 'static {
         self.set_with_cr(move |ctx, cr, a| {
             let data = cr.data_mut(ctx.path()).ok_or_else(|| MethodErr::no_path(ctx.path()))?;
             cb(ctx, data, a)
@@ -297,9 +314,12 @@ impl<T: std::marker::Send, A: arg::Arg + for <'x> arg::Get<'x>> PropBuilder<'_, 
     }
 
     pub fn set_with_cr<CB>(self, mut cb: CB) -> Self
-    where CB: FnMut(&mut Context, &mut Crossroads, A) -> Result<(), MethodErr> + Send + 'static {
+    where CB: FnMut(&mut Context, &mut Crossroads, A) -> Result<Option<A>, MethodErr> + Send + 'static {
         self.set_custom(move |mut ctx, cr, a| {
-            let _ = ctx.check(|ctx| cb(ctx, cr, a));
+            let oa = ctx.check(|ctx| cb(ctx, cr, a));
+            if let Ok(oa) = oa {
+                if !ctx.has_error() { ctx.reply_set_prop(oa); }
+            }
             Some(ctx)
         })
     }
@@ -323,7 +343,7 @@ impl<T: std::marker::Send, A: arg::Arg + for <'x> arg::Get<'x>> PropBuilder<'_, 
     pub fn set_with_cr_async<CB, R>(self, mut cb: CB) -> Self
     where
         CB: FnMut(Context, &mut Crossroads, A) -> R + Send + 'static,
-        R: Future<Output=()> + Send + 'static
+        R: Future<Output=PhantomData<Option<A>>> + Send + 'static
     {
         self.set_custom(move |ctx, cr, a| {
             cr.run_async_method(ctx, |ctx, cr| {

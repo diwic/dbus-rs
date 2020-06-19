@@ -44,14 +44,24 @@ fn score() {
         });
         b.property::<u16, _>("Score")
             .get(|_, score| { Ok(score.0) })
-            .set(|_, score, val| { score.0 = val; Ok(()) });
+            .set(|_, score, val| { score.0 = val; Ok(Some(val)) });
     });
 
     cr.insert("/", &[iface], Score(2, 0));
 
     let msg = Message::call_with_args("com.example.dbusrs.crossroads.score", "/",
         "org.freedesktop.DBus.Properties", "Set", ("com.example.dbusrs.crossroads.score", "Score", Variant(7u16)));
-    let r = dispatch_helper(&mut cr, msg);
+    let mut r = dispatch_helper2(&mut cr, msg);
+    assert_eq!(r.len(), 2);
+    if r[0].msg_type() == dbus::message::MessageType::Signal { r.swap(0, 1); }
+    assert_eq!(r[0].msg_type(), dbus::message::MessageType::MethodReturn);
+    assert_eq!(r[0].get_reply_serial().unwrap(), 57);
+
+    use dbus::blocking::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged as PPC;
+    use dbus::message::SignalArgs;
+    let ppc = PPC::from_message(&r[1]).unwrap();
+    assert_eq!(&*ppc.interface_name, "com.example.dbusrs.crossroads.score");
+    assert_eq!(ppc.changed_properties.get("Score").unwrap().0.as_u64(), Some(7));
 
     let msg = Message::call_with_args("com.example.dbusrs.crossroads.score", "/",
         "org.freedesktop.DBus.Properties", "Get", ("com.example.dbusrs.crossroads.score", "Score"));
@@ -142,7 +152,7 @@ fn introspect() {
             Ok(())
         });
         b.signal::<(bool,), _>("Changed", ("new_value",));
-        b.property("Bar").get(|_,_| Ok(0u8)).set(|_,_,_| Ok(()));
+        b.property("Bar").get(|_,_| Ok(0u8)).set(|_,_,_| Ok(None));
     });
     cr.insert("/com/example/sample_object0", &[token], ());
     cr.insert("/com/example/sample_object0/child_of_sample_object", &[], ());
