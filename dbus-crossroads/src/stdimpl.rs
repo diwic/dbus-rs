@@ -56,7 +56,7 @@ impl PropCtx {
         let token = self.iface_token;
         let pname = prop_name.clone();
         self.prop_name = Some(prop_name);
-        let mut cb = match ctx.check(|ctx| {
+        let mut cb = match ctx.check(|_| {
             cr.registry().take_prop(token, &pname, is_set)
         }) {
             Ok(cb) => cb,
@@ -159,7 +159,7 @@ fn getall(mut ctx: Context, cr: &mut Crossroads, (interface_name,): (String,)) -
     propctx.run_getall(ctx, cr)
 }
 
-fn set(mut ctx: Context, cr: &mut Crossroads, (interface_name, property_name, value): (String, String, Variant<Box<dyn RefArg>>)) -> Option<Context> {
+fn set(mut ctx: Context, cr: &mut Crossroads, (interface_name, property_name, _value): (String, String, Variant<Box<dyn RefArg>>)) -> Option<Context> {
     let mut propctx = match ctx.check(|ctx| { PropCtx::new(cr, ctx.path(), interface_name) }) {
         Ok(p) => p,
         Err(_) => return Some(ctx),

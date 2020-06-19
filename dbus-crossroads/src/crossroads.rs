@@ -1,7 +1,6 @@
 use std::pin::Pin;
 use std::sync::Arc;
 use dbus::channel::Sender;
-use dbus::arg;
 use std::future::Future;
 use std::marker::PhantomData;
 use crate::{Context, MethodErr, IfaceBuilder, stdimpl};
@@ -184,28 +183,6 @@ impl Crossroads {
 
     /// The token representing the built-in implementation of "org.freedesktop.DBus.Properties".
     pub fn properties<T: Send + 'static>(&self) -> IfaceToken<T> { IfaceToken(PROPERTIES, PhantomData) }
-
-    pub (crate) fn spawn_method<OA: arg::AppendAll, F>(&self, mut ctx: Context, f: F) -> Result<PhantomData<OA>, Context>
-    where F: Future<Output=Result<OA, MethodErr>> + Send + 'static {
-        let support = match self.async_support.as_ref() {
-            Some(x) => x,
-            None => {
-                let _ = ctx.check::<(),_>(|_| Err(MethodErr::failed(&"Async support not set")));
-                return Err(ctx);
-            }
-        };
-        let sender = support.sender.clone();
-        let boxed = Box::pin(async move {
-            let r = f.await;
-            if let Ok(oa) = ctx.check(|_| {Ok(r?) }) {
-                ctx.do_reply(|msg| msg.append_all(oa));
-            }
-            let _ = ctx.flush_messages(&*sender);
-            ()
-        });
-        (support.spawner)(boxed);
-        Ok(PhantomData)
-    }
 
     /// Enables this crossroads instance to run asynchronous methods (and setting properties).
     ///

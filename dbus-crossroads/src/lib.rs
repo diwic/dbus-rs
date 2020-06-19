@@ -7,9 +7,6 @@
 //! and one for [async (dbus-tokio)](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio02_server_cr.rs),
 //! or familiarize yourself using this API reference.
 
-#![allow(dead_code)]
-#![allow(unused_variables)]
-
 mod context;
 mod crossroads;
 mod ifacedesc;
