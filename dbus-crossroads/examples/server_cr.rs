@@ -22,7 +22,7 @@ struct Hello { called_count: u32 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Let's start by starting up a connection to the session bus and request a name.
-    let mut c = Connection::new_session()?;
+    let c = Connection::new_session()?;
     c.request_name("com.example.dbustest", false, true, false)?;
 
     // Create a new crossroads instance.
