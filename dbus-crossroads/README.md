@@ -17,7 +17,8 @@ When complete, it will supersede the dbus::tree module. Known missing pieces:
 Design decisions (compared to dbus::tree):
 
  * First class support for both sync and async methods
- * Less generics makes a less cluttered API
+ * Detect method arguments automatically through generics
+ * ...but less generics in structs you use, which means less cluttered API
  * The tree/crossroads instance is `Send` (but not `Sync`).
  * You can now modify the instance from within a method handler
  * Different object paths can contain different types of data
