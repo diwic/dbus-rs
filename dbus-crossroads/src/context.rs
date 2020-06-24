@@ -80,6 +80,18 @@ impl Context {
         PhantomData
     }
 
+    /// Replies to the incoming message, if the reply is not already set.
+    /// This is what you'll normally have last in your async method.
+    ///
+    /// Returns PhantomData just to aid the type system.
+    pub fn reply_result<OA: AppendAll>(&mut self, result: Result<OA, MethodErr>) -> PhantomData<OA> {
+        match result {
+            Ok(oa) => { self.reply_ok(oa); },
+            Err(e) => { self.reply_err(e); },
+        };
+        PhantomData
+    }
+
     /// Reply to a "get" result. (Does not work yet)
     /// This is what you'll normally have last in your async get property handler.
     ///

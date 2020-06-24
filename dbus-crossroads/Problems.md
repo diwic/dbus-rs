@@ -176,6 +176,19 @@ It also means borrowing the `Connection` for the duration of the method running,
 perhaps holding an `Arc`/`Rc` to it. Because how would you else send the reply once
 you're done?
 
+=== Async + GetAll ===
+
+Here's another problem. The user should not have to implement GetAll, it should be
+implemented by calling Get for all properties. But the Context can not be easily
+cloned (unless we wrap everything inside an Arc<Mutex>??).
+
+Maybe the best trade-off is to let `Get` borrow the `Context` until the first await
+point only. We then kick off all property gets in async-parallel fashion.
+
+Then have a separate small `GetCtx` that can be used during the awaiting, which is actually an Arc internally,
+shared between the different `GetAll`s.
+
+
 == Mocking and client/server ==
 
 TBD
