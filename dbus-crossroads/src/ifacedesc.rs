@@ -120,6 +120,10 @@ impl Registry {
         };
         r
     }
+
+    pub fn get_intf_name(&self, t: usize) -> Option<&dbus::strings::Interface<'static>> {
+        self.0.get(t)?.name.as_ref()
+    }
 }
 
 pub type Callback = Box<dyn FnMut(Context, &mut Crossroads) -> Option<Context> + Send + 'static>;
@@ -385,7 +389,7 @@ impl<T: std::marker::Send, A> PropBuilder<'_, T, A> {
 ///
 /// Methods that have "_async" will allow you to defer the result of your method. During await points,
 /// other tasks with method calls can run as separate tasks. Remember to call Crossroads::set_async_support
-/// when using async methods.  
+/// when using async methods.
 ///
 #[derive(Debug)]
 pub struct IfaceBuilder<T: Send + 'static>(IfaceDesc, PhantomData<&'static T>);

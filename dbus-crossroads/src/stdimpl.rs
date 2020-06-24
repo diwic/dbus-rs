@@ -1,3 +1,5 @@
+use std::sync::Arc;
+use dbus::channel::Sender;
 use std::collections::HashMap;
 use crate::{IfaceToken, Crossroads, Context, MethodErr};
 use dbus::arg::{Variant, RefArg, IterAppend, Arg};
@@ -182,4 +184,73 @@ pub fn properties(cr: &mut Crossroads) -> IfaceToken<()> {
         b.signal::<(String, Props, Vec<String>), _>("PropertiesChanged",
             ("interface_name", "changed_properties", "invalidated_properties"));
     })
+}
+
+type IfacesAndProps = HashMap<String, HashMap<String, Variant<Box<dyn RefArg>>>>;
+
+fn get_all_for_path(path: &dbus::Path<'static>, cr: &mut Crossroads) -> IfacesAndProps {
+    let mut i = HashMap::new();
+    let (reg, ifaces) = cr.registry_and_ifaces(&path);
+    for iface in ifaces.into_iter().filter_map(|iface| reg.get_intf_name(*iface)) {
+        // TODO
+        i.insert(String::from(&**iface), HashMap::new());
+    }
+    i
+}
+
+fn get_managed_objects(cr: &mut Crossroads, path: &dbus::Path<'static>) -> HashMap<dbus::Path<'static>, IfacesAndProps> {
+    let children: Vec<dbus::Path<'static>> =
+        cr.get_children(path).into_iter().map(|path| dbus::Path::from(path).into_static()).collect();
+    let mut r = HashMap::new();
+    for path in children {
+        let i = get_all_for_path(&path, cr);
+        r.insert(path, i);
+    }
+    r
+}
+
+pub fn object_manager(cr: &mut Crossroads) -> IfaceToken<()> {
+    cr.register("org.freedesktop.DBus.ObjectManager", |b| {
+        b.method_with_cr("GetManagedObjects", (), ("xml_data",), |ctx, cr, _: ()| {
+            Ok((get_managed_objects(cr, ctx.path()),))
+        });
+        b.signal::<(dbus::Path<'static>, IfacesAndProps), _>("InterfacesAdded",
+            ("object_path", "interfaces_and_properties"));
+        b.signal::<(dbus::Path<'static>, Vec<String>), _>("InterfacesRemoved",
+            ("object_path", "interfaces"));
+    })
+}
+
+fn object_manager_parents<F: FnMut(dbus::Path<'static>, &mut Crossroads)>(name: &dbus::Path<'static>, cr: &mut Crossroads, mut f: F) {
+    for idx in 0..name.len()-1 {
+        if name.as_bytes()[idx] != b'/' { continue; }
+        let parent = dbus::Path::from(&name[0..(if idx == 0 { idx + 1 } else {idx})]).into_static();
+        if !cr.has_interface(&parent, cr.object_manager::<()>()) { continue; }
+        f(parent, cr)
+    }
+}
+
+pub fn object_manager_path_added(sender: Arc<dyn Sender + Send + Sync>, name: &dbus::Path<'static>, cr: &mut Crossroads) {
+    object_manager_parents(name, cr, |parent, cr| {
+        let x = dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesAdded {
+            object: name.clone(),
+            interfaces: get_all_for_path(&name, cr),
+        };
+        let _ = sender.send(dbus::message::SignalArgs::to_emit_message(&x, &parent));
+    });
+}
+
+pub fn object_manager_path_removed(sender: Arc<dyn Sender + Send + Sync>, name: &dbus::Path<'static>, cr: &mut Crossroads) {
+    object_manager_parents(name, cr, |parent, cr| {
+        let (reg, ifaces) = cr.registry_and_ifaces(&name);
+
+        let x = dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved {
+            object: name.clone(),
+            interfaces: ifaces.into_iter()
+                .filter_map(|iface| reg.get_intf_name(*iface))
+                .map(|iface| String::from(&**iface))
+                .collect(),
+        };
+        let _ = sender.send(dbus::message::SignalArgs::to_emit_message(&x, &parent));
+    });
 }

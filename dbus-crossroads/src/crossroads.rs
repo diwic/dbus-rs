@@ -8,9 +8,11 @@ use crate::ifacedesc::Registry;
 use std::collections::{BTreeMap, HashSet};
 use std::any::Any;
 use std::fmt;
+use crate::context::Dbg;
 
 const INTROSPECTABLE: usize = 0;
 const PROPERTIES: usize = 1;
+const OBJECT_MANAGER: usize = 2;
 
 /// Contains a reference to a registered interface.
 #[derive(Debug, Copy, Clone, Eq, Ord, Hash, PartialEq, PartialOrd)]
@@ -48,6 +50,7 @@ pub struct Crossroads {
     registry: Registry,
     add_standard_ifaces: bool,
     async_support: Option<AsyncSupport>,
+    object_manager_support: Option<Dbg<Arc<dyn Sender + Send + Sync + 'static>>>,
 }
 
 impl Crossroads {
@@ -58,11 +61,14 @@ impl Crossroads {
             registry: Default::default(),
             add_standard_ifaces: true,
             async_support: None,
+            object_manager_support: None,
         };
         let t0 = stdimpl::introspectable(&mut cr);
         let t1 = stdimpl::properties(&mut cr);
+        let t2 = stdimpl::object_manager(&mut cr);
         debug_assert_eq!(t0.0, INTROSPECTABLE);
         debug_assert_eq!(t1.0, PROPERTIES);
+        debug_assert_eq!(t2.0, OBJECT_MANAGER);
         cr
     }
 
@@ -105,7 +111,16 @@ impl Crossroads {
                 ifaces.insert(PROPERTIES);
             }
         }
-        self.map.insert(name.into(), Object { ifaces, data: Box::new(data)});
+        let name = name.into();
+        self.map.insert(name.clone(), Object { ifaces, data: Box::new(data)});
+        if let Some(oms) = self.object_manager_support.as_ref() {
+            stdimpl::object_manager_path_added(oms.0.clone(), &name, self);
+        }
+    }
+
+    /// Returns true if the path exists and implements the interface
+    pub fn has_interface<D: Send>(&self, name: &dbus::Path<'static>, token: IfaceToken<D>) -> bool {
+        self.map.get(name).map(|x| x.ifaces.contains(&token.0)).unwrap_or(false)
     }
 
     /// Removes an existing path.
@@ -114,6 +129,11 @@ impl Crossroads {
     /// In case of a type mismatch, the path will be removed, but None will be returned.
     pub fn remove<D>(&mut self, name: &dbus::Path<'static>) -> Option<D>
     where D: Any + Send + 'static {
+        if let Some(oms) = self.object_manager_support.as_ref() {
+            if self.map.contains_key(name) {
+                stdimpl::object_manager_path_removed(oms.0.clone(), &name, self);
+            }
+        }
         let x = self.map.remove(name)?;
         let r: Box<D> = x.data.downcast().ok()?;
         Some(*r)
@@ -184,6 +204,12 @@ impl Crossroads {
     /// The token representing the built-in implementation of "org.freedesktop.DBus.Properties".
     pub fn properties<T: Send + 'static>(&self) -> IfaceToken<T> { IfaceToken(PROPERTIES, PhantomData) }
 
+    /// The token representing the built-in implementation of "org.freedesktop.DBus.ObjectManager".
+    ///
+    /// You can add this to a path without enabling "set_object_manager_support", but no signals will
+    /// be sent.
+    pub fn object_manager<T: Send + 'static>(&self) -> IfaceToken<T> { IfaceToken(OBJECT_MANAGER, PhantomData) }
+
     /// Enables this crossroads instance to run asynchronous methods (and setting properties).
     ///
     /// Incoming method calls are spawned as separate tasks if necessary. This provides the necessary
@@ -195,5 +221,13 @@ impl Crossroads {
             spawner: x.1
         });
         a.map(|x| (x.sender, x.spawner))
+    }
+
+    /// Enables this crossroads instance to send signals when paths are added and removed.
+    ///
+    /// The added/removed path is a subpat +  ?Sizedh of a path which implements an object manager instance.
+    pub fn set_object_manager_support(&mut self, x: Option<Arc<dyn Sender + Send + Sync + 'static>>) -> Option<Arc<dyn Sender + Send + Sync + 'static>> {
+        let x = x.map(|x| Dbg(x));
+        std::mem::replace(&mut self.object_manager_support, x).map(|x| x.0)
     }
 }

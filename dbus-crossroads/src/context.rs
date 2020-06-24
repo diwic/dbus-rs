@@ -9,7 +9,7 @@ use std::fmt;
 use crate::{MethodErr};
 use crate::stdimpl::PropCtx;
 
-struct Dbg<T>(T);
+pub (crate) struct Dbg<T>(pub T);
 
 impl<T> fmt::Debug for Dbg<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "...") }
