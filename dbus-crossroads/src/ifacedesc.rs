@@ -261,7 +261,7 @@ impl<T, A> Drop for PropBuilder<'_, T, A> {
     }
 }
 
-impl<T: std::marker::Send, A: arg::Arg + arg::RefArg + arg::Append> PropBuilder<'_, T, A> {
+impl<T: Send, A: Send + arg::RefArg + arg::Append> PropBuilder<'_, T, A> {
     pub fn get<CB>(self, mut cb: CB) -> Self
     where CB: FnMut(&mut Context, &mut T) -> Result<A, MethodErr> + Send + 'static {
         self.get_with_cr(move |ctx, cr| {

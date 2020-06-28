@@ -109,9 +109,10 @@ impl PropCtx {
         }
     }
 
-    pub (crate) fn add_get_result<V: dbus::arg::Arg + dbus::arg::Append>(&mut self, v: V) {
-        if let Some(get_msg) = self.get_msg.as_mut() {
-            get_msg.append_all((&Variant(v),));
+    pub (crate) fn add_get_result<V: dbus::arg::RefArg + Send>(&mut self, v: V) {
+        if let Some(mut get_msg) = self.get_msg.as_mut() {
+            let mut m = IterAppend::new(&mut get_msg);
+            Variant(v).append(&mut m);
         }
     }
 
@@ -211,7 +212,7 @@ fn get_managed_objects(cr: &mut Crossroads, path: &dbus::Path<'static>) -> HashM
 
 pub fn object_manager(cr: &mut Crossroads) -> IfaceToken<()> {
     cr.register("org.freedesktop.DBus.ObjectManager", |b| {
-        b.method_with_cr("GetManagedObjects", (), ("xml_data",), |ctx, cr, _: ()| {
+        b.method_with_cr("GetManagedObjects", (), ("objpath_interfaces_and_properties",), |ctx, cr, _: ()| {
             Ok((get_managed_objects(cr, ctx.path()),))
         });
         b.signal::<(dbus::Path<'static>, IfacesAndProps), _>("InterfacesAdded",

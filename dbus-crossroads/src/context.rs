@@ -1,4 +1,5 @@
 
+use dbus::arg::RefArg;
 use dbus::arg::Arg;
 use dbus::arg::Append;
 use std::marker::PhantomData;
@@ -96,7 +97,7 @@ impl Context {
     /// This is what you'll normally have last in your async get property handler.
     ///
     /// Returns PhantomData just to aid the type system.
-    pub (crate) fn reply_get_prop<A: Arg + Append>(&mut self, a: A) -> PhantomData<(A, ())> {
+    pub (crate) fn reply_get_prop<A: RefArg + Send>(&mut self, a: A) -> PhantomData<(A, ())> {
         self.prop_ctx().add_get_result(a);
         PhantomData
     }
