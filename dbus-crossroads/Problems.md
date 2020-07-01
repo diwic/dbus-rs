@@ -188,6 +188,9 @@ point only. We then kick off all property gets in async-parallel fashion.
 Then have a separate small `GetCtx` that can be used during the awaiting, which is actually an Arc internally,
 shared between the different `GetAll`s.
 
+However, retreival of properties can also happen as the result of wanting to send
+ObjectManagerInterfacesAdded. In which case we don't have a message to start with.
+
 
 == Mocking and client/server ==
 

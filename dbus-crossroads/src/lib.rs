@@ -15,9 +15,19 @@ mod stdimpl;
 pub use dbus::tree::MethodErr as MethodErr;
 
 pub use context::Context;
+pub use stdimpl::PropContext;
 pub use crossroads::{Crossroads, IfaceToken};
 
 pub use ifacedesc::{MethodDesc, SignalDesc, IfaceBuilder, PropBuilder};
 
 #[cfg(test)]
 mod test;
+
+mod utils {
+    use std::fmt;
+    pub (crate) struct Dbg<T>(pub T);
+
+    impl<T> fmt::Debug for Dbg<T> {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "...") }
+    }
+}

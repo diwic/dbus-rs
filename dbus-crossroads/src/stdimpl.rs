@@ -2,7 +2,8 @@ use std::sync::Arc;
 use dbus::channel::Sender;
 use std::collections::HashMap;
 use crate::{IfaceToken, Crossroads, Context, MethodErr};
-use dbus::arg::{Variant, RefArg, IterAppend, Arg};
+use dbus::arg::{Variant, RefArg, Arg, Append};
+use std::marker::PhantomData;
 use crate::ifacedesc::EMITS_CHANGED;
 
 fn introspect(cr: &Crossroads, path: &dbus::Path<'static>) -> String {
@@ -31,10 +32,126 @@ pub fn introspectable(cr: &mut Crossroads) -> IfaceToken<()> {
     })
 }
 
+
+fn make_emits_message<V: dbus::arg::Arg + dbus::arg::Append>(prop_name: &str, emits_changed: &str, ctx: &Context, v: &V) -> Option<dbus::Message> {
+    let arr = [prop_name];
+    let (d, i) = match emits_changed {
+        "false" => return None,
+        "invalidates" => (None, &arr[..]),
+        "true" => (Some((arr[0], Variant(v))), &[][..]),
+        _ => panic!("Invalid value of EmitsChangedSignal: {:?}", emits_changed)
+    };
+
+    use dbus::message::SignalArgs;
+    use dbus::blocking::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged as PPC;
+    let s: &str = ctx.message().read1().unwrap();
+    Some(dbus::Message::signal(ctx.path(), &PPC::INTERFACE.into(), &PPC::NAME.into())
+        .append3(s, dbus::arg::Dict::new(d), i))
+}
+
+
+#[derive(Debug)]
+pub struct PropContext {
+    path: dbus::Path<'static>,
+    interface: dbus::strings::Interface<'static>,
+    name: String,
+    context: Option<Context>,
+
+    iface_token: usize,
+    emits_changed: Option<&'static str>,
+}
+
+impl PropContext {
+    /// The current object path.
+    pub fn path(&self) -> &dbus::Path<'static> { &self.path }
+
+    /// The current interface name.
+    pub fn interface(&self) -> &dbus::strings::Interface<'static> { &self.interface }
+
+    /// The current property name.
+    pub fn name(&self) -> &str { &self.name }
+
+    /// The message, if any, that caused this method to be called.
+    pub fn message(&self) -> Option<&dbus::Message> { self.context.as_ref().map(|ctx| ctx.message()) }
+
+    /// Set a reply to message (use in async context only)
+    ///
+    /// Returns PhantomData just to aid the type system
+    pub fn reply<A: Arg + RefArg + Send + Append + 'static>(&mut self, reply: Result<A, MethodErr>) -> PhantomData<A> {
+        if let Some(ec) = &self.emits_changed {
+            let mut emit_msg = None;
+            if let Ok(v) = &reply {
+                if let Some(ctx) = &self.context {
+                    emit_msg = make_emits_message(&self.name, ec, &ctx, v);
+                }
+            }
+            self.reply_noemit(reply.map(|_| ()));
+            emit_msg.map(|emit_msg| self.context.as_mut().map(|ctx| { ctx.push_msg(emit_msg) }));
+        } else {
+            self.context.as_mut().map(|ctx| ctx.reply_result(reply.map(|a| (Variant(a),))));
+        }
+        PhantomData
+    }
+
+    /// Set a reply to a "set property" message (use in async context only)
+    ///
+    /// This can be used when the property does not send a "EmitsChanged" signal.
+    pub fn reply_noemit(&mut self, reply: Result<(), MethodErr>) {
+        debug_assert!(self.emits_changed.is_some());
+        self.context.as_mut().map(|ctx| ctx.reply_result(reply));
+    }
+
+    pub (crate) fn set_send_on_drop(&mut self, value: Arc<dyn Sender + Send + Sync>) {
+        self.context.as_mut().map(|ctx| ctx.set_send_on_drop(value));
+    }
+
+    fn new(cr: &Crossroads, path: dbus::Path<'static>, interface: String, name: String) -> Result<Self, MethodErr> {
+        let interface = dbus::strings::Interface::new(interface).map_err(|s| MethodErr::no_interface(&s))?;
+        let iface_token = cr.find_iface_token(&path, Some(&interface))?;
+        Ok(PropContext {
+            path,
+            iface_token,
+            interface,
+            name,
+            context: None,
+            emits_changed: None
+        })
+    }
+
+    fn call_prop(mut self, cr: &mut Crossroads, is_set: bool) -> Option<Self> {
+        let token = self.iface_token;
+        let name = self.name.clone();
+        let mut cb = match self.check(|_| {
+            cr.registry().take_prop(token, &name, is_set)
+        }) {
+            Ok(cb) => cb,
+            Err(_) => return Some(self)
+        };
+        let octx = cb(self, cr);
+        cr.registry().give_prop(token, &name, cb, is_set);
+        octx
+    }
+
+    fn call_all_props<F: FnOnce(Self, PropMap) + Send + 'static>(mut self, cr: &mut Crossroads, f: F) -> Option<Self> {
+        let prop_names = cr.registry().prop_names_readable(self.iface_token);
+
+        todo!()
+    }
+
+    /// Convenience method that sets an error reply if the closure returns an error.
+    pub fn check<R, F: FnOnce(&mut Context) -> Result<R, MethodErr>>(&mut self, f: F) -> Result<R, ()> {
+        match &mut self.context {
+            Some(ctx) => ctx.check(|ctx| f(ctx)),
+            None => todo!(),
+        }
+    }
+}
+
+/*
 #[derive(Debug)]
 pub (crate) struct PropCtx {
     iface_token: usize,
-    emits_changed: Option<String>,
+    emits_changed: Option<&'static str>,
 
     prop_names: Vec<String>,
     prop_name: Option<String>,
@@ -53,7 +170,7 @@ impl PropCtx {
             emits_changed: None
         })
     }
-
+/*
     fn call_prop(mut self, mut ctx: Context, cr: &mut Crossroads, prop_name: String, is_set: bool) -> Option<(Context, Self)> {
         let token = self.iface_token;
         let pname = prop_name.clone();
@@ -72,7 +189,8 @@ impl PropCtx {
             (ctx, prop_ctx)
         })
     }
-
+*/
+/*
     fn run_getall(mut self, mut ctx: Context, cr: &mut Crossroads) -> Option<Context> {
         loop {
             if let Some(next_name) = self.prop_names.pop() {
@@ -108,7 +226,7 @@ impl PropCtx {
             }
         }
     }
-
+*/
     pub (crate) fn add_get_result<V: dbus::arg::RefArg + Send>(&mut self, v: V) {
         if let Some(mut get_msg) = self.get_msg.as_mut() {
             let mut m = IterAppend::new(&mut get_msg);
@@ -132,49 +250,54 @@ impl PropCtx {
             .append3(s, dbus::arg::Dict::new(d), i))
     }
 }
-
+*/
 type Props = HashMap<String, Variant<Box<dyn RefArg>>>;
 
 fn get(mut ctx: Context, cr: &mut Crossroads, (interface_name, property_name): (String, String)) -> Option<Context> {
-    let mut propctx = match ctx.check(|ctx| { PropCtx::new(cr, ctx.path(), interface_name)}) {
+    let mut propctx = match ctx.check(|ctx| { PropContext::new(cr, ctx.path().clone(), interface_name, property_name)}) {
         Ok(p) => p,
         Err(_) => return Some(ctx),
     };
+    propctx.context = Some(ctx);
+    propctx.call_prop(cr, false).map(|propctx| { propctx.context.unwrap() })
+/*
     if !ctx.message().get_no_reply() {
         propctx.get_msg = Some(ctx.message().method_return());
     }
     propctx.call_prop(ctx, cr, property_name, false).map(|(mut ctx, propctx)| {
         if !ctx.has_reply() { ctx.set_reply(propctx.get_msg, true, true) }
         ctx
-    })
+    }) */
 }
 
 fn getall(mut ctx: Context, cr: &mut Crossroads, (interface_name,): (String,)) -> Option<Context> {
-    let mut propctx = match ctx.check(|ctx| { PropCtx::new(cr, ctx.path(), interface_name)}) {
+    let mut propctx = match ctx.check(|ctx| { PropContext::new(cr, ctx.path().clone(), interface_name, "".into())}) {
         Ok(p) => p,
         Err(_) => return Some(ctx),
     };
-    propctx.prop_names = cr.registry().prop_names_readable(propctx.iface_token);
-    if !ctx.message().get_no_reply() {
-        propctx.get_msg = Some(ctx.message().method_return());
-    }
-
-    propctx.run_getall(ctx, cr)
+    propctx.context = Some(ctx);
+    propctx.call_all_props(cr, move |propctx, all_props| {
+        propctx.context.unwrap().do_reply(|msg| {
+            msg.append_all((all_props,));
+        });
+    }).map(|propctx| { propctx.context.unwrap() })
 }
 
 fn set(mut ctx: Context, cr: &mut Crossroads, (interface_name, property_name, _value): (String, String, Variant<Box<dyn RefArg>>)) -> Option<Context> {
-    let mut propctx = match ctx.check(|ctx| { PropCtx::new(cr, ctx.path(), interface_name) }) {
+    let mut propctx = match ctx.check(|ctx| { PropContext::new(cr, ctx.path().clone(), interface_name, property_name) }) {
         Ok(p) => p,
         Err(_) => return Some(ctx),
     };
-    propctx.emits_changed = cr.registry()
-        .find_annotation(propctx.iface_token, EMITS_CHANGED, Some(&property_name))
-        .map(|x| x.into());
-    ctx.set_pre_flush(Box::new(|ctx| {
-        if ctx.has_error() { return; }
-        ctx.do_reply(|_| {});
-    }));
-    propctx.call_prop(ctx, cr, property_name, true).map(|(ctx, _)| { ctx })
+    let ann = cr.registry()
+        .find_annotation(propctx.iface_token, EMITS_CHANGED, Some(&propctx.name));
+    propctx.emits_changed = match ann {
+        Some("const") => Some("const"),
+        Some("false") => Some("false"),
+        Some("invalidates") => Some("invalidates"),
+        _ => Some("true"),
+    };
+    propctx.context = Some(ctx);
+    propctx.call_prop(cr, true).map(|propctx| { propctx.context.unwrap() })
 }
 
 pub fn properties(cr: &mut Crossroads) -> IfaceToken<()> {
@@ -187,9 +310,10 @@ pub fn properties(cr: &mut Crossroads) -> IfaceToken<()> {
     })
 }
 
-type IfacesAndProps = HashMap<String, HashMap<String, Variant<Box<dyn RefArg>>>>;
+type PropMap = HashMap<String, Variant<Box<dyn RefArg>>>;
+type IfacePropMap = HashMap<String, PropMap>;
 
-fn get_all_for_path(path: &dbus::Path<'static>, cr: &mut Crossroads) -> IfacesAndProps {
+fn get_all_for_path(path: &dbus::Path<'static>, cr: &mut Crossroads) -> IfacePropMap {
     let mut i = HashMap::new();
     let (reg, ifaces) = cr.registry_and_ifaces(&path);
     for iface in ifaces.into_iter().filter_map(|iface| reg.get_intf_name(*iface)) {
@@ -199,7 +323,7 @@ fn get_all_for_path(path: &dbus::Path<'static>, cr: &mut Crossroads) -> IfacesAn
     i
 }
 
-fn get_managed_objects(cr: &mut Crossroads, path: &dbus::Path<'static>) -> HashMap<dbus::Path<'static>, IfacesAndProps> {
+fn get_managed_objects(cr: &mut Crossroads, path: &dbus::Path<'static>) -> HashMap<dbus::Path<'static>, IfacePropMap> {
     let children: Vec<dbus::Path<'static>> =
         cr.get_children(path).into_iter().map(|path| dbus::Path::from(path).into_static()).collect();
     let mut r = HashMap::new();
@@ -215,7 +339,7 @@ pub fn object_manager(cr: &mut Crossroads) -> IfaceToken<()> {
         b.method_with_cr("GetManagedObjects", (), ("objpath_interfaces_and_properties",), |ctx, cr, _: ()| {
             Ok((get_managed_objects(cr, ctx.path()),))
         });
-        b.signal::<(dbus::Path<'static>, IfacesAndProps), _>("InterfacesAdded",
+        b.signal::<(dbus::Path<'static>, IfacePropMap), _>("InterfacesAdded",
             ("object_path", "interfaces_and_properties"));
         b.signal::<(dbus::Path<'static>, Vec<String>), _>("InterfacesRemoved",
             ("object_path", "interfaces"));

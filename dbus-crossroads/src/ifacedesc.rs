@@ -1,6 +1,6 @@
 use std::future::Future;
 use std::marker::PhantomData;
-use crate::{Context, MethodErr, Crossroads};
+use crate::{Context, PropContext, MethodErr, Crossroads, utils::Dbg};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::borrow::Cow;
@@ -41,7 +41,7 @@ impl Registry {
         }).collect()
     }
 
-    pub fn take_prop(&mut self, t: usize, name: &str, is_set: bool) -> Result<Callback, MethodErr> {
+    pub fn take_prop(&mut self, t: usize, name: &str, is_set: bool) -> Result<PropCb, MethodErr> {
         let pdesc = self.0[t].properties.get_mut(name).ok_or_else(|| MethodErr::no_property(name))?;
         let cb = if is_set { pdesc.set_cb.take() } else { pdesc.get_cb.take() };
         let rw = if is_set { "writable" } else { "readable" };
@@ -49,9 +49,9 @@ impl Registry {
         Ok(cb.0)
     }
 
-    pub fn give_prop(&mut self, t: usize, name: &str, cb: Callback, is_set: bool) {
+    pub fn give_prop(&mut self, t: usize, name: &str, cb: PropCb, is_set: bool) {
         let x = self.0[t].properties.get_mut(name).unwrap();
-        let cb = Some(CallbackDbg(cb));
+        let cb = Some(Dbg(cb));
         if is_set { x.set_cb = cb } else { x.get_cb = cb };
     }
 
@@ -127,6 +127,7 @@ impl Registry {
 }
 
 pub type Callback = Box<dyn FnMut(Context, &mut Crossroads) -> Option<Context> + Send + 'static>;
+pub type PropCb = Box<dyn FnMut(PropContext, &mut Crossroads) -> Option<PropContext> + Send + 'static>;
 
 struct CallbackDbg(Callback);
 
@@ -229,8 +230,8 @@ impl SignalDesc {
 pub struct PropDesc {
     annotations: Annotations,
     sig: dbus::Signature<'static>,
-    get_cb: Option<CallbackDbg>,
-    set_cb: Option<CallbackDbg>,
+    get_cb: Option<Dbg<PropCb>>,
+    set_cb: Option<Dbg<PropCb>>,
 }
 
 #[derive(Debug)]
@@ -261,9 +262,9 @@ impl<T, A> Drop for PropBuilder<'_, T, A> {
     }
 }
 
-impl<T: Send, A: Send + arg::RefArg + arg::Append> PropBuilder<'_, T, A> {
+impl<T: Send, A: Send + arg::RefArg + arg::Arg + arg::Append> PropBuilder<'_, T, A> {
     pub fn get<CB>(self, mut cb: CB) -> Self
-    where CB: FnMut(&mut Context, &mut T) -> Result<A, MethodErr> + Send + 'static {
+    where CB: FnMut(&mut PropContext, &mut T) -> Result<A, MethodErr> + Send + 'static {
         self.get_with_cr(move |ctx, cr| {
             let data = cr.data_mut(ctx.path()).ok_or_else(|| MethodErr::no_path(ctx.path()))?;
             cb(ctx, data)
@@ -271,50 +272,45 @@ impl<T: Send, A: Send + arg::RefArg + arg::Append> PropBuilder<'_, T, A> {
     }
 
     pub fn get_with_cr<CB>(self, mut cb: CB) -> Self
-    where CB: FnMut(&mut Context, &mut Crossroads) -> Result<A, MethodErr> + Send + 'static {
+    where CB: FnMut(&mut PropContext, &mut Crossroads) -> Result<A, MethodErr> + Send + 'static {
         self.get_custom(move |mut ctx, cr| {
-            let _ = ctx.check(|ctx| {
-                let r = cb(ctx, cr)?;
-                ctx.reply_get_prop(r);
-                Ok(())
-            });
+            let r = cb(&mut ctx, cr);
+            ctx.reply(r);
             Some(ctx)
         })
     }
 
     pub (crate) fn get_custom<CB>(mut self, mut cb: CB) -> Self
-    where CB: FnMut(Context, &mut Crossroads) -> Option<Context> + Send + 'static {
-        self.0.get_cb = Some(CallbackDbg(Box::new(move |ctx, cr| {
+    where CB: FnMut(PropContext, &mut Crossroads) -> Option<PropContext> + Send + 'static {
+        self.0.get_cb = Some(Dbg(Box::new(move |ctx, cr| {
             cb(ctx, cr)
         })));
         self
     }
 
-    /*
-     Does not work yet
-
     pub fn get_with_cr_async<R, CB>(self, mut cb: CB) -> Self
     where
-        CB: FnMut(Context, &mut Crossroads) -> R + Send + 'static,
+        CB: FnMut(PropContext, &mut Crossroads) -> R + Send + 'static,
         R: Future<Output=PhantomData<(A, ())>> + Send + 'static
     {
-        self.get_custom(move |ctx, cr| {
-            cr.run_async_method(ctx, |ctx, cr| {
+        self.get_custom(move |mut ctx, cr| {
+            cr.run_async_method(|sender, cr| {
+                ctx.set_send_on_drop(sender);
                 let r = cb(ctx, cr);
                 async move { r.await; }
             });
             None
         })
     }
-    */
+
 }
 
 pub const EMITS_CHANGED: &'static str = "org.freedesktop.DBus.Property.EmitsChangedSignal";
 const DEPRECATED: &'static str = "org.freedesktop.DBus.Deprecated";
 
-impl<T: std::marker::Send, A: arg::Append + arg::Arg + for <'x> arg::Get<'x>> PropBuilder<'_, T, A> {
+impl<T: Send, A: arg::RefArg + Send + for<'x> arg::Get<'x> + arg::Arg + arg::Append> PropBuilder<'_, T, A> {
     pub fn set<CB>(self, mut cb: CB) -> Self
-    where CB: FnMut(&mut Context, &mut T, A) -> Result<Option<A>, MethodErr> + Send + 'static {
+    where CB: FnMut(&mut PropContext, &mut T, A) -> Result<Option<A>, MethodErr> + Send + 'static {
         self.set_with_cr(move |ctx, cr, a| {
             let data = cr.data_mut(ctx.path()).ok_or_else(|| MethodErr::no_path(ctx.path()))?;
             cb(ctx, data, a)
@@ -322,19 +318,20 @@ impl<T: std::marker::Send, A: arg::Append + arg::Arg + for <'x> arg::Get<'x>> Pr
     }
 
     pub fn set_with_cr<CB>(self, mut cb: CB) -> Self
-    where CB: FnMut(&mut Context, &mut Crossroads, A) -> Result<Option<A>, MethodErr> + Send + 'static {
+    where CB: FnMut(&mut PropContext, &mut Crossroads, A) -> Result<Option<A>, MethodErr> + Send + 'static {
         self.set_custom(move |mut ctx, cr, a| {
-            let oa = ctx.check(|ctx| cb(ctx, cr, a));
-            if let Ok(oa) = oa {
-                if !ctx.has_error() { ctx.reply_set_prop(oa); }
-            }
+            match cb(&mut ctx, cr, a) {
+                Ok(None) => { ctx.reply_noemit(Ok(())); }
+                Ok(Some(x)) => { ctx.reply(Ok(x)); }
+                Err(x) => { ctx.reply_noemit(Err(x)); }
+            };
             Some(ctx)
         })
     }
 
     pub fn set_custom<CB>(mut self, mut cb: CB) -> Self
-    where CB: FnMut(Context, &mut Crossroads, A) -> Option<Context> + Send + 'static {
-        self.0.set_cb = Some(CallbackDbg(Box::new(move |mut ctx, cr| {
+    where CB: FnMut(PropContext, &mut Crossroads, A) -> Option<PropContext> + Send + 'static {
+        self.0.set_cb = Some(Dbg(Box::new(move |mut ctx, cr| {
             match ctx.check(|ctx| {
                 let mut i = ctx.message().iter_init();
                 i.next(); i.next();
@@ -350,11 +347,12 @@ impl<T: std::marker::Send, A: arg::Append + arg::Arg + for <'x> arg::Get<'x>> Pr
 
     pub fn set_with_cr_async<CB, R>(self, mut cb: CB) -> Self
     where
-        CB: FnMut(Context, &mut Crossroads, A) -> R + Send + 'static,
+        CB: FnMut(PropContext, &mut Crossroads, A) -> R + Send + 'static,
         R: Future<Output=PhantomData<Option<A>>> + Send + 'static
     {
-        self.set_custom(move |ctx, cr, a| {
-            cr.run_async_method(ctx, |ctx, cr| {
+        self.set_custom(move |mut ctx, cr, a| {
+            cr.run_async_method(|sender, cr| {
+                ctx.set_send_on_drop(sender);
                 let r = cb(ctx, cr, a);
                 async move { r.await; }
             });
@@ -458,8 +456,9 @@ impl<T: Send + 'static> IfaceBuilder<T> {
     N: Into<dbus::strings::Member<'static>>,
     CB: FnMut(Context, &mut Crossroads, IA) -> R + Send + 'static,
     R: Future<Output=PhantomData<OA>> + Send + 'static {
-        self.method_with_cr_custom::<IA, OA, _, _>(name, input_args, output_args, move |ctx, cr, ia| {
-            cr.run_async_method(ctx, |ctx, cr| {
+        self.method_with_cr_custom::<IA, OA, _, _>(name, input_args, output_args, move |mut ctx, cr, ia| {
+            cr.run_async_method(|sender, cr| {
+                ctx.set_send_on_drop(sender);
                 let r = cb(ctx, cr, ia);
                 async move { r.await; }
             });

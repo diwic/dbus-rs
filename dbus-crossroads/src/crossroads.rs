@@ -8,7 +8,7 @@ use crate::ifacedesc::Registry;
 use std::collections::{BTreeMap, HashSet};
 use std::any::Any;
 use std::fmt;
-use crate::context::Dbg;
+use crate::utils::Dbg;
 
 const INTROSPECTABLE: usize = 0;
 const PROPERTIES: usize = 1;
@@ -169,13 +169,12 @@ impl Crossroads {
         r
     }
 
-    pub (crate) fn run_async_method<F, R>(&mut self, mut ctx: Context, f: F)
-    where F: FnOnce(Context, &mut Crossroads) -> R,
+    pub (crate) fn run_async_method<F, R>(&mut self, f: F)
+    where F: FnOnce(Arc<dyn Sender + Send + Sync + 'static>, &mut Crossroads) -> R,
     R: Future<Output=()> + Send + 'static
     {
         let sender = self.async_support.as_ref().expect("Async support not set").sender.clone();
-        ctx.set_send_on_drop(sender);
-        let future = f(ctx, self);
+        let future = f(sender, self);
         let spawner = &self.async_support.as_ref().expect("Async support not set").spawner;
         let boxed = Box::pin(async move { future.await });
         (spawner)(boxed)
