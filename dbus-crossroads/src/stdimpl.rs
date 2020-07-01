@@ -1,3 +1,5 @@
+use crate::utils::Dbg;
+use std::sync::Mutex;
 use std::sync::Arc;
 use dbus::channel::Sender;
 use std::collections::HashMap;
@@ -59,6 +61,7 @@ pub struct PropContext {
 
     iface_token: usize,
     emits_changed: Option<&'static str>,
+    get_all: Option<Arc<Mutex<PropAllCtx>>>,
 }
 
 impl PropContext {
@@ -88,7 +91,11 @@ impl PropContext {
             self.reply_noemit(reply.map(|_| ()));
             emit_msg.map(|emit_msg| self.context.as_mut().map(|ctx| { ctx.push_msg(emit_msg) }));
         } else {
-            self.context.as_mut().map(|ctx| ctx.reply_result(reply.map(|a| (Variant(a),))));
+            if let Some(ga) = &self.get_all {
+                ga.lock().unwrap().add_reply(self.name.clone(), reply.ok().map(|a| Box::new(a) as Box<(dyn RefArg + Send)>));
+            } else {
+                self.context.as_mut().map(|ctx| ctx.reply_result(reply.map(|a| (Variant(a),))));
+            }
         }
         PhantomData
     }
@@ -113,6 +120,7 @@ impl PropContext {
             iface_token,
             interface,
             name,
+            get_all: None,
             context: None,
             emits_changed: None
         })
@@ -132,18 +140,77 @@ impl PropContext {
         octx
     }
 
-    fn call_all_props<F: FnOnce(Self, PropMap) + Send + 'static>(mut self, cr: &mut Crossroads, f: F) -> Option<Self> {
-        let prop_names = cr.registry().prop_names_readable(self.iface_token);
-
-        todo!()
+    fn call_all_props<F: FnOnce(&mut Self, PropMap) + Send + 'static>(self, cr: &mut Crossroads, f: F) -> Option<Self> {
+        let token = self.iface_token;
+        let pactx = Arc::new(Mutex::new(PropAllCtx {
+            remaining: 0,
+            answers: vec!(),
+            donefn: Some(Dbg(Box::new(f))),
+            propctx: Some(self),
+        }));
+        let mut pb = pactx.lock().unwrap();
+        let pctxs: Vec<_> = cr.registry().prop_names_readable(token).map(|prop_name| {
+            pb.remaining += 1;
+            let parent = pb.propctx.as_ref().unwrap();
+            PropContext {
+                path: parent.path.clone(),
+                iface_token: parent.iface_token,
+                interface: parent.interface().clone(),
+                name: prop_name.into(),
+                get_all: Some(pactx.clone()),
+                context: None,
+                emits_changed: None
+            }
+        }).collect();
+        drop(pb);
+        for pctx in pctxs {
+            pctx.call_prop(cr, false);
+        }
+        let mut temp = pactx.lock().unwrap();
+        if temp.check_finished() { Some(temp.propctx.take().unwrap()) } else { None }
     }
 
     /// Convenience method that sets an error reply if the closure returns an error.
-    pub fn check<R, F: FnOnce(&mut Context) -> Result<R, MethodErr>>(&mut self, f: F) -> Result<R, ()> {
+    pub fn check<R, F: FnOnce(Option<&mut Context>) -> Result<R, MethodErr>>(&mut self, f: F) -> Result<R, ()> {
         match &mut self.context {
-            Some(ctx) => ctx.check(|ctx| f(ctx)),
-            None => todo!(),
+            Some(ctx) => ctx.check(|ctx| f(Some(ctx))),
+            None => match f(None) {
+                Ok(r) => Ok(r),
+                Err(_) => { todo!() },
+            },
         }
+    }
+}
+
+#[derive(Debug)]
+struct PropAllCtx {
+    remaining: usize,
+    answers: Vec<(String, Box<dyn RefArg + Send>)>,
+    donefn: Option<Dbg<Box<dyn FnOnce(&mut PropContext, PropMap) + Send + 'static>>>,
+    propctx: Option<PropContext>,
+}
+
+impl PropAllCtx {
+    fn check_finished(&mut self) -> bool {
+        if self.remaining > 0 { return false; }
+        if let Some(donefn) = self.donefn.take() {
+            let mut h = HashMap::new();
+            for (k,v) in self.answers.drain(..) {
+                // Rebuild to change RefArg + Send => RefArg
+                h.insert(k, Variant(v as Box<dyn RefArg>));
+            }
+            let mut pctx = self.propctx.as_mut().unwrap();
+            (donefn.0)(&mut pctx, h);
+        }
+        true
+    }
+
+    fn add_reply(&mut self, prop_name: String, prop_value: Option<Box<dyn RefArg + Send>>) {
+        if let Some(v) = prop_value {
+            self.answers.push((prop_name, v));
+        }
+        self.remaining -= 1;
+        self.check_finished();
     }
 }
 
@@ -277,7 +344,7 @@ fn getall(mut ctx: Context, cr: &mut Crossroads, (interface_name,): (String,)) -
     };
     propctx.context = Some(ctx);
     propctx.call_all_props(cr, move |propctx, all_props| {
-        propctx.context.unwrap().do_reply(|msg| {
+        propctx.context.as_mut().unwrap().do_reply(|msg| {
             msg.append_all((all_props,));
         });
     }).map(|propctx| { propctx.context.unwrap() })

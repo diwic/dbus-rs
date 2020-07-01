@@ -35,10 +35,10 @@ impl Registry {
         x.cb = Some(CallbackDbg(cb));
     }
 
-    pub fn prop_names_readable(&self, t: usize) -> Vec<String> {
+    pub fn prop_names_readable(&self, t: usize) -> impl Iterator<Item=&str> {
         self.0[t].properties.iter().filter_map(|(k, v)| {
-            if v.get_cb.is_some() { Some(k.clone()) } else { None }
-        }).collect()
+            if v.get_cb.is_some() { Some(&**k) } else { None }
+        })
     }
 
     pub fn take_prop(&mut self, t: usize, name: &str, is_set: bool) -> Result<PropCb, MethodErr> {
@@ -333,6 +333,7 @@ impl<T: Send, A: arg::RefArg + Send + for<'x> arg::Get<'x> + arg::Arg + arg::App
     where CB: FnMut(PropContext, &mut Crossroads, A) -> Option<PropContext> + Send + 'static {
         self.0.set_cb = Some(Dbg(Box::new(move |mut ctx, cr| {
             match ctx.check(|ctx| {
+                let ctx = ctx.unwrap();
                 let mut i = ctx.message().iter_init();
                 i.next(); i.next();
                 let a: arg::Variant<_> = i.read()?;
