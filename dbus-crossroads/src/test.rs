@@ -166,3 +166,47 @@ fn introspect() {
     println!("{}", xml_data);
     assert_eq!(INTROSPECT, xml_data);
 }
+
+#[test]
+fn object_manager() {
+    struct Apple { radius: u32, weight: u32 };
+
+    let mut cr = Crossroads::new();
+
+    let add_remove = std::sync::Arc::new(std::sync::Mutex::new(vec!()));
+    cr.set_object_manager_support(Some(add_remove.clone()));
+
+    let weight_token = cr.register::<Apple, _, _>("com.example.dbusrs.weight", |b| {
+        b.property("Weight").get(|_, apple| { Ok(apple.weight) });
+    });
+    let radius_token = cr.register::<Apple, _, _>("com.example.dbusrs.radius", |b| {
+        b.property("Radius").get(|_, apple| { Ok(apple.radius) });
+    });
+
+    cr.insert("/list", &[cr.object_manager()], ());
+
+    cr.insert("/list/grannysmith", &[weight_token, radius_token], Apple { radius: 10, weight: 20 });
+    let v: Vec<_> = add_remove.lock().unwrap().drain(..).collect();
+    assert_eq!(v.len(), 1);
+
+    use dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesAdded as OMIA;
+    use dbus::message::SignalArgs;
+    assert_eq!(&*v[0].path().unwrap(), "/list");
+    let omia = OMIA::from_message(&v[0]).unwrap();
+    dbg!(&omia);
+    assert_eq!(&*omia.object, "/list/grannysmith");
+    let radius_iface = &omia.interfaces["com.example.dbusrs.radius"]["Radius"];
+    let radius = radius_iface.0.as_u64().unwrap();
+    assert_eq!(radius, 10);
+    assert!(omia.interfaces.get("org.freedesktop.DBus.Introspectable").is_none());
+
+    let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/list",
+        "org.freedesktop.DBus.ObjectManager", "GetManagedObjects").unwrap();
+    let r = dispatch_helper(&mut cr, msg);
+
+    type GMO = HashMap<dbus::Path<'static>, HashMap<String, HashMap<String, Variant<Box<dyn RefArg + 'static>>>>>;
+    let mo: GMO = r.read1().unwrap();
+    dbg!(&mo);
+    let v = &mo[&"/list/grannysmith".into()]["com.example.dbusrs.weight"]["Weight"];
+    assert_eq!(v.0.as_u64().unwrap(), 20);
+}
