@@ -94,7 +94,7 @@ impl PropContext {
             if let Some(ga) = &self.get_all {
                 ga.lock().unwrap().add_reply(self.name.clone(), reply.ok().map(|a| Box::new(a) as Box<(dyn RefArg + Send)>));
             } else {
-                self.context.as_mut().map(|ctx| ctx.reply_result(reply.map(|a| (Variant(a),))));
+                self.context.as_mut().map(|ctx| ctx.reply(reply.map(|a| (Variant(a),))));
             }
         }
         PhantomData
@@ -105,7 +105,7 @@ impl PropContext {
     /// This can be used when the property does not send a "EmitsChanged" signal.
     pub fn reply_noemit(&mut self, reply: Result<(), MethodErr>) {
         debug_assert!(self.emits_changed.is_some());
-        self.context.as_mut().map(|ctx| ctx.reply_result(reply));
+        self.context.as_mut().map(|ctx| ctx.reply(reply));
     }
 
     pub (crate) fn set_send_on_drop(&mut self, value: Arc<dyn Sender + Send + Sync>) {

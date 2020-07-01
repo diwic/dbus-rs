@@ -60,7 +60,7 @@ impl Context {
     /// This is what you'll normally have last in your async method.
     ///
     /// Returns PhantomData just to aid the type system.
-    pub fn reply_ok<OA: AppendAll>(&mut self, oa: OA) -> PhantomData<OA> {
+    pub (crate) fn reply_ok<OA: AppendAll>(&mut self, oa: OA) -> PhantomData<OA> {
         self.do_reply(|msg| { msg.append_all(oa); });
         PhantomData
     }
@@ -69,7 +69,7 @@ impl Context {
     /// This is what you'll normally have last in your async method.
     ///
     /// Returns PhantomData just to aid the type system.
-    pub fn reply_result<OA: AppendAll>(&mut self, result: Result<OA, MethodErr>) -> PhantomData<OA> {
+    pub fn reply<OA: AppendAll>(&mut self, result: Result<OA, MethodErr>) -> PhantomData<OA> {
         match result {
             Ok(oa) => { self.reply_ok(oa); },
             Err(e) => { self.reply_err(e); },
@@ -78,7 +78,7 @@ impl Context {
     }
 
     /// Replies to the incoming message with an error.
-    pub fn reply_err(&mut self, err: MethodErr) {
+    pub (crate) fn reply_err(&mut self, err: MethodErr) {
         self.has_error = true;
         if !self.message.get_no_reply() {
             self.reply = Some(err.to_message(&self.message))
