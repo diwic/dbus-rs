@@ -181,10 +181,11 @@ impl Crossroads {
         use std::ops::Bound;
         let mut range = self.map.range((Bound::Excluded(path), Bound::Unbounded));
         let p2 = path.as_bytes();
+        let substart = if &p2 == &b"/" { 0 } else { p2.len() };
         let mut r = vec!();
         while let Some((c, _)) = range.next() {
             if !c.as_bytes().starts_with(p2) { break; }
-            let csub: &str = &c[p2.len()..];
+            let csub: &str = &c[substart..];
             if csub.len() == 0 || csub.as_bytes()[0] != b'/' { continue; }
             r.push(&csub[1..]);
         };
