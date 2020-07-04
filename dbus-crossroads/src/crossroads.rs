@@ -15,8 +15,27 @@ const PROPERTIES: usize = 1;
 const OBJECT_MANAGER: usize = 2;
 
 /// Contains a reference to a registered interface.
-#[derive(Debug, Copy, Clone, Eq, Ord, Hash, PartialEq, PartialOrd)]
 pub struct IfaceToken<T: Send + 'static>(usize, PhantomData<&'static T>);
+
+impl<T: Send + 'static> Clone for IfaceToken<T> {
+    fn clone(&self) -> Self { IfaceToken(self.0, PhantomData) }
+}
+impl<T: Send + 'static> Copy for IfaceToken<T> {}
+impl<T: Send + 'static> Eq for IfaceToken<T> {}
+impl<T: Send + 'static> PartialEq for IfaceToken<T> {
+    fn eq(&self, a: &Self) -> bool { self.0 == a.0 }
+}
+impl<T: Send + 'static> Ord for IfaceToken<T> {
+    fn cmp(&self, a: &Self) -> std::cmp::Ordering { self.0.cmp(&a.0) }
+}
+impl<T: Send + 'static> PartialOrd for IfaceToken<T> {
+    fn partial_cmp(&self, a: &Self) -> Option<std::cmp::Ordering> { Some(self.0.cmp(&a.0)) }
+}
+impl<T: Send + 'static> fmt::Debug for IfaceToken<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "IfaceToken({})", self.0)
+    }
+}
 
 
 #[derive(Debug)]
@@ -69,6 +88,9 @@ impl Crossroads {
         debug_assert_eq!(t0.0, INTROSPECTABLE);
         debug_assert_eq!(t1.0, PROPERTIES);
         debug_assert_eq!(t2.0, OBJECT_MANAGER);
+
+        // Add the root path and make it introspectable. This helps D-Bus debug tools
+        cr.insert("/", &[], ());
         cr
     }
 
@@ -180,21 +202,31 @@ impl Crossroads {
         (spawner)(boxed)
     }
 
-    /// Handles an incoming message call.
-    ///
-    /// Returns Err if the message is not a method call.
-    pub fn handle_message<S: dbus::channel::Sender>(&mut self, message: dbus::Message, conn: &S) -> Result<(), ()> {
-        let mut ctx = Context::new(message).ok_or(())?;
-        let (itoken, mut cb) = ctx.check(|ctx| {
+    fn handle_message_inner(&mut self, mut ctx: Context) -> Option<Context> {
+        let (itoken, mut cb) = match ctx.check(|ctx| {
             let itoken = self.find_iface_token(ctx.path(), ctx.interface())?;
             let cb = self.registry.take_method(itoken, ctx.method())?;
             Ok((itoken, cb))
-        })?;
+        }) {
+            Ok(x) => x,
+            Err(_) => return Some(ctx)
+        };
         // No failure paths before method is given back!
         let methodname = ctx.method().clone();
         let ctx = cb(ctx, self);
         self.registry.give_method(itoken, &methodname, cb);
-        if let Some(mut ctx) = ctx { ctx.flush_messages(conn) } else { Ok(()) }
+        ctx
+    }
+
+    /// Handles an incoming message call.
+    ///
+    /// Returns Err if the message is not a method call.
+    pub fn handle_message<S: dbus::channel::Sender>(&mut self, message: dbus::Message, conn: &S) -> Result<(), ()> {
+        let ctx = Context::new(message).ok_or(())?;
+        if let Some(mut ctx) = self.handle_message_inner(ctx) {
+            let _ = ctx.flush_messages(conn);
+        }
+        Ok(())
     }
 
     /// The token representing the built-in implementation of "org.freedesktop.DBus.Introspectable".

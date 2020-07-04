@@ -32,3 +32,7 @@ travis-ci = { repository = "diwic/dbus-rs" }
 [[example]]
 name = "tokio02_server_cr"
 required-features = ["dbus-crossroads"]
+
+[[example]]
+name = "tokio_adv_server_cr"
+required-features = ["dbus-crossroads"]

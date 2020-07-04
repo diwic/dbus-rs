@@ -12,7 +12,6 @@ or familiarize yourself using the API reference.
 When complete, it will supersede the dbus::tree module. Known missing pieces:
 
  * Asynchronous "get property" handlers (asynchronous methods and set property handlers are implemented)
- * ObjectManager support
 
 Design decisions (compared to dbus::tree):
 
