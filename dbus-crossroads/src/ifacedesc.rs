@@ -303,12 +303,27 @@ impl<T: Send, A: Send + arg::RefArg + arg::Arg + arg::Append> PropBuilder<'_, T,
         })
     }
 
+    pub fn get_async<R, CB>(self, mut cb: CB) -> Self
+    where
+        CB: FnMut(PropContext, &mut T) -> R + Send + 'static,
+        R: Future<Output=PhantomData<(A, ())>> + Send + 'static
+    {
+        self.get_with_cr_async(move |ctx, cr| {
+            // It should be safe to unwrap here, the path has already been checked once (when dispatching the method)
+            let data = cr.data_mut(ctx.path()).unwrap();
+            cb(ctx, data)
+        })
+    }
 }
 
 pub const EMITS_CHANGED: &'static str = "org.freedesktop.DBus.Property.EmitsChangedSignal";
 const DEPRECATED: &'static str = "org.freedesktop.DBus.Deprecated";
 
 impl<T: Send, A: arg::RefArg + Send + for<'x> arg::Get<'x> + arg::Arg + arg::Append> PropBuilder<'_, T, A> {
+    /// Adds a set property handler to this property.
+    ///
+    /// In case an EmitsChangedSignal should be emitted, the callback should return Ok(Some(v)) where
+    /// v is the value to be emitted. If no EmitsChangedSignal should be emitted, return Ok(None).
     pub fn set<CB>(self, mut cb: CB) -> Self
     where CB: FnMut(&mut PropContext, &mut T, A) -> Result<Option<A>, MethodErr> + Send + 'static {
         self.set_with_cr(move |ctx, cr, a| {
@@ -317,6 +332,10 @@ impl<T: Send, A: arg::RefArg + Send + for<'x> arg::Get<'x> + arg::Arg + arg::App
         })
     }
 
+    /// Adds a set property handler to this property, and allowing the entire tree to be changed.
+    ///
+    /// In case an EmitsChangedSignal should be emitted, the callback should return Ok(Some(v)) where
+    /// v is the value to be emitted. If no EmitsChangedSignal should be emitted, return Ok(None).
     pub fn set_with_cr<CB>(self, mut cb: CB) -> Self
     where CB: FnMut(&mut PropContext, &mut Crossroads, A) -> Result<Option<A>, MethodErr> + Send + 'static {
         self.set_custom(move |mut ctx, cr, a| {
@@ -361,6 +380,17 @@ impl<T: Send, A: arg::RefArg + Send + for<'x> arg::Get<'x> + arg::Arg + arg::App
         })
     }
 
+    pub fn set_async<CB, R>(self, mut cb: CB) -> Self
+    where
+        CB: FnMut(PropContext, &mut T, A) -> R + Send + 'static,
+        R: Future<Output=PhantomData<Option<A>>> + Send + 'static
+    {
+        self.set_with_cr_async(move |ctx, cr, a| {
+            // It should be safe to unwrap here, the path has already been checked once (when dispatching the method)
+            let data = cr.data_mut(ctx.path()).unwrap();
+            cb(ctx, data, a)
+        })
+    }
 }
 
 impl<T: std::marker::Send, A> PropBuilder<'_, T, A> {
