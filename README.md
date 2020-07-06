@@ -84,7 +84,7 @@ let token = cr.register("com.example.dbustest", |b| {
     });
 });
 cr.insert("/hello", &[token], ());
-cr.serve(c)?;
+cr.serve(&c)?;
 ```
 
 Examples of server code using `dbus-crossroads` in the examples directory:

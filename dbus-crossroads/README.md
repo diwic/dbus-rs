@@ -5,13 +5,16 @@
 dbus-crossroads is a library that helps you implement interfaces on object paths, i e
 "server side" method handler code.
 
+It is not as mature as `dbus::tree` yet, but the API should be fairly stable and easier
+to use than `dbus::tree`. Go ahead and use it, and report any issues you find!
+
 To get started, you can jump into the commented examples,
 one for [sync](https://github.com/diwic/dbus-rs/blob/master/dbus-crossroads/examples/server_cr.rs)
 one for [async (dbus-tokio)](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio02_server_cr.rs),
 and one [slightly more advanced](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio_adv_server_cr.rs),
 or familiarize yourself using [the API reference](https://docs.rs/dbus-crossroads).
 
-It supersedes the `dbus::tree` module. Design decisions (compared to `dbus::tree`):
+Design decisions (compared to `dbus::tree`):
 
  * First class support for both sync and async methods
  * Detect method arguments automatically through generics
