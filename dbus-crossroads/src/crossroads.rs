@@ -257,9 +257,25 @@ impl Crossroads {
 
     /// Enables this crossroads instance to send signals when paths are added and removed.
     ///
-    /// The added/removed path is a subpat +  ?Sizedh of a path which implements an object manager instance.
+    /// The added/removed path is a subpath of a path which implements an object manager instance.
     pub fn set_object_manager_support(&mut self, x: Option<Arc<dyn Sender + Send + Sync + 'static>>) -> Option<Arc<dyn Sender + Send + Sync + 'static>> {
         let x = x.map(|x| Dbg(x));
         std::mem::replace(&mut self.object_manager_support, x).map(|x| x.0)
+    }
+
+    /// Serve clients forever on a blocking Connection.
+    ///
+    /// This is a quick one-liner for the simplest case. In more advanced scenarios, you
+    /// probably have to write similar code yourself.
+    pub fn serve(mut self, connection: &dbus::blocking::Connection) -> Result<(), dbus::Error> {
+        // We add the Crossroads instance to the connection so that incoming method calls will be handled.
+        use dbus::channel::MatchingReceiver;
+        connection.start_receive(dbus::message::MatchRule::new_method_call(), Box::new(move |msg, conn| {
+            self.handle_message(msg, conn).unwrap();
+            true
+        }));
+
+        // Serve clients forever.
+        loop { connection.process(std::time::Duration::from_millis(1000))?; }
     }
 }

@@ -10,11 +10,8 @@
    someone calls the "Hello" method.
 */
 use dbus::blocking::Connection;
-use dbus::channel::MatchingReceiver;
-use dbus::message::MatchRule;
 use dbus_crossroads::{Crossroads, Context};
 use std::error::Error;
-use std::time::Duration;
 
 // This is our "Hello" object that we are going to store inside the crossroads instance.
 struct Hello { called_count: u32 }
@@ -56,12 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // to the crossroads instance.
     cr.insert("/hello", &[iface_token], Hello { called_count: 0});
 
-    // We add the Crossroads instance to the connection so that incoming method calls will be handled.
-    c.start_receive(MatchRule::new_method_call(), Box::new(move |msg, conn| {
-        cr.handle_message(msg, conn).unwrap();
-        true
-    }));
-
     // Serve clients forever.
-    loop { c.process(Duration::from_millis(1000))?; }
+    cr.serve(&c)?;
+    unreachable!()
 }

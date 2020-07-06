@@ -8,15 +8,18 @@ D-Bus bindings for Rust
 The main dbus crate is fairly mature and the features you need should be all there. Breaking changes can still happen, but not often.
 If you're currently using 0.6.x of dbus and want to upgrade to later versions, you can read [changes in dbus-rs 0.7](dbus/changes-in-0.7.md).
 
- * Use `blocking::Connection` to connect to the session or system bus.
+ * Use `blocking::Connection` to connect to the session or system bus. (Or `SyncConnection` / `LocalConnection`)
  * Use `Message` to send and receive messages. Get and append arguments of all types, see the [argument guide](dbus/examples/argument_guide.md) for details.
- * Build method dispatching servers using the `tree` module. Standard D-Bus interfaces (introspection, properties, object manager) are supported.
+ * Build method dispatching servers using the `dbus-crossroads` crate or the `tree` module.
+   Standard D-Bus interfaces (introspection, properties, object manager) are supported.
 
 If you have questions or comments that the documentation cannot answer in an easy way, [filing an issue](https://github.com/diwic/dbus-rs/issues) with your question is fine. Pull requests that improve the code, documentation, etc, are welcome!
 
 Additional crates
 -----------------
 
+ * [dbus-crossroads](http://crates.io/crates/dbus-crossroads/) facitilates easy building of method
+    dispatching servers. [![API documentation](https://docs.rs/dbus-crossroads/badge.svg)](https://docs.rs/dbus-crossroads)
  * [dbus-tokio](http://crates.io/crates/dbus-tokio/) integrates D-Bus with [Tokio](http://tokio.rs). [![API documentation](https://docs.rs/dbus-tokio/badge.svg)](https://docs.rs/dbus-tokio)
  * [dbus-codegen](http://crates.io/crates/dbus-codegen/) installs a binary tool which generates Rust code from D-Bus XML introspection data. The [readme](https://github.com/diwic/dbus-rs/tree/master/dbus-codegen) contains an introduction to how to use it.
  * [libdbus-sys](http://crates.io/crates/libdbus-sys/) contains the raw FFI bindings to libdbus.
@@ -64,8 +67,33 @@ Examples of client code in the examples directory:
 Server
 ------
 
-This example grabs the `com.example.dbustest` bus name, registers the `/hello` path and adds a method which returns a string.
-It then listens for incoming D-Bus events and handles them accordingly.
+This example grabs the `com.example.dbustest` bus name, adds the `/hello` path
+which implements the `com.example.dbustest` interface, and specifies that this
+interface has a `Hello` method.
+It then listens for incoming D-Bus method calls on this path and handles them accordingly.
+
+`dbus-crossroads`:
+
+```rust
+let c = Connection::new_session()?;
+c.request_name("com.example.dbustest", false, true, false)?;
+let mut cr = Crossroads::new();
+let token = cr.register("com.example.dbustest", |b| {
+    b.method("Hello", ("name",), ("reply",), |_, _, (name,): (String,)| {
+        Ok(format!("Hello {}!", name))
+    });
+});
+cr.insert("/hello", &[token], ());
+cr.serve(c)?;
+```
+
+Examples of server code using `dbus-crossroads` in the examples directory:
+
+ * [server_cr](https://github.com/diwic/dbus-rs/blob/master/dbus-crossroads/examples/server_cr.rs)
+ * [tokio02_server_cr](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio02_server_cr.rs),
+ * [tokio_adv_server_cr](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio_adv_server_cr.rs),
+
+`dbus::tree`:
 
 ```rust
 let c = Connection::new_session()?;
@@ -86,7 +114,7 @@ tree.start_receive(&c);
 loop { c.process(Duration::from_millis(1000))?; }
 ```
 
-Examples of server code in the examples directory:
+Examples of server code using `dbus::tree` in the examples directory:
 
  * [server.rs](https://github.com/diwic/dbus-rs/tree/master/dbus/examples/server.rs)
  * [adv_server.rs](https://github.com/diwic/dbus-rs/tree/master/dbus/examples/adv_server.rs)
