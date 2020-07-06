@@ -53,6 +53,9 @@ fn make_emits_message<V: dbus::arg::Arg + dbus::arg::Append>(prop_name: &str, em
 
 
 #[derive(Debug)]
+/// PropContext is a struct that provides helpful information inside a get/set property handler.
+///
+/// Like Context, but for get/set property handlers.
 pub struct PropContext {
     path: dbus::Path<'static>,
     interface: dbus::strings::Interface<'static>,

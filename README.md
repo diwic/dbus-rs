@@ -72,7 +72,7 @@ which implements the `com.example.dbustest` interface, and specifies that this
 interface has a `Hello` method.
 It then listens for incoming D-Bus method calls on this path and handles them accordingly.
 
-`dbus-crossroads`:
+**dbus-crossroads**:
 
 ```rust
 let c = Connection::new_session()?;
@@ -89,11 +89,11 @@ cr.serve(c)?;
 
 Examples of server code using `dbus-crossroads` in the examples directory:
 
- * [server_cr](https://github.com/diwic/dbus-rs/blob/master/dbus-crossroads/examples/server_cr.rs)
- * [tokio02_server_cr](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio02_server_cr.rs),
- * [tokio_adv_server_cr](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio_adv_server_cr.rs),
+ * [server_cr.rs](https://github.com/diwic/dbus-rs/blob/master/dbus-crossroads/examples/server_cr.rs)
+ * [tokio02_server_cr.rs](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio02_server_cr.rs)
+ * [tokio_adv_server_cr.rs](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio_adv_server_cr.rs)
 
-`dbus::tree`:
+**dbus::tree**:
 
 ```rust
 let c = Connection::new_session()?;
