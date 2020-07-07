@@ -1,7 +1,7 @@
 [package]
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 name = "dbus-tokio"
-version = "0.5.1"
+version = "0.5.2"
 
 description = "Makes it possible to use Tokio with D-Bus, which is a bus commonly used on Linux for inter-process communication."
 repository = "https://github.com/diwic/dbus-rs"
@@ -17,7 +17,7 @@ dbus = { path = "../dbus", version = "0.8", features=["futures"] }
 mio = "0.6.21"
 libc = "0.2.69"
 tokio = {version = "0.2.4", features=["time", "macros", "io-driver", "rt-core", "rt-util", "rt-threaded", "stream"]}
-dbus-crossroads = { path = "../dbus-crossroads", optional = true }
+dbus-crossroads = { path = "../dbus-crossroads", optional = true, version = "0.2.1" }
 
 [dev-dependencies]
 futures = "0.3.1"
