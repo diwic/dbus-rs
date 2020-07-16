@@ -383,8 +383,8 @@ impl MsgMatch {
     /// Note: If the receiving end is disconnected and a message is received,
     /// the message matching will end but not in a clean fashion. Call remove_match() to
     /// stop matching cleanly.
-    pub fn msg_stream(self) -> (Self, futures::channel::mpsc::UnboundedReceiver<Message>) {
-        let (sender, receiver) = futures::channel::mpsc::unbounded();
+    pub fn msg_stream(self) -> (Self, futures_channel::mpsc::UnboundedReceiver<Message>) {
+        let (sender, receiver) = futures_channel::mpsc::unbounded();
         (self.msg_cb(move |msg| {
             sender.unbounded_send(msg).is_ok()
         }), receiver)
@@ -406,8 +406,8 @@ impl MsgMatch {
     ///    async {}
     /// });
     /// ```
-    pub fn stream<R: ReadAll + Send + 'static>(self) -> (Self, futures::channel::mpsc::UnboundedReceiver<(Message, R)>) {
-        let (sender, receiver) = futures::channel::mpsc::unbounded();
+    pub fn stream<R: ReadAll + Send + 'static>(self) -> (Self, futures_channel::mpsc::UnboundedReceiver<(Message, R)>) {
+        let (sender, receiver) = futures_channel::mpsc::unbounded();
         (self.cb(move |msg, r| {
             sender.unbounded_send((msg, r)).is_ok()
         }), receiver)
@@ -449,7 +449,7 @@ struct MRAwait {
 }
 
 async fn method_call_await(mra: MRAwait) -> Result<Message, Error> {
-    use futures::future;
+    use futures_util::future;
     let MRAwait { mrouter, token, timeout, timeoutfn } = mra;
     if token.is_err() { return Err(Error::new_failed("Failed to send message")) };
     let timeout = if let Some(tfn) = timeoutfn { tfn(timeout) } else { Box::pin(future::pending()) };
@@ -487,7 +487,7 @@ where
         args.append(&mut IterAppend::new(&mut msg));
         let mra = self.method_call_setup(msg);
         let r = method_call_await(mra);
-        let r = futures::FutureExt::map(r, |r| -> Result<R, Error> { r.and_then(|rmsg| rmsg.read_all()) } );
+        let r = futures_util::FutureExt::map(r, |r| -> Result<R, Error> { r.and_then(|rmsg| rmsg.read_all()) } );
         MethodReply::new(r)
     }
 }
