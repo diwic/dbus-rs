@@ -507,7 +507,7 @@ impl Future for MROuter {
         let r = mem::replace(&mut *inner, MRInner::Neither);
         if let MRInner::Ready(r) = r { task::Poll::Ready(r) }
         else {
-            mem::replace(&mut *inner, MRInner::Pending(ctx.waker().clone()));
+            *inner = MRInner::Pending(ctx.waker().clone());
             return task::Poll::Pending
         }
     }
