@@ -46,8 +46,8 @@ Defaults to 'RefClosure'."))
              .help("Name of dbus crate, defaults to 'dbus'."))
         .arg(clap::Arg::with_name("skipprefix").short("i").long("skipprefix").takes_value(true).value_name("PREFIX")
              .help("If present, skips a specific prefix for interface names, e g 'org.freedesktop.DBus.'."))
-//        .arg(clap::Arg::with_name("futures").short("f").long("futures")
-//             .help("Generates code to use with futures 0.3 (experimental)"))
+       .arg(clap::Arg::with_name("futures").short("f").long("futures")
+            .help("Generates code to use with futures 0.3 (experimental)"))
         .arg(clap::Arg::with_name("client").short("c").long("client").takes_value(true).value_name("client")
              .help("Type of client connection. Valid values are: 'blocking', 'nonblock', 'ffidisp'."))
         .arg(clap::Arg::with_name("output").short("o").long("output").takes_value(true).value_name("FILE")
@@ -120,7 +120,7 @@ Defaults to 'RefClosure'."))
         skipprefix: matches.value_of("skipprefix").map(|x| x.into()),
         serveraccess: maccess,
         genericvariant: matches.is_present("genericvariant"),
-        futures: false,
+        futures: matches.is_present("futures"),
         connectiontype: client,
         crhandler: crhandler.map(|x| x.to_string()),
         interfaces,
