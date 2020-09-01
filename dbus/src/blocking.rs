@@ -281,7 +281,7 @@ impl<'a, T: BlockingSender, C: std::ops::Deref<Target=T>> Proxy<'a, C> {
 
     /// Stops matching a signal added with match_start or match_signal.
     ///
-    /// If call_add_match is true, will notify the D-Bus server that matching should stop,
+    /// If call_remove_match is true, will notify the D-Bus server that matching should stop,
     /// this should be true in case match_signal was used.
     pub fn match_stop(&self, id: Token, call_remove_match: bool) -> Result<(), Error>
     where T: channel::MatchingReceiver {
