@@ -215,8 +215,7 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
 
     fn get_managed_objects(&self, m: &MethodInfo<M, D>) -> MethodResult {
         use crate::arg::{Dict, Variant};
-        let mut paths = m.tree.children(&self, false);
-        paths.push(&self);
+        let paths = m.tree.children(&self, false);
         let mut result = Ok(());
         let mut r = m.msg.method_return();
         {
