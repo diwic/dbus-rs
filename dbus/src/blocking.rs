@@ -9,9 +9,71 @@ use crate::channel::{Channel, BusType, Token};
 use std::{cell::RefCell, time::Duration, sync::Mutex};
 use crate::filters::Filters;
 
-pub mod stdintf;
+mod generated_org_freedesktop_standard_interfaces;
+mod generated_org_freedesktop_dbus;
 
+/// This module contains some standard interfaces and an easy way to call them.
+///
+/// See the [D-Bus specification](https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces) for more information about these standard interfaces.
+///
+/// The code was created by dbus-codegen.
+pub mod stdintf {
+    pub mod org_freedesktop_dbus {
+        pub use super::super::generated_org_freedesktop_standard_interfaces::*;
 
+        #[derive(Debug, PartialEq, Eq, Copy, Clone)]
+        pub enum RequestNameReply {
+            PrimaryOwner = 1,
+            InQueue = 2,
+            Exists = 3,
+            AlreadyOwner = 4,
+        }
+
+        #[derive(Debug, PartialEq, Eq, Copy, Clone)]
+        pub enum ReleaseNameReply {
+            Released = 1,
+            NonExistent = 2,
+            NotOwner = 3,
+        }
+
+        pub (crate) fn request_name<S: crate::blocking::BlockingSender>(s: &S, name: &str, allow_replacement: bool, replace_existing: bool, do_not_queue: bool)
+            -> Result<RequestNameReply, crate::Error> {
+            let flags: u32 =
+                if allow_replacement { 1 } else { 0 } +
+                if replace_existing { 2 } else { 0 } +
+                if do_not_queue { 4 } else { 0 };
+            let proxy = super::proxy(s);
+            use super::org_freedesktop::DBus;
+            let r = proxy.request_name(name, flags)?;
+            use RequestNameReply::*;
+            let all = [PrimaryOwner, InQueue, Exists, AlreadyOwner];
+            all.iter().find(|x| **x as u32 == r).copied().ok_or_else(||
+                crate::Error::new_failed("Invalid reply from DBus server")
+            )
+        }
+
+        pub (crate) fn release_name<S: crate::blocking::BlockingSender>(s: &S, name: &str)
+            -> Result<ReleaseNameReply, crate::Error> {
+
+            let proxy = super::proxy(s);
+            use super::org_freedesktop::DBus;
+            let r = proxy.release_name(name)?;
+            use ReleaseNameReply::*;
+            let all = [Released, NonExistent, NotOwner];
+            all.iter().find(|x| **x as u32 == r).copied().ok_or_else(||
+                crate::Error::new_failed("Invalid reply from DBus server")
+            )
+        }
+    }
+
+    pub mod org_freedesktop {
+        pub(crate) use super::super::generated_org_freedesktop_dbus::*;
+    }
+
+    pub (crate) fn proxy<C>(c: C) -> crate::blocking::Proxy<'static, C> {
+        super::Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", std::time::Duration::from_millis(5000), c)
+    }
+}
 
 /// A connection to D-Bus, thread local + non-async version
 pub struct LocalConnection {
