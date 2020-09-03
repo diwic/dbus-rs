@@ -4,6 +4,7 @@ use std::fmt;
 use crate::Message;
 use crate::ffidisp::stdintf;
 use crate::arg::{Iter, IterAppend, TypeMismatchError};
+use std::error::Error;
 use std::marker::PhantomData;
 use super::{Method, Interface, Property, ObjectPath, Tree};
 use crate::strings::{ErrorName};
@@ -64,6 +65,14 @@ impl MethodErr {
         msg.error(&self.0, &CString::new(&*self.1).unwrap())
     }
 }
+
+impl fmt::Display for MethodErr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.description())
+    }
+}
+
+impl Error for MethodErr {}
 
 impl From<TypeMismatchError> for MethodErr {
     fn from(t: TypeMismatchError) -> MethodErr { ("org.freedesktop.DBus.Error.Failed", format!("{}", t)).into() }
