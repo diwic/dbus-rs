@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let p = c.with_proxy("org.mpris.MediaPlayer2.rhythmbox", "/org/mpris/MediaPlayer2", Duration::from_millis(5000));
     use dbus::blocking::stdintf::org_freedesktop_dbus::Properties;
 
-    // The Metadata property is a Dict<String, Variant>. 
+    // The Metadata property is a Dict<String, Variant>.
 
     // Option 1: we can get the dict straight into a hashmap, like this:
 
@@ -31,6 +31,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         print_refarg(&value);
     }
 
+    // As an alternative, if we just want a specific property and know the type of it, we can use
+    // prop_cast:
+    let title: Option<&String> = arg::prop_cast(&metadata, "xesam:title");
+    if let Some(title) = title {
+        println!("The title is: {}", title);
+    }
 
     // Option 2: we can get the entire dict as a RefArg and get the values out by iterating over it.
 
@@ -46,5 +52,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let value = iter.next().unwrap();
         print_refarg(&value);
     }
+
     Ok(())
 }

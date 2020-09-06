@@ -1,9 +1,10 @@
 #![allow(dead_code)]
 
-use crate::{Signature, arg::TypeMismatchError};
+use crate::{Signature, arg::TypeMismatchError, arg::Variant};
 use std::{fmt, any};
 use std::sync::Arc;
 use std::rc::Rc;
+use std::collections::HashMap;
 
 use super::{Iter, IterAppend, ArgType};
 
@@ -141,6 +142,13 @@ pub fn cast<'a, T: 'static>(a: &'a (dyn RefArg + 'static)) -> Option<&'a T> { a.
 #[inline]
 pub fn cast_mut<'a, T: 'static>(a: &'a mut (dyn RefArg + 'static)) -> Option<&'a mut T> { a.as_any_mut().downcast_mut() }
 
+/// Descend into a hashmap returned by e g "Properties::get_all" to retrieve the value of a property.
+///
+/// Shortcut for get + cast. Returns None both if the property does not exist, or if it was of a different type.
+pub fn prop_cast<'a, T: 'static>(map: &'a HashMap<String, Variant<Box<dyn RefArg>>>, key: &str) -> Option<&'a T> {
+    map.get(key).and_then(|v| cast(&v.0))
+}
+
 /// If a type implements this trait, it means the size and alignment is the same
 /// as in D-Bus. This means that you can quickly append and get slices of this type.
 ///
@@ -184,7 +192,7 @@ impl<'a, T: RefArg + ?Sized> RefArg for &'a T {
     #[inline]
     fn as_iter<'b>(&'b self) -> Option<Box<dyn Iterator<Item=&'b dyn RefArg> + 'b>> { (&**self).as_iter() }
     #[inline]
-    fn as_static_inner(&self, index: usize) -> Option<&(dyn RefArg + 'static)> where Self: 'static { (&**self).as_static_inner(index) }    
+    fn as_static_inner(&self, index: usize) -> Option<&(dyn RefArg + 'static)> where Self: 'static { (&**self).as_static_inner(index) }
     #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> { (&**self).box_clone() }
 }
