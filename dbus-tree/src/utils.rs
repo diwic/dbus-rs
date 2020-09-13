@@ -1,6 +1,6 @@
 // Small structs that don't have their own unit.
 
-use crate::strings::{Signature, Member, Path, Interface as IfaceName};
+use dbus::strings::{Signature, Member, Path, Interface as IfaceName};
 use std::collections::{BTreeMap, btree_map};
 use std::sync::Arc;
 
@@ -46,7 +46,7 @@ impl Argument {
     /// Type signature of argument.
     pub fn signature(&self) -> &Signature<'static> { &self.1 }
 
-    fn introspect(&self, indent: &str, dir: &str) -> String { 
+    fn introspect(&self, indent: &str, dir: &str) -> String {
         let n = self.0.as_ref().map(|n| format!("name=\"{}\" ", n)).unwrap_or_default();
         format!("{}<arg {}type=\"{}\"{}/>\n", indent, n, self.1, dir)
     }
@@ -97,4 +97,3 @@ pub trait Introspect {
     fn xml_params(&self) -> String;
     fn xml_contents(&self) -> String;
 }
-

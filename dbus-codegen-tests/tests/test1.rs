@@ -1,5 +1,3 @@
-extern crate dbus;
-
 #[allow(dead_code)]
 mod policykit;
 
@@ -19,12 +17,12 @@ mod policykit_nonblock;
 use std::sync::atomic::*;
 
 impl policykit::OrgFreedesktopDBusIntrospectable for () {
-   fn introspect(&self) -> Result<String, dbus::tree::MethodErr> { Ok("I feel so introspected right now".into()) }
+   fn introspect(&self) -> Result<String, dbus::MethodErr> { Ok("I feel so introspected right now".into()) }
 }
 
 #[test]
 fn test_main() {
-    let f = dbus::tree::Factory::new_fn::<()>();
+    let f = dbus_tree::Factory::new_fn::<()>();
     let i1 = policykit::org_freedesktop_dbus_introspectable_server(&f, (), |minfo| minfo.path.get_data());
     let t = f.tree(()).add(f.object_path("/test", ()).add(i1));
     let c = dbus::ffidisp::Connection::new_session().unwrap();

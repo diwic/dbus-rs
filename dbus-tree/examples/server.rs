@@ -7,12 +7,9 @@
    someone calls the "Hello" method.
 */
 
-
-extern crate dbus;
-
 use std::sync::Arc;
 use dbus::blocking::LocalConnection;
-use dbus::tree::Factory;
+use dbus_tree::Factory;
 use std::error::Error;
 use std::time::Duration;
 

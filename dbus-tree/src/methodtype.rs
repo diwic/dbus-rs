@@ -1,95 +1,13 @@
 // Methods and method types. Glue to make stuff generic over MFn, MFnMut and MSync
 
 use std::fmt;
-use crate::Message;
-use crate::ffidisp::stdintf;
-use crate::arg::{Iter, IterAppend, TypeMismatchError};
-use std::error::Error;
+use dbus::Message;
+use dbus::ffidisp::stdintf;
+use dbus::arg::{Iter, IterAppend};
 use std::marker::PhantomData;
 use super::{Method, Interface, Property, ObjectPath, Tree};
-use crate::strings::{ErrorName};
 use std::cell::RefCell;
-use std::ffi::CString;
-use crate::Error as dbusError;
-
-#[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq)]
-/// A D-Bus Method Error, containing an error name and a description.
-pub struct MethodErr(ErrorName<'static>, String);
-
-impl MethodErr {
-    /// Create an Invalid Args MethodErr.
-    pub fn invalid_arg<T: fmt::Debug + ?Sized>(a: &T) -> MethodErr {
-        ("org.freedesktop.DBus.Error.InvalidArgs", format!("Invalid argument {:?}", a)).into()
-    }
-    /// Create a MethodErr that there are not enough arguments given.
-    pub fn no_arg() -> MethodErr {
-        ("org.freedesktop.DBus.Error.InvalidArgs", "Not enough arguments").into()
-    }
-    /// Create a MethodErr that the method failed in the way specified.
-    pub fn failed<T: fmt::Display + ?Sized>(a: &T) -> MethodErr {
-        ("org.freedesktop.DBus.Error.Failed", a.to_string()).into()
-    }
-
-    /// Create a MethodErr that the Object path was unknown.
-    pub fn no_path<T: fmt::Display + ?Sized>(a: &T) -> MethodErr {
-        ("org.freedesktop.DBus.Error.UnknownObject", format!("Unknown object path {}", a)).into()
-    }
-
-    /// Create a MethodErr that the Interface was unknown.
-    pub fn no_interface<T: fmt::Display + ?Sized>(a: &T) -> MethodErr {
-        ("org.freedesktop.DBus.Error.UnknownInterface", format!("Unknown interface {}", a)).into()
-    }
-    /// Create a MethodErr that the Method was unknown.
-    pub fn no_method<T: fmt::Display + ?Sized>(a: &T) -> MethodErr {
-        ("org.freedesktop.DBus.Error.UnknownMethod", format!("Unknown method {}", a)).into()
-    }
-    /// Create a MethodErr that the Property was unknown.
-    pub fn no_property<T: fmt::Display + ?Sized>(a: &T) -> MethodErr {
-        ("org.freedesktop.DBus.Error.UnknownProperty", format!("Unknown property {}", a)).into()
-    }
-    /// Create a MethodErr that the Property was read-only.
-    pub fn ro_property<T: fmt::Display + ?Sized>(a: &T) -> MethodErr {
-        ("org.freedesktop.DBus.Error.PropertyReadOnly", format!("Property {} is read only", a)).into()
-    }
-
-    /// Error name accessor
-    pub fn errorname(&self) -> &ErrorName<'static> { &self.0 }
-    /// Description accessor
-    pub fn description(&self) -> &str { &self.1 }
-
-    /// Creates an error reply from a method call message.
-    ///
-    /// Note: You normally don't need to use this function,
-    /// as it is called internally from Tree::handle.
-    pub fn to_message(&self, msg: &Message) -> Message {
-        msg.error(&self.0, &CString::new(&*self.1).unwrap())
-    }
-}
-
-impl fmt::Display for MethodErr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.description())
-    }
-}
-
-impl Error for MethodErr {}
-
-impl From<TypeMismatchError> for MethodErr {
-    fn from(t: TypeMismatchError) -> MethodErr { ("org.freedesktop.DBus.Error.Failed", format!("{}", t)).into() }
-}
-
-impl<T: Into<ErrorName<'static>>, M: Into<String>> From<(T, M)> for MethodErr {
-    fn from((t, m): (T, M)) -> MethodErr { MethodErr(t.into(), m.into()) }
-}
-
-impl From<dbusError> for MethodErr {
-    fn from(t: dbusError) -> MethodErr {
-        let n = t.name().unwrap_or("org.freedesktop.DBus.Error.Failed");
-        let m = t.message().unwrap_or("Unknown error");
-        MethodErr(String::from(n).into(), m.into())
-    }
-}
-
+use dbus::MethodErr;
 
 /// Result containing the Messages returned from the Method, or a MethodErr.
 pub type MethodResult = Result<Vec<Message>, MethodErr>;

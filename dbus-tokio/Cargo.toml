@@ -22,7 +22,7 @@ dbus-crossroads = { path = "../dbus-crossroads", optional = true, version = "0.2
 [dev-dependencies]
 futures = "0.3.1"
 tokio = {version = "0.2.4", features=["time", "macros", "io-driver", "rt-core", "rt-util", "rt-threaded", "stream", "blocking"]}
-
+dbus-tree = {path = "../dbus-tree", version="0.1"}
 
 [badges]
 is-it-maintained-open-issues = { repository = "diwic/dbus-rs" }

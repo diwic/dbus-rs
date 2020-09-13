@@ -1,7 +1,4 @@
 // This is a modified version of dbus/examples/adv_server.rs that uses code generated from dbus-codegen.
-
-extern crate dbus;
-
 //
 // Usually you would put imported code in a separate .rs file, but I've just copy-pasted it into
 // a module here, for simplicity.
@@ -14,7 +11,7 @@ mod com_example_dbus_rs {
 #![allow(dead_code)]
 use dbus as dbus;
 use dbus::arg;
-use dbus::tree;
+use dbus_tree as tree;
 use dbus::ffidisp;
 
 pub trait Device {
@@ -188,7 +185,7 @@ impl Device {
             checking: Cell::new(false),
             check_complete_sender: s,
         }
-    } 
+    }
 }
 
 // Here's where we implement the code for our interface.
@@ -258,11 +255,11 @@ fn create_tree(devices: &[Arc<Device>], iface: &Arc<Interface<MTFn<TData>, TData
             .add(iface.clone())
         );
     }
-    tree 
+    tree
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let (check_complete_s, check_complete_r) = mpsc::channel::<i32>(); 
+    let (check_complete_s, check_complete_r) = mpsc::channel::<i32>();
 
     // Create our bogus devices
     let devices: Vec<Arc<Device>> = (0..10).map(|i|

@@ -1,11 +1,11 @@
 // Methods, signals, properties, and interfaces.
 use super::utils::{Argument, Annotations, Introspect, introspect_args};
 use super::{MethodType, MethodInfo, MethodResult, MethodErr, DataType, PropInfo, MTFn, MTFnMut, MTSync};
-use crate::strings::{Interface as IfaceName, Member, Signature, Path};
-use crate::{arg, Message};
+use dbus::strings::{Interface as IfaceName, Member, Signature, Path};
+use dbus::{arg, Message};
 use std::fmt;
 use std::cell::RefCell;
-use crate::ffidisp::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged;
+use dbus::ffidisp::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged;
 
 
 // Workaround for https://github.com/rust-lang/rust/issues/31518
@@ -298,7 +298,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
     ///
     /// Will verify signature in case iter is not None; iter is supposed to point at the Variant with the item inside.
     pub fn can_set(&self, i: Option<arg::Iter>) -> Result<(), MethodErr> {
-        use crate::arg::Arg;
+        use dbus::arg::Arg;
         if self.rw == Access::Read || self.set_cb.is_none() || self.emits == EmitsChangedSignal::Const {
             return Err(MethodErr::ro_property(&self.name))
         }
@@ -316,7 +316,7 @@ impl<M: MethodType<D>, D: DataType> Property<M, D> {
     /// The return value might contain an extra message containing the EmitsChanged signal.
     /// Note: Will panic if set_cb is not set.
     pub fn set_as_variant(&self, i: &mut arg::Iter, pinfo: &PropInfo<M, D>) -> Result<Option<Message>, MethodErr> {
-        use crate::arg::Arg;
+        use dbus::arg::Arg;
         let mut subiter = i.recurse(arg::Variant::<bool>::ARG_TYPE).ok_or_else(|| MethodErr::invalid_arg(&2))?;
         M::call_setprop(&*self.set_cb.as_ref().unwrap().0, &mut subiter, pinfo)?;
         self.get_emits_changed_signal(pinfo)
@@ -485,9 +485,9 @@ pub fn new_property<M: MethodType<D>, D: DataType>
 
 #[test]
 fn test_prop_handlers() {
-    use crate::tree::Factory;
+    use crate::Factory;
     use std::collections::BTreeMap;
-    use crate::arg::{Dict, Variant};
+    use dbus::arg::{Dict, Variant};
 
     #[derive(Default, Debug)]
     struct Custom;
@@ -535,8 +535,8 @@ fn test_prop_handlers() {
 fn test_get_managed_objects() {
     use std::collections::BTreeMap;
 
-    use crate::tree::Factory;
-    use crate::arg::{Dict, Variant};
+    use crate::Factory;
+    use dbus::arg::{Dict, Variant};
 
     #[derive(Default, Debug)]
     struct Custom;
@@ -578,7 +578,7 @@ fn test_get_managed_objects() {
 
 #[test]
 fn test_set_prop() {
-    use crate::tree::{Factory, Access};
+    use crate::{Factory, Access};
     use std::cell::{Cell, RefCell};
     use std::collections::BTreeMap;
     use std::rc::Rc;
@@ -642,7 +642,7 @@ fn test_set_prop() {
 fn test_sync_prop() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
-    use crate::tree::{Factory, Access, EmitsChangedSignal};
+    use crate::{Factory, Access, EmitsChangedSignal};
 
     let f = Factory::new_sync::<()>();
 

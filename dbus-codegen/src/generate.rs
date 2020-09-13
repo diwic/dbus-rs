@@ -687,7 +687,7 @@ fn write_module_header(s: &mut String, opts: &GenOpts) {
     if opts.futures {
         *s += "use dbus_futures as dbusf;\n";
     }
-    if opts.methodtype.is_some() { *s += &format!("use {}::tree;\n", opts.dbuscrate) } else {
+    if opts.methodtype.is_some() { *s += &format!("use {}_tree as tree;\n", opts.dbuscrate) } else {
         *s += &format!("use {}::{};\n", opts.dbuscrate, match opts.connectiontype {
             ConnectionType::Ffidisp => "ffidisp",
             ConnectionType::Blocking => "blocking",

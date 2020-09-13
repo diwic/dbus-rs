@@ -5,15 +5,21 @@ D-Bus bindings for Rust
 [![API documentation](https://docs.rs/dbus/badge.svg)](https://docs.rs/dbus)
 [![license](https://img.shields.io/crates/l/dbus.svg)](https://crates.io/crates/dbus)
 
-The main dbus crate is fairly mature and the features you need should be all there. Breaking changes can still happen, but not often.
-If you're currently using 0.6.x of dbus and want to upgrade to later versions, you can read [changes in dbus-rs 0.7](dbus/changes-in-0.7.md).
-
  * Use `blocking::Connection` to connect to the session or system bus. (Or `SyncConnection` / `LocalConnection`)
  * Use `Message` to send and receive messages. Get and append arguments of all types, see the [argument guide](dbus/examples/argument_guide.md) for details.
  * Build method dispatching servers using the `dbus-crossroads` crate or the `tree` module.
    Standard D-Bus interfaces (introspection, properties, object manager) are supported.
 
 If you have questions or comments that the documentation cannot answer in an easy way, [filing an issue](https://github.com/diwic/dbus-rs/issues) with your question is fine. Pull requests that improve the code, documentation, etc, are welcome!
+
+Breaking changes
+----------------
+
+The main dbus crate is fairly mature and the features you need should be all there. Breaking changes can still happen, but not often.
+
+ * In 0.9, the `dbus::tree` module moved to the `dbus-tree` crate (but consider migrating to `dbus-crossroads` instead).
+ * If you're currently using 0.6.x of dbus and want to upgrade to later versions, you can read [changes in dbus-rs 0.7](dbus/changes-in-0.7.md).
+
 
 Additional crates
 -----------------
@@ -93,7 +99,7 @@ Examples of server code using `dbus-crossroads` in the examples directory:
  * [tokio02_server_cr.rs](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio02_server_cr.rs)
  * [tokio_adv_server_cr.rs](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio_adv_server_cr.rs)
 
-**dbus::tree**:
+**dbus-tree**:
 
 ```rust
 let c = Connection::new_session()?;
@@ -114,10 +120,10 @@ tree.start_receive(&c);
 loop { c.process(Duration::from_millis(1000))?; }
 ```
 
-Examples of server code using `dbus::tree` in the examples directory:
+Examples of server code using `dbus-tree` in the examples directory:
 
- * [server.rs](https://github.com/diwic/dbus-rs/tree/master/dbus/examples/server.rs)
- * [adv_server.rs](https://github.com/diwic/dbus-rs/tree/master/dbus/examples/adv_server.rs)
+ * [server.rs](https://github.com/diwic/dbus-rs/tree/master/dbus-tree/examples/server.rs)
+ * [adv_server.rs](https://github.com/diwic/dbus-rs/tree/master/dbus-tree/examples/adv_server.rs)
 
 Features
 ========

@@ -12,7 +12,7 @@ mod crossroads;
 mod ifacedesc;
 mod stdimpl;
 
-pub use dbus::tree::MethodErr as MethodErr;
+pub use dbus::MethodErr as MethodErr;
 
 pub use context::Context;
 pub use stdimpl::PropContext;

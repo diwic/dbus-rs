@@ -29,7 +29,7 @@ pub mod message;
 pub mod ffidisp;
 
 mod error;
-pub use error::Error;
+pub use error::{Error, MethodErr};
 
 pub mod channel;
 
@@ -45,7 +45,7 @@ pub use crate::strings::{Signature, Path};
 
 pub mod arg;
 
-pub mod tree;
+// pub mod tree;
 
 static INITDBUS: std::sync::Once = std::sync::Once::new();
 

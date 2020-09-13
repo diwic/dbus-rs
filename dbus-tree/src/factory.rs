@@ -2,8 +2,8 @@ use super::{MethodType, DataType, MTFn, MTFnMut, MTSync, MethodResult, MethodInf
 use super::{Tree, ObjectPath, Interface, Property, Signal, Method};
 use super::objectpath::IfaceCache;
 use std::sync::Arc;
-use crate::strings::{Interface as IfaceName, Member};
-use crate::{Path, arg};
+use dbus::strings::{Interface as IfaceName, Member};
+use dbus::{Path, arg};
 use std::cell::RefCell;
 
 /// The factory is used to create object paths, interfaces, methods etc.
@@ -34,7 +34,7 @@ impl Factory<MTFn<()>, ()> {
 
     /// Creates a new factory for multi-thread use.
     pub fn new_sync<D: DataType>() -> Factory<MTSync<D>, D> { Factory(IfaceCache::new()) }
-   
+
 }
 
 impl<D: DataType> Factory<MTFn<D>, D> {
@@ -107,7 +107,7 @@ fn create_fnmut() {
     let f = Factory::new_fnmut::<()>();
     let mut move_me = 5u32;
     let m = f.method("test", (), move |m| {
-        move_me += 1; 
+        move_me += 1;
         Ok(vec!(m.msg.method_return().append1(&move_me)))
     });
     assert_eq!(&**m.get_name(), "test");
@@ -128,10 +128,10 @@ fn fn_customdata() {
     }
 
     let f = Factory::new_fn::<Custom>();
-  
+
     let m = f.method("test", 789, |_| unimplemented!());
     assert_eq!(*m.get_data(), 789);
-   
+
     let o = f.object_path("/test/test", Arc::new(7));
     assert_eq!(**o.get_data(), 7);
 }

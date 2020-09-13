@@ -252,6 +252,7 @@ async fn timeout() {
 #[tokio::test]
 async fn large_message() -> Result<(), Box<dyn std::error::Error>> {
     use dbus::arg::Variant;
+    use dbus_tree::Factory;
     use futures::StreamExt;
     use std::{
         collections::HashMap,
@@ -273,11 +274,11 @@ async fn large_message() -> Result<(), Box<dyn std::error::Error>> {
     let server_conn = dbus::blocking::SyncConnection::new_session()?;
 
     server_conn.request_name("com.example.dbusrs.tokiobigtest", false, true, false)?;
-    let f = dbus::tree::Factory::new_sync::<()>();
+    let f = Factory::new_sync::<()>();
     let tree =
         f.tree(()).add(f.object_path("/", ()).add(f.interface("com.example.dbusrs.tokiobigtest", ()).add_m(f.method("Ping", (), |m| {
             // println!("received ping!");
-            Ok(vec![m.msg.method_return().append1(make_big_reply().map_err(|err| dbus::tree::MethodErr::failed(&err))?)])
+            Ok(vec![m.msg.method_return().append1(make_big_reply().map_err(|err| dbus::MethodErr::failed(&err))?)])
         }))));
     tree.start_receive_sync(&server_conn);
 

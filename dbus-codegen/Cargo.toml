@@ -23,6 +23,7 @@ default = ["dbus"]
 [dependencies]
 xml-rs = "0.8.3"
 dbus = { path = "../dbus", version = "0.8", optional = true }
+dbus-tree = { path = "../dbus-tree", version = "0.1", optional = true }
 clap = "2.20"
 
 [badges]
@@ -32,4 +33,4 @@ travis-ci = { repository = "diwic/dbus-rs" }
 
 [[example]]
 name = "adv_server_codegen"
-required-features = ["dbus"]
+required-features = ["dbus", "dbus-tree"]

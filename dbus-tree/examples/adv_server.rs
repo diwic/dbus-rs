@@ -5,15 +5,14 @@
 // Note: in the dbus-codegen/example directory, there is a version of this example where dbus-codegen
 // was used to create some boilerplate code - feel free to compare the two examples.
 
-extern crate dbus;
-
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::cell::Cell;
 use std::thread;
 
-use dbus::{tree, Path};
-use dbus::tree::{Interface, Signal, MTFn, Access, MethodErr, EmitsChangedSignal};
+use dbus_tree as tree;
+use dbus::Path;
+use dbus_tree::{Interface, Signal, MTFn, Access, MethodErr, EmitsChangedSignal};
 use dbus::ffidisp::Connection;
 
 // Our storage device
@@ -51,7 +50,7 @@ impl Device {
             online: Cell::new(index % 2 == 0),
             checking: Cell::new(false),
         }
-    } 
+    }
 }
 
 // Here's where we implement the code for our interface.
@@ -97,7 +96,7 @@ fn create_iface(check_complete_s: mpsc::Sender<i32>) -> (Interface<MTFn<TData>, 
                 Ok(())
             })
         )
-        // ...add a method for starting a device check... 
+        // ...add a method for starting a device check...
         .add_m(f.method("check", (), move |m| {
             let dev: &Arc<Device> = m.path.get_data();
             if dev.checking.get() {
@@ -138,7 +137,7 @@ fn create_tree(devices: &[Arc<Device>], iface: &Arc<Interface<MTFn<TData>, TData
             .add(iface.clone())
         );
     }
-    tree 
+    tree
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -146,7 +145,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let devices: Vec<Arc<Device>> = (0..10).map(|i| Arc::new(Device::new_bogus(i))).collect();
 
     // Create tree
-    let (check_complete_s, check_complete_r) = mpsc::channel::<i32>(); 
+    let (check_complete_s, check_complete_r) = mpsc::channel::<i32>();
     let (iface, sig) = create_iface(check_complete_s);
     let tree = create_tree(&devices, &Arc::new(iface));
 

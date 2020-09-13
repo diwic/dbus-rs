@@ -1,13 +1,13 @@
 use super::utils::{ArcMap, Iter, IterE, Annotations, Introspect};
 use super::{Factory, MethodType, MethodInfo, MethodResult, MethodErr, DataType, Property, Method, Signal, methodtype};
 use std::sync::{Arc, Mutex};
-use crate::{Message, MessageType, Error, arg, message, channel};
-use crate::strings::{Member, Path, Signature, Interface as IfaceName};
-use crate::ffidisp::{ConnectionItem, MsgHandler, Connection, MsgHandlerType, MsgHandlerResult};
+use dbus::{Message, MessageType, Error, arg, message, channel};
+use dbus::strings::{Member, Path, Signature, Interface as IfaceName};
+use dbus::ffidisp::{ConnectionItem, MsgHandler, Connection, MsgHandlerType, MsgHandlerResult};
 use std::fmt;
 use std::ffi::CStr;
 use super::leaves::prop_append_dict;
-use crate::channel::Channel;
+use dbus::channel::Channel;
 use std::time::Duration;
 
 fn introspect_map<I: fmt::Display, T: Introspect>
@@ -214,7 +214,7 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
     }
 
     fn get_managed_objects(&self, m: &MethodInfo<M, D>) -> MethodResult {
-        use crate::arg::{Dict, Variant};
+        use dbus::arg::{Dict, Variant};
         let paths = m.tree.children(&self, false);
         let mut result = Ok(());
         let mut r = m.msg.method_return();
@@ -287,7 +287,7 @@ where <D as DataType>::Interface: Default,
     /// It is not possible to add/remove interfaces while the object path belongs to a tree,
     /// hence no InterfacesAdded / InterfacesRemoved signals are sent.
     pub fn object_manager(mut self) -> Self {
-        use crate::arg::{Variant, Dict};
+        use dbus::arg::{Variant, Dict};
         let ifname = IfaceName::from("org.freedesktop.DBus.ObjectManager");
         if self.ifaces.contains_key(&ifname) { return self };
         let z = self.ifacecache.get(ifname, |i| {
@@ -300,7 +300,7 @@ where <D as DataType>::Interface: Default,
     }
 
     fn add_property_handler(&mut self) {
-        use crate::arg::{Variant, Dict};
+        use dbus::arg::{Variant, Dict};
         let ifname = IfaceName::from("org.freedesktop.DBus.Properties");
         if self.ifaces.contains_key(&ifname) { return };
         let z = self.ifacecache.get(ifname, |i| {
@@ -423,7 +423,7 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
                 for r in replies {
                     let _ = channel.send(r);
                 }
-            } else if let Some(reply) = crate::channel::default_reply(&msg) {
+            } else if let Some(reply) = dbus::channel::default_reply(&msg) {
                 let _ = channel.send(reply);
             }
 
@@ -523,14 +523,14 @@ impl<M: MethodType<D>, D: DataType> MsgHandler for Tree<M, D> {
     }
     fn handler_type(&self) -> MsgHandlerType { MsgHandlerType::MsgType(MessageType::MethodCall) }
 }
-
+/*
 impl<M: MethodType<D>, D: DataType> MsgHandler for Arc<Tree<M, D>> {
     fn handle_msg(&mut self, msg: &Message) -> Option<MsgHandlerResult> {
         self.handle(msg).map(|v| MsgHandlerResult { handled: true, done: false, reply: v })
     }
     fn handler_type(&self) -> MsgHandlerType { MsgHandlerType::MsgType(MessageType::MethodCall) }
 }
-
+*/
 /// An iterator adapter that handles incoming method calls.
 ///
 /// Method calls that match an object path in the tree are handled and consumed by this
