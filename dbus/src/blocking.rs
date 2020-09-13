@@ -9,6 +9,7 @@ use crate::channel::{Channel, BusType, Token};
 use std::{cell::RefCell, time::Duration, sync::Mutex};
 use crate::filters::Filters;
 
+#[allow(missing_docs)]
 mod generated_org_freedesktop_standard_interfaces;
 mod generated_org_freedesktop_dbus;
 
@@ -18,6 +19,7 @@ mod generated_org_freedesktop_dbus;
 ///
 /// The code was created by dbus-codegen.
 pub mod stdintf {
+    #[allow(missing_docs)]
     pub mod org_freedesktop_dbus {
         pub use super::super::generated_org_freedesktop_standard_interfaces::*;
 
@@ -66,7 +68,8 @@ pub mod stdintf {
         }
     }
 
-    pub mod org_freedesktop {
+    // Not public yet, because of lack of named arguments
+    pub (super) mod org_freedesktop {
         pub(crate) use super::super::generated_org_freedesktop_dbus::*;
     }
 
