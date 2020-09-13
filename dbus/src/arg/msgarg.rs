@@ -123,7 +123,7 @@ pub trait RefArg: fmt::Debug {
     ///
     /// In case of complex types (Array, Dict, Struct), the clone is not guaranteed
     /// to have the same internal representation as the original.
-    fn box_clone(&self) -> Box<dyn RefArg + 'static> { unimplemented!() /* Needed for backwards comp */ }
+    fn box_clone(&self) -> Box<dyn RefArg + 'static>;
 }
 
 impl<'a> Get<'a> for Box<dyn RefArg> {
