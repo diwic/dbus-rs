@@ -7,7 +7,7 @@ D-Bus bindings for Rust
 
  * Use `blocking::Connection` to connect to the session or system bus. (Or `SyncConnection` / `LocalConnection`)
  * Use `Message` to send and receive messages. Get and append arguments of all types, see the [argument guide](dbus/examples/argument_guide.md) for details.
- * Build method dispatching servers using the `dbus-crossroads` crate or the `tree` module.
+ * Build method dispatching servers using the `dbus-crossroads` or `dbus-tree` crates.
    Standard D-Bus interfaces (introspection, properties, object manager) are supported.
 
 If you have questions or comments that the documentation cannot answer in an easy way, [filing an issue](https://github.com/diwic/dbus-rs/issues) with your question is fine. Pull requests that improve the code, documentation, etc, are welcome!
@@ -29,6 +29,8 @@ Additional crates
  * [dbus-tokio](http://crates.io/crates/dbus-tokio/) integrates D-Bus with [Tokio](http://tokio.rs). [![API documentation](https://docs.rs/dbus-tokio/badge.svg)](https://docs.rs/dbus-tokio)
  * [dbus-codegen](http://crates.io/crates/dbus-codegen/) installs a binary tool which generates Rust code from D-Bus XML introspection data. The [readme](https://github.com/diwic/dbus-rs/tree/master/dbus-codegen) contains an introduction to how to use it.
  * [libdbus-sys](http://crates.io/crates/libdbus-sys/) contains the raw FFI bindings to libdbus.
+ * [dbus-tree](http://crates.io/crates/dbus-tree/) facitilates easy building of method
+    dispatching servers (legacy design). [![API documentation](https://docs.rs/dbus-tree/badge.svg)](https://docs.rs/dbus-tree)
 
 Examples
 ========
