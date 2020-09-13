@@ -3,7 +3,7 @@
 use crate::{Signature, arg::TypeMismatchError, arg::Variant};
 use std::{fmt, any};
 use std::sync::Arc;
-use std::rc::Rc;
+// use std::rc::Rc;
 use std::collections::HashMap;
 
 use super::{Iter, IterAppend, ArgType};
@@ -56,7 +56,7 @@ pub trait ReadAll: Sized {
 
 
 /// Object safe version of Arg + Append + Get.
-pub trait RefArg: fmt::Debug {
+pub trait RefArg: fmt::Debug + Send + Sync {
     /// The corresponding D-Bus argument type code.
     fn arg_type(&self) -> ArgType;
     /// The corresponding D-Bus type signature for this type.
@@ -246,7 +246,7 @@ impl<T: Append> Append for Box<T> {
 }
 
 deref_impl!(Box, self, &mut **self );
-deref_impl!(Rc, self, Rc::get_mut(self).unwrap());
+// deref_impl!(Rc, self, Rc::get_mut(self).unwrap());
 deref_impl!(Arc, self, Arc::get_mut(self).unwrap());
 
 macro_rules! argall_impl {

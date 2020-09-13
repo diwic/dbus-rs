@@ -196,7 +196,7 @@ impl<'a, K: DictKey + Get<'a> + Eq + Hash, V: Arg + Get<'a>, S: BuildHasher + De
     }
 }
 
-impl<K: DictKey + RefArg + Eq + Hash, V: RefArg + Arg, S: BuildHasher> RefArg for HashMap<K, V, S> {
+impl<K: DictKey + RefArg + Eq + Hash, V: RefArg + Arg, S: BuildHasher + Send + Sync> RefArg for HashMap<K, V, S> {
     fn arg_type(&self) -> ArgType { ArgType::Array }
     fn signature(&self) -> Signature<'static> { format!("a{{{}{}}}", <K as Arg>::signature(), <V as Arg>::signature()).into() }
     fn append(&self, i: &mut IterAppend) {
@@ -246,7 +246,7 @@ impl<'a, T: Arg + Get<'a>> Get<'a> for Vec<T> {
 /// Represents a D-Bus Array. Maximum flexibility (wraps an iterator of items to append).
 ///
 /// See the argument guide and module level documentation for details and alternatives.
-pub struct Array<'a, T, I>(I, PhantomData<(*const T, &'a Message)>);
+pub struct Array<'a, T, I>(I, PhantomData<(fn() -> T, &'a ())>);
 
 impl<'a, T: 'a, I: Iterator<Item=T>> Array<'a, T, I> {
     /// Creates a new Array from an iterator.
@@ -283,14 +283,18 @@ impl<'a, T: Get<'a>> Iterator for Array<'a, T, Iter<'a>> {
 
 // Due to the strong typing here; RefArg is implemented only for T's that are both Arg and RefArg.
 // We need Arg for this to work for empty arrays (we can't get signature from first element if there is no elements).
-// We need RefArg for non-consuming append.
-impl<'a, T: 'a + Arg + fmt::Debug + RefArg, I: fmt::Debug + Clone + Iterator<Item=&'a T>> RefArg for Array<'static, T, I> {
+// We need RefArg for box_clone.
+impl<'a, T, I> RefArg for Array<'static, T, I>
+where
+    T: 'a + Arg + RefArg,
+    I: fmt::Debug + Clone + Send + Sync + Iterator<Item=&'a T>
+{
     fn arg_type(&self) -> ArgType { ArgType::Array }
     fn signature(&self) -> Signature<'static> { Signature::from(format!("a{}", <T as Arg>::signature())) }
     fn append(&self, i: &mut IterAppend) {
         let z = self.0.clone();
         i.append_container(ArgType::Array, Some(<T as Arg>::signature().as_cstr()), |s|
-            for arg in z { RefArg::append(arg,s) }
+            for arg in z { RefArg::append(arg, s); }
         );
     }
     #[inline]
@@ -443,7 +447,7 @@ impl RefArg for InternalArray {
     }
     fn as_static_inner(&self, index: usize) -> Option<&(dyn RefArg + 'static)> where Self: 'static {
         self.data.get(index).map(|x| x as &dyn RefArg)
-    }    
+    }
     #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> {
         Box::new(InternalArray {
