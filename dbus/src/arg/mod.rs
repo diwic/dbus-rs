@@ -74,6 +74,7 @@ use crate::{ffi, Message, Signature, Path};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_void, c_int};
 use std::os::unix::io::{RawFd, AsRawFd, FromRawFd, IntoRawFd};
+use std::collections::VecDeque;
 
 fn check(f: &str, i: u32) { if i == 0 { panic!("D-Bus error: '{}' failed", f) }}
 
@@ -261,7 +262,7 @@ impl<'a> Iter<'a> {
             ArgType::UInt64 => Box::new(self.get::<u64>().unwrap()),
             ArgType::Double => Box::new(self.get::<f64>().unwrap()),
             ArgType::UnixFd => Box::new(self.get::<OwnedFd>().unwrap()),
-            ArgType::Struct => Box::new(self.recurse(ArgType::Struct).unwrap().collect::<Vec<_>>()),
+            ArgType::Struct => Box::new(self.recurse(ArgType::Struct).unwrap().collect::<VecDeque<_>>()),
             ArgType::ObjectPath => Box::new(self.get::<Path>().unwrap().into_static()),
             ArgType::Signature => Box::new(self.get::<Signature>().unwrap().into_static()),
         })

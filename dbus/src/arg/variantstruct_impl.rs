@@ -1,6 +1,7 @@
 use super::*;
 use crate::Signature;
 use std::any;
+use std::collections::VecDeque;
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 /// A simple wrapper to specify a D-Bus variant.
@@ -157,8 +158,8 @@ impl<$($t: RefArg),*> RefArg for ($($t,)*) {
     #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> {
         let &( $(ref $n,)*) = self;
-        let mut z = vec!();
-        $( z.push($n.box_clone()); )*
+        let mut z = VecDeque::new();
+        $( z.push_back($n.box_clone()); )*
         Box::new(z)
     }
 }
@@ -179,7 +180,7 @@ struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J,);
 struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J, k K,);
 struct_impl!(a A, b B, c C, d D, e E, f F, g G, h H, i I, j J, k K, l L,);
 
-impl RefArg for Vec<Box<dyn RefArg>> {
+impl RefArg for VecDeque<Box<dyn RefArg>> {
     fn arg_type(&self) -> ArgType { ArgType::Struct }
     fn signature(&self) -> Signature<'static> {
         let mut s = String::from("(");
@@ -207,7 +208,7 @@ impl RefArg for Vec<Box<dyn RefArg>> {
     }
     #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> {
-        let t: Vec<Box<dyn RefArg + 'static>> = self.iter().map(|x| x.box_clone()).collect();
+        let t: VecDeque<Box<dyn RefArg + 'static>> = self.iter().map(|x| x.box_clone()).collect();
         Box::new(t)
     }
 }
