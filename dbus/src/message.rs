@@ -1,7 +1,7 @@
 //! Contains structs and traits closely related to D-Bus messages.
 
 use std::{fmt, ptr};
-use super::{ffi, Error, libc, to_c_str, c_str_to_slice, init_dbus};
+use super::{ffi, Error, libc, init_dbus};
 use crate::strings::{BusName, Path, Interface, Member, ErrorName};
 use std::ffi::CStr;
 
@@ -113,14 +113,6 @@ impl Message {
         let mut m = self.method_return();
         m.append_all(args);
         m
-    }
-
-    /// The old way to create a new error reply
-    #[deprecated]
-    pub fn new_error(m: &Message, error_name: &str, error_message: &str) -> Option<Message> {
-        let (en, em) = (to_c_str(error_name), to_c_str(error_message));
-        let ptr = unsafe { ffi::dbus_message_new_error(m.msg, en.as_ptr(), em.as_ptr()) };
-        if ptr.is_null() { None } else { Some(Message { msg: ptr} ) }
     }
 
     /// Creates a new error reply
@@ -361,18 +353,6 @@ impl Message {
     pub fn sender(&self) -> Option<BusName> {
         self.msg_internal_str(unsafe { ffi::dbus_message_get_sender(self.msg) })
             .map(|s| unsafe { BusName::from_slice_unchecked(s) })
-    }
-
-    /// Returns a tuple of (Message type, Path, Interface, Member) of the current message.
-    #[deprecated]
-    pub fn headers(&self) -> (MessageType, Option<String>, Option<String>, Option<String>) {
-        let p = unsafe { ffi::dbus_message_get_path(self.msg) };
-        let i = unsafe { ffi::dbus_message_get_interface(self.msg) };
-        let m = unsafe { ffi::dbus_message_get_member(self.msg) };
-        (self.msg_type(),
-         c_str_to_slice(&p).map(|s| s.to_string()),
-         c_str_to_slice(&i).map(|s| s.to_string()),
-         c_str_to_slice(&m).map(|s| s.to_string()))
     }
 
     /// Gets the object path this Message is being sent to.
