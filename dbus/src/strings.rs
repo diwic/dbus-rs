@@ -58,7 +58,13 @@ impl<'m> $t<'m> {
     }
 
     /// View this struct as a CStr.
-    pub fn as_cstr(&self) -> &CStr { &self.0 }
+    ///
+    /// Note: As of dbus 0.9, this is made private to be able to make it easier for a potential
+    /// native implementation using "str" instead of "cstr".
+    pub (crate) fn as_cstr(&self) -> &CStr { &self.0 }
+
+    #[allow(dead_code)]
+    pub (crate) fn as_ptr(&self) -> *const c_char { self.0.as_ptr() }
 
     /// Makes sure this string does not contain borrows.
     pub fn into_static(self) -> $t<'static> {
@@ -129,9 +135,12 @@ impl<'m> fmt::Display for $t<'m> {
     }
 }
 
+/*
+As of dbus 0.9, this has been removed to prepare for a potential native implementation.
 impl<'m> AsRef<CStr> for $t<'m> {
     fn as_ref(&self) -> &CStr { &self.0 }
 }
+*/
 
 impl<'m> hash::Hash for $t<'m> {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {

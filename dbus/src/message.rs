@@ -42,7 +42,7 @@ impl Message {
         init_dbus();
         let (d, p, i, m) = (destination.into(), path.into(), iface.into(), method.into());
         let ptr = unsafe {
-            ffi::dbus_message_new_method_call(d.as_ref().as_ptr(), p.as_ref().as_ptr(), i.as_ref().as_ptr(), m.as_ref().as_ptr())
+            ffi::dbus_message_new_method_call(d.as_ptr(), p.as_ptr(), i.as_ptr(), m.as_ptr())
         };
         if ptr.is_null() { Err("D-Bus error: dbus_message_new_method_call failed".into()) }
         else { Ok(Message { msg: ptr}) }
@@ -52,8 +52,8 @@ impl Message {
     pub fn method_call(destination: &BusName, path: &Path, iface: &Interface, name: &Member) -> Message {
         init_dbus();
         let ptr = unsafe {
-            ffi::dbus_message_new_method_call(destination.as_ref().as_ptr(), path.as_ref().as_ptr(),
-                iface.as_ref().as_ptr(), name.as_ref().as_ptr())
+            ffi::dbus_message_new_method_call(destination.as_ptr(), path.as_ptr(),
+                iface.as_ptr(), name.as_ptr())
         };
         if ptr.is_null() { panic!("D-Bus error: dbus_message_new_method_call failed") }
         Message { msg: ptr}
@@ -77,7 +77,7 @@ impl Message {
         let m = Member::new(name)?;
 
         let ptr = unsafe {
-            ffi::dbus_message_new_signal(p.as_ref().as_ptr(), i.as_ref().as_ptr(), m.as_ref().as_ptr())
+            ffi::dbus_message_new_signal(p.as_ptr(), i.as_ptr(), m.as_ptr())
         };
         if ptr.is_null() { Err("D-Bus error: dbus_message_new_signal failed".into()) }
         else { Ok(Message { msg: ptr}) }
@@ -87,7 +87,7 @@ impl Message {
     pub fn signal(path: &Path, iface: &Interface, name: &Member) -> Message {
         init_dbus();
         let ptr = unsafe {
-            ffi::dbus_message_new_signal(path.as_ref().as_ptr(), iface.as_ref().as_ptr(), name.as_ref().as_ptr())
+            ffi::dbus_message_new_signal(path.as_ptr(), iface.as_ptr(), name.as_ptr())
         };
         if ptr.is_null() { panic!("D-Bus error: dbus_message_new_signal failed") }
         Message { msg: ptr}
@@ -117,7 +117,7 @@ impl Message {
 
     /// Creates a new error reply
     pub fn error(&self, error_name: &ErrorName, error_message: &CStr) -> Message {
-        let ptr = unsafe { ffi::dbus_message_new_error(self.msg, error_name.as_ref().as_ptr(), error_message.as_ptr()) };
+        let ptr = unsafe { ffi::dbus_message_new_error(self.msg, error_name.as_ptr(), error_message.as_ptr()) };
         if ptr.is_null() { panic!("D-Bus error: dbus_message_new_error failed") }
         Message { msg: ptr}
     }
