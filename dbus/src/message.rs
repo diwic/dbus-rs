@@ -69,7 +69,7 @@ impl Message {
 
     /// Creates a new signal message.
     pub fn new_signal<P, I, M>(path: P, iface: I, name: M) -> Result<Message, String>
-    where P: Into<Vec<u8>>, I: Into<Vec<u8>>, M: Into<Vec<u8>> {
+    where P: Into<String>, I: Into<String>, M: Into<String> {
         init_dbus();
 
         let p = Path::new(path)?;

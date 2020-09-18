@@ -274,7 +274,7 @@ impl<'a> Iter<'a> {
             let c = ffi::dbus_message_iter_get_signature(&mut self.0);
             assert!(c != ptr::null_mut());
             let cc = CStr::from_ptr(c);
-            let r = Signature::new(cc.to_bytes());
+            let r = Signature::new(std::str::from_utf8(cc.to_bytes()).unwrap());
             ffi::dbus_free(c as *mut c_void);
             r.unwrap()
         }
