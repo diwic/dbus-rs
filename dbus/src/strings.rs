@@ -1,8 +1,9 @@
 //! This module contains strings with a specific format, such as a valid
 //! Interface name, a valid Error name, etc.
 //!
-//! (The internal representation of these strings are `Cow<CStr>`, which
-//! makes it possible to use them in libdbus without conversion costs.)
+//! (The internal representation of these strings are `Cow<str>`, but with a \0 byte
+//! at the end to use it libdbus calls without extra allocations. This is usually nothing
+//! you have to worry about.)
 
 use std::{str, fmt, ops, default, hash};
 use std::ffi::{CStr, CString};
@@ -33,8 +34,10 @@ impl<'m> $t<'m> {
     /// Note: If the no-string-validation feature is activated, this string
     /// will not be checked for conformance with the D-Bus specification.
     pub fn new<S: Into<String>>(s: S) -> Result<$t<'m>, String> {
-        let c = CString::new(s.into()).map_err(|e| e.to_string())?;
-        $t::check_valid(c.as_ptr()).map(|_| $t(Cow::Owned(c)))
+        let mut s = s.into();
+        s.push_str("\0");
+        unsafe { $t::check_valid(CStr::from_bytes_with_nul_unchecked(s.as_bytes()).as_ptr() as *const c_char)?; }
+        Ok(Self(Cow::Owned(s)))
     }
 
     /// Creates a new instance of this struct. If you end it with \0,
@@ -46,8 +49,7 @@ impl<'m> $t<'m> {
         let ss = s.as_bytes();
         if ss.len() == 0 || ss[ss.len()-1] != 0 { return $t::new(s) };
         $t::check_valid(s.as_ptr() as *const c_char).map(|_| {
-            let c = unsafe { CStr::from_ptr(s.as_ptr() as *const c_char) };
-            $t(Cow::Borrowed(c))
+            unsafe { Self::from_slice_unchecked(s) }
         })
     }
 
@@ -56,17 +58,21 @@ impl<'m> $t<'m> {
     pub unsafe fn from_slice_unchecked(s: &'m str) -> $t<'m> {
         let ss = s.as_bytes();
         debug_assert!(ss[ss.len()-1] == 0);
-        $t(Cow::Borrowed(CStr::from_ptr(ss.as_ptr() as *const c_char)))
+        $t(Cow::Borrowed(s))
     }
 
     /// View this struct as a CStr.
     ///
     /// Note: As of dbus 0.9, this is made private to be able to make it easier for a potential
     /// native implementation using "str" instead of "cstr".
-    pub (crate) fn as_cstr(&self) -> &CStr { &self.0 }
+    pub (crate) fn as_cstr(&self) -> &CStr {
+        unsafe {
+            CStr::from_bytes_with_nul_unchecked(self.0.as_bytes())
+        }
+    }
 
     #[allow(dead_code)]
-    pub (crate) fn as_ptr(&self) -> *const c_char { self.0.as_ptr() }
+    pub (crate) fn as_ptr(&self) -> *const c_char { self.as_cstr().as_ptr() }
 
     /// Makes sure this string does not contain borrows.
     pub fn into_static(self) -> $t<'static> {
@@ -74,7 +80,12 @@ impl<'m> $t<'m> {
     }
 
     /// Converts this struct to a CString.
-    pub fn into_cstring(self) -> CString { self.0.into_owned() }
+    pub fn into_cstring(self) -> CString {
+        // Change this when https://github.com/rust-lang/rust/issues/73179 is on stable.
+        let mut x: Vec<u8> = self.0.into_owned().into();
+        x.pop();
+        CString::new(x).unwrap()
+    }
 }
 
 /*
@@ -109,7 +120,7 @@ impl<'m> From<&'m CStr> for $t<'m> {
     }
 }
 
-impl<'m> From<$t<'m>> for CString { fn from(s: $t<'m>) -> CString { s.0.into_owned() } }
+impl<'m> From<$t<'m>> for CString { fn from(s: $t<'m>) -> CString { s.into_cstring() } }
 
 
 /// #Panics
@@ -132,12 +143,12 @@ impl<'inner, 'm: 'inner> From<&'m $t<'inner>> for $t<'m> {
 
 impl<'m> ops::Deref for $t<'m> {
     type Target = str;
-    fn deref(&self) -> &str { str::from_utf8(self.0.to_bytes()).unwrap() }
+    fn deref(&self) -> &str { self.0.split_at(self.0.len()-1).0 }
 }
 
 impl<'m> fmt::Display for $t<'m> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        <str as fmt::Display>::fmt(self, f)
+        <str as fmt::Display>::fmt(&*self, f)
     }
 }
 
@@ -159,7 +170,7 @@ impl<'m> hash::Hash for $t<'m> {
 /// A wrapper around a string that is guaranteed to be
 /// a valid (single) D-Bus type signature.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct Signature<'a>(Cow<'a, CStr>);
+pub struct Signature<'a>(Cow<'a, str>);
 
 cstring_wrapper!(Signature, dbus_signature_validate_single);
 
@@ -171,49 +182,48 @@ impl Signature<'static> {
 /// A wrapper around a string that is guaranteed to be
 /// a valid D-Bus object path.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct Path<'a>(Cow<'a, CStr>);
+pub struct Path<'a>(Cow<'a, str>);
 
 cstring_wrapper!(Path, dbus_validate_path);
 
 // This is needed so one can make arrays of paths easily
 impl<'a> default::Default for Path<'a> {
-    fn default() -> Path<'a> { Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"/\0".as_ptr() as *const c_char)})) }
+    fn default() -> Path<'a> { Path(Cow::Borrowed("/\0")) }
 }
 
 /// A wrapper around a string that is guaranteed to be
 /// a valid D-Bus member, i e, a signal or method name.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct Member<'a>(Cow<'a, CStr>);
+pub struct Member<'a>(Cow<'a, str>);
 
 cstring_wrapper!(Member, dbus_validate_member);
 
 /// A wrapper around a string that is guaranteed to be
 /// a valid D-Bus interface name.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct Interface<'a>(Cow<'a, CStr>);
+pub struct Interface<'a>(Cow<'a, str>);
 
 cstring_wrapper!(Interface, dbus_validate_interface);
 
 /// A wrapper around a string that is guaranteed to be
 /// a valid D-Bus bus name.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct BusName<'a>(Cow<'a, CStr>);
+pub struct BusName<'a>(Cow<'a, str>);
 
 cstring_wrapper!(BusName, dbus_validate_bus_name);
 
 /// A wrapper around a string that is guaranteed to be
 /// a valid D-Bus error name.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct ErrorName<'a>(Cow<'a, CStr>);
+pub struct ErrorName<'a>(Cow<'a, str>);
 
 cstring_wrapper!(ErrorName, dbus_validate_error_name);
 
 #[test]
 fn some_path() {
-    use std::os::raw::c_char;
     let p1: Path = "/valid".into();
     let p2 = Path::new("##invalid##");
-    assert_eq!(p1, Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"/valid\0".as_ptr() as *const c_char) })));
+    assert_eq!(p1, Path(Cow::Borrowed("/valid\0")));
     #[cfg(not(feature = "no-string-validation"))]
     assert_eq!(p2, Err("Object path was not valid: '##invalid##'".into()));
     #[cfg(feature = "no-string-validation")]
