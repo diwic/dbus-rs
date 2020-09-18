@@ -5,7 +5,6 @@ use dbus::{Message, MessageType, Error, arg, message, channel};
 use dbus::strings::{Member, Path, Signature, Interface as IfaceName};
 use dbus::ffidisp::{ConnectionItem, MsgHandler, Connection, MsgHandlerType, MsgHandlerResult};
 use std::fmt;
-use std::ffi::CStr;
 use super::leaves::prop_append_dict;
 use dbus::channel::Channel;
 use std::time::Duration;
@@ -166,13 +165,13 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
         nodestr
     }
 
-    fn get_iface<'a>(&'a self, iface_name: &'a CStr) -> Result<&Arc<Interface<M, D>>, MethodErr> {
-        let j = IfaceName::from_slice(iface_name.to_bytes_with_nul()).map_err(|e| MethodErr::invalid_arg(&e))?;
+    fn get_iface<'a>(&'a self, iface_name: &'a str) -> Result<&Arc<Interface<M, D>>, MethodErr> {
+        let j = IfaceName::from_slice(iface_name).map_err(|e| MethodErr::invalid_arg(&e))?;
         self.ifaces.get(&j).ok_or_else(|| MethodErr::no_interface(&j))
     }
 
     fn prop_get(&self, m: &MethodInfo<M, D>) -> MethodResult {
-        let (iname, prop_name): (&CStr, &str) = m.msg.read2()?;
+        let (iname, prop_name): (&str, &str) = m.msg.read2()?;
         let iface = self.get_iface(iname)?;
         let prop: &Property<M, D> = iface.properties.get(&String::from(prop_name))
             .ok_or_else(|| MethodErr::no_property(&prop_name))?;
@@ -196,7 +195,7 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
 
 
     fn prop_set(&self, m: &MethodInfo<M, D>) -> MethodResult {
-        let (iname, prop_name): (&CStr, &str) = m.msg.read2()?;
+        let (iname, prop_name): (&str, &str) = m.msg.read2()?;
         let iface = self.get_iface(iname)?;
         let prop: &Property<M, D> = iface.properties.get(&String::from(prop_name))
             .ok_or_else(|| MethodErr::no_property(&prop_name))?;

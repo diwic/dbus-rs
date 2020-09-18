@@ -42,8 +42,9 @@ impl<'m> $t<'m> {
     ///
     /// Note: If the no-string-validation feature is activated, this string
     /// will not be checked for conformance with the D-Bus specification.
-    pub fn from_slice(s: &'m [u8]) -> Result<$t<'m>, String> {
-        if s.len() == 0 || s[s.len()-1] != 0 { return $t::new(s) };
+    pub fn from_slice(s: &'m str) -> Result<$t<'m>, String> {
+        let ss = s.as_bytes();
+        if ss.len() == 0 || ss[ss.len()-1] != 0 { return $t::new(s) };
         $t::check_valid(s.as_ptr() as *const c_char).map(|_| {
             let c = unsafe { CStr::from_ptr(s.as_ptr() as *const c_char) };
             $t(Cow::Borrowed(c))
@@ -90,18 +91,22 @@ impl<'m> From<String> for $t<'m> { fn from(s: String) -> $t<'m> { $t::new(s).unw
 /// #Panics
 ///
 /// If given string is not valid.
-impl<'m> From<&'m String> for $t<'m> { fn from(s: &'m String) -> $t<'m> { $t::from_slice(s.as_bytes()).unwrap() } }
+impl<'m> From<&'m String> for $t<'m> { fn from(s: &'m String) -> $t<'m> { $t::from_slice(s).unwrap() } }
 
 /// #Panics
 ///
 /// If given string is not valid.
-impl<'m> From<&'m str> for $t<'m> { fn from(s: &'m str) -> $t<'m> { $t::from_slice(s.as_bytes()).unwrap() } }
+impl<'m> From<&'m str> for $t<'m> { fn from(s: &'m str) -> $t<'m> { $t::from_slice(s).unwrap() } }
 
 /// #Panics
 ///
 /// If given string is not valid.
-impl<'m> From<&'m CStr> for $t<'m> { fn from(s: &'m CStr) -> $t<'m> { $t::from_slice(s.to_bytes_with_nul()).unwrap() } }
-
+impl<'m> From<&'m CStr> for $t<'m> {
+    fn from(s: &'m CStr) -> $t<'m> {
+        let x = str::from_utf8(s.to_bytes_with_nul()).unwrap();
+        $t::from_slice(x).unwrap()
+    }
+}
 
 impl<'m> From<$t<'m>> for CString { fn from(s: $t<'m>) -> CString { s.0.into_owned() } }
 
