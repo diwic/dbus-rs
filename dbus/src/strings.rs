@@ -53,9 +53,10 @@ impl<'m> $t<'m> {
 
     /// This function creates a new instance of this struct, without checking.
     /// It's up to you to guarantee that s ends with a \0 and is valid.
-    pub unsafe fn from_slice_unchecked(s: &'m [u8]) -> $t<'m> {
-        debug_assert!(s[s.len()-1] == 0);
-        $t(Cow::Borrowed(CStr::from_ptr(s.as_ptr() as *const c_char)))
+    pub unsafe fn from_slice_unchecked(s: &'m str) -> $t<'m> {
+        let ss = s.as_bytes();
+        debug_assert!(ss[ss.len()-1] == 0);
+        $t(Cow::Borrowed(CStr::from_ptr(ss.as_ptr() as *const c_char)))
     }
 
     /// View this struct as a CStr.

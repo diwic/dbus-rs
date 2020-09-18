@@ -344,9 +344,10 @@ impl Message {
         }
     }
 
-    fn msg_internal_str<'a>(&'a self, c: *const libc::c_char) -> Option<&'a [u8]> {
-        if c.is_null() { None }
-        else { Some( unsafe { CStr::from_ptr(c) }.to_bytes_with_nul()) }
+    fn msg_internal_str<'a>(&'a self, c: *const libc::c_char) -> Option<&'a str> {
+        if c.is_null() { return None };
+        let cc = unsafe { CStr::from_ptr(c) };
+        std::str::from_utf8(cc.to_bytes_with_nul()).ok()
     }
 
     /// Gets the name of the connection that originated this message.

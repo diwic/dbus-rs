@@ -23,7 +23,7 @@ impl<T:Default> Default for Variant<T> {
 
 impl<T> Arg for Variant<T> {
     const ARG_TYPE: ArgType = ArgType::Variant;
-    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"v\0") } }
+    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked("v\0") } }
 }
 
 impl<T: Arg + Append> Append for Variant<T> {
@@ -60,7 +60,7 @@ impl<'a> Get<'a> for Variant<Box<dyn RefArg>> {
 */
 impl<T: RefArg> RefArg for Variant<T> {
     fn arg_type(&self) -> ArgType { ArgType::Variant }
-    fn signature(&self) -> Signature<'static> { unsafe { Signature::from_slice_unchecked(b"v\0") } }
+    fn signature(&self) -> Signature<'static> { unsafe { Signature::from_slice_unchecked("v\0") } }
     fn append(&self, i: &mut IterAppend) {
         let z = &self.0;
         i.append_container(ArgType::Variant, Some(z.signature().as_cstr()), |s| z.append(s));
