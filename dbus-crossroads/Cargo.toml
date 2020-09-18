@@ -12,7 +12,7 @@ categories = ["os::unix-apis", "api-bindings"]
 readme = "README.md"
 
 [dependencies]
-dbus = { path = "../dbus", version = "0.8.4" }
+dbus = { path = "../dbus", version = "0.9" }
 
 [badges]
 is-it-maintained-open-issues = { repository = "diwic/dbus-rs" }

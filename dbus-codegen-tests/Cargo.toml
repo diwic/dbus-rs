@@ -13,8 +13,8 @@ edition = "2018"
 path = "src/lib.rs"
 
 [dependencies]
-dbus = { path = "../dbus", version = "0.8", features=["futures"] }
-dbus-tree = { path = "../dbus-tree", version = "0.1" }
+dbus = { path = "../dbus", version = "0.9", features=["futures"] }
+dbus-tree = { path = "../dbus-tree", version = "0.9" }
 
 [build-dependencies]
 dbus-codegen = { path = "../dbus-codegen" }
