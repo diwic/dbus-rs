@@ -6,7 +6,7 @@ edition = "2018"
 
 description = "Framework for writing D-Bus method handlers (legacy)"
 repository = "https://github.com/diwic/dbus-rs"
-documentation = "http://docs.rs/dbus"
+documentation = "http://docs.rs/dbus-tree"
 keywords = ["D-Bus", "DBus", "IPC"]
 license = "Apache-2.0/MIT"
 categories = ["os::unix-apis", "api-bindings"]
