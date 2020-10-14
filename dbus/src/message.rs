@@ -36,6 +36,19 @@ pub struct Message {
 unsafe impl Send for Message {}
 
 impl Message {
+    /// Creates a new message of a given type.
+    pub fn new(msg_type: MessageType) -> Self {
+        let msg_type = match msg_type {
+            MessageType::MethodCall => 1,
+            MessageType::MethodReturn => 2,
+            MessageType::Error => 3,
+            MessageType::Signal => 4,
+        };
+        let ptr = unsafe { ffi::dbus_message_new(msg_type) };
+        if ptr.is_null() { panic!("D-Bus error: dbus_message_new failed") }
+        Message { msg: ptr }
+    }
+
     /// Creates a new method call message.
     pub fn new_method_call<'d, 'p, 'i, 'm, D, P, I, M>(destination: D, path: P, iface: I, method: M) -> Result<Message, String>
     where D: Into<BusName<'d>>, P: Into<Path<'p>>, I: Into<Interface<'i>>, M: Into<Member<'m>> {
@@ -143,6 +156,12 @@ impl Message {
     pub fn get_reply_serial(&self) -> Option<u32> {
         let s = unsafe { ffi::dbus_message_get_reply_serial(self.msg) };
         if s == 0 { None } else { Some(s) }
+    }
+
+    /// Gets the serial of the message this message is a reply to.
+    pub fn set_reply_serial(&self, reply_serial: u32) {
+        let x = unsafe { ffi::dbus_message_set_reply_serial(self.msg, reply_serial) };
+        if x == 0 { panic!("D-Bus error: dbus_message_set_reply_serial failed") }
     }
 
     /// Returns true if the message does not expect a reply.

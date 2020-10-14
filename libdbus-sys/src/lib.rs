@@ -213,6 +213,7 @@ extern "C" {
     pub fn dbus_set_error(error: *mut DBusError, name: *const c_char, message: *const c_char, ...);
     pub fn dbus_set_error_from_message(error: *mut DBusError, message: *mut DBusMessage) -> u32;
 
+    pub fn dbus_message_new(msg_type: c_int) -> *mut DBusMessage;
     pub fn dbus_message_new_method_call(destination: *const c_char, path: *const c_char,
         iface: *const c_char, method: *const c_char) -> *mut DBusMessage;
     pub fn dbus_message_new_method_return(message: *mut DBusMessage) -> *mut DBusMessage;
@@ -226,6 +227,7 @@ extern "C" {
     pub fn dbus_message_is_method_call(message: *mut DBusMessage, iface: *const c_char, method: *const c_char) -> u32;
     pub fn dbus_message_is_signal(message: *mut DBusMessage, iface: *const c_char, signal_name: *const c_char) -> u32;
     pub fn dbus_message_get_reply_serial(message: *mut DBusMessage) -> u32;
+    pub fn dbus_message_set_reply_serial(message: *mut DBusMessage, reply_serial: u32) -> u32;
     pub fn dbus_message_get_serial(message: *mut DBusMessage) -> u32;
     pub fn dbus_message_get_path(message: *mut DBusMessage) -> *const c_char;
     pub fn dbus_message_get_interface(message: *mut DBusMessage) -> *const c_char;
