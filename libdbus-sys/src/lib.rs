@@ -240,6 +240,8 @@ extern "C" {
     pub fn dbus_message_set_no_reply(message: *mut DBusMessage, no_reply: u32);
     pub fn dbus_message_get_auto_start(message: *mut DBusMessage) -> u32;
     pub fn dbus_message_set_auto_start(message: *mut DBusMessage, no_reply: u32);
+    pub fn dbus_message_get_error_name(message: *mut DBusMessage) -> *const c_char;
+    pub fn dbus_message_set_error_name(message: *mut DBusMessage, error_name: *const c_char) -> u32;
 
     pub fn dbus_message_iter_append_basic(iter: *mut DBusMessageIter, t: c_int, value: *const c_void) -> u32;
     pub fn dbus_message_iter_append_fixed_array(iter: *mut DBusMessageIter, element_type: c_int,

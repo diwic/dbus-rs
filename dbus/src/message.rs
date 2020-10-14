@@ -184,6 +184,18 @@ impl Message {
         unsafe { ffi::dbus_message_set_auto_start(self.msg, if v { 1 } else { 0 }) }
     }
 
+    /// Gets the error name
+    pub fn get_error_name(&self) -> Option<ErrorName> {
+        self.msg_internal_str(unsafe { ffi::dbus_message_get_error_name(self.msg) })
+            .map(|s| unsafe { ErrorName::from_slice_unchecked(s) })
+    }
+
+    /// Sets the error name
+    pub fn set_error_name(&mut self, error_name: &ErrorName) {
+        let x = unsafe { ffi::dbus_message_set_error_name(self.msg, error_name.as_ptr()) };
+        if x == 0 { panic!("D-Bus error: dbus_message_set_error_name failed") }
+    }
+
     /// Add one or more MessageItems to this Message.
     ///
     /// Note: using `append1`, `append2` or `append3` might be faster, especially for large arrays.
