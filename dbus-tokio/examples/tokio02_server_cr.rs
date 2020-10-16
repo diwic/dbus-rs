@@ -55,7 +55,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let signal_msg = ctx.make_signal("HelloHappened", (name,));
                 ctx.push_msg(signal_msg);
                 // And the return value is a tuple of the output arguments.
-                ctx.reply_ok((s,))
+                ctx.reply(Ok((s,)))
                 // The reply is sent when ctx is dropped / goes out of scope.
             }
         });
