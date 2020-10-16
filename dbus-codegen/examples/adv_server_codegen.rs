@@ -139,8 +139,9 @@ impl dbus::message::SignalArgs for DeviceCheckComplete {
 // === Imported code end ===
 }
 
-use dbus::{ffidisp::Connection, tree, Path};
-use dbus::tree::{Interface, MTFn, MethodErr};
+use dbus::{ffidisp::Connection, Path};
+use dbus_tree as tree;
+use dbus_tree::{Interface, MTFn, MethodErr};
 
 use std::sync::Arc;
 use std::sync::mpsc;
