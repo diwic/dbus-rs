@@ -341,9 +341,6 @@ pub struct Tree<M: MethodType<D>, D: DataType> {
 
 impl<M: MethodType<D>, D: DataType> Tree<M, D> {
     /// Builder function that adds an object path to this tree.
-    ///
-    /// Note: This does not register a path with the connection, so if the tree is currently registered,
-    /// you might want to call Connection::register_object_path to add the path manually.
     pub fn add<I: Into<Arc<ObjectPath<M, D>>>>(mut self, s: I) -> Self {
         self.insert(s);
         self
@@ -358,9 +355,6 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
     pub fn iter<'a>(&'a self) -> Iter<'a, ObjectPath<M, D>> { IterE::Path(self.paths.values()).into() }
 
     /// Non-builder function that adds an object path to this tree.
-    ///
-    /// Note: This does not register a path with the connection, so if the tree is currently registered,
-    /// you might want to call Connection::register_object_path to add the path manually.
     pub fn insert<I: Into<Arc<ObjectPath<M, D>>>>(&mut self, s: I) {
         let m = s.into();
         self.paths.insert(m.name.clone(), m);
@@ -368,9 +362,6 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
 
 
     /// Remove a object path from the Tree. Returns the object path removed, or None if not found.
-    ///
-    /// Note: This does not unregister a path with the connection, so if the tree is currently registered,
-    /// you might want to call Connection::unregister_object_path to remove the path manually.
     pub fn remove(&mut self, p: &Path<'static>) -> Option<Arc<ObjectPath<M, D>>> {
         // There is no real reason p needs to have a static lifetime; but
         // the borrow checker doesn't agree. :-(
