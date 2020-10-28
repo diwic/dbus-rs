@@ -82,7 +82,7 @@ impl stdError for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         if let Some(x) = self.message() {
-             write!(f, "{:?}", x.to_string())
+             write!(f, "{}", x)
         } else { Ok(()) }
     }
 }
