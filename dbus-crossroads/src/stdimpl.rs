@@ -345,7 +345,9 @@ fn get_managed_objects(mut ctx: Context, cr: &mut Crossroads, _: ()) -> Option<C
     let children: Vec<dbus::Path<'static>> =
         cr.get_children(ctx.path()).into_iter().map(|child_path| {
             let mut x = String::from(&**parent);
-            x.push_str("/");
+            if !x.ends_with('/') {
+                x.push_str("/");
+            }
             x.push_str(child_path);
             dbus::Path::from(x).into_static()
         }).collect();
