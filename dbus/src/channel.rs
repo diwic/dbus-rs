@@ -6,8 +6,16 @@ use crate::{Message, to_c_str, c_str_to_slice, MessageType};
 use crate::message::MatchRule;
 use std::os::unix::io::RawFd;
 
+#[cfg(not(feature = "native-channel"))]
 mod ffichannel;
+#[cfg(not(feature = "native-channel"))]
 pub use ffichannel::Channel;
+
+#[cfg(feature = "native-channel")]
+mod nativechannel;
+#[cfg(feature = "native-channel")]
+pub use nativechannel::Channel;
+
 
 /// Which bus to connect to
 #[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
@@ -30,18 +38,6 @@ pub struct Watch {
     pub read: bool,
     /// True if wakeup should happen when the file descriptor is ready for writing
     pub write: bool,
-}
-
-impl Watch {
-    unsafe fn from_raw_enabled(watch: *mut ffi::DBusWatch) -> (Self, bool) {
-        let mut w = Watch { fd: ffi::dbus_watch_get_unix_fd(watch), read: false, write: false};
-        let enabled = ffi::dbus_watch_get_enabled(watch) != 0;
-        let flags = ffi::dbus_watch_get_flags(watch);
-        use std::os::raw::c_uint;
-        w.read = (flags & ffi::DBUS_WATCH_READABLE as c_uint) != 0;
-        w.write = (flags & ffi::DBUS_WATCH_WRITABLE as c_uint) != 0;
-        (w, enabled)
-    }
 }
 
 /// Abstraction over different connections that send data
