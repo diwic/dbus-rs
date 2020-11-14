@@ -5,11 +5,7 @@
 ///
 /// No stability guarantees for this crate.
 
-pub mod machineid;
-
-pub mod address;
-
-pub mod authentication;
+pub use dbus_native_channel::{machineid, address, authentication};
 
 pub mod message;
 
@@ -21,6 +17,3 @@ pub mod strings {
     //! Re-export of the dbus_strings crate
     pub use dbus_strings::*;
 }
-
-#[allow(unsafe_code)]
-mod sys;
