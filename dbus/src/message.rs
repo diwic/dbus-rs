@@ -411,13 +411,53 @@ impl Message {
         Message { msg: ptr }
     }
 
-    /// Sets serial number manually - should not be used in production code
+    /// Sets serial number manually - mostly for internal use
     ///
-    /// However, this can be very useful in test code that is supposed to handle a method call.
+    /// When sending a message, a serial will be automatically assigned, so you don't need to call
+    /// this method. However, it can be very useful in test code that is supposed to handle a method call.
     /// This way, you can create a method call and handle it without sending it to a real D-Bus instance.
     pub fn set_serial(&mut self, val: u32) {
         unsafe { ffi::dbus_message_set_serial(self.msg, val) };
     }
+
+    /// Marshals a message - mostly for internal use
+    ///
+    /// The function f will be called one or more times with bytes to be written somewhere.
+    /// You should call set_serial to manually set a serial number before calling this function
+    pub fn marshal<E, F: FnMut(&[u8]) -> Result<(), E>>(&self, mut f: F) -> Result<(), E> {
+        let mut len = 0;
+        let mut data = ptr::null_mut();
+        if unsafe { ffi::dbus_message_marshal(self.msg, &mut data, &mut len) } == 0 {
+            panic!("out of memory");
+        }
+        let s = unsafe { std::slice::from_raw_parts(data as *mut u8 as *const u8, len as usize) };
+        let r = f(s);
+        unsafe { ffi::dbus_free(data as *mut _) };
+        r
+    }
+
+    /// Demarshals a message - mostly for internal use
+    pub fn demarshal(data: &[u8]) -> Result<Self, Error> {
+        let mut e = Error::empty();
+        let p = unsafe { ffi::dbus_message_demarshal(data.as_ptr() as *const _, data.len() as _, e.get_mut()) };
+        if p == ptr::null_mut() {
+            Err(e)
+        } else {
+            Ok(Self::from_ptr(p, false))
+        }
+    }
+
+    /// Returns the size of the message - mostly for internal use
+    ///
+    /// Returns Err(()) on protocol errors. Make sure you have at least 16 bytes in the buffer
+    /// before calling this method.
+    pub fn demarshal_bytes_needed(data: &[u8]) -> Result<usize, ()> {
+        const MIN_HEADER: usize = 16;
+        if data.len() < MIN_HEADER { return Ok(MIN_HEADER); }
+        let x = unsafe { ffi::dbus_message_demarshal_bytes_needed(data.as_ptr() as *const _, data.len() as _) };
+        if x < MIN_HEADER as _ { Err(()) } else { Ok(x as usize) }
+    }
+
 }
 
 impl Drop for Message {
@@ -466,5 +506,17 @@ mod test {
         assert!(!m.get_no_reply());
         m.set_no_reply(true);
         assert!(m.get_no_reply());
+    }
+
+    #[test]
+    fn marshal() {
+        let mut m = Message::new_method_call("org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "Hello").unwrap();
+        m.set_serial(1);
+        let r = m.marshal(|d| {
+            let m2 = Message::demarshal(d).unwrap();
+            assert_eq!(&*m2.path().unwrap(), "/org/freedesktop/DBus");
+            Err(45)
+        });
+        assert_eq!(45, r.unwrap_err());
     }
 }
