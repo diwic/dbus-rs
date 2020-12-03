@@ -227,7 +227,7 @@ fn some_path() {
     #[cfg(not(feature = "no-string-validation"))]
     assert_eq!(p2, Err("Object path was not valid: '##invalid##'".into()));
     #[cfg(feature = "no-string-validation")]
-    assert_eq!(p2, Ok(Path(Cow::Borrowed(unsafe { CStr::from_ptr(b"##invalid##\0".as_ptr() as *const c_char) }))));
+    assert_eq!(p2, Ok(Path(Cow::Borrowed("##invalid##\0"))));
 }
 
 #[test]
