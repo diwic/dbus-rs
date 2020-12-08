@@ -10,16 +10,6 @@ D-Bus bindings for Rust
  * Build method dispatching servers using the `dbus-crossroads` or `dbus-tree` crates.
    Standard D-Bus interfaces (introspection, properties, object manager) are supported.
 
-You are hereby invited to participate in the development of these crates:
-
- * If you have discovered what you believe is a bug, then [file an issue](https://github.com/diwic/dbus-rs/issues).
- * If you have questions or comments that the documentation cannot answer in an easy way, [start a discussion](https://github.com/diwic/dbus-rs/discussions).
- * If you have a smaller improvement to code, documentation, examples etc, go ahead and [submit a Pull Request](https://github.com/diwic/dbus-rs/pulls).
-   Larger pieces of work are better off discussed first.
-
-The code is Apache 2.0 / MIT dual licensed. Any code submitted in Pull Requests, discussions or issues are assumed to have this license,
-unless explicitly stated otherwise.
-
 Breaking changes
 ----------------
 
@@ -39,6 +29,20 @@ Additional crates
  * [libdbus-sys](http://crates.io/crates/libdbus-sys/) contains the raw FFI bindings to libdbus.
  * [dbus-tree](http://crates.io/crates/dbus-tree/) facitilates easy building of method
     dispatching servers (legacy design). [![API documentation](https://docs.rs/dbus-tree/badge.svg)](https://docs.rs/dbus-tree)
+
+Invitation
+----------
+
+You are hereby invited to participate in the development of these crates:
+
+ * If you have discovered what you believe is a bug, [file an issue](https://github.com/diwic/dbus-rs/issues).
+ * If you have questions or comments that the documentation cannot answer in an easy way, [start a discussion](https://github.com/diwic/dbus-rs/discussions).
+ * If you have smaller improvements to code, documentation, examples etc, go ahead and [submit a pull request](https://github.com/diwic/dbus-rs/pulls).
+   Larger pieces of work are better off discussed first.
+
+The code is Apache 2.0 / MIT dual licensed. Any code submitted in Pull Requests, discussions or issues are assumed to have this license,
+unless explicitly stated otherwise.
+
 
 Examples
 ========
