@@ -173,6 +173,9 @@ fn main() {
     };
     generate_code(POLICYKIT_XML, &g, "policykit_asref.rs");
 
+    g.methodtype = Some("MTSync".into());
+    generate_code(POLICYKIT_XML, &g, "policykit_asref_mtsync.rs");
+
     g.methodtype = None;
     generate_code(POLICYKIT_XML, &g, "policykit_client.rs");
 
