@@ -552,6 +552,11 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
         },
         ServerAccess::MethodInfo => {},
     };
+    if let ServerAccess::RefClosure | ServerAccess::AsRefClosure = saccess {
+        if mtype == "MTSync" {
+            wheres.push("F: Send + Sync".into());
+        }
+    }
     *s += "where\n";
     for w in wheres { *s += &format!("    {},\n", w); }
     *s += "{\n";
