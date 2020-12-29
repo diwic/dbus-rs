@@ -4,7 +4,7 @@
 
 use dbus_tokio::connection;
 use futures::future;
-use tokio::time::delay_for;
+use tokio::time::sleep;
 use dbus::channel::{MatchingReceiver, Sender};
 use dbus::message::MatchRule;
 use dbus::nonblock::SyncConnection;
@@ -76,7 +76,7 @@ fn register_iface(cr: &Arc<Mutex<Crossroads>>, conn: Arc<SyncConnection>) -> Ifa
             let conn_clone = conn.clone();
             tokio::spawn(async move {
                 // Let's pretend we're doing a 15 second check of the device.
-                delay_for(Duration::from_secs(15)).await;
+                sleep(Duration::from_secs(15)).await;
 
                 // Now we need to set checking to false again.
                 // However, at this point we have no longer access to the "device" variable,
