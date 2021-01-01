@@ -21,6 +21,8 @@ jobs:
     - name: Check
       run: cargo check --verbose --all
     - name: Run test (step 1)
-      run: cargo test --all -- --nocapture --color always
+      run: |
+        echo DBUS_SESSION_BUS_ADDRESS=`dbus-daemon --session --print-address --fork` >> $GITHUB_ENV
+        cargo test --all -- --nocapture --color always
     - name: Run codegen tests without default features
       run: cd dbus-codegen && cargo test --all --no-default-features -- --nocapture --color always
