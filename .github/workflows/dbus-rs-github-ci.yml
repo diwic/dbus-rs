@@ -20,9 +20,8 @@ jobs:
       run: sudo apt-get install --no-install-recommends -y libdbus-1-dev dbus at-spi2-core
     - name: Check
       run: cargo check --verbose --all
-    - name: Run test (step 1)
+    - name: Run tests
       run: |
         export DBUS_SESSION_BUS_ADDRESS=`dbus-daemon --session --print-address --fork`
         cargo test --all -- --nocapture --color always
-    - name: Run codegen tests without default features
-      run: cd dbus-codegen && cargo test --all --no-default-features -- --nocapture --color always
+        cd dbus-codegen && cargo test --all --no-default-features -- --nocapture --color always
