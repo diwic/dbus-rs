@@ -5,6 +5,9 @@ use crate::{arg, to_c_str, c_str_to_slice, init_dbus, Message};
 use crate::strings::ErrorName;
 use std::error::Error as stdError;
 
+This is a silly test just to check github actions
+
+
 /// D-Bus Error wrapper.
 ///
 /// This is a wrapper around the libc dbus error object.
