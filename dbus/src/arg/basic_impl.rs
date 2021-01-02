@@ -79,6 +79,7 @@ impl RefArg for $t {
     fn as_f64(&self) -> Option<f64> { let $fff = *self; $ff }
     #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> { Box::new(self.clone()) }
+    fn array_clone(v: &[Self]) -> Option<Box<dyn RefArg + 'static>> where Self: Sized { Some(Box::new(v.to_vec())) }
 }
 
 impl DictKey for $t {}
@@ -119,6 +120,8 @@ impl RefArg for $t {
     fn as_str(&self) -> Option<&str> { let $i = self; $ss }
     #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> { Box::new(self.clone()) }
+    fn array_clone(v: &[Self]) -> Option<Box<dyn RefArg + 'static>> where Self: Sized { Some(Box::new(v.to_vec())) }
+
 }
 
     }
@@ -259,6 +262,7 @@ impl RefArg for $t<'static> {
     fn as_str(&self) -> Option<&str> { Some(self) }
     #[inline]
     fn box_clone(&self) -> Box<dyn RefArg + 'static> { Box::new(self.clone().into_static()) }
+    fn array_clone(v: &[Self]) -> Option<Box<dyn RefArg + 'static>> where Self: Sized { Some(Box::new(v.to_vec())) }
 }
 
 impl<'a> DictKey for $t<'a> {}

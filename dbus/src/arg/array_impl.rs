@@ -69,9 +69,11 @@ impl<'a, T: Arg + RefArg> RefArg for &'a [T] {
     }
 
     fn box_clone(&self) -> Box<dyn RefArg + 'static> {
-        Box::new(InternalArray {
-            inner_sig: <T as Arg>::signature(),
-            data: self.iter().map(|x| x.box_clone()).collect(),
+        T::array_clone(self).unwrap_or_else(|| {
+            Box::new(InternalArray {
+                inner_sig: <T as Arg>::signature(),
+                data: self.iter().map(|x| x.box_clone()).collect(),
+            })
         })
     }
 }

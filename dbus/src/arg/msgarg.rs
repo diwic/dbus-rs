@@ -124,6 +124,16 @@ pub trait RefArg: fmt::Debug + Send + Sync {
     /// In case of complex types (Array, Dict, Struct), the clone is not guaranteed
     /// to have the same internal representation as the original.
     fn box_clone(&self) -> Box<dyn RefArg + 'static>;
+
+    /// Deep clone of an array.
+    ///
+    /// This method is used internally by box_clone.
+    fn array_clone(_arg: &[Self]) -> Option<Box<dyn RefArg + 'static>> where Self: Sized { None }
+
+    /// Deep clone of a dict.
+    ///
+    /// This method is used internally by box_clone.
+    fn dict_clone(_arg: &HashMap<Self, Box<dyn RefArg>>) -> Option<Box<dyn RefArg + 'static>> where Self: Sized { None }
 }
 
 impl<'a> Get<'a> for Box<dyn RefArg> {
@@ -474,10 +484,14 @@ mod test {
                         );
                         let refarg = i2.get_refarg().unwrap();
                         println!("refarg {:?}", refarg);
+                        let cloned = refarg.box_clone();
+                        println!("cloned: {:?}", cloned);
                         let st_inner = refarg.as_static_inner(0).unwrap();
                         println!("st_inner {:?}", st_inner);
                         i2.next();
                         assert_eq!(cast::<Vec<$t>>(st_inner), Some(&vec![Default::default()]));
+                        let cl_inner = refarg.as_static_inner(0).unwrap();
+                        assert_eq!(cast::<Vec<$t>>(cl_inner), Some(&vec![Default::default()]));
                     };
                 }
                 check_array!(bool);
