@@ -323,6 +323,24 @@ fn get_var_array_refarg<'a, T: 'static + RefArg + Arg, F: FnMut(&mut Iter<'a>) -
     Box::new(v)
 }
 
+fn get_dict_refarg<'a, K, V, KF, VF>(i: &mut Iter<'a>, mut kf: KF, mut vf: VF) -> Box<dyn RefArg>
+where
+    K: DictKey + 'static + RefArg + Clone + Eq + Hash,
+    V: RefArg + Arg + 'static,
+    KF: FnMut(&mut Iter<'a>) -> Option<K>,
+    VF: FnMut(&mut Iter<'a>) -> Option<V>,
+{
+    let mut data: HashMap<K, V> = HashMap::new();
+    let mut si = i.recurse(ArgType::Array).unwrap();
+    while let Some(mut d) = si.recurse(ArgType::DictEntry) {
+        let k = kf(&mut d).unwrap();
+        d.next();
+        let v = vf(&mut d).unwrap();
+        data.insert(k, v);
+        si.next();
+    }
+    Box::new(data)
+}
 
 #[derive(Debug)]
 struct InternalDict<K> {
@@ -330,10 +348,14 @@ struct InternalDict<K> {
    outer_sig: Signature<'static>,
 }
 
-fn get_dict_refarg<'a, K, F: FnMut(&mut Iter<'a>) -> Option<K>>(i: &mut Iter<'a>, mut f: F) -> Box<dyn RefArg>
-    where K: DictKey + 'static + RefArg + Clone
- {
-    let mut data = vec!();
+fn get_internal_dict_refarg<'a, K, F: FnMut(&mut Iter<'a>) -> Option<K>>(
+    i: &mut Iter<'a>,
+    mut f: F,
+) -> Box<dyn RefArg>
+where
+    K: DictKey + 'static + RefArg + Clone,
+{
+    let mut data = vec![];
     let outer_sig = i.signature();
     let mut si = i.recurse(ArgType::Array).unwrap();
     while let Some(mut d) = si.recurse(ArgType::DictEntry) {
@@ -457,6 +479,44 @@ impl RefArg for InternalArray {
     }
 }
 
+fn get_dict_refarg_for_value_type<'a, K, KF>(
+    value_type: ArgType,
+    i: &mut Iter<'a>,
+    kf: KF,
+) -> Box<dyn RefArg>
+where
+    K: DictKey + 'static + RefArg + Clone + Eq + Hash,
+    KF: FnMut(&mut Iter<'a>) -> Option<K>,
+{
+    match value_type {
+        ArgType::Byte => get_dict_refarg::<K, u8, KF, _>(i, kf, Iter::get),
+        ArgType::Int16 => get_dict_refarg::<K, i16, KF, _>(i, kf, Iter::get),
+        ArgType::UInt16 => get_dict_refarg::<K, u16, KF, _>(i, kf, Iter::get),
+        ArgType::Int32 => get_dict_refarg::<K, i32, KF, _>(i, kf, Iter::get),
+        ArgType::UInt32 => get_dict_refarg::<K, u32, KF, _>(i, kf, Iter::get),
+        ArgType::Int64 => get_dict_refarg::<K, i64, KF, _>(i, kf, Iter::get),
+        ArgType::UInt64 => get_dict_refarg::<K, u64, KF, _>(i, kf, Iter::get),
+        ArgType::Double => get_dict_refarg::<K, f64, KF, _>(i, kf, Iter::get),
+        ArgType::String => get_dict_refarg::<K, String, KF, _>(i, kf, Iter::get),
+        ArgType::ObjectPath => get_dict_refarg::<K, Path<'static>, KF, _>(i, kf, |si| {
+            si.get::<Path>().map(|s| s.into_static())
+        }),
+        ArgType::Signature => get_dict_refarg::<K, Signature<'static>, KF, _>(i, kf, |si| {
+            si.get::<Signature>().map(|s| s.into_static())
+        }),
+        ArgType::Variant => {
+            get_dict_refarg::<K, Variant<Box<dyn RefArg>>, KF, _>(i, kf, Variant::new_refarg)
+        }
+        ArgType::Boolean => get_dict_refarg::<K, bool, KF, _>(i, kf, Iter::get),
+        ArgType::UnixFd => get_dict_refarg::<K, OwnedFd, KF, _>(i, kf, Iter::get),
+        // TODO: Handle array-valued dicts better
+        ArgType::Array => get_internal_dict_refarg::<K, KF>(i, kf),
+        ArgType::Struct => get_internal_dict_refarg::<K, KF>(i, kf),
+        ArgType::DictEntry => panic!("Can't have DictEntry as value for dictionary"),
+        ArgType::Invalid => panic!("Array with invalid dictvalue"),
+    }
+}
+
 pub fn get_array_refarg(i: &mut Iter) -> Box<dyn RefArg> {
     debug_assert!(i.arg_type() == ArgType::Array);
     let etype = ArgType::from_i32(unsafe { ffi::dbus_message_iter_get_element_type(&mut i.0) } as i32).unwrap();
@@ -479,20 +539,29 @@ pub fn get_array_refarg(i: &mut Iter) -> Box<dyn RefArg> {
         ArgType::Array => get_internal_array(i),
         ArgType::DictEntry => {
             let key = ArgType::from_i32(i.signature().as_bytes()[2] as i32).unwrap(); // The third character, after "a{", is our key.
+            let value = ArgType::from_i32(i.signature().as_bytes()[3] as i32).unwrap(); // The fourth character, after "a{", is our value.
             match key {
-                ArgType::Byte => get_dict_refarg::<u8, _>(i, |si| si.get()),
-                ArgType::Int16 => get_dict_refarg::<i16, _>(i, |si| si.get()),
-                ArgType::UInt16 => get_dict_refarg::<u16, _>(i, |si| si.get()),
-                ArgType::Int32 => get_dict_refarg::<i32, _>(i, |si| si.get()),
-                ArgType::UInt32 => get_dict_refarg::<u32, _>(i, |si| si.get()),
-                ArgType::Int64 => get_dict_refarg::<i64, _>(i, |si| si.get()),
-                ArgType::UInt64 => get_dict_refarg::<u64, _>(i, |si| si.get()),
-                ArgType::Double => get_dict_refarg::<f64, _>(i, |si| si.get()),
-                ArgType::Boolean => get_dict_refarg::<bool, _>(i, |si| si.get()),
-                // ArgType::UnixFd => get_dict_refarg::<OwnedFd, _>(i, |si| si.get()),
-                ArgType::String => get_dict_refarg::<String, _>(i, |si| si.get()),
-                ArgType::ObjectPath => get_dict_refarg::<Path<'static>, _>(i, |si| si.get::<Path>().map(|s| s.into_static())),
-                ArgType::Signature => get_dict_refarg::<Signature<'static>, _>(i, |si| si.get::<Signature>().map(|s| s.into_static())),
+                ArgType::Byte => get_dict_refarg_for_value_type::<u8, _>(value, i, Iter::get),
+                ArgType::Int16 => get_dict_refarg_for_value_type::<i16, _>(value, i, Iter::get),
+                ArgType::UInt16 => get_dict_refarg_for_value_type::<u16, _>(value, i, Iter::get),
+                ArgType::Int32 => get_dict_refarg_for_value_type::<i32, _>(value, i, Iter::get),
+                ArgType::UInt32 => get_dict_refarg_for_value_type::<u32, _>(value, i, Iter::get),
+                ArgType::Int64 => get_dict_refarg_for_value_type::<i64, _>(value, i, Iter::get),
+                ArgType::UInt64 => get_dict_refarg_for_value_type::<u64, _>(value, i, Iter::get),
+                ArgType::Double => get_internal_dict_refarg::<f64, _>(i, Iter::get),
+                ArgType::Boolean => get_dict_refarg_for_value_type::<bool, _>(value, i, Iter::get),
+                // ArgType::UnixFd => get_dict_refarg::<OwnedFd, _>(i),
+                ArgType::String => get_dict_refarg_for_value_type::<String, _>(value, i, Iter::get),
+                ArgType::ObjectPath => {
+                    get_dict_refarg_for_value_type::<Path<'static>, _>(value, i, |si| {
+                        si.get::<Path>().map(|s| s.into_static())
+                    })
+                }
+                ArgType::Signature => {
+                    get_dict_refarg_for_value_type::<Signature<'static>, _>(value, i, |si| {
+                        si.get::<Signature>().map(|s| s.into_static())
+                    })
+                }
                 _ => panic!("Array with invalid dictkey ({:?})", key),
             }
         }
