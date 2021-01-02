@@ -469,7 +469,7 @@ mod test {
                         assert_eq!(
                             cast::<Vec<$t>>(&(array.0)),
                             Some(&vec![Default::default()]),
-                            "a variant containing an array of of {0} should be castable to a Vec<{0}>",
+                            "a variant containing an array of {0} should be castable to a Vec<{0}>",
                             std::any::type_name::<$t>()
                         );
                         let refarg = i2.get_refarg().unwrap();
