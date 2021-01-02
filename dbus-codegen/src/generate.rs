@@ -83,6 +83,8 @@ pub struct GenOpts {
     pub futures: bool,
     /// Type of connection, for client only
     pub connectiontype: ConnectionType,
+    /// Generates a struct wrapping PropMap to get properties from it with their expected types.
+    pub propnewtype: bool,
     /// interface filter. Only matching interface are generated, if non-empty.
     pub interfaces: Option<HashSet<String>>,
     /// The command line argument string. This will be inserted into generated source files.
@@ -93,7 +95,7 @@ impl ::std::default::Default for GenOpts {
     fn default() -> Self { GenOpts {
         dbuscrate: "dbus".into(), methodtype: Some("MTFn".into()), skipprefix: None,
         serveraccess: ServerAccess::RefClosure, genericvariant: false, futures: false,
-        crhandler: None, connectiontype: ConnectionType::Blocking,
+        crhandler: None, connectiontype: ConnectionType::Blocking, propnewtype: false,
         interfaces: None,
         command_line: String::new()
     }}
@@ -266,6 +268,16 @@ fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool
     })
 }
 
+/// Return whether the given type implements `Copy`.
+///
+/// Only implented for types which may be returned by `xml_to_rust_type`.
+fn can_copy_type(rust_type: &str) -> bool {
+    match rust_type {
+        "u8" | "bool" | "i16" | "u16" | "i32" | "u32" | "i64" | "u64" | "f64" => true,
+        _ => false
+    }
+}
+
 fn make_type(s: &str, out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<dyn error::Error>> {
     let mut i = s.chars().peekable();
     let r = xml_to_rust_type(&mut i, out, genvars)?;
@@ -365,6 +377,12 @@ fn write_prop_decl(s: &mut String, p: &Prop, opts: &GenOpts, set: bool) -> Resul
         *s += &format!("    fn {}(&self) -> {}",
             p.get_fn_name, make_result(&make_type(&p.typ, true, &mut None)?, opts));
     };
+    Ok(())
+}
+
+fn write_intf_name(s: &mut String, i: &Intf) -> Result<(), Box<dyn error::Error>> {
+    let const_name = make_snake(&i.shortname, false).to_uppercase();
+    *s += &format!("\npub const {}_NAME: &str = \"{}\";\n", const_name, i.origname);
     Ok(())
 }
 
@@ -501,6 +519,47 @@ fn write_signal(s: &mut String, i: &Intf, ss: &Signal) -> Result<(), Box<dyn err
 
 fn write_signals(s: &mut String, i: &Intf) -> Result<(), Box<dyn error::Error>> {
     for ss in i.signals.iter() { write_signal(s, i, ss)?; }
+    Ok(())
+}
+
+fn write_prop_struct(s: &mut String, i: &Intf) -> Result<(), Box<dyn error::Error>> {
+    // No point generating the properties struct if the interface has no gettable properties.
+    if !i.props.iter().any(|property| property.can_get()) {
+        return Ok(())
+    }
+
+    let struct_name = format!("{}Properties", make_camel(&i.shortname));
+    *s += &format!(r#"
+#[derive(Copy, Clone, Debug)]
+pub struct {0}<'a>(pub &'a arg::PropMap);
+
+impl<'a> {0}<'a> {{
+    pub fn from_interfaces(
+        interfaces: &'a ::std::collections::HashMap<String, arg::PropMap>,
+    ) -> Option<Self> {{
+        interfaces.get("{1}").map(Self)
+    }}
+"#, struct_name, i.origname);
+
+    for p in &i.props {
+        if p.can_get() {
+            let rust_type = make_type(&p.typ, true, &mut None)?;
+            if can_copy_type(&rust_type) {
+                *s += &format!(r#"
+    pub fn {}(&self) -> Option<{}> {{
+        arg::prop_cast(self.0, "{}").copied()
+    }}
+"#, p.get_fn_name, rust_type, p.name);
+            } else {
+                *s += &format!(r#"
+    pub fn {}(&self) -> Option<&{}> {{
+        arg::prop_cast(self.0, "{}")
+    }}
+"#, p.get_fn_name, rust_type, p.name);
+            }
+        }
+    }
+    *s += "}\n";
     Ok(())
 }
 
@@ -740,6 +799,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
                         continue;
                     }
                 }
+                write_intf_name(&mut s, &intf)?;
                 write_intf(&mut s, &intf, opts)?;
                 if opts.crhandler.is_some() {
                     write_intf_crossroads(&mut s, &intf, opts)?;
@@ -749,6 +809,9 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
                     write_intf_client(&mut s, &intf, opts)?;
                 }
                 write_signals(&mut s, &intf)?;
+                if opts.propnewtype {
+                    write_prop_struct(&mut s, &intf)?;
+                }
             }
 
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "method" => {

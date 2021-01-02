@@ -177,6 +177,7 @@ fn main() {
     generate_code(POLICYKIT_XML, &g, "policykit_asref_mtsync.rs");
 
     g.methodtype = None;
+    g.propnewtype = true;
     generate_code(POLICYKIT_XML, &g, "policykit_client.rs");
 
 }

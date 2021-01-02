@@ -50,6 +50,8 @@ Defaults to 'RefClosure'."))
 //             .help("Generates code to use with futures 0.3 (experimental)"))
         .arg(clap::Arg::with_name("client").short("c").long("client").takes_value(true).value_name("client")
              .help("Type of client connection. Valid values are: 'blocking', 'nonblock', 'ffidisp'."))
+        .arg(clap::Arg::with_name("propnewtype").short("n").long("prop-newtype")
+             .help("If present, will generate a struct wrapping PropMap to get properties from it with their expected types."))
         .arg(clap::Arg::with_name("output").short("o").long("output").takes_value(true).value_name("FILE")
              .help("Write output into the specified file"))
         .arg(clap::Arg::with_name("file").long("file").required(false).takes_value(true).value_name("FILE")
@@ -122,6 +124,7 @@ Defaults to 'RefClosure'."))
         genericvariant: matches.is_present("genericvariant"),
         futures: false,
         connectiontype: client,
+        propnewtype: matches.is_present("propnewtype"),
         crhandler: crhandler.map(|x| x.to_string()),
         interfaces,
         command_line: std::env::args().skip(1).collect::<Vec<String>>().join(" ")
