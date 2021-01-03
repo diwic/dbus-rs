@@ -489,29 +489,27 @@ where
     KF: FnMut(&mut Iter<'a>) -> Option<K>,
 {
     match value_type {
-        ArgType::Byte => get_dict_refarg::<K, u8, KF, _>(i, kf, Iter::get),
-        ArgType::Int16 => get_dict_refarg::<K, i16, KF, _>(i, kf, Iter::get),
-        ArgType::UInt16 => get_dict_refarg::<K, u16, KF, _>(i, kf, Iter::get),
-        ArgType::Int32 => get_dict_refarg::<K, i32, KF, _>(i, kf, Iter::get),
-        ArgType::UInt32 => get_dict_refarg::<K, u32, KF, _>(i, kf, Iter::get),
-        ArgType::Int64 => get_dict_refarg::<K, i64, KF, _>(i, kf, Iter::get),
-        ArgType::UInt64 => get_dict_refarg::<K, u64, KF, _>(i, kf, Iter::get),
-        ArgType::Double => get_dict_refarg::<K, f64, KF, _>(i, kf, Iter::get),
-        ArgType::String => get_dict_refarg::<K, String, KF, _>(i, kf, Iter::get),
-        ArgType::ObjectPath => get_dict_refarg::<K, Path<'static>, KF, _>(i, kf, |si| {
-            si.get::<Path>().map(|s| s.into_static())
-        }),
-        ArgType::Signature => get_dict_refarg::<K, Signature<'static>, KF, _>(i, kf, |si| {
-            si.get::<Signature>().map(|s| s.into_static())
-        }),
         ArgType::Variant => {
             get_dict_refarg::<K, Variant<Box<dyn RefArg>>, KF, _>(i, kf, Variant::new_refarg)
         }
-        ArgType::Boolean => get_dict_refarg::<K, bool, KF, _>(i, kf, Iter::get),
-        ArgType::UnixFd => get_dict_refarg::<K, OwnedFd, KF, _>(i, kf, Iter::get),
-        // TODO: Handle array-valued dicts better
-        ArgType::Array => get_internal_dict_refarg::<K, KF>(i, kf),
-        ArgType::Struct => get_internal_dict_refarg::<K, KF>(i, kf),
+        // Most of the following could also use get_dict_refarg to convert to a typed HashMap, but
+        // doing so results in a large binary size increase due to all the generic instances being
+        // instantiated.
+        ArgType::Byte
+        | ArgType::Int16
+        | ArgType::UInt16
+        | ArgType::Int32
+        | ArgType::UInt32
+        | ArgType::Int64
+        | ArgType::UInt64
+        | ArgType::Double
+        | ArgType::String
+        | ArgType::ObjectPath
+        | ArgType::Signature
+        | ArgType::Boolean
+        | ArgType::UnixFd
+        | ArgType::Array
+        | ArgType::Struct => get_internal_dict_refarg::<K, KF>(i, kf),
         ArgType::DictEntry => panic!("Can't have DictEntry as value for dictionary"),
         ArgType::Invalid => panic!("Array with invalid dictvalue"),
     }

@@ -497,45 +497,59 @@ mod test {
     fn cast_dicts() {
         let c = Channel::get_private(BusType::Session).unwrap();
 
-        let m = Message::new_method_call(c.unique_name().unwrap(), "/hello", "com.example.hello", "Hello").unwrap();
-        macro_rules! append_dict {
-            ($m:expr, $k:ty, $v:ty) => {
-                {
-                    let mut map: HashMap<$k, $v> = HashMap::new();
-                    map.insert(Default::default(), Default::default());
-                    $m.append1(Variant(&map))
-                }
-            };
+        let m = Message::new_method_call(
+            c.unique_name().unwrap(),
+            "/hello",
+            "com.example.hello",
+            "Hello",
+        )
+        .unwrap();
+        macro_rules! append_dict_variant {
+            ($m:expr, $k:ty, $v:ty) => {{
+                let mut map: HashMap<$k, Variant<Box<dyn RefArg>>> = HashMap::new();
+                map.insert(Default::default(), Variant(Box::new(<$v>::default())));
+                $m.append1(Variant(&map))
+            }};
         }
-        let m = append_dict!(m, bool, bool);
-        let m = append_dict!(m, u8, u8);
-        let m = append_dict!(m, u16, u16);
-        let m = append_dict!(m, i16, i16);
-        let m = append_dict!(m, u32, u32);
-        let m = append_dict!(m, i32, i32);
-        let m = append_dict!(m, u64, u64);
-        let m = append_dict!(m, i64, i64);
-        let m = append_dict!(m, u8, f64);
-        let m = append_dict!(m, String, String);
+        let m = append_dict_variant!(m, bool, bool);
+        let m = append_dict_variant!(m, u8, u8);
+        let m = append_dict_variant!(m, u16, u16);
+        let m = append_dict_variant!(m, i16, i16);
+        let m = append_dict_variant!(m, u32, u32);
+        let m = append_dict_variant!(m, i32, i32);
+        let m = append_dict_variant!(m, u64, u64);
+        let m = append_dict_variant!(m, i64, i64);
+        let m = append_dict_variant!(m, u8, f64);
+        let m = append_dict_variant!(m, String, String);
         c.send(m).unwrap();
         loop {
-            if let Some(m) = c.blocking_pop_message(std::time::Duration::from_millis(1000)).unwrap() {
+            if let Some(m) = c
+                .blocking_pop_message(std::time::Duration::from_millis(1000))
+                .unwrap()
+            {
                 if m.msg_type() != MessageType::MethodCall {
                     continue;
                 }
                 let mut i = m.iter_init();
                 let mut i2 = m.iter_init();
 
-                macro_rules! check_dict {
+                macro_rules! check_dict_variant {
                     ($k:ty, $v:ty) => {
-                        let array: Variant<Box<dyn RefArg>> = i.read().unwrap();
-                        let mut expected_map: HashMap<$k, $v> = HashMap::new();
-                        expected_map.insert(Default::default(), Default::default());
-                        assert_eq!(
-                            cast::<HashMap<$k, $v>>(&(array.0)),
-                            Some(&expected_map),
-                            "a variant containing a dict of {0} {1} should be castable to a HashMap<{0}, {1}>",
+                        let map: Variant<Box<dyn RefArg>> = i.read().unwrap();
+                        let expected_key: $k = Default::default();
+                        let expected_value: $v = Default::default();
+                        let cast_map = cast::<HashMap<$k, Variant<Box<dyn RefArg>>>>(&map.0);
+                        assert!(cast_map.is_some(),
+                            "a variant containing a dict of {0} to Variant({1}) should be castable to a HashMap<{0}, Variant<Box<dyn RefArg>>>",
                             std::any::type_name::<$k>(),
+                            std::any::type_name::<$v>()
+                        );
+                        let cast_map_value = cast_map.unwrap().get(&expected_key).unwrap();
+                        assert_eq!(
+                            cast::<$v>(&cast_map_value.0),
+                            Some(&expected_value),
+                            "a variant {0:?} containing a {1} should be castable to {1}",
+                            cast_map_value,
                             std::any::type_name::<$v>()
                         );
                         let refarg = i2.get_refarg().unwrap();
@@ -543,19 +557,19 @@ mod test {
                         let st_inner = refarg.as_static_inner(0).unwrap();
                         println!("st_inner {:?}", st_inner);
                         i2.next();
-                        assert_eq!(cast::<HashMap<$k, $v>>(st_inner), Some(&expected_map));
+                        assert!(cast::<HashMap<$k, Variant<Box<dyn RefArg>>>>(st_inner).is_some());
                     };
                 }
-                check_dict!(bool, bool);
-                check_dict!(u8, u8);
-                check_dict!(u16, u16);
-                check_dict!(i16, i16);
-                check_dict!(u32, u32);
-                check_dict!(i32, i32);
-                check_dict!(u64, u64);
-                check_dict!(i64, i64);
-                check_dict!(u8, f64);
-                check_dict!(String, String);
+                check_dict_variant!(bool, bool);
+                check_dict_variant!(u8, u8);
+                check_dict_variant!(u16, u16);
+                check_dict_variant!(i16, i16);
+                check_dict_variant!(u32, u32);
+                check_dict_variant!(i32, i32);
+                check_dict_variant!(u64, u64);
+                check_dict_variant!(i64, i64);
+                check_dict_variant!(u8, f64);
+                check_dict_variant!(String, String);
                 break;
             }
         }
