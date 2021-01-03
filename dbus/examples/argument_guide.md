@@ -58,7 +58,7 @@ Now, if you want to make a service yourself, the generated code is more complex.
 Append / get basic types
 ------------------------
 
-If you just want to get/append simple types, just use `append1` / `append2` / `append3`, and 
+If you just want to get/append simple types, just use `append1` / `append2` / `append3`, and
 `read1` / `read2` / `read3`. The imaginary method below takes one byte parameter and one string parameter, and returns one string parameter and one int parameter.
 
 ```rust
@@ -119,7 +119,7 @@ let z: Variant<Box<dyn RefArg>> = r.read1()?;
 
 Ok, so we retrieved our `Box<dyn RefArg>`. We now need to use the `RefArg` methods to probe it, to see what's inside. Easiest is to use `as_i64` or `as_str` if you want to test for integer or string types. Use `as_iter` if the variant contains a complex type you need to iterate over.
 For floating point values, use `arg::cast` (this requires that the RefArg is `static` though, due to Rust type system limitations).
-Match over `arg_type` if you need to know the exact type. 
+Match over `arg_type` if you need to know the exact type.
 
 
 ```rust
@@ -132,7 +132,9 @@ else if let Some(f) = arg::cast::<f64>(value) { println!("It's a float: {}", f);
 else { println!("Don't know how to handle a {:?}", value.arg_type()) }
 ```
 
-Dicts and variants are sometimes combined, e g, you might need to read a D-Bus dictionary of String to Variants. You can then read these as `HashMap<String, Variant<Box<dyn RefArg>>>`.
+Dicts and variants are sometimes combined, e g, you might need to read a D-Bus dictionary of String to Variants.
+You can read these as `PropMap` (which is a type alias for `HashMap<String, Variant<Box<dyn RefArg>>>`) and use
+`prop_cast` to retrieve a value.
 
 Structs
 -------
@@ -189,5 +191,3 @@ MessageItem
 -----------
 
 MessageItem was the first design - an enum representing a D-Bus argument. It still works, but I doubt you'll ever need to use it. Newer methods provide better type safety, speed, and ergonomics.
-
-

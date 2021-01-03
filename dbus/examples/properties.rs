@@ -1,5 +1,4 @@
 use dbus::{blocking::Connection, arg};
-use std::collections::HashMap;
 use std::time::Duration;
 
 fn print_refarg(value: &dyn arg::RefArg) {
@@ -21,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Option 1: we can get the dict straight into a hashmap, like this:
 
-    let metadata: HashMap<String, arg::Variant<Box<dyn arg::RefArg>>> = p.get("org.mpris.MediaPlayer2.Player", "Metadata")?;
+    let metadata: arg::PropMap = p.get("org.mpris.MediaPlayer2.Player", "Metadata")?;
 
     println!("Option 1:");
 

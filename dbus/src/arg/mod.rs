@@ -65,7 +65,8 @@ mod array_impl;
 
 pub mod messageitem;
 
-pub use self::msgarg::{Arg, FixedArray, Get, DictKey, Append, RefArg, AppendAll, ReadAll, ArgAll, cast, cast_mut, prop_cast};
+pub use self::msgarg::{Arg, FixedArray, Get, DictKey, Append, RefArg, AppendAll, ReadAll, ArgAll,
+    cast, cast_mut, prop_cast, PropMap};
 pub use self::array_impl::{Array, Dict};
 pub use self::variantstruct_impl::Variant;
 

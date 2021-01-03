@@ -1,7 +1,7 @@
 use crate::*;
 use dbus::Message;
 use std::cell::RefCell;
-use dbus::arg::{Variant, RefArg};
+use dbus::arg::{Variant, RefArg, PropMap};
 use std::collections::HashMap;
 
 #[test]
@@ -204,7 +204,7 @@ fn object_manager() {
         "org.freedesktop.DBus.ObjectManager", "GetManagedObjects").unwrap();
     let r = dispatch_helper(&mut cr, msg);
 
-    type GMO = HashMap<dbus::Path<'static>, HashMap<String, HashMap<String, Variant<Box<dyn RefArg + 'static>>>>>;
+    type GMO = HashMap<dbus::Path<'static>, HashMap<String, PropMap>>;
     let mo: GMO = r.read1().unwrap();
     dbg!(&mo);
     let v = &mo[&"/list/grannysmith".into()]["com.example.dbusrs.weight"]["Weight"];

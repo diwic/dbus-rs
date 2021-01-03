@@ -129,11 +129,6 @@ pub trait RefArg: fmt::Debug + Send + Sync {
     ///
     /// This method is used internally by box_clone.
     fn array_clone(_arg: &[Self]) -> Option<Box<dyn RefArg + 'static>> where Self: Sized { None }
-
-    /// Deep clone of a dict.
-    ///
-    /// This method is used internally by box_clone.
-    fn dict_clone(_arg: &HashMap<Self, Box<dyn RefArg>>) -> Option<Box<dyn RefArg + 'static>> where Self: Sized { None }
 }
 
 impl<'a> Get<'a> for Box<dyn RefArg> {
@@ -152,10 +147,14 @@ pub fn cast<'a, T: 'static>(a: &'a (dyn RefArg + 'static)) -> Option<&'a T> { a.
 #[inline]
 pub fn cast_mut<'a, T: 'static>(a: &'a mut (dyn RefArg + 'static)) -> Option<&'a mut T> { a.as_any_mut().downcast_mut() }
 
+/// The type typically used for a dictionary of properties.
+pub type PropMap = HashMap<String, Variant<Box<dyn RefArg>>>;
+
+
 /// Descend into a hashmap returned by e g "Properties::get_all" to retrieve the value of a property.
 ///
 /// Shortcut for get + cast. Returns None both if the property does not exist, or if it was of a different type.
-pub fn prop_cast<'a, T: 'static>(map: &'a HashMap<String, Variant<Box<dyn RefArg>>>, key: &str) -> Option<&'a T> {
+pub fn prop_cast<'a, T: 'static>(map: &'a PropMap, key: &str) -> Option<&'a T> {
     map.get(key).and_then(|v| cast(&v.0))
 }
 
