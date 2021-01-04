@@ -148,7 +148,7 @@ pub fn cast<'a, T: 'static>(a: &'a (dyn RefArg + 'static)) -> Option<&'a T> { a.
 pub fn cast_mut<'a, T: 'static>(a: &'a mut (dyn RefArg + 'static)) -> Option<&'a mut T> { a.as_any_mut().downcast_mut() }
 
 /// The type typically used for a dictionary of properties.
-pub type PropMap = HashMap<String, Variant<Box<dyn RefArg>>>;
+pub type PropMap = HashMap<String, Variant<Box<dyn RefArg + 'static>>>;
 
 
 /// Descend into a hashmap returned by e g "Properties::get_all" to retrieve the value of a property.
