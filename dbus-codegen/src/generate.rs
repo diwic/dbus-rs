@@ -1,5 +1,5 @@
 
-use std::{io, error, iter};
+use std::{io, error};
 use std::collections::HashSet;
 use xml;
 
@@ -218,17 +218,17 @@ struct GenVars {
     gen: Vec<String>,
 }
 
-fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<dyn error::Error>> {
-
-    let c = i.next().ok_or_else(|| "unexpected end of signature")?;
-    Ok(match (c, out) {
+fn xml_to_rust_type(i: &mut &[u8], out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<dyn error::Error>> {
+    let c = i.get(0).ok_or_else(|| "unexpected end of signature")?;
+    *i = &i[1..];
+    Ok(match (*c as char, out) {
         ('(', _) => {
             let mut s: Vec<String> = vec!();
-            while i.peek() != Some(&')') {
+            while i.get(0) != Some(&b')') {
                 let n = xml_to_rust_type(i, out, genvars)?;
                 s.push(n);
             };
-            i.next().unwrap();
+            *i = &i[1..];
             format!("({})", s.join(", "))
         },
         ('y', _) => "u8".into(),
@@ -255,12 +255,18 @@ fn xml_to_rust_type<I: Iterator<Item=char>>(i: &mut iter::Peekable<I>, out: bool
             t
         } else if out { "arg::Variant<Box<dyn arg::RefArg + 'static>>".into() }
         else { "arg::Variant<Box<dyn arg::RefArg>>".into() },
-        ('a', _) => if i.peek() == Some(&'{') {
-            i.next();
-            let n1 = xml_to_rust_type(i, out, &mut None)?;
-            let n2 = xml_to_rust_type(i, out, &mut None)?;
-            if i.next() != Some('}') { return Err("No end of dict".into()); }
-            format!("::std::collections::HashMap<{}, {}>", n1, n2)
+        ('a', _) => if i.get(0) == Some(&b'{') {
+            *i = &i[1..];
+            if &i[..3] == b"sv}" {
+                *i = &i[3..];
+                "arg::PropMap".into()
+            } else {
+                let n1 = xml_to_rust_type(i, out, &mut None)?;
+                let n2 = xml_to_rust_type(i, out, &mut None)?;
+                if i.get(0) != Some(&b'}') { return Err("No end of dict".into()); }
+                *i = &i[1..];
+                format!("::std::collections::HashMap<{}, {}>", n1, n2)
+            }
         } else {
             format!("Vec<{}>", xml_to_rust_type(i, out, &mut None)?)
         },
@@ -279,9 +285,9 @@ fn can_copy_type(rust_type: &str) -> bool {
 }
 
 fn make_type(s: &str, out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<dyn error::Error>> {
-    let mut i = s.chars().peekable();
+    let mut i = s.as_bytes();
     let r = xml_to_rust_type(&mut i, out, genvars)?;
-    if i.next().is_some() { Err("Expected type to end".into()) }
+    if i.len() > 0 { Err("Expected type to end".into()) }
     else { Ok(r) }
 }
 
