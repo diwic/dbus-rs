@@ -478,7 +478,7 @@ mod test {
                         assert_eq!(
                             cast::<Vec<$t>>(&(array.0)),
                             Some(&vec![Default::default()]),
-                            "a variant containing an array of of {0} should be castable to a Vec<{0}>",
+                            "a variant containing an array of {0} should be castable to a Vec<{0}>",
                             std::any::type_name::<$t>()
                         );
                         let refarg = i2.get_refarg().unwrap();
@@ -501,6 +501,88 @@ mod test {
                 check_array!(i32);
                 check_array!(f64);
                 check_array!(String);
+                break;
+            }
+        }
+    }
+
+    #[test]
+    fn cast_dicts() {
+        let c = Channel::get_private(BusType::Session).unwrap();
+
+        let m = Message::new_method_call(
+            c.unique_name().unwrap(),
+            "/hello",
+            "com.example.hello",
+            "Hello",
+        )
+        .unwrap();
+        macro_rules! append_dict_variant {
+            ($m:expr, $k:ty, $v:ty) => {{
+                let mut map: HashMap<$k, Variant<Box<dyn RefArg>>> = HashMap::new();
+                map.insert(Default::default(), Variant(Box::new(<$v>::default())));
+                $m.append1(Variant(&map))
+            }};
+        }
+        let m = append_dict_variant!(m, bool, bool);
+        let m = append_dict_variant!(m, u8, u8);
+        let m = append_dict_variant!(m, u16, u16);
+        let m = append_dict_variant!(m, i16, i16);
+        let m = append_dict_variant!(m, u32, u32);
+        let m = append_dict_variant!(m, i32, i32);
+        let m = append_dict_variant!(m, u64, u64);
+        let m = append_dict_variant!(m, i64, i64);
+        let m = append_dict_variant!(m, u8, f64);
+        let m = append_dict_variant!(m, String, String);
+        c.send(m).unwrap();
+        loop {
+            if let Some(m) = c
+                .blocking_pop_message(std::time::Duration::from_millis(1000))
+                .unwrap()
+            {
+                if m.msg_type() != MessageType::MethodCall {
+                    continue;
+                }
+                let mut i = m.iter_init();
+                let mut i2 = m.iter_init();
+
+                macro_rules! check_dict_variant {
+                    ($k:ty, $v:ty) => {
+                        let map: Variant<Box<dyn RefArg>> = i.read().unwrap();
+                        let expected_key: $k = Default::default();
+                        let expected_value: $v = Default::default();
+                        let cast_map = cast::<HashMap<$k, Variant<Box<dyn RefArg>>>>(&map.0);
+                        assert!(cast_map.is_some(),
+                            "a variant containing a dict of {0} to Variant({1}) should be castable to a HashMap<{0}, Variant<Box<dyn RefArg>>>",
+                            std::any::type_name::<$k>(),
+                            std::any::type_name::<$v>()
+                        );
+                        let cast_map_value = cast_map.unwrap().get(&expected_key).unwrap();
+                        assert_eq!(
+                            cast::<$v>(&cast_map_value.0),
+                            Some(&expected_value),
+                            "a variant {0:?} containing a {1} should be castable to {1}",
+                            cast_map_value,
+                            std::any::type_name::<$v>()
+                        );
+                        let refarg = i2.get_refarg().unwrap();
+                        println!("refarg {:?}", refarg);
+                        let st_inner = refarg.as_static_inner(0).unwrap();
+                        println!("st_inner {:?}", st_inner);
+                        i2.next();
+                        assert!(cast::<HashMap<$k, Variant<Box<dyn RefArg>>>>(st_inner).is_some());
+                    };
+                }
+                check_dict_variant!(bool, bool);
+                check_dict_variant!(u8, u8);
+                check_dict_variant!(u16, u16);
+                check_dict_variant!(i16, i16);
+                check_dict_variant!(u32, u32);
+                check_dict_variant!(i32, i32);
+                check_dict_variant!(u64, u64);
+                check_dict_variant!(i64, i64);
+                check_dict_variant!(u8, f64);
+                check_dict_variant!(String, String);
                 break;
             }
         }
