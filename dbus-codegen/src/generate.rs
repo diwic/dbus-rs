@@ -805,7 +805,6 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
                         continue;
                     }
                 }
-                write_intf_name(&mut s, &intf)?;
                 write_intf(&mut s, &intf, opts)?;
                 if opts.crhandler.is_some() {
                     write_intf_crossroads(&mut s, &intf, opts)?;
@@ -816,6 +815,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
                 }
                 write_signals(&mut s, &intf)?;
                 if opts.propnewtype {
+                    write_intf_name(&mut s, &intf)?;
                     write_prop_struct(&mut s, &intf)?;
                 }
             }
