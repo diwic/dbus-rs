@@ -4,7 +4,7 @@ use std::sync::Arc;
 use dbus::channel::Sender;
 use std::collections::HashMap;
 use crate::{IfaceToken, Crossroads, Context, MethodErr};
-use dbus::arg::{Variant, RefArg, Arg, Append};
+use dbus::arg::{Variant, RefArg, Arg, Append, PropMap};
 use std::marker::PhantomData;
 use crate::ifacedesc::EMITS_CHANGED;
 
@@ -147,7 +147,7 @@ impl PropContext {
         let token = self.iface_token;
         let pactx = Arc::new(Mutex::new(PropAllCtx {
             remaining: 0,
-            answers: vec!(),
+            answers: HashMap::new(),
             donefn: Some(Dbg(Box::new(f))),
             propctx: Some(self),
         }));
@@ -186,28 +186,10 @@ impl PropContext {
     }
 }
 
-// The real reason we rebuild is to change RefArg + Send => RefArg. The rest could have been done
-// during the original addition.
-fn rebuild_answers(src: &mut TempPropMap) -> PropMap {
-    let mut h = HashMap::new();
-    for (k,v) in src.drain(..) {
-        h.insert(k, Variant(v as Box<dyn RefArg>));
-    }
-    h
-}
-
-fn rebuild_answers_all(src: &mut TempIfacePropMap) -> IfacePropMap {
-    let mut h = HashMap::new();
-    for (k, mut v) in src.drain(..) {
-        h.insert(String::from(&*k), rebuild_answers(&mut v));
-    }
-    h
-}
-
 #[derive(Debug)]
 struct PropAllCtx {
     remaining: usize,
-    answers: Vec<(String, Box<dyn RefArg + Send>)>,
+    answers: PropMap,
     donefn: Option<Dbg<Box<dyn FnOnce(&mut Self) + Send + 'static>>>,
     propctx: Option<PropContext>,
 }
@@ -223,14 +205,12 @@ impl PropAllCtx {
 
     fn add_reply(&mut self, prop_name: String, prop_value: Option<Box<dyn RefArg + Send>>) {
         if let Some(v) = prop_value {
-            self.answers.push((prop_name, v));
+            self.answers.insert(prop_name, Variant(v));
         }
         self.remaining -= 1;
         self.check_finished();
     }
 }
-
-type Props = HashMap<String, Variant<Box<dyn RefArg>>>;
 
 fn get(mut ctx: Context, cr: &mut Crossroads, (interface_name, property_name): (String, String)) -> Option<Context> {
     let mut propctx = match ctx.check(|ctx| { PropContext::new(cr, ctx.path().clone(), interface_name, property_name)}) {
@@ -249,9 +229,9 @@ fn getall(mut ctx: Context, cr: &mut Crossroads, (interface_name,): (String,)) -
     propctx.context = Some(ctx);
     propctx.call_all_props(cr, move |pactx| {
         let pctx = pactx.propctx.as_mut().unwrap();
-        let all_props = rebuild_answers(&mut pactx.answers);
+        let answers = &pactx.answers;
         pctx.context.as_mut().unwrap().do_reply(|msg| {
-            msg.append_all((all_props,));
+            msg.append_all((answers,));
         });
     }).map(|propctx| { propctx.context.unwrap() })
 }
@@ -276,9 +256,9 @@ fn set(mut ctx: Context, cr: &mut Crossroads, (interface_name, property_name, _v
 pub fn properties(cr: &mut Crossroads) -> IfaceToken<()> {
     cr.register("org.freedesktop.DBus.Properties", |b| {
         b.method_with_cr_custom::<_, (Variant<u8>,), _, _>("Get", ("interface_name", "property_name"), ("value",), get);
-        b.method_with_cr_custom::<_, (Props,), _, _>("GetAll", ("interface_name",), ("properties",), getall);
+        b.method_with_cr_custom::<_, (PropMap,), _, _>("GetAll", ("interface_name",), ("properties",), getall);
         b.method_with_cr_custom::<_, (), _, _>("Set", ("interface_name", "property_name", "value"), (), set);
-        b.signal::<(String, Props, Vec<String>), _>("PropertiesChanged",
+        b.signal::<(String, PropMap, Vec<String>), _>("PropertiesChanged",
             ("interface_name", "changed_properties", "invalidated_properties"));
     })
 }
@@ -286,14 +266,10 @@ pub fn properties(cr: &mut Crossroads) -> IfaceToken<()> {
 #[derive(Debug, Default)]
 struct IfaceContext {
     remaining: usize,
-    ifaces: TempIfacePropMap,
+    ifaces: IfacePropMap,
     donefn: Option<Dbg<Box<dyn FnOnce(&mut IfaceContext) + Send + 'static>>>,
 }
 
-type TempPropMap = Vec<(String, Box<dyn RefArg + Send>)>;
-type TempIfacePropMap = Vec<(dbus::strings::Interface<'static>, TempPropMap)>;
-
-type PropMap = HashMap<String, Variant<Box<dyn RefArg>>>;
 type IfacePropMap = HashMap<String, PropMap>;
 type PathPropMap = HashMap<dbus::Path<'static>, IfacePropMap>;
 
@@ -327,9 +303,9 @@ fn get_all_for_path<F: FnOnce(&mut IfaceContext) + Send + 'static>(path: &dbus::
         let iclone = ictx.clone();
         pctx.call_all_props(cr, move |pactx| {
             let mut ic = iclone.lock().unwrap();
-            let answers = std::mem::replace(&mut pactx.answers, vec!());
+            let answers = std::mem::replace(&mut pactx.answers, HashMap::new());
             // dbg!(&pactx);
-            ic.ifaces.push((pactx.propctx.as_ref().unwrap().interface.clone(), answers));
+            ic.ifaces.insert(pactx.propctx.as_ref().unwrap().interface.to_string(), answers);
             ic.remaining -= 1;
             if ic.remaining == 0 {
                 let donefn = ic.donefn.take().unwrap().0;
@@ -363,12 +339,12 @@ fn get_managed_objects(mut ctx: Context, cr: &mut Crossroads, _: ()) -> Option<C
     #[derive(Debug)]
     struct Temp {
         remaining: usize,
-        temp_map: Vec<(dbus::Path<'static>, TempIfacePropMap)>,
+        temp_map: PathPropMap,
         ctx: Option<Context>,
     }
     let r = Arc::new(Mutex::new(Temp {
         remaining: children.len(),
-        temp_map: vec!(),
+        temp_map: HashMap::new(),
         ctx: Some(ctx),
     }));
     let returned_ctx: Arc<Mutex<Option<Context>>> = Default::default();
@@ -378,19 +354,14 @@ fn get_managed_objects(mut ctx: Context, cr: &mut Crossroads, _: ()) -> Option<C
         let subpath_clone = subpath.clone();
         get_all_for_path(&subpath, cr, move |ictx| {
             let mut rr = rclone.lock().unwrap();
-            let ifaces = std::mem::replace(&mut ictx.ifaces, vec!());
-            rr.temp_map.push((subpath_clone, ifaces));
+            let ifaces = std::mem::replace(&mut ictx.ifaces, HashMap::new());
+            rr.temp_map.insert(subpath_clone, ifaces);
             rr.remaining -= 1;
             // dbg!(&rr);
             if rr.remaining > 0 { return; }
             let mut ctx = rr.ctx.take().unwrap();
             ctx.do_reply(|msg| {
-                let mut h: PathPropMap = HashMap::new();
-                for (k, mut v) in rr.temp_map.drain(..) {
-                    h.insert(k, rebuild_answers_all(&mut v));
-                }
-                // dbg!(&h);
-                msg.append_all((h,));
+                msg.append_all((&rr.temp_map,));
             });
             *rctx.lock().unwrap() = Some(ctx);
         });
@@ -426,7 +397,7 @@ pub fn object_manager_path_added(sender: Arc<dyn Sender + Send + Sync>, name: &d
         get_all_for_path(&name, cr, move |ictx| {
             let x = dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesAdded {
                 object: n,
-                interfaces: rebuild_answers_all(&mut ictx.ifaces),
+                interfaces: std::mem::replace(&mut ictx.ifaces, HashMap::new()),
             };
             let _ = s.send(dbus::message::SignalArgs::to_emit_message(&x, &parent));
         });
