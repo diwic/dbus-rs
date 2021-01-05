@@ -1,7 +1,7 @@
 [package]
 
 name = "dbus"
-version = "0.9.0"
+version = "0.9.1"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 
 description = "Bindings to D-Bus, which is a bus commonly used on Linux for inter-process communication."
@@ -19,7 +19,7 @@ libdbus-sys = { path = "../libdbus-sys", version = "0.2" }
 futures-util = { version = "0.3", optional = true, features = ["io"] }
 futures-channel = { version = "0.3", optional = true }
 futures-executor = { version = "0.3", optional = true }
-dbus-native-channel = { path = "../dbus-native-channel", version = "0.1", optional = true }
+# dbus-native-channel = { path = "../dbus-native-channel", version = "0.1", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
@@ -27,7 +27,8 @@ tempfile = "3"
 [features]
 no-string-validation = []
 futures = ["futures-util", "futures-channel"]
-native-channel = ["futures-executor", "futures-util", "dbus-native-channel"]
+# Not ready yet
+# native-channel = ["futures-executor", "futures-util", "dbus-native-channel"]
 
 [badges]
 is-it-maintained-open-issues = { repository = "diwic/dbus-rs" }
