@@ -287,6 +287,11 @@ pub fn new_session() -> Result<(IOResource<Connection>, Arc<Connection>), Error>
 pub fn new_system() -> Result<(IOResource<Connection>, Arc<Connection>), Error> { new(BusType::System) }
 */
 
+#[cfg(test)]
+mod test {
+
+use super::*;
+
 #[test]
 fn method_call_local() {
     use tokio::task;
@@ -387,4 +392,6 @@ async fn large_message() -> Result<(), Box<dyn std::error::Error>> {
     done.store(true, Ordering::Release);
 
     Ok(())
+}
+
 }
