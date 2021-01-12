@@ -71,16 +71,12 @@ pub struct GenOpts {
     pub dbuscrate: String,
     /// MethodType for server tree impl, set to none for client impl only
     pub methodtype: Option<String>,
-    /// Crossroads server handler type, set to none for client impl only
-    pub crhandler: Option<String>,
     /// Removes a prefix from interface names
     pub skipprefix: Option<String>,
     /// Type of server access (tree)
     pub serveraccess: ServerAccess,
     /// Tries to make variants generic instead of Variant<Box<Refarg>>
     pub genericvariant: bool,
-    /// Generates code to work with async / futures 0.3
-    pub futures: bool,
     /// Type of connection, for client only
     pub connectiontype: ConnectionType,
     /// Generates a struct wrapping PropMap to get properties from it with their expected types.
@@ -94,8 +90,8 @@ pub struct GenOpts {
 impl ::std::default::Default for GenOpts {
     fn default() -> Self { GenOpts {
         dbuscrate: "dbus".into(), methodtype: Some("MTFn".into()), skipprefix: None,
-        serveraccess: ServerAccess::RefClosure, genericvariant: false, futures: false,
-        crhandler: None, connectiontype: ConnectionType::Blocking, propnewtype: false,
+        serveraccess: ServerAccess::RefClosure, genericvariant: false,
+        connectiontype: ConnectionType::Blocking, propnewtype: false,
         interfaces: None,
         command_line: String::new()
     }}
@@ -346,7 +342,6 @@ fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), B
         let t = a.typename(genvar)?.0;
         *s += &format!(", {}: {}", a.varname(), t);
     }
-    if let Some(crh) = &opts.crhandler { *s += &format!(", info: &cr::{}Info", crh) };
 
     let r = match m.oargs.len() {
         0 => "()".to_string(),
@@ -362,11 +357,7 @@ fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), B
 }
 
 fn make_result(success: &str, opts: &GenOpts) -> String {
-    if opts.futures {
-        format!("dbusf::MethodReply<{}>", success)
-    } else if opts.crhandler.is_some() {
-        format!("Result<{}, cr::MethodErr>", success)
-    } else if opts.methodtype.is_some() {
+    if opts.methodtype.is_some() {
         format!("Result<{}, tree::MethodErr>", success)
     } else if opts.connectiontype == ConnectionType::Nonblock {
         format!("nonblock::MethodReply<{}>", success)
@@ -424,9 +415,6 @@ fn write_intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box
     if module == "nonblock" {
         *s += &format!("\nimpl<'a, T: nonblock::NonblockReply, C: ::std::ops::Deref<Target=T>> {} for {}::{}<'a, C> {{\n",
             make_camel(&i.shortname), module, proxy);
-    } else if opts.futures {
-        *s += &format!("\nimpl<'a> {} for dbusf::ConnPath<'a> {{\n",
-            make_camel(&i.shortname));
     } else if module == "blocking" {
         *s += &format!("\nimpl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target=T>> {} for {}::{}<'a, C> {{\n",
             make_camel(&i.shortname), module, proxy);
@@ -709,54 +697,11 @@ fn write_intf_tree(s: &mut String, i: &Intf, mtype: &str, saccess: ServerAccess,
     Ok(())
 }
 
-fn write_intf_crossroads(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<dyn error::Error>> {
-    let crh = opts.crhandler.as_ref().unwrap();
-    *s += &format!("\npub fn {}_ifaceinfo<I>() -> cr::IfaceInfo<'static, cr::{}>\n",
-        make_snake(&i.shortname, false), crh);
-    *s += &format!("where I: {}{} {{\n",
-        make_camel(&i.shortname), if crh == "Par" { " + Send + Sync + 'static" } else { "" });
-    *s += &format!("    cr::IfaceInfo::new(\"{}\", vec!(\n", i.origname);
-
-    for m in &i.methods {
-        *s += &format!("        MethodInfo::new_{}(\"{}\", |intf: &I, info| {{\n", crh.to_lowercase(), m.name);
-        if m.iargs.len() > 0 {
-            *s += "            let mut i = info.msg().iter_init();\n";
-        }
-        for a in &m.iargs {
-            *s += &format!("            let {}: {} = i.read()?;\n", a.varname(), a.typename(opts.genericvariant)?.0);
-        }
-        let mut argsvar: Vec<_> = m.iargs.iter().map(|q| q.varname()).collect();
-        argsvar.push("info".into());
-        let argsvar = argsvar.join(", ");
-        let retargs = match m.oargs.len() {
-            0 => String::new(),
-            1 => format!("let {} = ", m.oargs[0].varname()),
-            _ => format!("let ({}) = ", m.oargs.iter().map(|q| q.varname()).collect::<Vec<String>>().join(", ")),
-        };
-        *s += &format!("            {}intf.{}({})?;\n",
-            retargs, m.fn_name, argsvar);
-        *s += "            let rm = info.msg().method_return();\n";
-        for r in &m.oargs {
-            *s += &format!("            let rm = rm.append1({});\n", r.varname());
-        }
-        *s += "            Ok(Some(rm))\n";
-        *s += "        }),\n";
-    }
-
-    *s += "    ), vec!(), vec!())\n"; // TODO: Props, signals
-    *s += "}\n";
-    Ok(())
-}
-
-
 fn write_module_header(s: &mut String, opts: &GenOpts) {
     *s += &format!("// This code was autogenerated with `dbus-codegen-rust {}`, see https://github.com/diwic/dbus-rs\n", opts.command_line);
     *s += &format!("use {} as dbus;\n", opts.dbuscrate);
     *s += "#[allow(unused_imports)]\n";
     *s += &format!("use {}::arg;\n", opts.dbuscrate);
-    if opts.futures {
-        *s += "use dbus_futures as dbusf;\n";
-    }
     if opts.methodtype.is_some() { *s += &format!("use {}_tree as tree;\n", opts.dbuscrate) } else {
         *s += &format!("use {}::{};\n", opts.dbuscrate, match opts.connectiontype {
             ConnectionType::Ffidisp => "ffidisp",
@@ -764,7 +709,6 @@ fn write_module_header(s: &mut String, opts: &GenOpts) {
             ConnectionType::Nonblock => "nonblock",
         });
     }
-    if opts.crhandler.is_some() { *s += &format!("use {}::crossroads as cr;\n", opts.dbuscrate) }
 }
 
 /// Generates Rust structs and traits from D-Bus XML introspection data.
@@ -806,9 +750,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
                     }
                 }
                 write_intf(&mut s, &intf, opts)?;
-                if opts.crhandler.is_some() {
-                    write_intf_crossroads(&mut s, &intf, opts)?;
-                } else if let Some(ref mt) = opts.methodtype {
+                if let Some(ref mt) = opts.methodtype {
                     write_intf_tree(&mut s, &intf, &mt, opts.serveraccess, opts.genericvariant)?;
                 } else {
                     write_intf_client(&mut s, &intf, opts)?;

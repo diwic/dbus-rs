@@ -46,8 +46,6 @@ Defaults to 'RefClosure'."))
              .help("Name of dbus crate, defaults to 'dbus'."))
         .arg(clap::Arg::with_name("skipprefix").short("i").long("skipprefix").takes_value(true).value_name("PREFIX")
              .help("If present, skips a specific prefix for interface names, e g 'org.freedesktop.DBus.'."))
-//        .arg(clap::Arg::with_name("futures").short("f").long("futures")
-//             .help("Generates code to use with futures 0.3 (experimental)"))
         .arg(clap::Arg::with_name("client").short("c").long("client").takes_value(true).value_name("client")
              .help("Type of client connection. Valid values are: 'blocking', 'nonblock', 'ffidisp'."))
         .arg(clap::Arg::with_name("propnewtype").short("n").long("prop-newtype")
@@ -88,13 +86,12 @@ Defaults to 'RefClosure'."))
     let dbuscrate = matches.value_of("dbuscrate").unwrap_or("dbus");
 
     let mtype = matches.value_of("methodtype").map(|s| s.to_lowercase());
-    let (mtype, crhandler) = match mtype.as_ref().map(|s| &**s) {
-        None | Some("fn") => (Some("MTFn"), None),
-        Some("fnmut") => (Some("MTFnMut"), None),
-        Some("sync") => (Some("MTSync"), None),
-        Some("generic") => (Some("MethodType"), None),
-        Some("par") => (None, Some("Par")),
-        Some("none") => (None, None),
+    let mtype = match mtype.as_ref().map(|s| &**s) {
+        None | Some("fn") => Some("MTFn"),
+        Some("fnmut") => Some("MTFnMut"),
+        Some("sync") => Some("MTSync"),
+        Some("generic") => Some("MethodType"),
+        Some("none") => None,
         _ => panic!("Invalid methodtype specified"),
     };
 
@@ -122,10 +119,8 @@ Defaults to 'RefClosure'."))
         skipprefix: matches.value_of("skipprefix").map(|x| x.into()),
         serveraccess: maccess,
         genericvariant: matches.is_present("genericvariant"),
-        futures: false,
         connectiontype: client,
         propnewtype: matches.is_present("propnewtype"),
-        crhandler: crhandler.map(|x| x.to_string()),
         interfaces,
         command_line: std::env::args().skip(1).collect::<Vec<String>>().join(" ")
     };
