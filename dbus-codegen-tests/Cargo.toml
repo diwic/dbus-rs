@@ -15,6 +15,7 @@ path = "src/lib.rs"
 [dependencies]
 dbus = { path = "../dbus", version = "0.9", features=["futures"] }
 dbus-tree = { path = "../dbus-tree", version = "0.9" }
+dbus-crossroads = { path = "../dbus-crossroads" }
 
 [build-dependencies]
 dbus-codegen = { path = "../dbus-codegen" }

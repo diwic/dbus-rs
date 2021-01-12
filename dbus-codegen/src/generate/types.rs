@@ -247,6 +247,9 @@ impl Arg {
             if self.is_out { format!("{}: for<'b> arg::Get<'b> + 'static", s) } else { format!("{}: arg::Arg + arg::Append", s) }
         ).collect()).unwrap_or(vec!())))
     }
+    pub fn typename_norefs(&self) -> Result<String, Box<dyn error::Error>> {
+        make_type(&self.typ, true, &mut None)
+    }
     pub fn typename_maybewrap(&self, genvar: bool) -> Result<String, Box<dyn error::Error>> {
         let t = self.typename(genvar)?.0;
         Ok(if self.can_wrap_variant(genvar) {

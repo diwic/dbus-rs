@@ -180,4 +180,8 @@ fn main() {
     g.propnewtype = true;
     generate_code(POLICYKIT_XML, &g, "policykit_client.rs");
 
+    g.crossroads = true;
+    g.propnewtype = false;
+    g.skipprefix = Some("org.freedesktop".into());
+    generate_code(POLICYKIT_XML, &g, "policykit_cr.rs");
 }

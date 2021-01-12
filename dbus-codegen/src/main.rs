@@ -36,11 +36,11 @@ fn main() {
             .help("Comma separated list of filter strings. Only matching interfaces are generated if set."))
         .arg(clap::Arg::with_name("genericvariant").short("g").long("generic-variant")
              .help("If present, will try to make variant arguments generic instead of Variant<Box<dyn RefArg>>. \
-Experimental, does not work with server methods (other than None)."))
+Experimental, does not work with dbus-tree."))
         .arg(clap::Arg::with_name("methodtype").short("m").long("methodtype").takes_value(true).value_name("Fn")
-             .help("Type of server method; valid values are: 'Fn', 'FnMut', 'Sync', 'Generic', and 'None'. Defaults to 'Fn'."))
+             .help("Type of server method for dbus-tree; valid values are: 'Fn', 'FnMut', 'Sync', 'Generic', and 'None'. Defaults to 'Fn'."))
         .arg(clap::Arg::with_name("methodaccess").short("a").long("methodaccess").takes_value(true).value_name("RefClosure")
-             .help("Specifies how to access the type implementing the interface (experimental). Valid values are: 'RefClosure', 'AsRefClosure', 'MethodInfo'. \
+             .help("Specifies how to access the type implementing the interface for dbus-tree (experimental). Valid values are: 'RefClosure', 'AsRefClosure', 'MethodInfo'. \
 Defaults to 'RefClosure'."))
         .arg(clap::Arg::with_name("dbuscrate").long("dbuscrate").takes_value(true).value_name("dbus")
              .help("Name of dbus crate, defaults to 'dbus'."))
@@ -50,6 +50,8 @@ Defaults to 'RefClosure'."))
              .help("Type of client connection. Valid values are: 'blocking', 'nonblock', 'ffidisp'."))
         .arg(clap::Arg::with_name("propnewtype").short("n").long("prop-newtype")
              .help("If present, will generate a struct wrapping PropMap to get properties from it with their expected types."))
+        .arg(clap::Arg::with_name("crossroads").short("r").long("crossroads")
+            .help("Generate dbus-crossroads server code."))
         .arg(clap::Arg::with_name("output").short("o").long("output").takes_value(true).value_name("FILE")
              .help("Write output into the specified file"))
         .arg(clap::Arg::with_name("file").long("file").required(false).takes_value(true).value_name("FILE")
@@ -121,6 +123,7 @@ Defaults to 'RefClosure'."))
         genericvariant: matches.is_present("genericvariant"),
         connectiontype: client,
         propnewtype: matches.is_present("propnewtype"),
+        crossroads: matches.is_present("crossroads"),
         interfaces,
         command_line: std::env::args().skip(1).collect::<Vec<String>>().join(" ")
     };

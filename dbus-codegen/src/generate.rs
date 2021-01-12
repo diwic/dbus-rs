@@ -34,8 +34,10 @@ pub enum ConnectionType {
 pub struct GenOpts {
     /// Name of dbus crate (used for import)
     pub dbuscrate: String,
-    /// MethodType for server tree impl, set to none for client impl only
+    /// MethodType for dbus-tree impl, set to none for client impl only
     pub methodtype: Option<String>,
+    /// Generate dbus-crossroads server implementation
+    pub crossroads: bool,
     /// Removes a prefix from interface names
     pub skipprefix: Option<String>,
     /// Type of server access (tree)
@@ -57,23 +59,10 @@ impl ::std::default::Default for GenOpts {
         dbuscrate: "dbus".into(), methodtype: Some("MTFn".into()), skipprefix: None,
         serveraccess: ServerAccess::RefClosure, genericvariant: false,
         connectiontype: ConnectionType::Blocking, propnewtype: false,
-        interfaces: None,
+        interfaces: None, crossroads: false,
         command_line: String::new()
     }}
 }
-
-
-
-fn make_result(success: &str, opts: &GenOpts) -> String {
-    if opts.methodtype.is_some() {
-        format!("Result<{}, tree::MethodErr>", success)
-    } else if opts.connectiontype == ConnectionType::Nonblock {
-        format!("nonblock::MethodReply<{}>", success)
-    } else {
-        format!("Result<{}, dbus::Error>", success)
-    }
-}
-
 
 mod types;
 
@@ -121,15 +110,18 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
                     }
                 }
                 write::intf(&mut s, &intf, opts)?;
-                if let Some(ref mt) = opts.methodtype {
-                    write::intf_tree(&mut s, &intf, &mt, opts.serveraccess, opts.genericvariant)?;
-                } else {
-                    write::intf_client(&mut s, &intf, opts)?;
-                }
                 write::signals(&mut s, &intf)?;
                 if opts.propnewtype {
                     write::intf_name(&mut s, &intf)?;
                     write::prop_struct(&mut s, &intf)?;
+                }
+                if opts.crossroads {
+                    write::intf_cr(&mut s, &intf)?;
+                }
+                if let Some(ref mt) = opts.methodtype {
+                    write::intf_tree(&mut s, &intf, &mt, opts.serveraccess, opts.genericvariant)?;
+                } else if !opts.crossroads {
+                    write::intf_client(&mut s, &intf, opts)?;
                 }
             }
 
