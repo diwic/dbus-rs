@@ -44,8 +44,9 @@ fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), B
     } else { vec!() };
 
 
-    *s += &format!("    fn {}{}(&self", m.fn_name,
-        if g.len() > 0 { format!("<{}>", g.join(",")) } else { "".into() }
+    *s += &format!("    fn {}{}(&{}self", m.fn_name,
+        if g.len() > 0 { format!("<{}>", g.join(",")) } else { "".into() },
+        if opts.crossroads { "mut " } else { "" }
     );
 
     for a in m.iargs.iter() {
