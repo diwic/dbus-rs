@@ -4,7 +4,7 @@ pub (super) struct Arg {
     pub name: String,
     pub typ: String,
     pub idx: i32,
-    pub is_out: bool,
+    pub no_refs: bool,
 }
 
 pub (super) struct Method {
@@ -152,14 +152,14 @@ pub (super) struct GenVars {
     gen: Vec<String>,
 }
 
-pub (super) fn xml_to_rust_type(i: &mut &[u8], out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<dyn error::Error>> {
+pub (super) fn xml_to_rust_type(i: &mut &[u8], no_refs: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<dyn error::Error>> {
     let c = i.get(0).ok_or_else(|| "unexpected end of signature")?;
     *i = &i[1..];
-    Ok(match (*c as char, out) {
+    Ok(match (*c as char, no_refs) {
         ('(', _) => {
             let mut s: Vec<String> = vec!();
             while i.get(0) != Some(&b')') {
-                let n = xml_to_rust_type(i, out, genvars)?;
+                let n = xml_to_rust_type(i, no_refs, genvars)?;
                 s.push(n);
             };
             *i = &i[1..];
@@ -187,7 +187,7 @@ pub (super) fn xml_to_rust_type(i: &mut &[u8], out: bool, genvars: &mut Option<G
             g.gen.push(g.prefix.clone());
             g.prefix = format!("{}X", g.prefix);
             t
-        } else if out { "arg::Variant<Box<dyn arg::RefArg + 'static>>".into() }
+        } else if no_refs { "arg::Variant<Box<dyn arg::RefArg + 'static>>".into() }
         else { "arg::Variant<Box<dyn arg::RefArg>>".into() },
         ('a', _) => if i.get(0) == Some(&b'{') {
             *i = &i[1..];
@@ -195,14 +195,14 @@ pub (super) fn xml_to_rust_type(i: &mut &[u8], out: bool, genvars: &mut Option<G
                 *i = &i[3..];
                 "arg::PropMap".into()
             } else {
-                let n1 = xml_to_rust_type(i, out, &mut None)?;
-                let n2 = xml_to_rust_type(i, out, &mut None)?;
+                let n1 = xml_to_rust_type(i, no_refs, &mut None)?;
+                let n2 = xml_to_rust_type(i, no_refs, &mut None)?;
                 if i.get(0) != Some(&b'}') { return Err("No end of dict".into()); }
                 *i = &i[1..];
                 format!("::std::collections::HashMap<{}, {}>", n1, n2)
             }
         } else {
-            format!("Vec<{}>", xml_to_rust_type(i, out, &mut None)?)
+            format!("Vec<{}>", xml_to_rust_type(i, no_refs, &mut None)?)
         },
         (_, _) => return Err(format!("Unknown character in signature {:?}", c).into()),
     })
@@ -218,9 +218,9 @@ pub (super) fn can_copy_type(rust_type: &str) -> bool {
     }
 }
 
-pub (super) fn make_type(s: &str, out: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<dyn error::Error>> {
+pub (super) fn make_type(s: &str, no_refs: bool, genvars: &mut Option<GenVars>) -> Result<String, Box<dyn error::Error>> {
     let mut i = s.as_bytes();
-    let r = xml_to_rust_type(&mut i, out, genvars)?;
+    let r = xml_to_rust_type(&mut i, no_refs, genvars)?;
     if i.len() > 0 { Err("Expected type to end".into()) }
     else { Ok(r) }
 }
@@ -239,12 +239,12 @@ impl Arg {
     }
     pub fn typename(&self, genvar: bool) -> Result<(String, Vec<String>), Box<dyn error::Error>> {
         let mut g = if genvar { Some(GenVars {
-            prefix: format!("{}{}", if self.is_out { 'R' } else { 'I' }, self.idx),
+            prefix: format!("{}{}", if self.no_refs { 'R' } else { 'I' }, self.idx),
             gen: vec!(),
         }) } else { None };
-        let r = make_type(&self.typ, self.is_out, &mut g)?;
+        let r = make_type(&self.typ, self.no_refs, &mut g)?;
         Ok((r, g.map(|g| g.gen.iter().map(|s|
-            if self.is_out { format!("{}: for<'b> arg::Get<'b> + 'static", s) } else { format!("{}: arg::Arg + arg::Append", s) }
+            if self.no_refs { format!("{}: for<'b> arg::Get<'b> + 'static", s) } else { format!("{}: arg::Arg + arg::Append", s) }
         ).collect()).unwrap_or(vec!())))
     }
     pub fn typename_norefs(&self) -> Result<String, Box<dyn error::Error>> {

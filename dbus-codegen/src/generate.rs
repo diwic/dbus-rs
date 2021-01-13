@@ -174,16 +174,17 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
                 if curm.is_none() && cursig.is_none() { Err("Start of arg outside method and signal")? };
                 if curintf.is_none() { Err("Start of arg outside interface")? };
                 let typ = find_attr(attributes, "type")?.into();
-                let is_out = if cursig.is_some() { true } else { match find_attr(attributes, "direction") {
+                let is_out = match find_attr(attributes, "direction") {
                     Err(_) => false,
                     Ok("in") => false,
                     Ok("out") => true,
                     _ => { Err("Invalid direction")?; unreachable!() }
-                }};
+                };
+                let no_refs = is_out || cursig.is_some() || opts.crossroads;
                 let arr = if let Some(ref mut sig) = cursig { &mut sig.args }
                     else if is_out { &mut curm.as_mut().unwrap().oargs } else { &mut curm.as_mut().unwrap().iargs };
                 let arg = Arg { name: find_attr(attributes, "name").unwrap_or("").into(),
-                    typ: typ, is_out: is_out, idx: arr.len() as i32 };
+                    typ: typ, no_refs, idx: arr.len() as i32 };
                 arr.push(arg);
             }
             _ => (),
