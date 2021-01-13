@@ -278,6 +278,10 @@ fn cr_types(args: &[Arg]) -> Result<String, Box<dyn error::Error>> {
     Ok(r)
 }
 
+fn cr_strs(args: &[Arg]) -> String {
+    args.iter().fold(String::new(), |mut ss, arg| { ss += &format!("\"{}\",", arg.name); ss })
+}
+
 pub (super) fn intf_cr(s: &mut String, i: &Intf) -> Result<(), Box<dyn error::Error>> {
     *s += &format!(r#"
 pub fn register_{}<T>(cr: &mut crossroads::Crossroads) -> crossroads::IfaceToken<T>
@@ -286,27 +290,19 @@ where T: {} + Send + 'static
     cr.register("{}", |_b| {{
 "#, make_snake(&i.shortname, false), make_camel(&i.shortname), i.origname);
     for z in &i.signals {
-        let astrs = z.args.iter().fold(String::new(), |mut ss, arg| { ss += &format!("\"{}\",", arg.name); ss });
-        *s += &format!("        _b.signal::<({}), _>(\"{}\", ({}));", cr_types(&z.args)?, z.name, astrs);
+        *s += &format!("        _b.signal::<({}), _>(\"{}\", ({}));", cr_types(&z.args)?, z.name, cr_strs(&z.args));
     }
-/*    for m in &i.methods {
-        let iargs = m.iargs.iter().fold(String::new(), |mut ss, arg| { ss += &format!("\"{}\",", arg.name); ss });
-        let oargs = m.oargs.iter().fold(String::new(), |mut ss, arg| { ss += &format!("\"{}\",", arg.name); ss });
-        let ivars = m.iargs.iter().fold(String::new(), |mut ss, arg| { ss += &format!("{}\",", arg.name); ss });
+    for m in &i.methods {
+        let ivars = m.iargs.iter().fold(String::new(), |mut ss, arg| { ss += &format!("{},", arg.name); ss });
 
-        let mut itypes = String::new();
-        for arg in &m.iargs {
-            itypes += &format!("{},", arg.typename_norefs()?);
-        }
-        let argsvar = m.iargs.iter().map(|q| q.varname()).collect::<Vec<String>>().join(", ");
-
-        *s += &format!("        b.method(\"{}\", ({}), ({}), |_, t: &mut T, ({}): ({})| {{\n", m.name, iargs, oargs, ivars, itypes);
-        *s += &format!("            t.{}({})\n", m.fn_name, argsvar);
+        *s += &format!("        _b.method(\"{}\", ({}), ({}), |_, t: &mut T, ({})| {{\n",
+            m.name, cr_strs(&m.iargs), cr_strs(&m.oargs), ivars);
+        *s += &format!("            t.{}({})\n", m.fn_name, ivars);
         if m.oargs.len() == 1 {
             *s += "                .map(|x| (x,))\n";
         }
         *s += "        });\n";
-    } */
+    }
 
     *s += "    })\n}\n";
     Ok(())
