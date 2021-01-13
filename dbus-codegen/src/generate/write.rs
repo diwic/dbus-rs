@@ -287,21 +287,32 @@ pub (super) fn intf_cr(s: &mut String, i: &Intf) -> Result<(), Box<dyn error::Er
 pub fn register_{}<T>(cr: &mut crossroads::Crossroads) -> crossroads::IfaceToken<T>
 where T: {} + Send + 'static
 {{
-    cr.register("{}", |_b| {{
+    cr.register("{}", |b| {{
 "#, make_snake(&i.shortname, false), make_camel(&i.shortname), i.origname);
     for z in &i.signals {
-        *s += &format!("        _b.signal::<({}), _>(\"{}\", ({}));", cr_types(&z.args)?, z.name, cr_strs(&z.args));
+        *s += &format!("        b.signal::<({}), _>(\"{}\", ({}));\n", cr_types(&z.args)?, z.name, cr_strs(&z.args));
     }
     for m in &i.methods {
         let ivars = m.iargs.iter().fold(String::new(), |mut ss, arg| { ss += &format!("{},", arg.name); ss });
 
-        *s += &format!("        _b.method(\"{}\", ({}), ({}), |_, t: &mut T, ({})| {{\n",
+        *s += &format!("        b.method(\"{}\", ({}), ({}), |_, t: &mut T, ({})| {{\n",
             m.name, cr_strs(&m.iargs), cr_strs(&m.oargs), ivars);
         *s += &format!("            t.{}({})\n", m.fn_name, ivars);
         if m.oargs.len() == 1 {
             *s += "                .map(|x| (x,))\n";
         }
         *s += "        });\n";
+    }
+    for p in &i.props {
+        *s += &format!("        b.property::<{}, _>(\"{}\")", make_type(&p.typ, true, &mut None)?, p.name);
+        if p.can_get() {
+            *s += &format!("\n            .get(|_, t| t.{}())", p.get_fn_name);
+        }
+        if p.can_set() {
+            // TODO: Handle EmitsChangedSignal correctly here.
+            *s += &format!("\n            .set(|_, t, value| t.{}(value).map(|_| None))", p.set_fn_name);
+        }
+        *s += ";\n";
     }
 
     *s += "    })\n}\n";
