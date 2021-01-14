@@ -312,7 +312,9 @@ argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str,);
 argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str,);
 argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str,);
 argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str,);
-
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str, m M str,);
 
 
 #[cfg(test)]
