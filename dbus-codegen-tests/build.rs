@@ -207,4 +207,5 @@ fn main() {
     g.propnewtype = false;
     g.skipprefix = Some("org.freedesktop".into());
     generate_code(POLICYKIT_XML, &g, "policykit_cr.rs");
+    generate_code(DEPRECATED_XML, &g, "deprecated_cr.rs");
 }

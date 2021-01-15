@@ -294,6 +294,14 @@ fn cr_strs(args: &[Arg]) -> String {
     args.iter().fold(String::new(), |mut ss, arg| { ss += &format!("\"{}\",", arg.name); ss })
 }
 
+fn cr_anno(a: &HashMap<String, String>, prefix: &str, suffix: &str) -> String {
+    let mut r = String::new();
+    for (name, value) in a.iter() {
+        r.push_str(&format!("\n{}.annotate(\"{}\", \"{}\"){}", prefix, name, value, suffix));
+    }
+    r
+}
+
 pub (super) fn intf_cr(s: &mut String, i: &Intf) -> Result<(), Box<dyn error::Error>> {
     *s += &format!(r#"
 pub fn register_{}<T>(cr: &mut crossroads::Crossroads) -> crossroads::IfaceToken<T>
@@ -301,8 +309,10 @@ where T: {} + Send + 'static
 {{
     cr.register("{}", |b| {{
 "#, make_snake(&i.shortname, false), make_camel(&i.shortname), i.origname);
+    *s += &cr_anno(&i.annotations, "        b", ";\n");
     for z in &i.signals {
-        *s += &format!("        b.signal::<({}), _>(\"{}\", ({}));\n", cr_types(&z.args)?, z.name, cr_strs(&z.args));
+        *s += &format!("        b.signal::<({}), _>(\"{}\", ({})){};\n",
+            cr_types(&z.args)?, z.name, cr_strs(&z.args), cr_anno(&z.annotations, "            ", ""));
     }
     for m in &i.methods {
         let ivars = m.iargs.iter().fold(String::new(), |mut ss, arg| { ss += &format!("{},", arg.name); ss });
@@ -313,7 +323,7 @@ where T: {} + Send + 'static
         if m.oargs.len() == 1 {
             *s += "                .map(|x| (x,))\n";
         }
-        *s += "        });\n";
+        *s += &format!("        }}){};\n", cr_anno(&m.annotations, "            ", ""));
     }
     for p in &i.props {
         *s += &format!("        b.property::<{}, _>(\"{}\")", make_type(&p.typ, true, &mut None)?, p.name);
@@ -324,6 +334,7 @@ where T: {} + Send + 'static
             // TODO: Handle EmitsChangedSignal correctly here.
             *s += &format!("\n            .set(|_, t, value| t.{}(value).map(|_| None))", p.set_fn_name);
         }
+        *s += &cr_anno(&p.annotations, "            ", "");
         *s += ";\n";
     }
 
