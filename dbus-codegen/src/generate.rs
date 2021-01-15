@@ -1,6 +1,6 @@
 
 use std::{io, error};
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use xml;
 
 fn find_attr<'a>(a: &'a Vec<xml::attribute::OwnedAttribute>, n: &str) -> Result<&'a str, Box<dyn error::Error>> {
@@ -96,7 +96,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
                     if n.len() > p.len() && n.starts_with(p) { n2 = &n[p.len()..]; }
                 }
                 curintf = Some(Intf { origname: n.into(), shortname: n2.into(),
-                    methods: Vec::new(), signals: Vec::new(), props: Vec::new() });
+                    methods: Vec::new(), signals: Vec::new(), props: Vec::new(), annotations: HashMap::new() });
             }
             XmlEvent::EndElement { ref name } if &name.local_name == "interface" => {
                 if curm.is_some() { Err("End of Interface inside method")? };
@@ -130,7 +130,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
                 if curintf.is_none() { Err("Start of method outside interface")? };
                 let name = find_attr(attributes, "name")?;
                 curm = Some(Method { name: name.into(), fn_name: make_fn_name(curintf.as_ref().unwrap(), name),
-                    iargs: Vec::new(), oargs: Vec::new() });
+                    iargs: Vec::new(), oargs: Vec::new(), annotations: HashMap::new() });
             }
             XmlEvent::EndElement { ref name } if &name.local_name == "method" => {
                 if curm.is_none() { Err("End of method outside method")? };
@@ -141,7 +141,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
             XmlEvent::StartElement { ref name, ref attributes, .. } if &name.local_name == "signal" => {
                 if cursig.is_some() { Err("Start of signal inside signal")? };
                 if curintf.is_none() { Err("Start of signal outside interface")? };
-                cursig = Some(Signal { name: find_attr(attributes, "name")?.into(), args: Vec::new() });
+                cursig = Some(Signal { name: find_attr(attributes, "name")?.into(), args: Vec::new(), annotations: HashMap::new() });
             }
             XmlEvent::EndElement { ref name } if &name.local_name == "signal" => {
                 if cursig.is_none() { Err("End of signal outside signal")? };
@@ -161,6 +161,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
                     access: find_attr(attributes, "access")?.into(),
                     get_fn_name: get_fn_name,
                     set_fn_name: set_fn_name,
+                    annotations: HashMap::new(),
                 });
             }
             XmlEvent::EndElement { ref name } if &name.local_name == "property" => {
@@ -186,6 +187,17 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
                 let arg = Arg { name: find_attr(attributes, "name").unwrap_or("").into(),
                     typ: typ, no_refs, idx: arr.len() as i32 };
                 arr.push(arg);
+            }
+
+            XmlEvent::StartElement { ref name, ref attributes, ..} if &name.local_name == "annotation" => {
+                if let Ok(key) = find_attr(attributes, "name") {
+                    if let Ok(value) = find_attr(attributes, "value") {
+                        if let Some(ref mut sig) = cursig { sig.annotations.insert(key.into(), value.into()); }
+                        else if let Some(ref mut prop) = curprop { prop.annotations.insert(key.into(), value.into()); }
+                        else if let Some(ref mut met) = curm { met.annotations.insert(key.into(), value.into()); }
+                        else if let Some(ref mut intf) = curintf { intf.annotations.insert(key.into(), value.into()); }
+                    }
+                }
             }
             _ => (),
         }

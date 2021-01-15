@@ -132,6 +132,28 @@ static POLICYKIT_XML: &'static str = r#"
 </node>
 "#;
 
+static DEPRECATED_XML: &'static str = r#"
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+                      "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="com.github.dbus_rs.dbus_codegen1">
+    <annotation name="org.freedesktop.DBus.Deprecated" value="this interface is deprecated"/>
+    <method name="Method1">
+      <annotation name="org.freedesktop.DBus.Deprecated" value="this method is deprecated"/>
+      <arg type="s" name="inbound" direction="in"/>
+      <arg type="s" name="outbound" direction="in"/>
+    </method>
+    <signal name="Signal1">
+      <annotation name="org.freedesktop.DBus.Deprecated" value="this signal is deprecated"/>
+      <arg type="s" name="signal_name"/>
+    </signal>
+    <property name="property_name" type="s" access="readwrite">
+      <annotation name="org.freedesktop.DBus.Deprecated" value="this property is deprecated"/>
+    </property>
+  </interface>
+</node>
+"#;
+
 fn write_to_file(code: &str, path: &Path) {
     let mut f = File::create(path).unwrap();
     Write::write_all(&mut f,code.as_bytes()).unwrap();
@@ -172,6 +194,7 @@ fn main() {
         ..Default::default()
     };
     generate_code(POLICYKIT_XML, &g, "policykit_asref.rs");
+    generate_code(DEPRECATED_XML, &g, "deprecated.rs");
 
     g.methodtype = Some("MTSync".into());
     generate_code(POLICYKIT_XML, &g, "policykit_asref_mtsync.rs");

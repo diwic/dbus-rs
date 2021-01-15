@@ -43,7 +43,9 @@ fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), B
         g
     } else { vec!() };
 
-
+    m.annotations.get("org.freedesktop.DBus.Deprecated").iter().for_each(|v| {
+        *s += &format!("    #[deprecated(note = \"{}\")]\n", v);
+    });
     *s += &format!("    fn {}{}(&{}self", m.fn_name,
         if g.len() > 0 { format!("<{}>", g.join(",")) } else { "".into() },
         if opts.crossroads { "mut " } else { "" }
@@ -68,6 +70,9 @@ fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), B
 }
 
 fn write_prop_decl(s: &mut String, p: &Prop, opts: &GenOpts, set: bool) -> Result<(), Box<dyn error::Error>> {
+    p.annotations.get("org.freedesktop.DBus.Deprecated").iter().for_each(|v| {
+        *s += &format!("    #[deprecated(note = \"{}\")]\n", v);
+    });
     if set {
         *s += &format!("    fn {}(&self, value: {}) -> {}",
             p.set_fn_name, make_type(&p.typ, true, &mut None)?, make_result("()", opts));
@@ -86,6 +91,9 @@ pub (super) fn intf_name(s: &mut String, i: &Intf) -> Result<(), Box<dyn error::
 
 pub (super) fn intf(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<dyn error::Error>> {
 
+    i.annotations.get("org.freedesktop.DBus.Deprecated").iter().for_each(|v| {
+        *s += &format!("\n#[deprecated(note = \"{}\")]", v);
+    });
     let iname = make_camel(&i.shortname);
     *s += &format!("\npub trait {} {{\n", iname);
     for m in &i.methods {
@@ -109,6 +117,9 @@ pub (super) fn intf(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<
 
 fn write_signal(s: &mut String, i: &Intf, ss: &Signal) -> Result<(), Box<dyn error::Error>> {
     let structname = format!("{}{}", make_camel(&i.shortname), make_camel(&ss.name));
+    ss.annotations.get("org.freedesktop.DBus.Deprecated").iter().for_each(|v| {
+        *s += &format!("\n#[deprecated(note = \"{}\")]", v);
+    });
     *s += "\n#[derive(Debug)]\n";
     *s += &format!("pub struct {} {{\n", structname);
     for a in ss.args.iter() {
