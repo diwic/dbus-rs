@@ -1,4 +1,5 @@
 use std::error;
+use std::collections::HashMap;
 
 pub (super) struct Arg {
     pub name: String,
@@ -12,6 +13,7 @@ pub (super) struct Method {
     pub fn_name: String,
     pub iargs: Vec<Arg>,
     pub oargs: Vec<Arg>,
+    pub annotations: HashMap<String, String>,
 }
 
 pub (super) struct Prop {
@@ -20,11 +22,13 @@ pub (super) struct Prop {
     pub set_fn_name: String,
     pub typ: String,
     pub access: String,
+    pub annotations: HashMap<String, String>,
 }
 
 pub (super) struct Signal {
     pub name: String,
     pub args: Vec<Arg>,
+    pub annotations: HashMap<String, String>,
 }
 
 pub (super) struct Intf {
@@ -33,6 +37,7 @@ pub (super) struct Intf {
     pub methods: Vec<Method>,
     pub props: Vec<Prop>,
     pub signals: Vec<Signal>,
+    pub annotations: HashMap<String, String>,
 }
 
 const RUST_KEYWORDS: [&str; 57] = [
