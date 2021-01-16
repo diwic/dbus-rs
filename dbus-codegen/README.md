@@ -82,6 +82,8 @@ let token = register_org_example_test(&mut myCrossroads);
 myCrossroads.insert("/", &[token], myData);
 ```
 
+Where myData must be of a type that implements `OrgExampleTest`.
+
 ## Server side - dbus-tree
 
  * A method will be generated, which you can call to get a `tree::Interface`, like this:
