@@ -38,7 +38,7 @@ fn main() {
              .help("If present, will try to make variant arguments generic instead of Variant<Box<dyn RefArg>>. \
 Experimental, does not work with dbus-tree."))
         .arg(clap::Arg::with_name("methodtype").short("m").long("methodtype").takes_value(true).value_name("Fn")
-             .help("Type of server method for dbus-tree; valid values are: 'Fn', 'FnMut', 'Sync', 'Generic', and 'None'. Defaults to 'Fn'."))
+             .help("Type of server method for dbus-tree; valid values are: 'Fn', 'FnMut', 'Sync', 'Generic', and 'None'. Defaults to 'None'."))
         .arg(clap::Arg::with_name("methodaccess").short("a").long("methodaccess").takes_value(true).value_name("RefClosure")
              .help("Specifies how to access the type implementing the interface for dbus-tree (experimental). Valid values are: 'RefClosure', 'AsRefClosure', 'MethodInfo'. \
 Defaults to 'RefClosure'."))
@@ -89,11 +89,11 @@ Defaults to 'RefClosure'."))
 
     let mtype = matches.value_of("methodtype").map(|s| s.to_lowercase());
     let mtype = match mtype.as_ref().map(|s| &**s) {
-        None | Some("fn") => Some("MTFn"),
+        Some("fn") => Some("MTFn"),
         Some("fnmut") => Some("MTFnMut"),
         Some("sync") => Some("MTSync"),
         Some("generic") => Some("MethodType"),
-        Some("none") => None,
+        None | Some("none") => None,
         _ => panic!("Invalid methodtype specified"),
     };
 
