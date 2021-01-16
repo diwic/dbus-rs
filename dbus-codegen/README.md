@@ -19,7 +19,11 @@ From a D-Bus interface like this:
         </interface>
      </node>
 
-This code will generate a few things.
+You can choose to generate one of three things:
+
+ * Client-side code (for calling the interface)
+ * Server-side code for implementing the interface using [dbus-crossroads](https://docs.rs/dbus-crossroads)
+ * Server-side code for implementing the interface using [dbus-tree](https://docs.rs/dbus-tree)
 
 ## Common for client and server sides
 
@@ -27,8 +31,13 @@ This code will generate a few things.
 
 ```rust
 pub trait OrgExampleTest {
-    type Err;
-    fn foo(&self, bar: i32) -> Result<String, Self::Err>;
+    fn foo(&self, bar: i32) -> Result<String, dbus::Error>;
+}
+```
+
+```rust
+pub trait OrgExampleTest {
+    fn foo(&self, bar: i32) -> Result<String, dbus::MethodErr>;
 }
 ```
 
@@ -47,26 +56,33 @@ impl dbus::SignalArgs for OrgExampleTestLaundry { /* code here */ }
 
 ## Client side
 
- * The trait will be implemented for `ConnPath`, which makes methods easy to call for a client, like this:
+ * The trait will be implemented for `blocking::Proxy`, `nonblock::Proxy` or `ffidisp::ConnPath`,
+ which makes methods easy to call for a client, like this:
 
 ```rust
 use OrgExampleTest;
-let myString = try!(myConnPath.foo(myInteger));
+let myString = myProxy.foo(myInteger)?;
 ```
 
- * To help catch signals emitted from the server, you can use `match_str` and `from_message`, like this:
+ * To catch signals emitted from the server, do like this:
 
 ```rust
-use SignalArgs;
-myConnection.add_match(OrgExampleTestLaundry::match_str(None, None));
-for msg in myConnection.incoming(1000) {
-    if let Some(laundrySignal) = OrgExampleTestLaundry::from_message(&msg) {
-        println!("Laundry was eaten: {:?}", laundrySignal.eaten);
-    }
-}
+use dbus::SignalArgs;
+myConnection.add_match(OrgExampleTestLaundry::match_rule(None, None).into_static(), |laundrySignal| {
+  println!("Laundry was eaten: {:?}", laundrySignal.eaten);
+})
 ```
 
-## Server side
+## Server side - dbus-crossroads
+
+ * A method will be generated that registers an `IfaceToken`, like this:
+
+```rust
+let token = register_org_example_test(&mut myCrossroads);
+myCrossroads.insert("/", &[token], myData);
+```
+
+## Server side - dbus-tree
 
  * A method will be generated, which you can call to get a `tree::Interface`, like this:
 
@@ -147,10 +163,13 @@ dbus-codegen-rust < mydefinition.xml > mod.rs
 Dbus-codegen-rust can also fetch the xml definition for you. Here's an example that generates client definitions for PolicyKit:
 
 ```
-dbus-codegen-rust -s -d org.freedesktop.PolicyKit1 -p "/org/freedesktop/PolicyKit1/Authority" -m None > policykit.rs
+dbus-codegen-rust -s -d org.freedesktop.PolicyKit1 -p "/org/freedesktop/PolicyKit1/Authority" > policykit.rs
 ```
 
-See available options:
+Dbus-codegen-rust defaults to generating client definitions. Use the `--crossroads` switch to
+generate dbus-crossroads server definitions and `--methodtype` to generate dbus-tree definitions.
+
+To see available options:
 
 ```
 dbus-codegen-rust --help
