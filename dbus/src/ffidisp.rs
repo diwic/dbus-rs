@@ -4,7 +4,6 @@
 
 
 use super::{Error, ffi, Message, MessageType};
-use std::panic;
 use crate::strings::{BusName, Path, Member, Interface};
 use crate::arg::{AppendAll, ReadAll, IterAppend};
 use crate::message::SignalArgs;

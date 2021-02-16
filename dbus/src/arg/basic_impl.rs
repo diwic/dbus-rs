@@ -5,6 +5,7 @@ use crate::strings::{Signature, Path, Member, ErrorName, Interface};
 use std::{ptr, any, mem};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_char, c_int};
+use std::fs::File;
 
 
 fn arg_append_basic<T>(i: *mut ffi::DBusMessageIter, arg_type: ArgType, v: T) {
@@ -105,7 +106,7 @@ impl RefArg for $t {
     #[inline]
     fn signature(&self) -> Signature<'static> { <$t as Arg>::signature() }
     #[inline]
-    fn append(&self, i: &mut IterAppend) { <$t as Append>::append(self.clone(), i) }
+    fn append(&self, i: &mut IterAppend) { <$t as Append>::append_by_ref(self, i) }
     #[inline]
     fn as_any(&self) -> &dyn any::Any { self }
     #[inline]
@@ -241,6 +242,40 @@ impl<'a> Get<'a> for OwnedFd {
 }
 
 refarg_impl!(OwnedFd, _i, { use std::os::unix::io::AsRawFd; Some(_i.as_raw_fd() as i64) }, None, None, None);
+
+impl Arg for File {
+    const ARG_TYPE: ArgType = ArgType::UnixFd;
+    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked("h\0") } }
+}
+impl Append for File {
+    fn append_by_ref(&self, i: &mut IterAppend) {
+        arg_append_basic(&mut i.0, ArgType::UnixFd, self.as_raw_fd())
+    }
+}
+impl DictKey for File {}
+impl<'a> Get<'a> for File {
+    fn get(i: &mut Iter) -> Option<Self> {
+        arg_get_basic(&mut i.0, ArgType::UnixFd).map(|fd| unsafe { File::from_raw_fd(fd) })
+    }
+}
+
+impl RefArg for File {
+    #[inline]
+    fn arg_type(&self) -> ArgType { <File as Arg>::ARG_TYPE }
+    #[inline]
+    fn signature(&self) -> Signature<'static> { <File as Arg>::signature() }
+    #[inline]
+    fn append(&self, i: &mut IterAppend) { <File as Append>::append_by_ref(self, i) }
+    #[inline]
+    fn as_any(&self) -> &dyn any::Any { self }
+    #[inline]
+    fn as_any_mut(&mut self) -> &mut dyn any::Any { self }
+    #[inline]
+    fn as_i64(&self) -> Option<i64> { Some(self.as_raw_fd() as i64) }
+    #[inline]
+    fn box_clone(&self) -> Box<dyn RefArg + 'static> { Box::new(self.try_clone().unwrap()) }
+}
+
 
 macro_rules! string_impl {
     ($t: ident, $s: ident, $f: expr) => {
