@@ -262,7 +262,7 @@ impl<'a> Iter<'a> {
             ArgType::Int64 => Box::new(self.get::<i64>().unwrap()),
             ArgType::UInt64 => Box::new(self.get::<u64>().unwrap()),
             ArgType::Double => Box::new(self.get::<f64>().unwrap()),
-            ArgType::UnixFd => Box::new(self.get::<OwnedFd>().unwrap()),
+            ArgType::UnixFd => Box::new(self.get::<std::fs::File>().unwrap()),
             ArgType::Struct => Box::new(self.recurse(ArgType::Struct).unwrap().collect::<VecDeque<_>>()),
             ArgType::ObjectPath => Box::new(self.get::<Path>().unwrap().into_static()),
             ArgType::Signature => Box::new(self.get::<Signature>().unwrap().into_static()),
@@ -404,7 +404,7 @@ pub enum ArgType {
     UInt64 = ffi::DBUS_TYPE_UINT64 as u8,
     /// f64
     Double = ffi::DBUS_TYPE_DOUBLE as u8,
-    /// OwnedFd
+    /// File
     UnixFd = ffi::DBUS_TYPE_UNIX_FD as u8,
     /// Use tuples or Vec<Box<dyn RefArg>> to read/write structs.
     Struct = ffi::DBUS_TYPE_STRUCT as u8,
@@ -422,7 +422,7 @@ const ALL_ARG_TYPES: [(ArgType, &str); 18] =
     (ArgType::DictEntry, "Dict entry"),
     (ArgType::ObjectPath, "Path"),
     (ArgType::Signature, "Signature"),
-    (ArgType::UnixFd, "OwnedFd"),
+    (ArgType::UnixFd, "File"),
     (ArgType::Boolean, "bool"),
     (ArgType::Byte, "u8"),
     (ArgType::Int16, "i16"),

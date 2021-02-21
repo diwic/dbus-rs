@@ -205,7 +205,7 @@ impl MessageItem {
             MessageItem::Dict(ref a) => a.sig.clone(),
             MessageItem::ObjectPath(_) => <Path as Arg>::signature(),
             MessageItem::Signature(_) => <Signature as Arg>::signature(),
-            MessageItem::UnixFd(_) => <OwnedFd as Arg>::signature(),
+            MessageItem::UnixFd(_) => <std::fs::File as Arg>::signature(),
         }
     }
 
