@@ -140,13 +140,22 @@ Structs
 -------
 
 D-Bus structs are implemented as Rust tuples. You can append and get tuples like you do with other types of arguments.
+You can also use `VecDeque<Box<dyn RefArg>>` for when the types of the struct cannot be statically typed.
 
 TODO: Example
 
 Declare method arguments
 ------------------------
 
-When you make a `Tree`, you want to declare what input and output arguments your method expects - so that correct D-Bus introspection data can be generated. You'll use the same types as you learned earlier in this guide:
+For `dbus-crossroads`, the method argument types are automatically deduced from your method closure, but the names have to repeated. Method arguments - both in and out - are always tuples, so if you have a single argument, it needs to be wrapped into a "one element tuple" (so a variable or type `x` becomes `(x,)`). Like this:
+
+```rust
+b.method("Hello", ("request",), ("reply",), |_, _, (request,): (HashMap<i32, Vec<(i32, bool, String)>>,)| {
+  // Returns a Result<String>
+});
+```
+
+For `dbus-tree`, you want to declare what input and output arguments your method expects - so that correct D-Bus introspection data can be generated. You'll use the same types as you learned earlier in this guide:
 
 ```rust
 factory.method( /* ... */ )
@@ -183,9 +192,9 @@ An edge case where this is necessary is having floating point keys in a dictiona
 Unusual types
 -------------
 
-The types `Path`, `Signature` and `OwnedFd` are not often used, but they can be appended and read as other argument types. `Path` and `Signature` will return strings with a borrowed lifetime - use `.into_static()` if you want to untie that lifetime.
+The types `Path` and `Signature` are not often used, but they can be appended and read as other argument types. `Path` and `Signature` will return strings with a borrowed lifetime - use `.into_static()` if you want to untie that lifetime.
 
-For `OwnedFd`, which a wrapper around a file descriptor, remember that the file descriptor will be closed when it goes out of scope.
+You can also append and get a `std::fs::File`, this will send or receive a file descriptor. `OwnedFd` is an earlier design which was used for the same thing.
 
 MessageItem
 -----------

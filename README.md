@@ -40,7 +40,7 @@ You are hereby invited to participate in the development of these crates:
  * If you have smaller improvements to code, documentation, examples etc, go ahead and [submit a pull request](https://github.com/diwic/dbus-rs/pulls).
    Larger pieces of work are better off discussed first.
 
-The code is Apache 2.0 / MIT dual licensed. Any code submitted in Pull Requests, discussions or issues are assumed to have this license,
+The code is Apache 2.0 / MIT dual licensed. Any code submitted in Pull Requests, discussions or issues is assumed to have this license,
 unless explicitly stated otherwise.
 
 
