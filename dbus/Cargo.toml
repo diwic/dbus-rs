@@ -31,9 +31,6 @@ futures = ["futures-util", "futures-channel"]
 # native-channel = ["futures-executor", "futures-util", "dbus-native-channel"]
 
 [badges]
-is-it-maintained-open-issues = { repository = "diwic/dbus-rs" }
-is-it-maintained-issue-resolution = { repository = "diwic/dbus-rs" }
-travis-ci = { repository = "diwic/dbus-rs" }
 maintenance = { status = "actively-developed" }
 
 [package.metadata.docs.rs]

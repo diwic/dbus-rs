@@ -24,9 +24,7 @@ tokio = {version = "1.0", features=["time", "net", "macros", "rt-multi-thread"]}
 dbus-tree = {path = "../dbus-tree", version="0.9"}
 
 [badges]
-is-it-maintained-open-issues = { repository = "diwic/dbus-rs" }
-is-it-maintained-issue-resolution = { repository = "diwic/dbus-rs" }
-travis-ci = { repository = "diwic/dbus-rs" }
+maintenance = { status = "actively-developed" }
 
 [[example]]
 name = "tokio_server_cr"

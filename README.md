@@ -4,6 +4,7 @@ D-Bus bindings for Rust
 [![crates.io](https://img.shields.io/crates/v/dbus.svg)](https://crates.io/crates/dbus)
 [![API documentation](https://docs.rs/dbus/badge.svg)](https://docs.rs/dbus)
 [![license](https://img.shields.io/crates/l/dbus.svg)](https://crates.io/crates/dbus)
+[![Github CI](https://github.com/diwic/dbus-rs/actions/workflows/dbus-rs-github-ci.yml/badge.svg)](https://github.com/diwic/dbus-rs/actions/workflows/dbus-rs-github-ci.yml/badge.svg)
 
  * Use `blocking::Connection` to connect to the session or system bus. (Or `SyncConnection` / `LocalConnection`)
  * Use `Message` to send and receive messages. Get and append arguments of all types, see the [argument guide](dbus/examples/argument_guide.md) for details.
