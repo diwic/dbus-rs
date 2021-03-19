@@ -4,7 +4,6 @@
 
 use crate::{Message, to_c_str, c_str_to_slice, MessageType};
 use crate::message::MatchRule;
-use std::os::unix::io::RawFd;
 
 #[cfg(not(feature = "native-channel"))]
 mod ffichannel;
@@ -28,12 +27,19 @@ pub enum BusType {
     Starter = ffi::DBusBusType::Starter as isize,
 }
 
+/// Platform-specific file descriptor type
+#[cfg(unix)]
+pub type Fd = std::os::unix::io::RawFd;
+
+/// Platform-specific file descriptor type
+#[cfg(windows)]
+pub type Fd = std::os::windows::io::RawSocket;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 /// A file descriptor, and an indication whether it should be read from, written to, or both.
 pub struct Watch {
     /// File descriptor
-    pub fd: RawFd,
+    pub fd: Fd,
     /// True if wakeup should happen when the file descriptor is ready for reading
     pub read: bool,
     /// True if wakeup should happen when the file descriptor is ready for writing

@@ -9,7 +9,8 @@
 use crate::strings::{Signature, Path, Interface, BusName};
 
 use crate::arg;
-use crate::arg::{Iter, IterAppend, Arg, ArgType, OwnedFd};
+use crate::arg::{Iter, IterAppend, Arg, ArgType};
+use crate::arg::OwnedFd;
 use std::ffi::CStr;
 use std::{ops, any};
 
@@ -661,8 +662,10 @@ mod test {
     extern crate tempfile;
 
     use crate::{Message, MessageType, Path, Signature};
+    #[cfg(unix)]
     use libc;
     use crate::arg::messageitem::MessageItem;
+    #[cfg(unix)]
     use crate::arg::OwnedFd;
     use crate::ffidisp::{Connection, BusType};
 
@@ -671,6 +674,7 @@ mod test {
         use std::io::prelude::*;
         use std::io::SeekFrom;
         use std::fs::OpenOptions;
+        #[cfg(unix)]
         use std::os::unix::io::{IntoRawFd, AsRawFd};
 
         let c = Connection::get_private(BusType::Session).unwrap();
@@ -683,18 +687,24 @@ mod test {
         let mut file = OpenOptions::new().create(true).read(true).write(true).open(&filename).unwrap();
         file.write_all(b"z").unwrap();
         file.seek(SeekFrom::Start(0)).unwrap();
-        let ofd = unsafe { OwnedFd::new(file.into_raw_fd()) };
-        m.append_items(&[MessageItem::UnixFd(ofd.clone())]);
+        #[cfg(unix)]
+        {
+            let ofd = unsafe { OwnedFd::new(file.into_raw_fd()) };
+            m.append_items(&[MessageItem::UnixFd(ofd.clone())]);
+        }
         println!("Sending {:?}", m.get_items());
         c.send(m).unwrap();
 
         loop { for n in c.incoming(1000) {
             if n.msg_type() == MessageType::MethodCall {
-                let z: OwnedFd = n.read1().unwrap();
-                println!("Got {:?}", z);
-                let mut q: libc::c_char = 100;
-                assert_eq!(1, unsafe { libc::read(z.as_raw_fd(), &mut q as *mut _ as *mut libc::c_void, 1) });
-                assert_eq!(q, 'z' as libc::c_char);
+                #[cfg(unix)]
+                {
+                    let z: OwnedFd = n.read1().unwrap();
+                    println!("Got {:?}", z);
+                    let mut q: libc::c_char = 100;
+                    assert_eq!(1, unsafe { libc::read(z.as_raw_fd(), &mut q as *mut _ as *mut libc::c_void, 1) });
+                    assert_eq!(q, 'z' as libc::c_char);
+                }
                 return;
             } else {
                 println!("Got {:?}", n);
@@ -807,6 +817,7 @@ mod test {
     }
 
     /* Unfortunately org.freedesktop.DBus has no properties we can use for testing, but hostname1 should be around on most distros. */
+    #[cfg(unix)]
     #[test]
     fn test_get_hostname1_prop() {
         use super::Props;
