@@ -25,3 +25,25 @@ jobs:
         export DBUS_SESSION_BUS_ADDRESS=`dbus-daemon --session --print-address --fork`
         cargo test --all -- --nocapture --color always
         cd dbus-codegen && cargo test --all --no-default-features -- --nocapture --color always
+
+  build-mingw:
+
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+    - uses: msys2/setup-msys2@v2
+      with:
+        install: >-
+          git
+          mingw-w64-x86_64-dbus
+          mingw-w64-x86_64-pkgconf
+          mingw-w64-x86_64-rust
+    - uses: actions/checkout@v2
+    - name: Run tests
+      run: |
+        # dbus-daemon has no '--fork' option on windows. But it will autolaunch
+        cd dbus && cargo test --lib -- --nocapture --color always
