@@ -353,7 +353,7 @@ impl Watch {
         #[cfg(unix)]
         let mut w = Watch {fd: ffi::dbus_watch_get_unix_fd(watch), read: false, write: false};
         #[cfg(windows)]
-        let mut w = Watch {fd: ffi::dbus_watch_get_socket(watch) as Fd, read: false, write: false};
+        let mut w = Watch {fd: ffi::dbus_watch_get_socket(watch) as WatchFd, read: false, write: false};
         let enabled = ffi::dbus_watch_get_enabled(watch) != 0;
         let flags = ffi::dbus_watch_get_flags(watch);
         use std::os::raw::c_uint;
