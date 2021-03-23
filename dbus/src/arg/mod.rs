@@ -74,6 +74,7 @@ use std::{fmt, mem, ptr, error};
 use crate::{ffi, Message, Signature, Path};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_void, c_int};
+#[cfg(unix)]
 use std::os::unix::io::{RawFd, AsRawFd, FromRawFd, IntoRawFd};
 use std::collections::VecDeque;
 
@@ -88,9 +89,11 @@ fn ffi_iter() -> ffi::DBusMessageIter {
 /// when the scope ends.
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct OwnedFd {
+    #[cfg(unix)]
     fd: RawFd
 }
 
+#[cfg(unix)]
 impl OwnedFd {
     /// Create a new OwnedFd from a RawFd.
     ///
@@ -108,6 +111,7 @@ impl OwnedFd {
     }
 }
 
+#[cfg(unix)]
 impl Drop for OwnedFd {
     fn drop(&mut self) {
         unsafe { libc::close(self.fd); }
@@ -115,25 +119,34 @@ impl Drop for OwnedFd {
 }
 
 impl Clone for OwnedFd {
+    #[cfg(unix)]
     fn clone(&self) -> OwnedFd {
         let x = unsafe { libc::dup(self.fd) };
         if x == -1 { panic!("Duplicating file descriptor failed") }
         unsafe { OwnedFd::new(x) }
     }
+
+    #[cfg(windows)]
+    fn clone(&self) -> OwnedFd {
+        OwnedFd {}
+    }
 }
 
+#[cfg(unix)]
 impl AsRawFd for OwnedFd {
     fn as_raw_fd(&self) -> RawFd {
         self.fd
     }
 }
 
+#[cfg(unix)]
 impl IntoRawFd for OwnedFd {
     fn into_raw_fd(self) -> RawFd {
         self.into_fd()
     }
 }
 
+#[cfg(unix)]
 impl FromRawFd for OwnedFd {
     unsafe fn from_raw_fd(fd: RawFd) -> Self { OwnedFd::new(fd) }
 }

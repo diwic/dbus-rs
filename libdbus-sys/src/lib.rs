@@ -272,6 +272,7 @@ extern "C" {
     pub fn dbus_watch_get_enabled(watch: *mut DBusWatch) -> u32;
     pub fn dbus_watch_get_flags(watch: *mut DBusWatch) -> c_uint;
     pub fn dbus_watch_get_unix_fd(watch: *mut DBusWatch) -> c_int;
+    pub fn dbus_watch_get_socket(watch: *mut DBusWatch) -> c_int;
     pub fn dbus_watch_handle(watch: *mut DBusWatch, flags: c_uint) -> u32;
     pub fn dbus_watch_get_data(watch: *mut DBusWatch) -> *mut c_void;
     pub fn dbus_watch_set_data(watch: *mut DBusWatch, user_data: *mut c_void,

@@ -427,9 +427,12 @@ fn test_peer() {
 
     let s2 = j.join().unwrap();
 
-    let proxy = c.with_proxy("org.a11y.Bus", "/org/a11y/bus", Duration::from_secs(5));
-    let (s1,): (String,) = proxy.method_call("org.freedesktop.DBus.Peer", "GetMachineId", ()).unwrap();
+    #[cfg(unix)]
+    {
+        let proxy = c.with_proxy("org.a11y.Bus", "/org/a11y/bus", Duration::from_secs(5));
+        let (s1,): (String,) = proxy.method_call("org.freedesktop.DBus.Peer", "GetMachineId", ()).unwrap();
 
-    assert_eq!(s1, s2);
+        assert_eq!(s1, s2);
+    }
 
 }

@@ -5,8 +5,7 @@ use std::{str, time::Duration, collections::HashMap};
 use std::sync::{Mutex, atomic::AtomicU8, atomic::Ordering};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_int};
-use super::{BusType, Watch};
-use std::os::unix::io::RawFd;
+use super::{BusType, Watch, Fd};
 
 #[derive(Debug)]
 struct ConnHandle(*mut ffi::DBusConnection, bool);
@@ -35,7 +34,7 @@ struct WatchMap {
     conn: ConnHandle,
     list: Mutex<HashMap<WatchHandle, (Watch, bool)>>,
     current_rw: AtomicU8,
-    current_fd: Option<RawFd>,
+    current_fd: Option<Fd>,
 }
 
 fn calc_rw(list: &HashMap<WatchHandle, (Watch, bool)>) -> u8 {
@@ -351,7 +350,10 @@ impl Channel {
 
 impl Watch {
     unsafe fn from_raw_enabled(watch: *mut ffi::DBusWatch) -> (Self, bool) {
-        let mut w = Watch { fd: ffi::dbus_watch_get_unix_fd(watch), read: false, write: false};
+        #[cfg(unix)]
+        let mut w = Watch {fd: ffi::dbus_watch_get_unix_fd(watch), read: false, write: false};
+        #[cfg(windows)]
+        let mut w = Watch {fd: ffi::dbus_watch_get_socket(watch) as Fd, read: false, write: false};
         let enabled = ffi::dbus_watch_get_enabled(watch) != 0;
         let flags = ffi::dbus_watch_get_flags(watch);
         use std::os::raw::c_uint;

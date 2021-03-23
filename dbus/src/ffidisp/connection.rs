@@ -1,11 +1,10 @@
 //! Contains structs and traits relevant to the connection itself, and dispatching incoming messages. 
 
-use crate::{Error, ffi, to_c_str, c_str_to_slice, Message, MessageType};
+use crate::{Error, Message, MessageType, c_str_to_slice, channel::Fd, ffi, to_c_str};
 use crate::ffidisp::ConnPath;
 use std::{fmt, mem, ptr, thread, panic, ops};
 use std::{collections::VecDeque, time::Duration};
 use std::cell::{Cell, RefCell};
-use std::os::unix::io::RawFd;
 use std::os::raw::{c_void, c_char, c_int, c_uint};
 use crate::strings::{BusName, Path};
 use super::{Watch, WatchList, MessageCallback, ConnectionItem, MsgHandler, MsgHandlerList, MessageReply, BusType};
@@ -338,11 +337,10 @@ impl Connection {
     /// The returned iterator will return pending items only, never block for new events.
     ///
     /// See the `Watch` struct for an example.
-    pub fn watch_handle(&self, fd: RawFd, flags: c_uint) -> ConnectionItems {
+    pub fn watch_handle(&self, fd: Fd, flags: c_uint) -> ConnectionItems {
         self.i.watches.as_ref().unwrap().watch_handle(fd, flags);
         ConnectionItems::new(self, None, true)
     }
-
 
     /// Create a convenience struct for easier calling of many methods on the same destination and path.
     pub fn with_path<'a, D: Into<BusName<'a>>, P: Into<Path<'a>>>(&'a self, dest: D, path: P, timeout_ms: i32) ->
