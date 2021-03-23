@@ -1,4 +1,4 @@
-use crate::{channel::Fd, ffi};
+use crate::{channel::WatchFd, ffi};
 use libc;
 use crate::ffidisp::Connection;
 
@@ -71,14 +71,14 @@ impl WatchEvent {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 /// A file descriptor, and an indication whether it should be read from, written to, or both.
 pub struct Watch {
-    fd: Fd,
+    fd: WatchFd,
     read: bool,
     write: bool,
 }
 
 impl Watch {
     /// Get the RawFd this Watch is for
-    pub fn fd(&self) -> Fd { self.fd }
+    pub fn fd(&self) -> WatchFd { self.fd }
     /// Add POLLIN to events to listen for
     pub fn readable(&self) -> bool { self.read }
     /// Add POLLOUT to events to listen for
@@ -132,7 +132,7 @@ impl WatchList {
 
     pub fn set_on_update(&self, on_update: Box<dyn Fn(Watch) + Send>) { *self.on_update.lock().unwrap() = on_update; }
 
-    pub fn watch_handle(&self, fd: Fd, flags: c_uint) {
+    pub fn watch_handle(&self, fd: WatchFd, flags: c_uint) {
         // println!("watch_handle {} flags {}", fd, flags);
         for &q in self.watches.read().unwrap().iter() {
             let w = self.get_watch(q);

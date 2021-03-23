@@ -29,17 +29,17 @@ pub enum BusType {
 
 /// Platform-specific file descriptor type
 #[cfg(unix)]
-pub type Fd = std::os::unix::io::RawFd;
+pub type WatchFd = std::os::unix::io::RawFd;
 
 /// Platform-specific file descriptor type
 #[cfg(windows)]
-pub type Fd = std::os::windows::io::RawSocket;
+pub type WatchFd = std::os::windows::io::RawSocket;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 /// A file descriptor, and an indication whether it should be read from, written to, or both.
 pub struct Watch {
     /// File descriptor
-    pub fd: Fd,
+    pub fd: WatchFd,
     /// True if wakeup should happen when the file descriptor is ready for reading
     pub read: bool,
     /// True if wakeup should happen when the file descriptor is ready for writing

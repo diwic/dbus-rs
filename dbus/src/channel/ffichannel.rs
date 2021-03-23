@@ -5,7 +5,7 @@ use std::{str, time::Duration, collections::HashMap};
 use std::sync::{Mutex, atomic::AtomicU8, atomic::Ordering};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_int};
-use super::{BusType, Watch, Fd};
+use super::{BusType, Watch, WatchFd};
 
 #[derive(Debug)]
 struct ConnHandle(*mut ffi::DBusConnection, bool);
@@ -34,7 +34,7 @@ struct WatchMap {
     conn: ConnHandle,
     list: Mutex<HashMap<WatchHandle, (Watch, bool)>>,
     current_rw: AtomicU8,
-    current_fd: Option<Fd>,
+    current_fd: Option<WatchFd>,
 }
 
 fn calc_rw(list: &HashMap<WatchHandle, (Watch, bool)>) -> u8 {

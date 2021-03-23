@@ -1,6 +1,6 @@
-//! Contains structs and traits relevant to the connection itself, and dispatching incoming messages. 
+//! Contains structs and traits relevant to the connection itself, and dispatching incoming messages.
 
-use crate::{Error, Message, MessageType, c_str_to_slice, channel::Fd, ffi, to_c_str};
+use crate::{Error, Message, MessageType, c_str_to_slice, channel::WatchFd, ffi, to_c_str};
 use crate::ffidisp::ConnPath;
 use std::{fmt, mem, ptr, thread, panic, ops};
 use std::{collections::VecDeque, time::Duration};
@@ -58,8 +58,8 @@ extern "C" fn filter_message_cb(conn: *mut ffi::DBusConnection, msg: *mut ffi::D
     });
 
     match r {
-        Ok(false) => ffi::DBusHandlerResult::NotYetHandled, 
-        Ok(true) => ffi::DBusHandlerResult::Handled, 
+        Ok(false) => ffi::DBusHandlerResult::NotYetHandled,
+        Ok(true) => ffi::DBusHandlerResult::Handled,
         Err(e) => {
             *i.filter_cb_panic.borrow_mut() = Err(e);
             ffi::DBusHandlerResult::Handled
@@ -75,7 +75,7 @@ fn default_filter_callback(c: &Connection, m: Message) -> bool {
 
 extern "C" fn object_path_message_cb(_conn: *mut ffi::DBusConnection, _msg: *mut ffi::DBusMessage,
     _user_data: *mut c_void) -> ffi::DBusHandlerResult {
-    /* Already pushed in filter_message_cb, so we just set the handled flag here to disable the 
+    /* Already pushed in filter_message_cb, so we just set the handled flag here to disable the
        "default" handler. */
     ffi::DBusHandlerResult::Handled
 }
@@ -200,7 +200,7 @@ impl Connection {
     /// let done: rc::Rc<cell::Cell<bool>> = Default::default();
     /// let done2 = done.clone();
     /// c.add_handler(c.send_with_reply(m, move |reply| {
-    ///     let v: Vec<&str> = reply.unwrap().read1().unwrap(); 
+    ///     let v: Vec<&str> = reply.unwrap().read1().unwrap();
     ///     println!("The names on the D-Bus are: {:?}", v);
     ///     done2.set(true);
     /// }).unwrap());
@@ -217,7 +217,7 @@ impl Connection {
     ///
     /// There might be more methods added later on, which give better ways to deal
     /// with the list of MsgHandler currently on the connection. If this would help you,
-    /// please [file an issue](https://github.com/diwic/dbus-rs/issues). 
+    /// please [file an issue](https://github.com/diwic/dbus-rs/issues).
     pub fn extract_handler(&self) -> Option<Box<dyn MsgHandler>> {
         self.i.handlers.borrow_mut().pop()
     }
@@ -337,7 +337,7 @@ impl Connection {
     /// The returned iterator will return pending items only, never block for new events.
     ///
     /// See the `Watch` struct for an example.
-    pub fn watch_handle(&self, fd: Fd, flags: c_uint) -> ConnectionItems {
+    pub fn watch_handle(&self, fd: WatchFd, flags: c_uint) -> ConnectionItems {
         self.i.watches.as_ref().unwrap().watch_handle(fd, flags);
         ConnectionItems::new(self, None, true)
     }
@@ -351,7 +351,7 @@ impl Connection {
     /// Replace the default message callback. Returns the previously set callback.
     ///
     /// By default, when you call ConnectionItems::next, all relevant incoming messages
-    /// are returned through the ConnectionItems iterator, and 
+    /// are returned through the ConnectionItems iterator, and
     /// irrelevant messages are passed on to libdbus's default handler.
     /// If you need to customize this behaviour (i e, to handle all incoming messages yourself),
     /// you can set this message callback yourself. A few caveats apply:
@@ -426,7 +426,7 @@ impl Connection {
     /// If this ever happens, you'll get a callback. The watch changed is provided as a parameter.
     ///
     /// In rare cases this might not even happen in the thread calling anything on the connection,
-    /// so the callback needs to be `Send`. 
+    /// so the callback needs to be `Send`.
     /// A mutex is held during the callback. If you try to call set_watch_callback from a callback,
     /// you will deadlock.
     ///
@@ -482,7 +482,7 @@ impl crate::blocking::BlockingSender for Connection {
 fn msghandler_process(v: &mut MsgHandlerList, m: &Message, c: &Connection) -> bool {
     let mut ii: isize = -1;
     loop {
-        ii += 1; 
+        ii += 1;
         let i = ii as usize;
         if i >= v.len() { return false };
 
@@ -523,14 +523,14 @@ impl<'a> ConnectionItems<'a> {
         msghandler_process(&mut self.handlers, m, &self.c)
     }
 
-    /// Access and modify message handlers 
+    /// Access and modify message handlers
     ///
     /// Note: Likely to changed/refactored/removed in next release
     pub fn msg_handlers(&mut self) -> &mut Vec<Box<dyn MsgHandler>> { &mut self.handlers }
 
     /// Creates a new ConnectionItems iterator
     ///
-    /// For io_timeout, setting None means the fds will not be read/written. I e, only pending 
+    /// For io_timeout, setting None means the fds will not be read/written. I e, only pending
     /// items in libdbus's internal queue will be processed.
     ///
     /// For end_on_timeout, setting false will means that the iterator will never finish (unless
@@ -589,7 +589,7 @@ pub struct ConnMsgs<C> {
 impl<C: ops::Deref<Target = Connection>> Iterator for ConnMsgs<C> {
     type Item = Message;
     fn next(&mut self) -> Option<Self::Item> {
-        
+
         loop {
             let iconn = &self.conn.i;
             if iconn.filter_cb.borrow().is_none() { panic!("ConnMsgs::next called recursively or with a MessageCallback set to None"); }
@@ -630,5 +630,3 @@ fn message_reply() {
     for _ in c.iter(1000).with(reply) { if quit.get() { return; } }
     assert!(false);
 }
-
-
