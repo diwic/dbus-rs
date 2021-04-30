@@ -33,6 +33,8 @@ fn dispatch_helper(cr: &mut Crossroads, msg: Message) -> Message {
 #[test]
 fn score() {
     struct Score(u16, u32);
+    use dbus::blocking::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged as PPC;
+    use dbus::message::SignalArgs;
 
     let mut cr = Crossroads::new();
 
@@ -42,9 +44,16 @@ fn score() {
             score.1 += 1;
             Ok((score.0, score.1))
         });
-        b.property::<u16, _>("Score")
+
+        let prop_ch = b.property::<u16, _>("Score")
             .get(|_, score| { Ok(score.0) })
-            .set(|_, score, val| { score.0 = val; Ok(Some(val)) });
+            .set(|_, score, val| { score.0 = val; Ok(Some(val)) })
+            .changed_msg();
+        let msg = prop_ch(&"/somePath".into(), &734u16).unwrap();
+        let ppc = PPC::from_message(&msg).unwrap();
+        assert_eq!(&*ppc.interface_name, "com.example.dbusrs.crossroads.score");
+        assert_eq!(ppc.changed_properties.get("Score").unwrap().0.as_u64(), Some(734));
+
     });
 
     cr.insert("/", &[iface], Score(2, 0));
@@ -57,8 +66,6 @@ fn score() {
     assert_eq!(r[0].msg_type(), dbus::message::MessageType::MethodReturn);
     assert_eq!(r[0].get_reply_serial().unwrap(), 57);
 
-    use dbus::blocking::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged as PPC;
-    use dbus::message::SignalArgs;
     let ppc = PPC::from_message(&r[1]).unwrap();
     assert_eq!(&*ppc.interface_name, "com.example.dbusrs.crossroads.score");
     assert_eq!(ppc.changed_properties.get("Score").unwrap().0.as_u64(), Some(7));

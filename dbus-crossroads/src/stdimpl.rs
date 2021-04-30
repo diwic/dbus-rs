@@ -35,7 +35,7 @@ pub fn introspectable(cr: &mut Crossroads) -> IfaceToken<()> {
 }
 
 
-fn make_emits_message<V: dbus::arg::Arg + dbus::arg::Append>(prop_name: &str, emits_changed: &str, ctx: &Context, v: &V) -> Option<dbus::Message> {
+pub (crate) fn make_emits_message<V: dbus::arg::Arg + dbus::arg::Append>(prop_name: &str, emits_changed: &str, ctx: &Context, v: &V) -> Option<dbus::Message> {
     let arr = [prop_name];
     let (d, i) = match emits_changed {
         "false" => return None,
