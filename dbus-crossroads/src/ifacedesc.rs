@@ -238,6 +238,7 @@ impl<A: 'static> SignalBuilder<'_, A> {
 }
 
 impl<A: arg::AppendAll + 'static> SignalBuilder<'_, A> {
+    /// Returns a function which, when called, will construct the signal message.
     pub fn msg_fn(self) -> Box<dyn Fn(&dbus::Path, &A) -> dbus::Message + Send + Sync + 'static> {
         let SignalBuilder { iface_name, name, .. } = self;
         let iface_name: strings::Interface<'static> = iface_name.unwrap().clone();

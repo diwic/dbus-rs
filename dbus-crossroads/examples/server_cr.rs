@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Let's build a new interface, which can be used for "Hello" objects.
     let iface_token = cr.register("com.example.dbustest", |b| {
-        // This row advertises that we can send a HelloHappened signal when introspected.
+        // This row advertises (when introspected) that we can send a HelloHappened signal.
         // We use the single-tuple to say that we have one single argument, named "sender" of type "String".
         // The msg_fn returns a boxed function, which when called constructs the message to be emitted.
         let hello_happened = b.signal::<(String,), _>("HelloHappened", ("sender",)).msg_fn();
@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             // And here's what happens when the method is called.
             println!("Incoming hello call from {}!", name);
             hello.called_count += 1;
-            let s = format!("Hello {}! This API has been used {} times.", name, hello.called_count);
+            let reply = format!("Hello {}! This API has been used {} times.", name, hello.called_count);
 
             // Now call the function we got earlier to get a signal message.
             // The function takes all its arguments as the second parameter, so we must again
@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             ctx.push_msg(signal_msg);
 
             // And the return value from the method call is a tuple of the output arguments.
-            Ok((s,))
+            Ok((reply,))
         });
     });
 
