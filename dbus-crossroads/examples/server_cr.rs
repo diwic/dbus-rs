@@ -29,22 +29,29 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Let's build a new interface, which can be used for "Hello" objects.
     let iface_token = cr.register("com.example.dbustest", |b| {
-        // This row is just for introspection: It advertises that we can send a
-        // HelloHappened signal. We use the single-tuple to say that we have one single argument,
-        // named "sender" of type "String".
-        b.signal::<(String,), _>("HelloHappened", ("sender",));
+        // This row advertises that we can send a HelloHappened signal when introspected.
+        // We use the single-tuple to say that we have one single argument, named "sender" of type "String".
+        // The msg_fn returns a boxed function, which when called constructs the message to be emitted.
+        let hello_happened = b.signal::<(String,), _>("HelloHappened", ("sender",)).msg_fn();
+
         // Let's add a method to the interface. We have the method name, followed by
         // names of input and output arguments (used for introspection). The closure then controls
         // the types of these arguments. The last argument to the closure is a tuple of the input arguments.
-        b.method("Hello", ("name",), ("reply",), |ctx: &mut Context, hello: &mut Hello, (name,): (String,)| {
+        b.method("Hello", ("name",), ("reply",), move |ctx: &mut Context, hello: &mut Hello, (name,): (String,)| {
+
             // And here's what happens when the method is called.
             println!("Incoming hello call from {}!", name);
             hello.called_count += 1;
             let s = format!("Hello {}! This API has been used {} times.", name, hello.called_count);
+
+            // Now call the function we got earlier to get a signal message.
+            // The function takes all its arguments as the second parameter, so we must again
+            // tuple our single argument into a single-tuple.
+            let signal_msg = hello_happened(ctx.path(), &(name,));
             // The ctx parameter can be used to conveniently send extra messages.
-            let signal_msg = ctx.make_signal("HelloHappened", (name,));
             ctx.push_msg(signal_msg);
-            // And the return value is a tuple of the output arguments.
+
+            // And the return value from the method call is a tuple of the output arguments.
             Ok((s,))
         });
     });

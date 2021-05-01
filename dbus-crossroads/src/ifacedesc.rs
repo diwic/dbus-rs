@@ -5,7 +5,7 @@ use crate::{Context, PropContext, MethodErr, Crossroads, utils::Dbg};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::borrow::Cow;
-use dbus::arg;
+use dbus::{arg, strings};
 
 #[derive(Default, Debug)]
 pub struct Registry(Vec<IfaceDesc>);
@@ -16,7 +16,7 @@ impl Registry {
         self.0.len() - 1
     }
 
-    pub fn find_token(&self, name: Option<&dbus::strings::Interface>, tokens: &HashSet<usize>) -> Result<usize, MethodErr> {
+    pub fn find_token(&self, name: Option<&strings::Interface>, tokens: &HashSet<usize>) -> Result<usize, MethodErr> {
         for &t in tokens.iter() {
             let desc = &self.0[t];
             if desc.name.as_ref() == name { return Ok(t) }
@@ -24,14 +24,14 @@ impl Registry {
         Err(name.map(MethodErr::no_interface).unwrap_or_else(|| MethodErr::no_interface("")))
     }
 
-    pub fn take_method(&mut self, t: usize, name: &dbus::strings::Member<'static>) -> Result<Callback, MethodErr> {
+    pub fn take_method(&mut self, t: usize, name: &strings::Member<'static>) -> Result<Callback, MethodErr> {
         let mdesc = self.0[t].methods.get_mut(name).ok_or_else(|| MethodErr::no_method(name))?;
         let cb = mdesc.cb.take();
         let cb = cb.ok_or_else(|| MethodErr::failed(&format!("Detected recursive call to {}", name)))?;
         Ok(cb.0)
     }
 
-    pub fn give_method(&mut self, t: usize, name: &dbus::strings::Member<'static>, cb: Callback) {
+    pub fn give_method(&mut self, t: usize, name: &strings::Member<'static>, cb: Callback) {
         let x = self.0[t].methods.get_mut(name).unwrap();
         x.cb = Some(CallbackDbg(cb));
     }
@@ -122,7 +122,7 @@ impl Registry {
         r
     }
 
-    pub fn get_intf_name(&self, t: usize) -> Option<&dbus::strings::Interface<'static>> {
+    pub fn get_intf_name(&self, t: usize) -> Option<&strings::Interface<'static>> {
         self.0.get(t)?.name.as_ref()
     }
 }
@@ -219,12 +219,35 @@ pub struct SignalDesc {
     annotations: Annotations,
 }
 
-impl SignalDesc {
+/// Struct used to describe a property when building an interface.
+#[derive(Debug)]
+pub struct SignalBuilder<'a, A: 'static> {
+    desc: &'a mut SignalDesc,
+    _dummy: PhantomData<&'static A>,
+    iface_name: Option<&'a strings::Interface<'static>>,
+    name: strings::Member<'static>,
+}
+
+
+impl<A: 'static> SignalBuilder<'_, A> {
     pub fn annotate<N: Into<String>, V: Into<String>>(&mut self, name: N, value: V) -> &mut Self {
-        self.annotations.insert(name, value);
+        self.desc.annotations.insert(name, value);
         self
     }
     pub fn deprecated(&mut self) -> &mut Self { self.annotate(DEPRECATED, "true") }
+}
+
+impl<A: arg::AppendAll + 'static> SignalBuilder<'_, A> {
+    pub fn msg_fn(self) -> Box<dyn Fn(&dbus::Path, &A) -> dbus::Message + Send + Sync + 'static> {
+        let SignalBuilder { iface_name, name, .. } = self;
+        let iface_name: strings::Interface<'static> = iface_name.unwrap().clone();
+        Box::new(move |path, args| {
+            let mut msg = dbus::Message::signal(path, &iface_name, &name);
+            let mut ia = arg::IterAppend::new(&mut msg);
+            args.append(&mut ia);
+            msg
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -237,10 +260,10 @@ pub struct PropDesc {
 
 #[derive(Debug)]
 pub struct IfaceDesc {
-    name: Option<dbus::strings::Interface<'static>>,
+    name: Option<strings::Interface<'static>>,
     annotations: Annotations,
-    methods: HashMap<dbus::strings::Member<'static>, MethodDesc>,
-    signals: HashMap<dbus::strings::Member<'static>, SignalDesc>,
+    methods: HashMap<strings::Member<'static>, MethodDesc>,
+    signals: HashMap<strings::Member<'static>, SignalDesc>,
     properties: HashMap<String, PropDesc>,
 }
 
@@ -258,7 +281,7 @@ pub struct PropBuilder<'a, T:'static, A: 'static> {
     desc: &'a mut PropDesc,
     _dummy: PhantomData<&'static (T, A)>,
     emits_changed: EmitsChangedSignal,
-    iface_name: Option<&'a dbus::strings::Interface<'static>>,
+    iface_name: Option<&'a strings::Interface<'static>>,
     prop_name: String,
 }
 
@@ -332,7 +355,7 @@ impl<T: Send, A: Send + arg::RefArg + arg::Arg + arg::Append> PropBuilder<'_, T,
     /// # Panics
     ///
     /// If emits_changed is set to "const", the function will panic.
-    pub fn changed_msg(self) -> Box<dyn Fn(&dbus::Path, &dyn arg::RefArg) -> Option<dbus::Message>> {
+    pub fn changed_msg(self) -> Box<dyn Fn(&dbus::Path, &dyn arg::RefArg) -> Option<dbus::Message> + Send + Sync + 'static> {
         let prop_name = self.prop_name.clone();
         let emits_changed = self.emits_changed;
         assert_ne!(emits_changed, EmitsChangedSignal::Const);
@@ -495,7 +518,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
 
     pub fn method<IA, OA, N, CB>(&mut self, name: N, input_args: IA::strs, output_args: OA::strs, mut cb: CB) -> &mut MethodDesc
     where IA: arg::ArgAll + arg::ReadAll, OA: arg::ArgAll + arg::AppendAll,
-    N: Into<dbus::strings::Member<'static>>,
+    N: Into<strings::Member<'static>>,
     CB: FnMut(&mut Context, &mut T, IA) -> Result<OA, MethodErr> + Send + 'static {
         self.method_with_cr(name, input_args, output_args, move |ctx, cr, ia| {
             let data = cr.data_mut(ctx.path()).ok_or_else(|| MethodErr::no_path(ctx.path()))?;
@@ -505,7 +528,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
 
     pub fn method_with_cr<IA, OA, N, CB>(&mut self, name: N, input_args: IA::strs, output_args: OA::strs, mut cb: CB) -> &mut MethodDesc
     where IA: arg::ArgAll + arg::ReadAll, OA: arg::ArgAll + arg::AppendAll,
-    N: Into<dbus::strings::Member<'static>>,
+    N: Into<strings::Member<'static>>,
     CB: FnMut(&mut Context, &mut Crossroads, IA) -> Result<OA, MethodErr> + Send + 'static {
         let boxed = Box::new(move |mut ctx: Context, cr: &mut Crossroads| {
             let _ = ctx.check(|ctx| {
@@ -526,7 +549,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
 
     pub fn method_with_cr_custom<IA, OA, N, CB>(&mut self, name: N, input_args: IA::strs, output_args: OA::strs, mut cb: CB) -> &mut MethodDesc
     where IA: arg::ArgAll + arg::ReadAll, OA: arg::ArgAll + arg::AppendAll,
-    N: Into<dbus::strings::Member<'static>>,
+    N: Into<strings::Member<'static>>,
     CB: FnMut(Context, &mut Crossroads, IA) -> Option<Context> + Send + 'static {
         let boxed = Box::new(move |mut ctx: Context, cr: &mut Crossroads| {
             match ctx.check(|ctx| Ok(ctx.message().read_all()?)) {
@@ -544,7 +567,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
 
     pub fn method_with_cr_async<IA, OA, N, R, CB>(&mut self, name: N, input_args: IA::strs, output_args: OA::strs, mut cb: CB) -> &mut MethodDesc
     where IA: arg::ArgAll + arg::ReadAll, OA: arg::ArgAll + arg::AppendAll,
-    N: Into<dbus::strings::Member<'static>>,
+    N: Into<strings::Member<'static>>,
     CB: FnMut(Context, &mut Crossroads, IA) -> R + Send + 'static,
     R: Future<Output=PhantomData<OA>> + Send + 'static {
         self.method_with_cr_custom::<IA, OA, _, _>(name, input_args, output_args, move |mut ctx, cr, ia| {
@@ -561,7 +584,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
 /*
     pub fn method_with_cr_async<'x, IA, OA, N, R, CB>(&mut self, name: N, input_args: IA::strs, output_args: OA::strs, mut cb: CB) -> &mut MethodDesc
     where IA: arg::ArgAll + arg::ReadAll, OA: arg::ArgAll + arg::AppendAll,
-    N: Into<dbus::strings::Member<'static>>,
+    N: Into<strings::Member<'static>>,
     CB: FnMut(&'x mut Context, &mut Crossroads, IA) -> R + Send + 'static,
     R: Future<Output = Result<OA, MethodErr>> + Send + 'x {
         self.method_with_cr_custom::<IA, OA, _, _>(name, input_args, output_args, move |mut ctx, cr, ia| {
@@ -571,12 +594,19 @@ impl<T: Send + 'static> IfaceBuilder<T> {
     }
 */
 
-    pub fn signal<A, N>(&mut self, name: N, args: A::strs) -> &mut SignalDesc
-    where A: arg::ArgAll, N: Into<dbus::strings::Member<'static>> {
-        self.0.signals.entry(name.into()).or_insert(SignalDesc {
-            annotations: Default::default(),
-            args: build_argvec::<A>(args),
-        })
+    pub fn signal<A, N>(&mut self, name: N, args: A::strs) -> SignalBuilder<A>
+    where A: arg::ArgAll, N: Into<strings::Member<'static>> {
+        let name = name.into();
+        let key = name.clone();
+        SignalBuilder {
+            desc: self.0.signals.entry(key).or_insert(SignalDesc {
+                annotations: Default::default(),
+                args: build_argvec::<A>(args),
+            }),
+            _dummy: PhantomData,
+            name,
+            iface_name: self.0.name.as_ref(),
+        }
     }
 
     pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
@@ -585,7 +615,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
     }
     pub fn deprecated(self) -> Self { self.annotate(DEPRECATED, "true") }
 
-    pub (crate) fn build<F>(name: Option<dbus::strings::Interface<'static>>, f: F) -> IfaceDesc
+    pub (crate) fn build<F>(name: Option<strings::Interface<'static>>, f: F) -> IfaceDesc
     where F: FnOnce(&mut IfaceBuilder<T>) {
         let mut b = IfaceBuilder(IfaceDesc {
             name,
