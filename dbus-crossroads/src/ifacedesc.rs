@@ -356,11 +356,11 @@ impl<T: Send, A: Send + arg::RefArg + arg::Arg + arg::Append> PropBuilder<'_, T,
     /// # Panics
     ///
     /// If emits_changed is set to "const", the function will panic.
-    pub fn changed_msg(self) -> Box<dyn Fn(&dbus::Path, &dyn arg::RefArg) -> Option<dbus::Message> + Send + Sync + 'static> {
+    pub fn changed_msg_fn(self) -> Box<dyn Fn(&dbus::Path, &dyn arg::RefArg) -> Option<dbus::Message> + Send + Sync + 'static> {
         let prop_name = self.prop_name.clone();
         let emits_changed = self.emits_changed;
         assert_ne!(emits_changed, EmitsChangedSignal::Const);
-        let interface_name: String = self.iface_name.map(|x| &**x).unwrap_or("").into();
+        let interface_name: String = self.iface_name.map(|x| &**x).unwrap().into();
         Box::new(move |path, val| {
             use dbus::blocking::stdintf::org_freedesktop_dbus::PropertiesPropertiesChanged as PPC;
             let mut ppc = PPC {

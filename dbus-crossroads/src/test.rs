@@ -48,7 +48,7 @@ fn score() {
         let prop_ch = b.property::<u16, _>("Score")
             .get(|_, score| { Ok(score.0) })
             .set(|_, score, val| { score.0 = val; Ok(Some(val)) })
-            .changed_msg();
+            .changed_msg_fn();
         let msg = prop_ch(&"/somePath".into(), &734u16).unwrap();
         let ppc = PPC::from_message(&msg).unwrap();
         assert_eq!(&*ppc.interface_name, "com.example.dbusrs.crossroads.score");
