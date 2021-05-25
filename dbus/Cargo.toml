@@ -16,7 +16,7 @@ edition = "2018"
 [dependencies]
 libc = "0.2.66"
 libdbus-sys = { path = "../libdbus-sys", version = "0.2" }
-futures-util = { version = "0.3", optional = true, features = ["io"] }
+futures-util = { version = "0.3", optional = true, default-features = false }
 futures-channel = { version = "0.3", optional = true }
 futures-executor = { version = "0.3", optional = true }
 # dbus-native-channel = { path = "../dbus-native-channel", version = "0.1", optional = true }
@@ -31,7 +31,7 @@ tempfile = "3"
 no-string-validation = []
 futures = ["futures-util", "futures-channel"]
 # Not ready yet
-# native-channel = ["futures-executor", "futures-util", "dbus-native-channel"]
+# native-channel = ["futures-executor", "futures-util/io", "dbus-native-channel"]
 
 [badges]
 maintenance = { status = "actively-developed" }
