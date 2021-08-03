@@ -214,9 +214,26 @@ fn make_timeout(timeout: Instant) -> pin::Pin<Box<dyn future::Future<Output=()> 
     Box::pin(t)
 }
 
-/// Generic connection creator, you might want to use e g `new_session_local`, `new_system_sync` etc for convenience.
-pub fn new<C: From<Channel> + NonblockReply>(b: BusType) -> Result<(IOResource<C>, Arc<C>), dbus::Error> {
-    let mut channel = Channel::get_private(b)?;
+/// Create a connection from channel, you may need to invoke `channel.register()?` to make sure the
+/// channel is usable.
+///
+/// # Example
+///
+/// ```rust
+/// use dbus::channel::Channel;
+/// use dbus_tokio::connection;
+///
+/// let mut channel = Channel::open_private("unix:path=/run/user/1000/bus").expect("open private channel failed");
+///
+/// channel.register().expect("register channel failed");
+///
+/// let (resource, conn) = connection::from_channel(channel).expect("create connection failed");
+///
+/// tokio::spawn(resource);
+///
+/// // do anything with the conn
+/// ```
+pub fn from_channel<C: From<Channel> + NonblockReply>(mut channel: Channel) -> Result<(IOResource<C>, Arc<C>), dbus::Error> {
     channel.set_watch_enabled(true);
     let watch = channel.watch();
     let watch_fd = watch.fd;
@@ -260,6 +277,13 @@ pub fn new<C: From<Channel> + NonblockReply>(b: BusType) -> Result<(IOResource<C
         write_pending: false,
     };
     Ok((res, conn))
+}
+
+/// Generic connection creator, you might want to use e g `new_session_local`, `new_system_sync` etc for convenience.
+pub fn new<C: From<Channel> + NonblockReply>(b: BusType) -> Result<(IOResource<C>, Arc<C>), dbus::Error> {
+    let channel = Channel::get_private(b)?;
+
+    from_channel(channel)
 }
 
 /// Creates a connection to the session bus, to use with Tokio's basic (single-thread) scheduler.
