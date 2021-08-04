@@ -220,16 +220,22 @@ fn make_timeout(timeout: Instant) -> pin::Pin<Box<dyn future::Future<Output=()> 
 /// # Example
 ///
 /// ```rust
+/// use std::sync::Arc;
+///
 /// use dbus::channel::Channel;
 /// use dbus_tokio::connection;
+/// use dbus_tokio::connection::IOResource;
+/// use dbus::nonblock::SyncConnection;
 ///
+/// # tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap().block_on(async {
 /// let mut channel = Channel::open_private("unix:path=/run/user/1000/bus").expect("open private channel failed");
 ///
 /// channel.register().expect("register channel failed");
 ///
-/// let (resource, conn) = connection::from_channel(channel).expect("create connection failed");
+/// let (resource, conn): (IOResource<SyncConnection>, Arc<SyncConnection>) = connection::from_channel(channel).expect("create connection failed");
 ///
 /// tokio::spawn(resource);
+/// # })
 ///
 /// // do anything with the conn
 /// ```
