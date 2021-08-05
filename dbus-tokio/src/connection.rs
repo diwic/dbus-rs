@@ -219,7 +219,7 @@ fn make_timeout(timeout: Instant) -> pin::Pin<Box<dyn future::Future<Output=()> 
 ///
 /// # Example
 ///
-/// ```rust
+/// ```no_run
 /// use std::sync::Arc;
 ///
 /// use dbus::channel::Channel;
