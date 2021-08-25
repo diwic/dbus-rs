@@ -47,6 +47,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     /*
     // ..or use the match as a stream if you prefer
+    use futures_util::stream::StreamExt;
     let (incoming_signal, stream) = conn.add_match(mr).await?.stream();
     let stream = stream.for_each(|(_, (source,)): (_, (String,))| {
         println!("Hello from {} happened on the bus!", source);
