@@ -104,7 +104,9 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // The resource is a task that should be spawned onto a tokio compatible
     // reactor ASAP. If the resource ever finishes, you lost connection to D-Bus.
-    tokio::spawn(async {
+    //
+    // To shut down the connection, both call _handle.abort() and drop the connection.
+    let _handle = tokio::spawn(async {
         let err = resource.await;
         panic!("Lost connection to D-Bus: {}", err);
     });
