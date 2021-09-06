@@ -211,13 +211,21 @@ impl $c {
     /// it recursively and might lead to panics or deadlocks.
     pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
         if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
-            let ff = self.filters_mut().remove_matching(&msg);
-            if let Some(mut ff) = ff {
-                if ff.2(msg, self) {
+            let matching_filters = self.filters_mut().remove_matching(&msg);
+            if matching_filters.is_empty() {
+                if let Some(reply) = crate::channel::default_reply(&msg) {
+                    let _ = self.channel.send(reply);
+                }
+            }
+            for mut ff in matching_filters {
+                if let Ok(copy) = msg.duplicate() {
+                    if ff.2(copy, self) {
+                        self.filters_mut().insert(ff);
+                    }
+                } else {
+                    // Silently drop the message, but add the filter back.
                     self.filters_mut().insert(ff);
                 }
-            } else if let Some(reply) = crate::channel::default_reply(&msg) {
-                let _ = self.channel.send(reply);
             }
             Ok(true)
         } else {
