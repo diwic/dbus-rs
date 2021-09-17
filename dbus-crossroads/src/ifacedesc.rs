@@ -322,7 +322,7 @@ impl<T: Send, A: Send + arg::RefArg + arg::Arg + arg::Append> PropBuilder<'_, T,
     pub fn get_with_cr_async<R, CB>(self, mut cb: CB) -> Self
     where
         CB: FnMut(PropContext, &mut Crossroads) -> R + Send + 'static,
-        R: Future<Output=PhantomData<(A, ())>> + Send + 'static
+        R: Future<Output=PhantomData<A>> + Send + 'static
     {
         self.get_custom(move |mut ctx, cr| {
             cr.run_async_method(|sender, cr| {
@@ -337,7 +337,7 @@ impl<T: Send, A: Send + arg::RefArg + arg::Arg + arg::Append> PropBuilder<'_, T,
     pub fn get_async<R, CB>(self, mut cb: CB) -> Self
     where
         CB: FnMut(PropContext, &mut T) -> R + Send + 'static,
-        R: Future<Output=PhantomData<(A, ())>> + Send + 'static
+        R: Future<Output=PhantomData<A>> + Send + 'static
     {
         self.get_with_cr_async(move |ctx, cr| {
             // It should be safe to unwrap here, the path has already been checked once (when dispatching the method)
