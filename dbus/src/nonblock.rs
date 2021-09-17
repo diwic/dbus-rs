@@ -122,7 +122,17 @@ impl AsRef<Channel> for $c {
 }
 
 impl Sender for $c {
-    fn send(&self, msg: Message) -> Result<u32, ()> { self.channel.send(msg) }
+    fn send(&self, msg: Message) -> Result<u32, ()> {
+        let token = self.channel.send(msg);
+        if self.channel.has_messages_to_send() {
+            // Non-blocking send failed
+            // Wake up task that will send the message
+            if self.waker.as_ref().map(|wake| wake().is_err() ).unwrap_or(false) {
+                return Err(());
+            }
+        }
+        token
+    }
 }
 
 impl MatchingReceiver for $c {
