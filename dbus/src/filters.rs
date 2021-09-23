@@ -33,12 +33,25 @@ impl<F> Filters<F> {
         self.list.remove(&id)
     }
 
-    /// Removes and returns all filters which match the given message.
-    pub fn remove_matching(&mut self, msg: &Message) -> Vec<(Token, MatchRule<'static>, F)> {
-        let matching: Vec<_> = self.list.iter().filter_map(|(k, v)| if v.0.matches(&msg) { Some(*k) } else { None }).collect();
-        matching.into_iter().map(|k| {
+    /// Removes and returns the first filter which matches the given message.
+    pub fn remove_first_matching(&mut self, msg: &Message) -> Option<(Token, MatchRule<'static>, F)> {
+        if let Some(k) = self.list.iter_mut().find_map(|(k, v)| if v.0.matches(&msg) { Some(*k) } else { None }) {
             let v = self.list.remove(&k).unwrap();
-            (k, v.0, v.1)
-        }).collect()
+            Some((k, v.0, v.1))
+        } else {
+            None
+        }
+    }
+
+    /// Removes and returns all filters which match the given message.
+    pub fn remove_all_matching(&mut self, msg: &Message) -> Vec<(Token, MatchRule<'static>, F)> {
+        let matching: Vec<_> = self.list.iter().filter_map(|(k, v)| if v.0.matches(&msg) { Some(*k) } else { None }).collect();
+        matching
+            .into_iter()
+            .map(|k| {
+                let v = self.list.remove(&k).unwrap();
+                (k, v.0, v.1)
+            })
+            .collect()
     }
 }
