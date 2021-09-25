@@ -260,7 +260,7 @@ impl $c {
     ///
     /// If multiple [`MatchRule`]s match the same message, then by default only one of them will get
     /// the callback. No guarantee is made about which one. This behaviour can be changed for signal
-    /// messages by calling [`all_signal_matches`](Self::all_signal_matches).
+    /// messages by calling [`sig_signal_match_mode`](Self::set_signal_match_mode).
     ///
     /// The returned value can be used to remove the match.
     pub async fn add_match(&self, match_rule: MatchRule<'static>) -> Result<MsgMatch, Error> {
@@ -296,16 +296,18 @@ impl $c {
     }
 
     /// If true, configures the connection to send signal messages to all matching [`MatchRule`]
-    /// filters added with [`add_match`](Self::add_match) rather than just the first one. This will
-    /// result in the messages being duplicated, and so the message serial will be lost, but this is
-    /// generally not a problem for signals.
+    /// filters added with [`add_match`](Self::add_match) rather than just the first one. This comes
+    /// with the following gotchas:
+    ///
+    ///  * The messages might be duplicated, so the message serial might be lost (this is
+    ///    generally not a problem for signals).
+    ///  * Panicking inside a match callback might mess with other callbacks, causing them
+    ///    to be permanently dropped.
+    ///  * Removing other matches from inside a match callback is not supported.
     ///
     /// This is false by default, for a newly-created connection.
-    ///
-    /// When `all_signal_matches` mode is enabled, removing other matches from inside a match
-    /// callback is not supported.
-    pub fn set_all_signal_matches(&mut self, all_signal_matches: bool) {
-        self.all_signal_matches = all_signal_matches;
+    pub fn set_signal_match_mode(&mut self, match_all: bool) {
+        self.all_signal_matches = match_all;
     }
 }
 
