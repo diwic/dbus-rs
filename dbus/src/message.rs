@@ -59,6 +59,20 @@ impl Message {
         Message { msg: ptr}
     }
 
+    /// Creates a new message that is a replica of this message, but without a serial.
+    ///
+    /// May fail if out of memory or file descriptors.
+    pub fn duplicate(&self) -> Result<Self, String> {
+        let ptr = unsafe {
+            ffi::dbus_message_copy(self.msg)
+        };
+        if ptr.is_null() {
+            Err("D-Bus error: dbus_message_copy failed".into())
+        } else {
+            Ok(Message { msg: ptr })
+        }
+    }
+
     /// Creates a new method call message.
     pub fn call_with_args<'d, 'p, 'i, 'm, A, D, P, I, M>(destination: D, path: P, iface: I, method: M, args: A) -> Message
     where D: Into<BusName<'d>>, P: Into<Path<'p>>, I: Into<Interface<'i>>, M: Into<Member<'m>>, A: AppendAll {

@@ -4,7 +4,7 @@
 use crate::strings::{BusName, Path, Interface, Member};
 use crate::arg::{AppendAll, ReadAll, IterAppend};
 use crate::{channel, Error, Message};
-use crate::message::{MatchRule, SignalArgs};
+use crate::message::{MatchRule, SignalArgs, MessageType};
 use crate::channel::{Channel, BusType, Token};
 use std::{cell::RefCell, time::Duration, sync::Mutex};
 use crate::filters::Filters;
@@ -111,18 +111,21 @@ pub mod stdintf {
 pub struct LocalConnection {
     channel: Channel,
     filters: RefCell<Filters<LocalFilterCb>>,
+    all_signal_matches: bool,
 }
 
 /// A connection to D-Bus, non-async version where callbacks are Send but not Sync.
 pub struct Connection {
     channel: Channel,
     filters: RefCell<Filters<FilterCb>>,
+    all_signal_matches: bool,
 }
 
 /// A connection to D-Bus, Send + Sync + non-async version
 pub struct SyncConnection {
     channel: Channel,
-    filters: Mutex<Filters<SyncFilterCb>>
+    filters: Mutex<Filters<SyncFilterCb>>,
+    all_signal_matches: bool,
 }
 
 use crate::blocking::stdintf::org_freedesktop_dbus;
@@ -173,6 +176,10 @@ impl $c {
 
     /// Adds a new match to the connection, and sets up a callback when this message arrives.
     ///
+    /// If multiple [`MatchRule`]s match the same message, then by default only one of them will get
+    /// the callback. No guarantee is made about which one. This behaviour can be changed for signal
+    /// messages by calling [`all_signal_matches`](Self::all_signal_matches).
+    ///
     /// The returned value can be used to remove the match. The match is also removed if the callback
     /// returns "false".
     pub fn add_match<S: ReadAll, F>(&self, match_rule: MatchRule<'static>, f: F) -> Result<Token, Error>
@@ -204,6 +211,19 @@ impl $c {
         self.remove_match_no_cb(&mr.match_str())
     }
 
+    /// If true, configures the connection to send signal messages to all matching [`MatchRule`]
+    /// filters added with [`add_match`](Self::add_match) rather than just the first one. This will
+    /// result in the messages being duplicated, and so the message serial will be lost, but this is
+    /// generally not a problem for signals.
+    ///
+    /// This is false by default, for a newly-created connection.
+    ///
+    /// When `all_signal_matches` mode is enabled, removing other matches from inside a match
+    /// callback is not supported.
+    pub fn set_all_signal_matches(&mut self, all_signal_matches: bool) {
+        self.all_signal_matches = all_signal_matches;
+    }
+
     /// Tries to handle an incoming message if there is one. If there isn't one,
     /// it will wait up to timeout
     ///
@@ -211,13 +231,29 @@ impl $c {
     /// it recursively and might lead to panics or deadlocks.
     pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
         if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
-            let ff = self.filters_mut().remove_matching(&msg);
-            if let Some(mut ff) = ff {
-                if ff.2(msg, self) {
-                    self.filters_mut().insert(ff);
+            if self.all_signal_matches && msg.msg_type() == MessageType::Signal {
+                // If it's a signal and the mode is enabled, send a copy of the message to all
+                // matching filters.
+                for mut ff in self.filters_mut().remove_all_matching(&msg) {
+                    if let Ok(copy) = msg.duplicate() {
+                        if ff.2(copy, self) {
+                            self.filters_mut().insert(ff);
+                        }
+                    } else {
+                        // Silently drop the message, but add the filter back.
+                        self.filters_mut().insert(ff);
+                    }
                 }
-            } else if let Some(reply) = crate::channel::default_reply(&msg) {
-                let _ = self.channel.send(reply);
+            } else {
+                // Otherwise, send the original message to only the first matching filter.
+                let ff = self.filters_mut().remove_first_matching(&msg);
+                if let Some(mut ff) = ff {
+                    if ff.2(msg, self) {
+                        self.filters_mut().insert(ff);
+                    }
+                } else if let Some(reply) = crate::channel::default_reply(&msg) {
+                    let _ = self.channel.send(reply);
+                }
             }
             Ok(true)
         } else {
@@ -239,7 +275,9 @@ impl BlockingSender for $c {
 
 impl From<Channel> for $c {
     fn from(channel: Channel) -> $c { $c {
-        channel, filters: Default::default(),
+        channel,
+        filters: Default::default(),
+        all_signal_matches: false,
     } }
 }
 

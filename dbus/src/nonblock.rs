@@ -17,7 +17,7 @@ use crate::{Error, Message};
 use crate::channel::{MatchingReceiver, Channel, Sender, Token};
 use crate::strings::{BusName, Path, Interface, Member};
 use crate::arg::{AppendAll, ReadAll, IterAppend};
-use crate::message::MatchRule;
+use crate::message::{MatchRule, MessageType};
 
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
@@ -75,6 +75,7 @@ pub struct LocalConnection {
     replies: RefCell<Replies<LocalRepliesCb>>,
     timeout_maker: Option<TimeoutMakerCb>,
     waker: Option<WakerCb>,
+    all_signal_matches: bool,
 }
 
 /// A connection to D-Bus, async version, which is Send but not Sync.
@@ -84,6 +85,7 @@ pub struct Connection {
     replies: RefCell<Replies<RepliesCb>>,
     timeout_maker: Option<TimeoutMakerCb>,
     waker: Option<WakerCb>,
+    all_signal_matches: bool,
 }
 
 /// A connection to D-Bus, Send + Sync + async version
@@ -93,6 +95,7 @@ pub struct SyncConnection {
     replies: Mutex<Replies<SyncRepliesCb>>,
     timeout_maker: Option<TimeoutMakerCb>,
     waker: Option<WakerCb>,
+    all_signal_matches: bool,
 }
 
 use stdintf::org_freedesktop_dbus::DBus;
@@ -113,6 +116,7 @@ impl From<Channel> for $c {
             filters: Default::default(),
             timeout_maker: None,
             waker: None,
+            all_signal_matches: false,
         }
     }
 }
@@ -188,13 +192,29 @@ impl Process for $c {
                 return;
             }
         }
-        let ff = self.filters_mut().remove_matching(&msg);
-        if let Some(mut ff) = ff {
-            if ff.2(msg, self) {
-                self.filters_mut().insert(ff);
+        if self.all_signal_matches && msg.msg_type() == MessageType::Signal {
+            // If it's a signal and the mode is enabled, send a copy of the message to all
+            // matching filters.
+            for mut ff in self.filters_mut().remove_all_matching(&msg) {
+                if let Ok(copy) = msg.duplicate() {
+                    if ff.2(copy, self) {
+                        self.filters_mut().insert(ff);
+                    }
+                } else {
+                    // Silently drop the message, but add the filter back.
+                    self.filters_mut().insert(ff);
+                }
             }
-        } else if let Some(reply) = crate::channel::default_reply(&msg) {
-            let _ = self.send(reply);
+        } else {
+            // Otherwise, send the original message to only the first matching filter.
+            let ff = self.filters_mut().remove_first_matching(&msg);
+            if let Some(mut ff) = ff {
+                if ff.2(msg, self) {
+                    self.filters_mut().insert(ff);
+                }
+            } else if let Some(reply) = crate::channel::default_reply(&msg) {
+                let _ = self.channel.send(reply);
+            }
         }
     }
 }
@@ -238,6 +258,10 @@ impl $c {
 
     /// Adds a new match to the connection, and sets up a callback when this message arrives.
     ///
+    /// If multiple [`MatchRule`]s match the same message, then by default only one of them will get
+    /// the callback. No guarantee is made about which one. This behaviour can be changed for signal
+    /// messages by calling [`all_signal_matches`](Self::all_signal_matches).
+    ///
     /// The returned value can be used to remove the match.
     pub async fn add_match(&self, match_rule: MatchRule<'static>) -> Result<MsgMatch, Error> {
         let m = match_rule.match_str();
@@ -269,6 +293,19 @@ impl $c {
     pub async fn remove_match(&self, id: Token) -> Result<(), Error> {
         let (mr, _) = self.stop_receive(id).ok_or_else(|| Error::new_failed("No match with that id found"))?;
         self.remove_match_no_cb(&mr.match_str()).await
+    }
+
+    /// If true, configures the connection to send signal messages to all matching [`MatchRule`]
+    /// filters added with [`add_match`](Self::add_match) rather than just the first one. This will
+    /// result in the messages being duplicated, and so the message serial will be lost, but this is
+    /// generally not a problem for signals.
+    ///
+    /// This is false by default, for a newly-created connection.
+    ///
+    /// When `all_signal_matches` mode is enabled, removing other matches from inside a match
+    /// callback is not supported.
+    pub fn set_all_signal_matches(&mut self, all_signal_matches: bool) {
+        self.all_signal_matches = all_signal_matches;
     }
 }
 
