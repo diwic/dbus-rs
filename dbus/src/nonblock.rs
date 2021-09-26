@@ -260,7 +260,7 @@ impl $c {
     ///
     /// If multiple [`MatchRule`]s match the same message, then by default only the first will get
     /// the callback. This behaviour can be changed for signal messages by calling
-    /// [`sig_signal_match_mode`](Self::set_signal_match_mode).
+    /// [`set_signal_match_mode`](Self::set_signal_match_mode).
     ///
     /// The returned value can be used to remove the match.
     pub async fn add_match(&self, match_rule: MatchRule<'static>) -> Result<MsgMatch, Error> {
