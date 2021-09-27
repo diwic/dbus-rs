@@ -20,7 +20,7 @@ use crate::arg::{AppendAll, ReadAll, IterAppend};
 use crate::message::{MatchRule, MessageType};
 
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst};
 use std::{task, pin, mem};
 use std::cell::RefCell;
 use std::time::Duration;
@@ -75,7 +75,7 @@ pub struct LocalConnection {
     replies: RefCell<Replies<LocalRepliesCb>>,
     timeout_maker: Option<TimeoutMakerCb>,
     waker: Option<WakerCb>,
-    all_signal_matches: bool,
+    all_signal_matches: AtomicBool,
 }
 
 /// A connection to D-Bus, async version, which is Send but not Sync.
@@ -85,7 +85,7 @@ pub struct Connection {
     replies: RefCell<Replies<RepliesCb>>,
     timeout_maker: Option<TimeoutMakerCb>,
     waker: Option<WakerCb>,
-    all_signal_matches: bool,
+    all_signal_matches: AtomicBool,
 }
 
 /// A connection to D-Bus, Send + Sync + async version
@@ -95,7 +95,7 @@ pub struct SyncConnection {
     replies: Mutex<Replies<SyncRepliesCb>>,
     timeout_maker: Option<TimeoutMakerCb>,
     waker: Option<WakerCb>,
-    all_signal_matches: bool,
+    all_signal_matches: AtomicBool,
 }
 
 use stdintf::org_freedesktop_dbus::DBus;
@@ -116,7 +116,7 @@ impl From<Channel> for $c {
             filters: Default::default(),
             timeout_maker: None,
             waker: None,
-            all_signal_matches: false,
+            all_signal_matches: AtomicBool::new(false),
         }
     }
 }
@@ -192,7 +192,7 @@ impl Process for $c {
                 return;
             }
         }
-        if self.all_signal_matches && msg.msg_type() == MessageType::Signal {
+        if self.all_signal_matches.load(SeqCst) && msg.msg_type() == MessageType::Signal {
             // If it's a signal and the mode is enabled, send a copy of the message to all
             // matching filters.
             for mut ff in self.filters_mut().remove_all_matching(&msg) {
@@ -306,8 +306,8 @@ impl $c {
     ///  * Removing other matches from inside a match callback is not supported.
     ///
     /// This is false by default, for a newly-created connection.
-    pub fn set_signal_match_mode(&mut self, match_all: bool) {
-        self.all_signal_matches = match_all;
+    pub fn set_signal_match_mode(&self, match_all: bool) {
+        self.all_signal_matches.store(match_all, SeqCst);
     }
 }
 

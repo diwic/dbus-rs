@@ -7,6 +7,7 @@ use crate::{channel, Error, Message};
 use crate::message::{MatchRule, SignalArgs, MessageType};
 use crate::channel::{Channel, BusType, Token};
 use std::{cell::RefCell, time::Duration, sync::Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use crate::filters::Filters;
 
 #[allow(missing_docs)]
@@ -111,21 +112,21 @@ pub mod stdintf {
 pub struct LocalConnection {
     channel: Channel,
     filters: RefCell<Filters<LocalFilterCb>>,
-    all_signal_matches: bool,
+    all_signal_matches: AtomicBool,
 }
 
 /// A connection to D-Bus, non-async version where callbacks are Send but not Sync.
 pub struct Connection {
     channel: Channel,
     filters: RefCell<Filters<FilterCb>>,
-    all_signal_matches: bool,
+    all_signal_matches: AtomicBool,
 }
 
 /// A connection to D-Bus, Send + Sync + non-async version
 pub struct SyncConnection {
     channel: Channel,
     filters: Mutex<Filters<SyncFilterCb>>,
-    all_signal_matches: bool,
+    all_signal_matches: AtomicBool,
 }
 
 use crate::blocking::stdintf::org_freedesktop_dbus;
@@ -222,8 +223,8 @@ impl $c {
     ///  * Removing other matches from inside a match callback is not supported.
     ///
     /// This is false by default, for a newly-created connection.
-    pub fn set_signal_match_mode(&mut self, match_all: bool) {
-        self.all_signal_matches = match_all;
+    pub fn set_signal_match_mode(&self, match_all: bool) {
+        self.all_signal_matches.store(match_all, Ordering::SeqCst);
     }
 
     /// Tries to handle an incoming message if there is one. If there isn't one,
@@ -233,7 +234,7 @@ impl $c {
     /// it recursively and might lead to panics or deadlocks.
     pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
         if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
-            if self.all_signal_matches && msg.msg_type() == MessageType::Signal {
+            if self.all_signal_matches.load(Ordering::SeqCst) && msg.msg_type() == MessageType::Signal {
                 // If it's a signal and the mode is enabled, send a copy of the message to all
                 // matching filters.
                 for mut ff in self.filters_mut().remove_all_matching(&msg) {
@@ -279,7 +280,7 @@ impl From<Channel> for $c {
     fn from(channel: Channel) -> $c { $c {
         channel,
         filters: Default::default(),
-        all_signal_matches: false,
+        all_signal_matches: AtomicBool::new(false),
     } }
 }
 
