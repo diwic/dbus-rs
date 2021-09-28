@@ -224,7 +224,7 @@ impl $c {
     ///
     /// This is false by default, for a newly-created connection.
     pub fn set_signal_match_mode(&self, match_all: bool) {
-        self.all_signal_matches.store(match_all, Ordering::SeqCst);
+        self.all_signal_matches.store(match_all, Ordering::Release);
     }
 
     /// Tries to handle an incoming message if there is one. If there isn't one,
@@ -234,7 +234,7 @@ impl $c {
     /// it recursively and might lead to panics or deadlocks.
     pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
         if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
-            if self.all_signal_matches.load(Ordering::SeqCst) && msg.msg_type() == MessageType::Signal {
+            if self.all_signal_matches.load(Ordering::Acquire) && msg.msg_type() == MessageType::Signal {
                 // If it's a signal and the mode is enabled, send a copy of the message to all
                 // matching filters.
                 for mut ff in self.filters_mut().remove_all_matching(&msg) {

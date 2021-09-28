@@ -20,7 +20,7 @@ use crate::arg::{AppendAll, ReadAll, IterAppend};
 use crate::message::{MatchRule, MessageType};
 
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::{task, pin, mem};
 use std::cell::RefCell;
 use std::time::Duration;
@@ -192,7 +192,7 @@ impl Process for $c {
                 return;
             }
         }
-        if self.all_signal_matches.load(SeqCst) && msg.msg_type() == MessageType::Signal {
+        if self.all_signal_matches.load(Ordering::Acquire) && msg.msg_type() == MessageType::Signal {
             // If it's a signal and the mode is enabled, send a copy of the message to all
             // matching filters.
             for mut ff in self.filters_mut().remove_all_matching(&msg) {
@@ -274,7 +274,7 @@ impl $c {
         let token = self.start_receive(match_rule, Box::new(move |msg, _| {
             mi_weak.upgrade().map(|mi| mi.incoming(msg)).unwrap_or(false)
         }));
-        mi.token.store(token.0, SeqCst);
+        mi.token.store(token.0, Ordering::SeqCst);
         Ok(MsgMatch(mi))
     }
 
@@ -307,7 +307,7 @@ impl $c {
     ///
     /// This is false by default, for a newly-created connection.
     pub fn set_signal_match_mode(&self, match_all: bool) {
-        self.all_signal_matches.store(match_all, SeqCst);
+        self.all_signal_matches.store(match_all, Ordering::Release);
     }
 }
 
@@ -463,7 +463,7 @@ impl MsgMatch {
     }
 
     /// The token retreived can be used in a call to remove_match to stop matching on the data.
-    pub fn token(&self) -> Token { Token(self.0.token.load(SeqCst)) }
+    pub fn token(&self) -> Token { Token(self.0.token.load(Ordering::SeqCst)) }
 }
 
 /// A struct that wraps a connection, destination and path.
