@@ -195,7 +195,11 @@ impl Process for $c {
         if self.all_signal_matches.load(Ordering::Acquire) && msg.msg_type() == MessageType::Signal {
             // If it's a signal and the mode is enabled, send a copy of the message to all
             // matching filters.
-            for mut ff in self.filters_mut().remove_all_matching(&msg) {
+            let matching_filters = self.filters_mut().remove_all_matching(&msg);
+            // `matching_filters` needs to be a separate variable and not inlined here, because if
+            // it's inline then the `MutexGuard` will live too long and we'll get a deadlock on the
+            // next call to `filters_mut()` below.
+            for mut ff in matching_filters {
                 if let Ok(copy) = msg.duplicate() {
                     if ff.2(copy, self) {
                         self.filters_mut().insert(ff);
