@@ -116,4 +116,55 @@ impl<'a> MatchRule<'a> {
             _more_fields_may_come: (),
         }
     }
+
+    /// Enables eavesdropping for the generated message.
+    /// You probably want to use [BecomeMonitor](https://dbus.freedesktop.org/doc/dbus-specification.html#bus-messages-become-monitor) instead
+    pub fn with_eavesdrop(mut self) -> Self {
+        self.eavesdrop = true;
+        self
+    }
+
+    /// Sets the MatchRule to match on the message sender
+    pub fn with_sender(mut self, sender: impl Into<BusName<'a>>) -> Self {
+        self.sender = Some(sender.into());
+        self
+    }
+
+    /// Sets the MatchRule to match on the message sender and be strict
+    pub fn with_strict_sender(mut self, sender: impl Into<BusName<'a>>) -> Self {
+        self.sender = Some(sender.into());
+        self.strict_sender = true;
+        self
+    }
+
+    /// Sets the MatchRule to match on the message path and treat it as a namespace
+    pub fn with_namespaced_path(mut self, path: impl Into<Path<'a>>) -> Self {
+        self.path = Some(path.into());
+        self.path_is_namespace = true;
+        self
+    }
+
+    /// Sets the MatchRule to match on the message path
+    pub fn with_path(mut self, path: impl Into<Path<'a>>) -> Self {
+        self.path = Some(path.into());
+        self
+    }
+
+    /// Sets the MatchRule to match on the message interface
+    pub fn with_interface(mut self, intf: impl Into<Interface<'a>>) -> Self {
+        self.interface = Some(intf.into());
+        self
+    }
+
+    /// Sets the MatchRule to match on the message member
+    pub fn with_member(mut self, member: impl Into<Member<'a>>) -> Self {
+        self.member = Some(member.into());
+        self
+    }
+
+    /// Sets the MatchRule to match on the message type. This will usually be `"signal"`
+    pub fn with_type(mut self, ty: MessageType) -> Self {
+        self.msg_type = Some(ty);
+        self
+    }
 }
