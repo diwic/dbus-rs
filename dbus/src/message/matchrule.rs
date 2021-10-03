@@ -1,5 +1,6 @@
 use crate::{Message, MessageType};
 use crate::strings::{BusName, Path, Interface, Member};
+use crate::message::parser;
 
 #[derive(Clone, Debug, Default)]
 /// A "match rule", that can match Messages on its headers.
@@ -60,7 +61,7 @@ impl<'a> MatchRule<'a> {
             if let Some(ref p) = msg.path() {
                 if x != p {
                     if self.path_is_namespace {
-                        p.starts_with(&**x) && &p[x.len()..x.len()+1] == "/"
+                        p.starts_with(&**x) && &p[x.len()..x.len() + 1] == "/"
                     } else { false }
                 } else { true }
             } else { false }
@@ -69,17 +70,17 @@ impl<'a> MatchRule<'a> {
 
     /// Returns whether or not the message matches the rule.
     pub fn matches(&self, msg: &Message) -> bool {
-        if let Some(x) = self.msg_type { if x != msg.msg_type() { return false; }};
+        if let Some(x) = self.msg_type { if x != msg.msg_type() { return false; } };
 
         if let Some(ref x) = self.sender {
             if let Some(s) = msg.sender() {
                 let check = self.strict_sender || (s.starts_with(":") == x.starts_with(":"));
-                if check && s != *x { return false }
-            } else if self.strict_sender { return false }
+                if check && s != *x { return false; }
+            } else if self.strict_sender { return false; }
         };
-        if !self.path_match(msg) { return false }
-        if self.interface.is_some() && msg.interface() != self.interface { return false };
-        if self.member.is_some() && msg.member() != self.member { return false };
+        if !self.path_match(msg) { return false; }
+        if self.interface.is_some() && msg.interface() != self.interface { return false; };
+        if self.member.is_some() && msg.member() != self.member { return false; };
         true
     }
 
@@ -166,5 +167,11 @@ impl<'a> MatchRule<'a> {
     pub fn with_type(mut self, ty: MessageType) -> Self {
         self.msg_type = Some(ty);
         self
+    }
+
+    /// Tries parsing a MatchRule from a String. Please note however that not all features supported
+    /// by DBus are supported by dbus-rs (yet). args and destinations are not supported yet.
+    pub fn parse(text: &'a str) -> Result<Self, parser::Error> {
+        parser::Parser::new(text)?.parse()
     }
 }

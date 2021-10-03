@@ -20,12 +20,29 @@ pub enum MessageType {
     Signal = 4,
 }
 
+impl<'a> TryFrom<&'a str> for MessageType {
+    type Error = ();
+
+    fn try_from(value: &'a str) -> Result<Self, <crate::message::MessageType as TryFrom<&'a str>>::Error> {
+        match value {
+            "error" => Ok(MessageType::Error),
+            "method_call" => Ok(MessageType::MethodCall),
+            "method_return" => Ok(MessageType::MethodReturn),
+            "signal" => Ok(MessageType::Signal),
+            _ => Err(())
+        }
+    }
+}
+
 mod signalargs;
 pub use self::signalargs::SignalArgs;
 
 mod matchrule;
 pub use self::matchrule::MatchRule;
+use std::convert::TryFrom;
 
+mod parser;
+pub use self::parser::Error as MatchRuleParserError;
 
 /// A D-Bus message. A message contains headers - usually destination address, path, interface and member,
 /// and a list of arguments.
