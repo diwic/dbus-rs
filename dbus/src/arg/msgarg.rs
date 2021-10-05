@@ -315,6 +315,18 @@ argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H 
 argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str,);
 argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str,);
 argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str, m M str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str, m M str, n N str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str, m M str, n N str, o O str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str, m M str, n N str, o O str, p P str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str, m M str, n N str, o O str, p P str, r R str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str, m M str, n N str, o O str, p P str, r R str, s S str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str, m M str, n N str, o O str, p P str, r R str, s S str, t T str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str, m M str, n N str, o O str, p P str, r R str, s S str, t T str, u U str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str, m M str, n N str, o O str, p P str, r R str, s S str, t T str, u U str, v V str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str, m M str, n N str, o O str, p P str, r R str, s S str, t T str, u U str, v V str, w W str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str, m M str, n N str, o O str, p P str, r R str, s S str, t T str, u U str, v V str, w W str, x X str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str, m M str, n N str, o O str, p P str, r R str, s S str, t T str, u U str, v V str, w W str, x X str, y Y str,);
+argall_impl!(a A str, b B str, c C str, d D str, e E str, f F str, g G str, h H str, i I str, j J str, k K str, l L str, m M str, n N str, o O str, p P str, r R str, s S str, t T str, u U str, v V str, w W str, x X str, y Y str, z Z str,);
 
 
 #[cfg(test)]
