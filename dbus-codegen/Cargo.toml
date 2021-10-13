@@ -1,6 +1,6 @@
 [package]
 name = "dbus-codegen"
-version = "0.9.1"
+version = "0.10.0"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 description = "Binary crate to generate Rust code from XML introspection data"
 license = "Apache-2.0/MIT"
@@ -24,7 +24,7 @@ default = ["dbus"]
 xml-rs = "0.8.3"
 dbus = { path = "../dbus", version = "0.9", optional = true }
 dbus-tree = { path = "../dbus-tree", version = "0.9", optional = true }
-dbus-crossroads = { path = "../dbus-crossroads", optional = true }
+dbus-crossroads = { path = "../dbus-crossroads", version = "0.5", optional = true }
 clap = "2.20"
 
 [badges]
