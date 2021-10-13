@@ -438,7 +438,9 @@ impl<M: MethodType<D>, D: DataType> Tree<M, D> {
             // println!("DEBUG before: {:?}", r.iter().map(|v| &**v.name).collect::<Vec<_>>());
             let mut prev: Option<&ObjectPath<M, D>> = None;
             r.retain(|v| {
-                let a = prev.map(|prev| !v.name.starts_with(&**prev.name)).unwrap_or(true);
+                let a = prev.map(|prev|
+                     !(v.name.starts_with(&**prev.name) && v.name.as_bytes().get(prev.name.len()) == Some(&b'/'))
+                 ).unwrap_or(true);
                 if a { prev = Some(v); }
                 a
             });
@@ -586,7 +588,7 @@ fn test_introspection() {
             .add_s(f.signal("Echoed", ()).arg(("data", "s")).deprecated())
     );
 
-    let actual_result = t.introspect(&f.tree(()).add(f.object_path("/echo/subpath", ())));
+    let actual_result = t.introspect(&f.tree(()).add(f.object_path("/echo/subpath2", ())).add(f.object_path("/echo/subpath", ())));
     println!("\n=== Introspection XML start ===\n{}\n=== Introspection XML end ===", actual_result);
 
     let expected_result = r##"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
@@ -629,6 +631,7 @@ fn test_introspection() {
     </signal>
   </interface>
   <node name="subpath"/>
+  <node name="subpath2"/>
 </node>"##;
 
     assert_eq!(expected_result, actual_result);
