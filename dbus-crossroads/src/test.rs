@@ -3,6 +3,7 @@ use dbus::Message;
 use std::cell::RefCell;
 use dbus::arg::{Variant, RefArg, PropMap};
 use std::collections::HashMap;
+use std::time::Duration;
 
 #[test]
 fn test_send() {
@@ -243,4 +244,68 @@ fn object_manager_root() {
         "org.freedesktop.DBus.ObjectManager", "GetManagedObjects").unwrap();
     dispatch_helper(&mut shared_cr.lock().unwrap(), msg);
     service_thread.join().unwrap();
+}
+
+#[test]
+fn properties_get_all() {
+    let bus = dbus::blocking::Connection::new_session().unwrap();
+    bus.request_name("com.example.dbusrs.properties", false, false, false).unwrap();
+
+    let mut cr = Crossroads::new();
+    let iface = cr.register("com.example.dbusrs.properties", |b| {
+        b.property("One").get(|_, _| Ok(1));
+        b.property("Two").get(|_, _| Ok(2));
+    });
+    cr.insert("/", &[iface], ());
+
+    let msg = Message::call_with_args(
+        "com.example.dbusrs.properties",
+        "/",
+        "org.freedesktop.DBus.Properties",
+        "GetAll",
+        ("com.example.dbusrs.properties",),
+    );
+    let r = dispatch_helper(&mut cr, msg);
+    let response: HashMap<String, Variant<Box<dyn RefArg>>> = r.read1().unwrap();
+    assert_eq!(response.get("One").unwrap().as_i64(), Some(1));
+    assert_eq!(response.get("Two").unwrap().as_i64(), Some(2));
+    assert_eq!(response.len(), 2);
+}
+
+#[tokio::test]
+async fn properties_get_all_async() {
+    use dbus::channel::MatchingReceiver;
+
+    let (resource, bus) = dbus_tokio::connection::new_session_sync().unwrap();
+    tokio::spawn(async {resource.await;});
+    bus.request_name("com.example.dbusrs.properties", false, false, false).await.unwrap();
+
+    let mut cr = Crossroads::new();
+    let spawner = Box::new(|fut| { tokio::spawn(fut); });
+    cr.set_async_support(Some((bus.clone(), spawner)));
+
+    let iface = cr.register("com.example.dbusrs.properties", |b| {
+        b.property("Sync").get(|_, _| Ok(1));
+        b.property("Async").get_async(|mut ctx, _| async move { 
+            ctx.reply(Ok(2))
+        });
+    });
+    cr.insert("/", &[iface], ());
+    bus.start_receive(
+        dbus::message::MatchRule::new_method_call(), 
+        Box::new(move |msg, conn| {
+            cr.handle_message(msg, conn).unwrap();
+            true
+        })
+    );
+
+    let proxy = dbus::nonblock::Proxy::new("com.example.dbusrs.properties", "/", Duration::from_secs(3600), bus);
+    let (response,): (HashMap<String, Variant<Box<dyn RefArg>>>,) = proxy.method_call(
+        "org.freedesktop.DBus.Properties",
+        "GetAll",
+        ("com.example.dbusrs.properties",)
+    ).await.unwrap();
+    assert_eq!(response.get("Sync").unwrap().as_i64(), Some(1));
+    assert_eq!(response.get("Async").unwrap().as_i64(), Some(2));
+    assert_eq!(response.len(), 2);
 }
