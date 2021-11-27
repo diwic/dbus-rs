@@ -14,5 +14,9 @@ readme = "README.md"
 [dependencies]
 dbus = { path = "../dbus", version = "0.9.3" }
 
+[dev-dependencies]
+tokio = { version = "1.14.0", features = ["rt", "test-util", "macros", "sync"] }
+dbus-tokio = { path = "../dbus-tokio" }
+
 [badges]
 maintenance = { status = "actively-developed" }

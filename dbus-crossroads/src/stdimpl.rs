@@ -112,6 +112,13 @@ impl PropContext {
     }
 
     pub (crate) fn set_send_on_drop(&mut self, value: Arc<dyn Sender + Send + Sync>) {
+        if let Some(get_all) = &self.get_all {
+            let mut pactx = get_all.lock().unwrap();
+            if let Some(ref mut propctx) = pactx.propctx {
+                propctx.context.as_mut().map(|ctx| ctx.set_send_on_drop(value));
+                return;
+            }
+        }
         self.context.as_mut().map(|ctx| ctx.set_send_on_drop(value));
     }
 
