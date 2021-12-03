@@ -466,7 +466,7 @@ mod test {
         let m = Message::new_method_call(c.unique_name().unwrap(), "/hello", "com.example.hello", "Hello").unwrap();
         macro_rules! append_array {
             ($m:expr, $t:ty) => {
-                $m.append1(Variant(&Array::<&$t, _>::new(&vec![Default::default()])));
+                $m.append1(Variant(&Array::<&$t, _>::new(&vec![Default::default()])))
             };
         }
         let m = append_array!(m, bool);
