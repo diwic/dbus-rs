@@ -65,22 +65,11 @@ pub trait RefArg: fmt::Debug + Send + Sync {
     fn append(&self, _: &mut IterAppend);
     /// Transforms this argument to Any (which can be downcasted to read the current value).
     ///
-    /// If the type is an array, and the element type is byte, numeric, boolean, or string, then the
-    /// representation is guaranteed to be a Vec<T>. Arrays of structs, dicts, and so on are not
-    /// safe to use with this.
-    ///
-    /// Note: The internal representation of complex types (Dict, Struct) is unstable
-    /// and as_any should not be relied upon for these types. Use as_iter instead.
+    /// See the argument guide's reference section for which types you can cast to.
     fn as_any(&self) -> &dyn any::Any where Self: 'static;
     /// Transforms this argument to Any (which can be downcasted to read the current value).
-    ///
-    /// If the type is an array, and the element type is byte, numeric, boolean, or string, then the
-    /// representation is guaranteed to be a Vec<T>. Arrays of structs, dicts, and so on are not
-    /// safe to use with this.
-    ///
-    /// Note: The internal representation of complex types (Dict, Struct) is unstable
-    /// and as_any should not be relied upon for these types. Use as_iter instead.
-    ///
+	///
+    /// See the argument guide's reference section for which types you can cast to.
     /// # Panic
     /// Will panic if the interior cannot be made mutable, e g, if encapsulated
     /// inside a Rc with a reference count > 1.

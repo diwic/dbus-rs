@@ -118,10 +118,14 @@ let r = c.send_with_reply_and_block(m, 2000)?;
 let z: Variant<Box<dyn RefArg>> = r.read1()?;
 ```
 
-Ok, so we retrieved our `Box<dyn RefArg>`. We now need to use the `RefArg` methods to probe it, to see what's inside. Easiest is to use `as_i64` or `as_str` if you want to test for integer or string types. Use `as_iter` if the variant contains a complex type you need to iterate over.
-For floating point values, use `arg::cast` (this requires that the RefArg is `static` though, due to Rust type system limitations).
-Match over `arg_type` if you need to know the exact type.
+Ok, so we retrieved our `Box<dyn RefArg>`. We now need to use the `RefArg` methods to probe it, to see what's inside.
+You can use `as_i64`, `as_u64`, `as_f64` or `as_str` if you want to test for number or string types.
+Second easiest is to use `arg::cast` to downcast to the specific type inside (see reference section below
+for what type you need to cast to).
 
+This works for most types, but in some advanced cases, this is not possible, either because the `RefArg` is not `'static`
+(work around this with the `box_clone` method if necessary), or because the internal representation is not specified.
+In this case, try to use `as_static_inner` or `as_iter` to iterate through the interior of the complex type.
 
 ```rust
 let z: Variant<Box<dyn RefArg + 'static>> = r.read1()?;
@@ -166,7 +170,6 @@ factory.method( /* ... */ )
 
 The types are just for generating a correct signature, they are never instantiated. Many different types can generate the same signature - e g, `Array<u8, _>`, `Vec<u8>` and `&[u8]` will all generate the same signature. `Variant` will generate the same type signature regardless of what's inside, so just write `Variant<()>` for simplicity.
 
-
 Iter / IterAppend
 -----------------
 
@@ -206,7 +209,9 @@ Reference
 =========
 
 This is a translation table between D-Bus types and Rust types. Both the RefArg type
-and the other types can be used in most cases, e g `append`, `get` and/or `read`.
+and the other types can be used in most cases, e g `append`, `get` and/or `read`, as
+well as function arguments for `dbus-crossroads`. In addition, `&T`, `Box<T>`, `Rc<T>` and
+`Arc<T>` can (in general) be used instead of `T`, where `T` is a Rust type.
 
 If you want to to use `cast` or `prop_cast` on a `&RefArg` however, you need to use
 the RefArg type.
@@ -229,7 +234,7 @@ the RefArg type.
 | VARIANT | `v` | `Variant<Box<RefArg>>` | `Variant<T>`, `Variant<Iter>` |
 | STRUCT | `(`...`)` | `VecDeque<Box<RefArg>>` | tuples: `(T,)`, `(T1,T2)` etc |
 | DICT<STRING, VARIANT> | `a{sv}` | `PropMap` | |
-| DICT<_, _> | `a{`...`}` | N/A | `HashMap<K, V>`, `Dict<K, V>` |
+| DICT<_, _> | `a{`...`}` | N/A | `HashMap<K, V>`, `Dict<K, V, _>` |
 | ARRAY<ARRAY<_>> | `aa`... | N/A | `Vec<Vec<T>>`, `&[&[T]]`, `Array<Array<T>>` |
-| ARRAY<STRUCT<_>> | `a(`...`)` | N/A | `Vec<VecDeque<Box<RefArg>>>`, `Vec<(`...`)` |
-| ARRAY<_> (all else) | `a`... | `Vec<T>` | `&[T]` `Array<T>` |
+| ARRAY<STRUCT<_>> | `a(`...`)` | N/A | `Vec<VecDeque<Box<RefArg>>>`, `Vec<`tuple`>` |
+| ARRAY<_> (all else) | `a`... | `Vec<T>` | `&[T]` `Array<T, _>` |
