@@ -253,12 +253,11 @@ impl<'a> Iter<'a> {
 
     /// Returns the current argument as a trait object.
     ///
-    /// Note: For the more complex arguments (arrays / dicts / structs, and especially
-    /// combinations thereof), their internal representations are still a bit in flux.
-    /// Instead, use as_iter() to read the values of those.
-    ///
-    /// The rest are unlikely to change - Variants are `Variant<Box<dyn RefArg>>`, strings are `String`,
-    /// paths are `Path<'static>`, signatures are `Signature<'static>`, Int32 are `i32s` and so on.
+    /// Variants are `Variant<Box<dyn RefArg>>`, strings are `String`, structs are `VecDeque<Box<RefArg>>`,
+    /// paths are `Path<'static>`, signatures are `Signature<'static>`, Int32 are `i32` and so on.
+    /// Arrays are `Vec<_>`, with the exception of arrays of arrays, and arrays of structs.
+    /// Dicts do not have a specified representation yet,
+    /// you need to use `as_iter` or `as_static_inner` instead.
     pub fn get_refarg(&mut self) -> Option<Box<dyn RefArg + 'static>> {
         Some(match self.arg_type() {
             ArgType::Array => array_impl::get_array_refarg(self),
