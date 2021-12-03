@@ -136,10 +136,14 @@ impl<'a> Get<'a> for Box<dyn RefArg> {
 }
 
 /// Cast a RefArg as a specific type (shortcut for any + downcast)
+///
+/// See the argument guide's reference section for which types you can cast to.
 #[inline]
 pub fn cast<'a, T: 'static>(a: &'a (dyn RefArg + 'static)) -> Option<&'a T> { a.as_any().downcast_ref() }
 
 /// Cast a RefArg as a specific type (shortcut for any_mut + downcast_mut)
+///
+/// See the argument guide's reference section for which types you can cast to.
 ///
 /// # Panic
 /// Will panic if the interior cannot be made mutable, e g, if encapsulated
@@ -154,6 +158,7 @@ pub type PropMap = HashMap<String, Variant<Box<dyn RefArg + 'static>>>;
 /// Descend into a hashmap returned by e g "Properties::get_all" to retrieve the value of a property.
 ///
 /// Shortcut for get + cast. Returns None both if the property does not exist, or if it was of a different type.
+/// See the argument guide's reference section for which types you can cast to.
 pub fn prop_cast<'a, T: 'static>(map: &'a PropMap, key: &str) -> Option<&'a T> {
     map.get(key).and_then(|v| cast(&v.0))
 }

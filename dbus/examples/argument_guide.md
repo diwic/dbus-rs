@@ -4,6 +4,7 @@ Preamble
 The different ways you can append and get message arguments can be a bit bewildering. I've iterated a few times on the design and didn't want to lose backwards compatibility.
 
 This guide is to help you on your way. In addition, many of the examples in the examples directory append and read arguments.
+There is also a reference at the end of this document.
 
 Code generation
 ---------------
@@ -200,3 +201,35 @@ MessageItem
 -----------
 
 MessageItem was the first design - an enum representing a D-Bus argument. It still works, but I doubt you'll ever need to use it. Newer methods provide better type safety, speed, and ergonomics.
+
+Reference
+=========
+
+This is a translation table between D-Bus types and Rust types. Both the RefArg type
+and the other types can be used in most cases, e g `append`, `get` and/or `read`.
+
+If you want to to use `cast` or `prop_cast` on a `&RefArg` however, you need to use
+the RefArg type.
+
+| D-Bus type | Signature | RefArg type | Other types |
+| ---------- | --------- | ----------- | ----------- |
+| BYTE | `y` | `u8` | |
+| BOOLEAN | `b` | `bool` | |
+| INT16	| `n` | `i16` | |
+| UINT16 | `q` | `u16` | |
+| INT32 | `i` | `i32` | |
+| UINT32 | `u` | `u32` | |
+| INT64 | `x` | `i64` | |
+| UINT64 | `t` | `u64` | |
+| DOUBLE | `d` | `f64` | |
+| STRING | `s` | `String` | `&str`, `&CStr` |
+| UNIX_FD | `h` | `File` | `OwnedFd` |
+| OBJECT_PATH | `o` | `Path<'static>` | `Path<'a>` |
+| SIGNATURE	| `g` | `Signature<'static>` | `Signature<'a>` |
+| VARIANT | `v` | `Variant<Box<RefArg>>` | `Variant<T>`, `Variant<Iter>` |
+| STRUCT | `(`...`)` | `VecDeque<Box<RefArg>>` | tuples: `(T,)`, `(T1,T2)` etc |
+| DICT<STRING, VARIANT> | `a{sv}` | `PropMap` | |
+| DICT<_, _> | `a{`...`}` | N/A | `HashMap<K, V>`, `Dict<K, V>` |
+| ARRAY<ARRAY<_>> | `aa`... | N/A | `Vec<Vec<T>>`, `&[&[T]]`, `Array<Array<T>>` |
+| ARRAY<STRUCT<_>> | `a(`...`)` | N/A | `Vec<VecDeque<Box<RefArg>>>`, `Vec<(`...`)` |
+| ARRAY<_> (all else) | `a`... | `Vec<T>` | `&[T]` `Array<T>` |
