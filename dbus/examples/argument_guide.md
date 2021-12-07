@@ -209,7 +209,7 @@ fn notify(
 }
 ```
 
-TODO: Example
+TODO: tuple example 
 
 Declare method arguments
 ------------------------
