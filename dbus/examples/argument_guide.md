@@ -163,15 +163,10 @@ fn notify(
     hints: arg::PropMap,
     expire_timeout: i32
 ) -> Result<u32, dbus::MethodErr> {
-    // PropMap is just an alias for a HashMap:
-    // pub type PropMap = HashMap<String, Variant<Box<dyn RefArg + 'static>>>;
-
     use dbus::arg::prop_cast;
 
     // Retrieving a property from a PropMap of type byte (`u8`).
     let urgency: Option<&u8> = prop_cast(&hints, "urgency");
-    //let urgency: Option<u8> = prop_cast(&hints, "urgency").copied();
-    //let urgency = prop_cast::<u8>(&hints, "urgency");    // Option<&u8>
     
     // Retrieving a property from a PropMap of type struct (`Image`, in this case).
     struct Image {
