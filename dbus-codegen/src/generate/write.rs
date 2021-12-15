@@ -265,7 +265,7 @@ pub (super) fn intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(
         *s += "\n";
         write_prop_decl(s, &p, opts, false)?;
         *s += " {\n";
-        *s += &format!("        <Self as {}>::get(&self, \"{}\", \"{}\")\n", propintf, i.origname, p.name);
+        *s += &format!("        <Self as {}>::get(self, \"{}\", \"{}\")\n", propintf, i.origname, p.name);
         *s += "    }\n";
     }
 
@@ -273,7 +273,7 @@ pub (super) fn intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(
         *s += "\n";
         write_prop_decl(s, &p, opts, true)?;
         *s += " {\n";
-        *s += &format!("        <Self as {}>::set(&self, \"{}\", \"{}\", value)\n", propintf, i.origname, p.name);
+        *s += &format!("        <Self as {}>::set(self, \"{}\", \"{}\", value)\n", propintf, i.origname, p.name);
         *s += "    }\n";
     }
 
