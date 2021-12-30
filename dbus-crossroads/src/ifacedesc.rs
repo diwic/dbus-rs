@@ -610,11 +610,11 @@ impl<T: Send + 'static> IfaceBuilder<T> {
         }
     }
 
-    pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
+    pub fn annotate<N: Into<String>, V: Into<String>>(&mut self, name: N, value: V) -> &mut Self {
         self.0.annotations.insert(name, value);
         self
     }
-    pub fn deprecated(self) -> Self { self.annotate(DEPRECATED, "true") }
+    pub fn deprecated(&mut self) -> &mut Self { self.annotate(DEPRECATED, "true") }
 
     pub (crate) fn build<F>(name: Option<strings::Interface<'static>>, f: F) -> IfaceDesc
     where F: FnOnce(&mut IfaceBuilder<T>) {
