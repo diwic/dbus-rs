@@ -10,7 +10,7 @@ to use than `dbus::tree`. Go ahead and use it, and report any issues you find!
 
 To get started, you can jump into the commented examples,
 one for [sync](https://github.com/diwic/dbus-rs/blob/master/dbus-crossroads/examples/server_cr.rs)
-one for [async (dbus-tokio)](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio02_server_cr.rs),
+one for [async (dbus-tokio)](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio_server_cr.rs),
 and one [slightly more advanced](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio_adv_server_cr.rs),
 or familiarize yourself using [the API reference](https://docs.rs/dbus-crossroads).
 

@@ -111,7 +111,7 @@ cr.serve(&c)?;
 Examples of server code using `dbus-crossroads` in the examples directory:
 
  * [server_cr.rs](https://github.com/diwic/dbus-rs/blob/master/dbus-crossroads/examples/server_cr.rs)
- * [tokio02_server_cr.rs](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio02_server_cr.rs)
+ * [tokio_server_cr.rs](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio_server_cr.rs)
  * [tokio_adv_server_cr.rs](https://github.com/diwic/dbus-rs/blob/master/dbus-tokio/examples/tokio_adv_server_cr.rs)
 
 **dbus-tree**:
