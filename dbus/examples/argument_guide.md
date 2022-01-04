@@ -167,7 +167,7 @@ fn notify(
 
     // Retrieving a property from a PropMap of type byte (`u8`).
     let urgency: Option<&u8> = prop_cast(&hints, "urgency");
-    
+
     // Retrieving a property from a PropMap of type struct (`Image`, in this case).
     struct Image {
         width: i32,
@@ -178,7 +178,7 @@ fn notify(
         channels: i32,
         data: Vec<u8>,
     }
-    
+
     // Structs are represented internally as `VecDeque<Box<RefArg>>`.
     let image_data: Option<&VecDeque<Box<dyn RefArg>>> = prop_cast(&hints, "image-data");
     let image = if let Some(img) = image_data {
@@ -197,14 +197,14 @@ fn notify(
     } else {
         None
     }
-    
+
     // Do something with image / urgency.
 
     Ok(0)
 }
 ```
 
-TODO: tuple example 
+TODO: tuple example
 
 Declare method arguments
 ------------------------
@@ -291,7 +291,7 @@ the RefArg type.
 | VARIANT | `v` | `Variant<Box<RefArg>>` | `Variant<T>`, `Variant<Iter>` |
 | STRUCT | `(`...`)` | `VecDeque<Box<RefArg>>` | tuples: `(T,)`, `(T1,T2)` etc |
 | DICT<STRING, VARIANT> | `a{sv}` | `PropMap` | |
-| DICT<_, _> | `a{`...`}` | N/A | `HashMap<K, V>`, `Dict<K, V, _>` |
+| DICT<_, _> | `a{`...`}` | N/A | `HashMap<K, V>`, `Dict<K, V, _>`, `BTreeMap<K, V>` |
 | ARRAY<ARRAY<_>> | `aa`... | N/A | `Vec<Vec<T>>`, `&[&[T]]`, `Array<Array<T>>` |
 | ARRAY<STRUCT<_>> | `a(`...`)` | N/A | `Vec<VecDeque<Box<RefArg>>>`, `Vec<`tuple`>` |
 | ARRAY<_> (all else) | `a`... | `Vec<T>` | `&[T]` `Array<T, _>` |
