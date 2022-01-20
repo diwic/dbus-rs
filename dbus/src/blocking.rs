@@ -232,6 +232,9 @@ impl $c {
     ///
     /// This method only takes "&self" instead of "&mut self", but it is a logic error to call
     /// it recursively and might lead to panics or deadlocks.
+    ///
+    /// For `SyncConnection`: It is also a logic error to call this method from one thread, while
+    /// calling this or other methods from other threads. This can lead to messages being lost.
     pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
         if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
             if self.all_signal_matches.load(Ordering::Acquire) && msg.msg_type() == MessageType::Signal {
