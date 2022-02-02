@@ -36,10 +36,22 @@ fn ffi_iter() -> ffi::DBusMessageIter {
 
 /// An RAII wrapper around Fd to ensure that file descriptor is closed
 /// when the scope ends.
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug)]
 pub struct OwnedFd {
     #[cfg(unix)]
-    fd: RawFd
+    fd: rustix::io::OwnedFd
+}
+
+impl PartialEq for OwnedFd {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_raw_fd() == other.as_raw_fd()
+    }
+}
+
+impl PartialOrd for OwnedFd {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        self.as_raw_fd().partial_cmp(&other.as_raw_fd())
+    }
 }
 
 #[cfg(unix)]
@@ -49,30 +61,21 @@ impl OwnedFd {
     /// This function is unsafe, because you could potentially send in an invalid file descriptor,
     /// or close it during the lifetime of this struct. This could potentially be unsound.
     pub unsafe fn new(fd: RawFd) -> OwnedFd {
-        OwnedFd { fd: fd }
+        OwnedFd { fd: rustix::io::OwnedFd::from_raw_fd(fd) }
     }
 
     /// Convert an OwnedFD back into a RawFd.
     pub fn into_fd(self) -> RawFd {
-        let s = self.fd;
-        ::std::mem::forget(self);
-        s
-    }
-}
-
-#[cfg(unix)]
-impl Drop for OwnedFd {
-    fn drop(&mut self) {
-        unsafe { libc::close(self.fd); }
+        self.fd.into_raw_fd()
     }
 }
 
 impl Clone for OwnedFd {
     #[cfg(unix)]
     fn clone(&self) -> OwnedFd {
-        let x = unsafe { libc::dup(self.fd) };
-        if x == -1 { panic!("Duplicating file descriptor failed") }
-        unsafe { OwnedFd::new(x) }
+        let x = rustix::io::dup(&self.fd)
+            .expect("Duplicating file descriptor failed");
+        OwnedFd { fd: x }
     }
 
     #[cfg(windows)]
@@ -84,7 +87,7 @@ impl Clone for OwnedFd {
 #[cfg(unix)]
 impl AsRawFd for OwnedFd {
     fn as_raw_fd(&self) -> RawFd {
-        self.fd
+        self.fd.as_raw_fd()
     }
 }
 

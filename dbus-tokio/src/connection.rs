@@ -43,6 +43,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::os::unix::io::RawFd;
 
+use rustix::fd::{AsRawFd, BorrowedFd};
+use rustix::net::RecvFlags;
+
 use tokio::io::unix::{AsyncFd, AsyncFdReadyGuard};
 
 #[derive(Debug)]
@@ -162,14 +165,12 @@ impl<C: AsRef<Channel> + Process> IOResource<C> {
 
                 // Because libdbus is level-triggered and tokio is edge-triggered, we need to do read again
                 // in case libdbus did not read all available data. Maybe there is a better way to see if there
-                // is more incoming data than calling libc::recv?
+                // is more incoming data than calling rustix::net::recv?
                 // https://github.com/diwic/dbus-rs/issues/254
-                let watch_fd = *watch_reg.get_ref();
-                let mut x = 0u8;
-                let r = unsafe {
-                    libc::recv(watch_fd, &mut x as *mut _ as *mut libc::c_void, 1, libc::MSG_DONTWAIT | libc::MSG_PEEK)
-                };
-                if r != 1 {
+                let watch_fd = unsafe { BorrowedFd::borrow_raw_fd(watch_reg.as_raw_fd()) };
+                let mut x = [0u8];
+                let r = rustix::net::recv(&watch_fd, &mut x, RecvFlags::DONTWAIT | RecvFlags::PEEK);
+                if r != Ok(1) {
                     if check_ready_now(&mut read_guard, || watch_reg.poll_read_ready(ctx))? {
                         continue
                     }

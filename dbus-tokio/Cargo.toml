@@ -14,7 +14,7 @@ readme = "README.md"
 
 [dependencies]
 dbus = { path = "../dbus", version = "0.9", features=["futures"] }
-libc = "0.2.69"
+rustix = "0.33.0"
 tokio = {version = "1.0", features=["time", "net"]}
 dbus-crossroads = { path = "../dbus-crossroads", optional = true, version = "0.5" }
 

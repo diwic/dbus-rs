@@ -12,6 +12,7 @@ use std::os::windows::io::{RawSocket, AsRawSocket};
 use libc::{POLLIN, POLLOUT, POLLERR, POLLHUP};
 #[cfg(windows)]
 use winapi::um::winsock2::{POLLIN, POLLOUT, POLLERR, POLLHUP};
+use rustix::fd::{BorrowedFd, AsFd};
 use std::os::raw::{c_void, c_uint};
 
 /// A file descriptor to watch for incoming events (for async I/O).
@@ -108,9 +109,19 @@ impl AsRawFd for Watch {
     fn as_raw_fd(&self) -> RawFd { self.fd }
 }
 
+#[cfg(unix)]
+impl AsFd for Watch {
+    fn as_fd(&self) -> BorrowedFd { unsafe { BorrowedFd::borrow_raw_fd(self.fd) } }
+}
+
 #[cfg(windows)]
 impl AsRawSocket for Watch {
     fn as_raw_socket(&self) -> RawSocket { self.fd }
+}
+
+#[cfg(windows)]
+impl AsSocket for Watch {
+    fn as_socket(&self) -> BorrowedSocket { unsafe { BorrowedSocket::borrow_raw_socket(self.fd) } }
 }
 
 /// Note - internal struct, not to be used outside API. Moving it outside its box will break things.

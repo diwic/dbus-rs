@@ -1,8 +1,7 @@
 use std::os::unix::net::UnixStream;
 
 pub fn getuid() -> u32 {
-    let x = unsafe { libc::getuid() };
-    x as u32
+    rustix::process::getuid().as_raw()
 }
 
 pub fn connect_blocking(addr: &libc::sockaddr_un) -> Result<UnixStream, Box<dyn std::error::Error>> {

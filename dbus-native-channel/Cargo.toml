@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 libc = "0.2.80"
+rustix = "0.33.0"

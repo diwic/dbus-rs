@@ -5,6 +5,8 @@
 use std::cmp;
 use std::time::Duration;
 
+use rustix::process::{Resource, Rlimit};
+
 fn make_realtime(prio: u32) -> Result<u32, Box<dyn std::error::Error>> {
     let c = dbus::blocking::Connection::new_system()?;
 
@@ -18,21 +20,17 @@ fn make_realtime(prio: u32) -> Result<u32, Box<dyn std::error::Error>> {
 
     // Enforce RLIMIT_RTPRIO, also a must before asking rtkit for rtprio
     let max_rttime: i64 = proxy.get("org.freedesktop.RealtimeKit1", "RTTimeUSecMax")?;
-    let new_limit = libc::rlimit64 { rlim_cur: max_rttime as u64, rlim_max: max_rttime as u64 };
-    let mut old_limit = new_limit;
-    if unsafe { libc::getrlimit64(libc::RLIMIT_RTTIME, &mut old_limit) } < 0 {
-        return Err(Box::from("getrlimit failed"));
-    }
-    if unsafe { libc::setrlimit64(libc::RLIMIT_RTTIME, &new_limit) } < 0 {
-        return Err(Box::from("setrlimit failed"));
-    }
+    let old_limit = rustix::process::getrlimit(Resource::Rttime);
+
+    let new_limit = Rlimit { current: Some(max_rttime as u64), maximum: Some(max_rttime as u64) };
+    rustix::process::setrlimit(Resource::Rttime, new_limit).map_err(|err| format!("setrlimit failed: {:?}", err))?;
 
     // Finally, let's ask rtkit to make us realtime
-    let thread_id = unsafe { libc::syscall(libc::SYS_gettid) };
-    let r = proxy.method_call("org.freedesktop.RealtimeKit1", "MakeThreadRealtime", (thread_id as u64, prio));
+    let thread_id = rustix::thread::gettid();
+    let r = proxy.method_call("org.freedesktop.RealtimeKit1", "MakeThreadRealtime", (thread_id.as_raw_nonzero().get() as u64, prio));
 
     if r.is_err() {
-        unsafe { libc::setrlimit64(libc::RLIMIT_RTTIME, &old_limit) };
+        rustix::process::setrlimit(Resource::Rttime, old_limit).ok();
     }
 
     r?;
