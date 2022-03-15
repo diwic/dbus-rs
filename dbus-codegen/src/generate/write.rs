@@ -2,6 +2,12 @@ use super::*;
 
 use super::types::*;
 
+#[derive(Debug, PartialEq, Eq)]
+enum GenContext {
+    Trait,
+    Impl,
+}
+
 fn make_result(success: &str, opts: &GenOpts) -> String {
     if opts.methodtype.is_some() {
         format!("Result<{}, tree::MethodErr>", success)
@@ -32,7 +38,7 @@ pub (super) fn module_header(s: &mut String, opts: &GenOpts) {
     }
 }
 
-fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), Box<dyn error::Error>> {
+fn write_method_signature(s: &mut String, m: &Method, opts: &GenOpts, context: GenContext) -> Result<(), Box<dyn error::Error>> {
     let genvar = opts.genericvariant;
     let g: Vec<String> = if genvar {
         let mut g = vec!();
@@ -43,9 +49,11 @@ fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), B
         g
     } else { vec!() };
 
-    m.annotations.get("org.freedesktop.DBus.Deprecated").iter().for_each(|v| {
-        *s += &format!("    #[deprecated(note = \"{}\")]\n", v);
-    });
+    if context == GenContext::Trait {
+        m.annotations.get("org.freedesktop.DBus.Deprecated").iter().for_each(|v| {
+            *s += &format!("    #[deprecated(note = \"{}\")]\n", v);
+        });
+    }
     *s += &format!("    fn {}{}(&{}self", m.fn_name,
         if g.len() > 0 { format!("<{}>", g.join(",")) } else { "".into() },
         if opts.crossroads { "mut " } else { "" }
@@ -69,10 +77,12 @@ fn write_method_decl(s: &mut String, m: &Method, opts: &GenOpts) -> Result<(), B
     Ok(())
 }
 
-fn write_prop_decl(s: &mut String, p: &Prop, opts: &GenOpts, set: bool) -> Result<(), Box<dyn error::Error>> {
-    p.annotations.get("org.freedesktop.DBus.Deprecated").iter().for_each(|v| {
-        *s += &format!("    #[deprecated(note = \"{}\")]\n", v);
-    });
+fn write_prop_signature(s: &mut String, p: &Prop, opts: &GenOpts, context: GenContext, set: bool) -> Result<(), Box<dyn error::Error>> {
+    if context == GenContext::Trait {
+        p.annotations.get("org.freedesktop.DBus.Deprecated").iter().for_each(|v| {
+            *s += &format!("    #[deprecated(note = \"{}\")]\n", v);
+        });
+    }
     if set {
         *s += &format!("    fn {}(&self, value: {}) -> {}",
             p.set_fn_name, make_type(&p.typ, true, &mut None)?, make_result("()", opts));
@@ -97,16 +107,16 @@ pub (super) fn intf(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(), Box<
     let iname = make_camel(&i.shortname);
     *s += &format!("\npub trait {} {{\n", iname);
     for m in &i.methods {
-        write_method_decl(s, &m, opts)?;
+        write_method_signature(s, &m, opts, GenContext::Trait)?;
         *s += ";\n";
     }
     for p in &i.props {
         if p.can_get() {
-            write_prop_decl(s, &p, opts, false)?;
+            write_prop_signature(s, &p, opts, GenContext::Trait, false)?;
             *s += ";\n";
         }
         if p.can_set() {
-            write_prop_decl(s, &p, opts, true)?;
+            write_prop_signature(s, &p, opts, GenContext::Trait, true)?;
             *s += ";\n";
         }
     }
@@ -230,7 +240,7 @@ pub (super) fn intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(
     }
     for m in &i.methods {
         *s += "\n";
-        write_method_decl(s, &m, opts)?;
+        write_method_signature(s, &m, opts, GenContext::Impl)?;
         *s += " {\n";
         *s += &format!("        self.method_call(\"{}\", \"{}\", (", i.origname, m.name);
         for a in m.iargs.iter() {
@@ -263,7 +273,7 @@ pub (super) fn intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(
 
     for p in i.props.iter().filter(|p| p.can_get()) {
         *s += "\n";
-        write_prop_decl(s, &p, opts, false)?;
+        write_prop_signature(s, &p, opts, GenContext::Impl, false)?;
         *s += " {\n";
         *s += &format!("        <Self as {}>::get(self, \"{}\", \"{}\")\n", propintf, i.origname, p.name);
         *s += "    }\n";
@@ -271,7 +281,7 @@ pub (super) fn intf_client(s: &mut String, i: &Intf, opts: &GenOpts) -> Result<(
 
     for p in i.props.iter().filter(|p| p.can_set()) {
         *s += "\n";
-        write_prop_decl(s, &p, opts, true)?;
+        write_prop_signature(s, &p, opts, GenContext::Impl, true)?;
         *s += " {\n";
         *s += &format!("        <Self as {}>::set(self, \"{}\", \"{}\", value)\n", propintf, i.origname, p.name);
         *s += "    }\n";
