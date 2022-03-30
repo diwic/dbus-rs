@@ -206,7 +206,7 @@ fn object_manager() {
     let radius_iface = &omia.interfaces["com.example.dbusrs.radius"]["Radius"];
     let radius = radius_iface.0.as_u64().unwrap();
     assert_eq!(radius, 10);
-    assert!(omia.interfaces.get("org.freedesktop.DBus.Introspectable").is_none());
+    assert!(omia.interfaces.get("org.freedesktop.DBus.Introspectable").is_some());
 
     let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/list",
         "org.freedesktop.DBus.ObjectManager", "GetManagedObjects").unwrap();
