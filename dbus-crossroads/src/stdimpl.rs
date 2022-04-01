@@ -284,7 +284,6 @@ fn get_all_for_path<F: FnOnce(&mut IfaceContext) + Send + 'static>(path: &dbus::
     let ictx: Arc<Mutex<IfaceContext>> = Default::default();
     let (reg, ifaces) = cr.registry_and_ifaces(&path);
     let all: Vec<_> = ifaces.into_iter().filter_map(|&token| {
-        if !reg.has_props(token) { return None };
         let iface_name = reg.get_intf_name(token)?;
         Some(PropContext {
             context: None,
