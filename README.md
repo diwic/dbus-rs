@@ -153,3 +153,10 @@ Requirements
 [Libdbus](https://dbus.freedesktop.org/releases/dbus/) 1.6 or higher, and latest stable release of [Rust](https://www.rust-lang.org/). If you run Ubuntu (any maintained version should be okay), this means having the `libdbus-1-dev` and `pkg-config` packages installed while building, and the `libdbus-1-3` package installed while running.
 
 Cross compiling libdbus might be tricky because it binds to a C library, there are some notes [here](https://github.com/diwic/dbus-rs/blob/master/libdbus-sys/cross_compile.md).
+
+Alternatives
+============
+
+[zbus](https://gitlab.freedesktop.org/zeenix/zbus/) and [rustbus](https://github.com/KillingSpark/rustbus) are D-Bus crates
+written completely in Rust (i e, no bindings to C libraries).
+Some more alternatives are listed [here](https://github.com/KillingSpark/rust-dbus-comparisons), but I'm not sure how usable they are.
