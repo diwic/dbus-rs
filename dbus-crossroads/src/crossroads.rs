@@ -1,11 +1,12 @@
 use std::pin::Pin;
 use std::sync::Arc;
 use dbus::channel::Sender;
+use std::collections::btree_map::Entry;
 use std::future::Future;
 use std::marker::PhantomData;
 use crate::{Context, MethodErr, IfaceBuilder, stdimpl};
 use crate::ifacedesc::Registry;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::any::Any;
 use std::fmt;
 use crate::utils::Dbg;
@@ -37,11 +38,9 @@ impl<T: Send + 'static> fmt::Debug for IfaceToken<T> {
     }
 }
 
-
 #[derive(Debug)]
 struct Object {
-    ifaces: HashSet<usize>,
-    data: Box<dyn Any + Send + 'static>
+    iface_data_map: HashMap<usize, Box<dyn Any + Send + 'static>>,
 }
 
 pub type BoxedSpawn = Box<dyn Fn(Pin<Box<dyn Future<Output = ()> + Send + 'static>>) + Send + 'static>;
@@ -90,7 +89,7 @@ impl Crossroads {
         debug_assert_eq!(t2.0, OBJECT_MANAGER);
 
         // Add the root path and make it introspectable. This helps D-Bus debug tools
-        cr.insert("/", &[], ());
+        cr.insert("/", IfaceToken(INTROSPECTABLE, PhantomData), ());
         cr
     }
 
@@ -111,53 +110,68 @@ impl Crossroads {
         IfaceToken(x, PhantomData)
     }
 
-    /// Access the data of a certain path.
+    /// Access the data of a certain path and interface.
     ///
-    /// Will return none both if the path was not found, and if the found data was of another type.
-    pub fn data_mut<D: Any + Send + 'static>(&mut self, name: &dbus::Path<'static>) -> Option<&mut D> {
-        let obj = self.map.get_mut(name)?;
-        obj.data.downcast_mut()
+    /// Will return none if the path+interface combination was not found, or if the found data was
+    /// of another type.
+    pub fn data_mut<D: Any + Send + 'static>(&mut self, name: &dbus::Path<'static>, iface: &dbus::strings::Interface<'static>) -> Option<&mut D> {
+        let itoken = self.find_iface_token(name, Some(iface)).ok()?;
+        let data = self.map.get_mut(name)?.iface_data_map.get_mut(&itoken)?;
+        data.downcast_mut()
     }
 
-    /// Inserts a new path.
+    /// Inserts a new path+interface.
     ///
-    /// If the path already exists, it is overwritten.
-    pub fn insert<'z, D, I, N>(&mut self, name: N, ifaces: I, data: D)
-    where D: Any + Send + 'static, N: Into<dbus::Path<'static>>, I: IntoIterator<Item = &'z IfaceToken<D>>
+    /// If the path+interface already exists, it is overwritten.
+    pub fn insert<'z, D, N>(&mut self, name: N, iface: IfaceToken<D>, data: D)
+    where D: Any + Send + 'static, N: Into<dbus::Path<'static>>
     {
-        let ifaces = ifaces.into_iter().map(|x| x.0);
-        let mut ifaces: HashSet<usize> = std::iter::FromIterator::from_iter(ifaces);
-        if self.add_standard_ifaces {
-            ifaces.insert(INTROSPECTABLE);
-            if ifaces.iter().any(|u| self.registry().has_props(*u)) {
-                ifaces.insert(PROPERTIES);
-            }
-        }
         let name = name.into();
-        self.map.insert(name.clone(), Object { ifaces, data: Box::new(data)});
+
+        let object = match self.map.entry(name.clone()) {
+            Entry::Occupied(o) => o.into_mut(),
+            Entry::Vacant(v) => {
+                v.insert(Object {
+                    iface_data_map: if self.add_standard_ifaces {
+                        HashMap::from([
+                            (INTROSPECTABLE, Box::new(()) as Box<dyn Any + Send>),
+                            (PROPERTIES, Box::new(()) as Box<dyn Any + Send>)
+                        ])
+                    } else {
+                        HashMap::new()
+                    }
+                })
+            }
+        };
+
+        object.iface_data_map.insert(iface.0, Box::new(data));
+
         if let Some(oms) = self.object_manager_support.as_ref() {
-            stdimpl::object_manager_path_added(oms.0.clone(), &name, self);
+            stdimpl::object_manager_path_interface_added(oms.0.clone(), &name, iface.0, self);
         }
     }
 
     /// Returns true if the path exists and implements the interface
     pub fn has_interface<D: Send>(&self, name: &dbus::Path<'static>, token: IfaceToken<D>) -> bool {
-        self.map.get(name).map(|x| x.ifaces.contains(&token.0)).unwrap_or(false)
+        self.map.get(name).map(|x| x.iface_data_map.contains_key(&token.0)).unwrap_or(false)
     }
 
-    /// Removes an existing path.
+    /// Removes an existing path+interface.
     ///
-    /// Returns None if the path was not found.
+    /// Returns None if the path+interface was not found.
     /// In case of a type mismatch, the path will be removed, but None will be returned.
-    pub fn remove<D>(&mut self, name: &dbus::Path<'static>) -> Option<D>
+    pub fn remove<D>(&mut self, name: &dbus::Path<'static>, iface: &dbus::strings::Interface<'static>) -> Option<D>
     where D: Any + Send + 'static {
+        let itoken = self.find_iface_token(name, Some(iface)).ok()?;
+
         if let Some(oms) = self.object_manager_support.as_ref() {
-            if self.map.contains_key(name) {
-                stdimpl::object_manager_path_removed(oms.0.clone(), &name, self);
-            }
+            stdimpl::object_manager_path_interface_removed(oms.0.clone(), &name, itoken, self);
         }
-        let x = self.map.remove(name)?;
-        let r: Box<D> = x.data.downcast().ok()?;
+
+        let obj = self.map.get_mut(name)?;
+        let data = obj.iface_data_map.remove(&itoken)?;
+
+        let r: Box<D> = data.downcast().ok()?;
         Some(*r)
     }
 
@@ -166,15 +180,15 @@ impl Crossroads {
         interface: Option<&dbus::strings::Interface<'static>>)
     -> Result<usize, MethodErr> {
         let obj = self.map.get(path).ok_or_else(|| MethodErr::no_path(path))?;
-        self.registry.find_token(interface, &obj.ifaces)
+        self.registry.find_token(interface, &obj.iface_data_map)
     }
 
     pub (crate) fn registry(&mut self) -> &mut Registry { &mut self.registry }
 
     pub (crate) fn registry_and_ifaces(&self, path: &dbus::Path<'static>)
-    -> (&Registry, &HashSet<usize>) {
+    -> (&Registry, &HashMap<usize, Box<dyn Any + Send + 'static>>) {
         let obj = self.map.get(path).unwrap();
-        (&self.registry, &obj.ifaces)
+        (&self.registry, &obj.iface_data_map)
     }
 
     pub (crate) fn get_children(&self, path: &dbus::Path<'static>) -> Vec<&str> {

@@ -2,7 +2,7 @@ use dbus::blocking::stdintf::org_freedesktop_dbus::EmitsChangedSignal;
 use std::future::Future;
 use std::marker::PhantomData;
 use crate::{Context, PropContext, MethodErr, Crossroads, utils::Dbg};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
 use std::borrow::Cow;
 use dbus::{arg, strings};
@@ -16,8 +16,8 @@ impl Registry {
         self.0.len() - 1
     }
 
-    pub fn find_token(&self, name: Option<&strings::Interface>, tokens: &HashSet<usize>) -> Result<usize, MethodErr> {
-        for &t in tokens.iter() {
+    pub fn find_token(&self, name: Option<&strings::Interface>, tokens: &HashMap<usize, Box<dyn std::any::Any + Send + 'static>>) -> Result<usize, MethodErr> {
+        for (&t, _) in tokens.iter() {
             let desc = &self.0[t];
             if desc.name.as_ref() == name { return Ok(t) }
         }
@@ -56,8 +56,6 @@ impl Registry {
         if is_set { x.set_cb = cb } else { x.get_cb = cb };
     }
 
-    pub fn has_props(&self, t: usize) -> bool { !self.0[t].properties.is_empty() }
-
     pub fn find_annotation(&self, t: usize, annotation_name: &str, prop_name: Option<&str>) -> Option<&str> {
         let desc = &self.0[t];
         if let Some(prop_name) = prop_name {
@@ -70,8 +68,8 @@ impl Registry {
         desc.annotations.get(annotation_name)
     }
 
-    pub fn introspect(&self, ifaces: &HashSet<usize>) -> String {
-        let mut v: Vec<_> = ifaces.iter().filter_map(|&t| self.0[t].name.as_ref().map(|n| (n, t))).collect();
+    pub fn introspect(&self, iface_data_map: &HashMap<usize, Box<dyn std::any::Any + Send + 'static>>) -> String {
+        let mut v: Vec<_> = iface_data_map.iter().filter_map(|(&t, _)| self.0[t].name.as_ref().map(|n| (n, t))).collect();
         v.sort_unstable();
         let mut r = String::new();
         for (n, t) in v.into_iter() {
@@ -297,7 +295,7 @@ impl<T: Send, A: Send + arg::RefArg + arg::Arg + arg::Append> PropBuilder<'_, T,
     pub fn get<CB>(self, mut cb: CB) -> Self
     where CB: FnMut(&mut PropContext, &mut T) -> Result<A, MethodErr> + Send + 'static {
         self.get_with_cr(move |ctx, cr| {
-            let data = cr.data_mut(ctx.path()).ok_or_else(|| MethodErr::no_path(ctx.path()))?;
+            let data = cr.data_mut(ctx.path(), ctx.interface()).ok_or_else(|| MethodErr::no_path(ctx.path()))?;
             cb(ctx, data)
         })
     }
@@ -341,7 +339,7 @@ impl<T: Send, A: Send + arg::RefArg + arg::Arg + arg::Append> PropBuilder<'_, T,
     {
         self.get_with_cr_async(move |ctx, cr| {
             // It should be safe to unwrap here, the path has already been checked once (when dispatching the method)
-            let data = cr.data_mut(ctx.path()).unwrap();
+            let data = cr.data_mut(ctx.path(), ctx.interface()).unwrap();
             cb(ctx, data)
         })
     }
@@ -389,7 +387,7 @@ impl<T: Send, A: arg::RefArg + Send + for<'x> arg::Get<'x> + arg::Arg + arg::App
     pub fn set<CB>(self, mut cb: CB) -> Self
     where CB: FnMut(&mut PropContext, &mut T, A) -> Result<Option<A>, MethodErr> + Send + 'static {
         self.set_with_cr(move |ctx, cr, a| {
-            let data = cr.data_mut(ctx.path()).ok_or_else(|| MethodErr::no_path(ctx.path()))?;
+            let data = cr.data_mut(ctx.path(), ctx.interface()).ok_or_else(|| MethodErr::no_path(ctx.path()))?;
             cb(ctx, data, a)
         })
     }
@@ -449,7 +447,7 @@ impl<T: Send, A: arg::RefArg + Send + for<'x> arg::Get<'x> + arg::Arg + arg::App
     {
         self.set_with_cr_async(move |ctx, cr, a| {
             // It should be safe to unwrap here, the path has already been checked once (when dispatching the method)
-            let data = cr.data_mut(ctx.path()).unwrap();
+            let data = cr.data_mut(ctx.path(), ctx.interface()).unwrap();
             cb(ctx, data, a)
         })
     }
@@ -522,7 +520,9 @@ impl<T: Send + 'static> IfaceBuilder<T> {
     N: Into<strings::Member<'static>>,
     CB: FnMut(&mut Context, &mut T, IA) -> Result<OA, MethodErr> + Send + 'static {
         self.method_with_cr(name, input_args, output_args, move |ctx, cr, ia| {
-            let data = cr.data_mut(ctx.path()).ok_or_else(|| MethodErr::no_path(ctx.path()))?;
+            let data = cr
+                .data_mut(ctx.path(), ctx.interface().ok_or(MethodErr::no_interface(""))?)
+                .ok_or_else(|| MethodErr::no_path(ctx.path()))?;
             cb(ctx, data, ia)
         })
     }
