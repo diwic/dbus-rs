@@ -281,9 +281,16 @@ type IfacePropMap = HashMap<String, PropMap>;
 type PathPropMap = HashMap<dbus::Path<'static>, IfacePropMap>;
 
 fn get_all_for_path<F: FnOnce(&mut IfaceContext) + Send + 'static>(path: &dbus::Path<'static>, cr: &mut Crossroads, f: F) {
+    let (_reg, ifaces) = cr.registry_and_ifaces(&path);
+    let all: Vec<usize> = ifaces.into_iter().map(|token| *token).collect();
+    for_each_interface_with_properties(path, all, cr, f);
+}
+
+fn for_each_interface_with_properties<F: FnOnce(&mut IfaceContext) + Send + 'static, I: IntoIterator<Item = usize>>
+(path: &dbus::Path<'static>, ifaces: I, cr: &mut Crossroads, f: F) {
     let ictx: Arc<Mutex<IfaceContext>> = Default::default();
-    let (reg, ifaces) = cr.registry_and_ifaces(&path);
-    let all: Vec<_> = ifaces.into_iter().filter_map(|&token| {
+    let (reg, _all_ifaces) = cr.registry_and_ifaces(&path);
+    let all: Vec<_> = ifaces.into_iter().filter_map(|token| {
         let iface_name = reg.get_intf_name(token)?;
         Some(PropContext {
             context: None,
@@ -320,6 +327,7 @@ fn get_all_for_path<F: FnOnce(&mut IfaceContext) + Send + 'static>(path: &dbus::
         });
     }
 }
+
 //
 fn get_managed_objects(mut ctx: Context, cr: &mut Crossroads, _: ()) -> Option<Context> {
     // HashMap<dbus::Path<'static>, IfacePropMap>
@@ -422,5 +430,34 @@ pub fn object_manager_path_removed(sender: Arc<dyn Sender + Send + Sync>, name: 
                 .collect(),
         };
         let _ = sender.send(dbus::message::SignalArgs::to_emit_message(&x, &parent));
+    });
+}
+
+pub fn object_manager_interface_added(sender: Arc<dyn Sender + Send + Sync>, name: &dbus::Path<'static>, itoken: usize, cr: &mut Crossroads) {
+    object_manager_parents(name, cr, |parent, cr| {
+        let n = name.clone();
+        let s = sender.clone();
+
+        for_each_interface_with_properties(&name, vec![itoken], cr, move |ictx| {
+            let x = dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesAdded {
+                object: n,
+                interfaces: std::mem::replace(&mut ictx.ifaces, HashMap::new()),
+            };
+            let _ = s.send(dbus::message::SignalArgs::to_emit_message(&x, &parent));
+        });
+    });
+}
+
+pub fn object_manager_interface_removed(sender: Arc<dyn Sender + Send + Sync>, name: &dbus::Path<'static>, itoken: usize, cr: &mut Crossroads) {
+    object_manager_parents(name, cr, |parent, cr| {
+        let (reg, _ifaces) = cr.registry_and_ifaces(&name);
+
+        if let Some(iface) = reg.get_intf_name(itoken) {
+            let x = dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesRemoved {
+                object: name.clone(),
+                interfaces: vec![iface.to_string()],
+            };
+            let _ = sender.send(dbus::message::SignalArgs::to_emit_message(&x, &parent));
+        }
     });
 }

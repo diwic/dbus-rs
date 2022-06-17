@@ -140,6 +140,53 @@ impl Crossroads {
         }
     }
 
+    /// Adds an interface to an existing object path.
+    ///
+    /// Returns true if interface can be added to the object or already exists in the object.
+    /// Returns false if the object does not exist or the interface cannot be added due to data type
+    /// mismatch.
+    pub fn add_interface<'z, D, N>(&mut self, name: N, iface: IfaceToken<D>) -> bool
+    where D: Any + Send + 'static, N: Into<dbus::Path<'static>>
+    {
+        let name = name.into();
+        if let Some(obj) = self.map.get_mut(&name) {
+            if !obj.data.is::<D>() {
+                // Data type mismatch, return fail.
+                return false;
+            }
+
+            if obj.ifaces.contains(&iface.0) {
+                // Already has the interface, return success.
+                return true;
+            }
+
+            obj.ifaces.insert(iface.0);
+            if let Some(oms) = self.object_manager_support.as_ref() {
+                stdimpl::object_manager_interface_added(oms.0.clone(), &name, iface.0, self);
+            }
+
+            return true;
+        }
+        false
+    }
+
+    /// Removes an interface from an object path.
+    pub fn remove_interface<'z, D, N>(&mut self, name: N, iface: IfaceToken<D>)
+    where D: Any + Send + 'static, N: Into<dbus::Path<'static>>
+    {
+        let name = name.into();
+        if let Some(obj) = self.map.get_mut(&name) {
+            if !obj.ifaces.contains(&iface.0) {
+                return;
+            }
+
+            obj.ifaces.remove(&iface.0);
+            if let Some(oms) = self.object_manager_support.as_ref() {
+                stdimpl::object_manager_interface_removed(oms.0.clone(), &name, iface.0, self);
+            }
+        }
+    }
+
     /// Returns true if the path exists and implements the interface
     pub fn has_interface<D: Send>(&self, name: &dbus::Path<'static>, token: IfaceToken<D>) -> bool {
         self.map.get(name).map(|x| x.ifaces.contains(&token.0)).unwrap_or(false)
