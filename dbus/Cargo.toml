@@ -1,7 +1,7 @@
 [package]
 
 name = "dbus"
-version = "0.9.5"
+version = "0.9.6"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
 
 description = "Bindings to D-Bus, which is a bus commonly used on Linux for inter-process communication."
