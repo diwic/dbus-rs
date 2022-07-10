@@ -336,7 +336,7 @@ fn method_call_local() {
     let local = task::LocalSet::new();
 
     let (res, conn) = new_session_local().unwrap();
-    local.spawn_local(async move { panic!(res.await);});
+    local.spawn_local(async move { panic!("{}", res.await);});
 
     let proxy = dbus::nonblock::Proxy::new("org.freedesktop.DBus", "/", Duration::from_secs(2), conn);
     let fut = proxy.method_call("org.freedesktop.DBus", "NameHasOwner", ("dummy.name.without.owner",));
@@ -351,13 +351,13 @@ async fn timeout() {
     use std::time::Duration;
 
     let (ress, conns) = new_session_sync().unwrap();
-    tokio::spawn(async move { panic!(ress.await);});
+    tokio::spawn(async move { panic!("{}", ress.await);});
     conns.request_name("com.example.dbusrs.tokiotest", true, true, true).await.unwrap();
     use dbus::channel::MatchingReceiver;
     conns.start_receive(dbus::message::MatchRule::new_method_call(), Box::new(|_,_| true));
 
     let (res, conn) = new_session_sync().unwrap();
-    tokio::spawn(async move { panic!(res.await);});
+    tokio::spawn(async move { panic!("{}", res.await);});
     let proxy = dbus::nonblock::Proxy::new("com.example.dbusrs.tokiotest", "/", Duration::from_millis(150), conn);
     let e: Result<(), _> = proxy.method_call("com.example.dbusrs.tokiotest", "Whatever", ()).await;
     let e = e.unwrap_err();
