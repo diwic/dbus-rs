@@ -177,7 +177,7 @@ fn introspect() {
 
 #[test]
 fn object_manager() {
-    struct Apple { radius: u32, weight: u32 };
+    struct Apple { radius: u32, weight: u32 }
 
     let mut cr = Crossroads::new();
 
@@ -286,13 +286,13 @@ async fn properties_get_all_async() {
 
     let iface = cr.register("com.example.dbusrs.properties", |b| {
         b.property("Sync").get(|_, _| Ok(1));
-        b.property("Async").get_async(|mut ctx, _| async move { 
+        b.property("Async").get_async(|mut ctx, _| async move {
             ctx.reply(Ok(2))
         });
     });
     cr.insert("/", &[iface], ());
     bus.start_receive(
-        dbus::message::MatchRule::new_method_call(), 
+        dbus::message::MatchRule::new_method_call(),
         Box::new(move |msg, conn| {
             cr.handle_message(msg, conn).unwrap();
             true
