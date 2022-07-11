@@ -27,10 +27,18 @@ fn main() {
     } else {
         // Start matching using old scheme
         rule.eavesdrop = true; // this lets us eavesdrop on *all* session messages, not just ours
-        conn.add_match(rule, |_: (), _, msg| {
+        let result: Result<_, dbus::Error> = conn.add_match(rule.clone(), |_: (), _, msg| {
             handle_message(&msg);
             true
-        }).expect("add_match failed");
+        });
+
+        if result.is_err() {
+            rule.eavesdrop = false;
+            conn.add_match(rule, |_: (), _, msg| {
+                handle_message(&msg);
+                true
+            }).expect("add_match failed");
+        }
     }
 
     // Loop and print out all messages received (using handle_message()) as they come.
