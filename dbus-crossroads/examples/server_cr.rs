@@ -8,6 +8,13 @@
    The interface has a "Hello" method (which takes no arguments and returns a string),
    and a "HelloHappened" signal (with a string argument) which is sent every time
    someone calls the "Hello" method.
+   
+   When you run this example, you can test it with this command:
+       dbus-send --dest=com.example.dbustest /hello com.example.dbustest.Hello string:MyName
+       
+   You should see output like this:
+       method return time=1667227809.834235 sender=:1.1620 -> destination=:1.1628 serial=7 reply_serial=2
+       string "Hello MyName! This API has been used 3 times."
 */
 use dbus::blocking::Connection;
 use dbus_crossroads::{Crossroads, Context};
