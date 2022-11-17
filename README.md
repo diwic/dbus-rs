@@ -101,7 +101,7 @@ c.request_name("com.example.dbustest", false, true, false)?;
 let mut cr = Crossroads::new();
 let token = cr.register("com.example.dbustest", |b| {
     b.method("Hello", ("name",), ("reply",), |_, _, (name,): (String,)| {
-        Ok(format!("Hello {}!", name))
+        Ok((format!("Hello {}!", name),))
     });
 });
 cr.insert("/hello", &[token], ());
