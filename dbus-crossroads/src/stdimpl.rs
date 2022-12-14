@@ -227,7 +227,19 @@ fn get(mut ctx: Context, cr: &mut Crossroads, (interface_name, property_name): (
     propctx.call_prop(cr, false).map(|propctx| { propctx.context.unwrap() })
 }
 
+fn getall_all(ctx: Context, cr: &mut Crossroads) -> Option<Context> {
+    get_all_for_path(&ctx.path().clone(), cr, Some(ctx), move |ictx, octx| {
+        let props: HashMap<_, _> = ictx.ifaces.values().flatten().collect();
+        octx.as_mut().unwrap().do_reply(|msg| {
+            msg.append_all((props,));
+        });
+    })
+}
+
 fn getall(mut ctx: Context, cr: &mut Crossroads, (interface_name,): (String,)) -> Option<Context> {
+    if interface_name == "" {
+        return getall_all(ctx, cr);
+    }
     let mut propctx = match ctx.check(|ctx| { PropContext::new(cr, ctx.path().clone(), interface_name, "".into())}) {
         Ok(p) => p,
         Err(_) => return Some(ctx),
