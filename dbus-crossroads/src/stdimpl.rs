@@ -51,7 +51,6 @@ pub (crate) fn make_emits_message<V: dbus::arg::Arg + dbus::arg::Append>(prop_na
         .append3(s, dbus::arg::Dict::new(d), i))
 }
 
-
 #[derive(Debug)]
 /// PropContext is a struct that provides helpful information inside a get/set property handler.
 ///
@@ -274,20 +273,21 @@ pub fn properties(cr: &mut Crossroads) -> IfaceToken<()> {
 struct IfaceContext {
     remaining: usize,
     ifaces: IfacePropMap,
-    donefn: Option<Dbg<Box<dyn FnOnce(&mut IfaceContext) + Send + 'static>>>,
+    donefn: Option<Dbg<Box<dyn FnOnce(&mut IfaceContext, &mut Option<Context>) + Send + 'static>>>,
 }
 
 type IfacePropMap = HashMap<String, PropMap>;
 type PathPropMap = HashMap<dbus::Path<'static>, IfacePropMap>;
 
-fn get_all_for_path<F: FnOnce(&mut IfaceContext) + Send + 'static>(path: &dbus::Path<'static>, cr: &mut Crossroads, f: F) {
+fn get_all_for_path<F>(path: &dbus::Path<'static>, cr: &mut Crossroads, octx: Option<Context>, f: F) -> Option<Context>
+where F: FnOnce(&mut IfaceContext, &mut Option<Context>) + Send + 'static {
     let (_reg, ifaces) = cr.registry_and_ifaces(&path);
     let all: Vec<usize> = ifaces.into_iter().map(|token| *token).collect();
-    for_each_interface_with_properties(path, all, cr, f);
+    for_each_interface_with_properties(path, all, cr, octx, f)
 }
 
-fn for_each_interface_with_properties<F: FnOnce(&mut IfaceContext) + Send + 'static, I: IntoIterator<Item = usize>>
-(path: &dbus::Path<'static>, ifaces: I, cr: &mut Crossroads, f: F) {
+fn for_each_interface_with_properties<F: FnOnce(&mut IfaceContext, &mut Option<Context>) + Send + 'static, I: IntoIterator<Item = usize>>
+(path: &dbus::Path<'static>, ifaces: I, cr: &mut Crossroads, mut octx: Option<Context>, f: F) -> Option<Context> {
     let ictx: Arc<Mutex<IfaceContext>> = Default::default();
     let (reg, _all_ifaces) = cr.registry_and_ifaces(&path);
     let all: Vec<_> = ifaces.into_iter().filter_map(|token| {
@@ -304,16 +304,17 @@ fn for_each_interface_with_properties<F: FnOnce(&mut IfaceContext) + Send + 'sta
     }).collect();
 
     if all.len() == 0 {
-        f(&mut *ictx.lock().unwrap());
-        return;
+        f(&mut *ictx.lock().unwrap(), &mut octx);
+        return octx;
     }
 
     let mut ic = ictx.lock().unwrap();
     ic.remaining = all.len();
     ic.donefn = Some(Dbg(Box::new(f)));
     drop(ic);
-    for pctx in all.into_iter() {
+    for mut pctx in all.into_iter() {
         let iclone = ictx.clone();
+        pctx.context = octx.take();
         pctx.call_all_props(cr, move |pactx| {
             let mut ic = iclone.lock().unwrap();
             let answers = std::mem::replace(&mut pactx.answers, HashMap::new());
@@ -322,10 +323,11 @@ fn for_each_interface_with_properties<F: FnOnce(&mut IfaceContext) + Send + 'sta
             ic.remaining -= 1;
             if ic.remaining == 0 {
                 let donefn = ic.donefn.take().unwrap().0;
-                (donefn)(&mut *ic)
+                (donefn)(&mut *ic, &mut pactx.propctx.as_mut().unwrap().context)
             }
-        });
+        }).map(|mut pctx| octx = pctx.context.take());
     }
+    octx
 }
 
 //
@@ -350,38 +352,32 @@ fn get_managed_objects(mut ctx: Context, cr: &mut Crossroads, _: ()) -> Option<C
         return Some(ctx);
     }
 
+    let mut octx = Some(ctx);
     #[derive(Debug)]
     struct Temp {
         remaining: usize,
         temp_map: PathPropMap,
-        ctx: Option<Context>,
     }
     let r = Arc::new(Mutex::new(Temp {
         remaining: children.len(),
         temp_map: HashMap::new(),
-        ctx: Some(ctx),
     }));
-    let returned_ctx: Arc<Mutex<Option<Context>>> = Default::default();
     for subpath in children {
         let rclone = r.clone();
-        let rctx = returned_ctx.clone();
         let subpath_clone = subpath.clone();
-        get_all_for_path(&subpath, cr, move |ictx| {
+        octx = get_all_for_path(&subpath, cr, octx.take(), move |ictx, octx| {
             let mut rr = rclone.lock().unwrap();
             let ifaces = std::mem::replace(&mut ictx.ifaces, HashMap::new());
             rr.temp_map.insert(subpath_clone, ifaces);
             rr.remaining -= 1;
             // dbg!(&rr);
             if rr.remaining > 0 { return; }
-            let mut ctx = rr.ctx.take().unwrap();
-            ctx.do_reply(|msg| {
+            octx.as_mut().unwrap().do_reply(|msg| {
                 msg.append_all((&rr.temp_map,));
             });
-            *rctx.lock().unwrap() = Some(ctx);
         });
     }
-    let mut lock = returned_ctx.lock().unwrap();
-    lock.take()
+    octx
 }
 
 pub fn object_manager(cr: &mut Crossroads) -> IfaceToken<()> {
@@ -408,7 +404,7 @@ pub fn object_manager_path_added(sender: Arc<dyn Sender + Send + Sync>, name: &d
     object_manager_parents(name, cr, |parent, cr| {
         let n = name.clone();
         let s = sender.clone();
-        get_all_for_path(&name, cr, move |ictx| {
+        get_all_for_path(&name, cr, None, move |ictx, _| {
             let x = dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesAdded {
                 object: n,
                 interfaces: std::mem::replace(&mut ictx.ifaces, HashMap::new()),
@@ -438,7 +434,7 @@ pub fn object_manager_interface_added(sender: Arc<dyn Sender + Send + Sync>, nam
         let n = name.clone();
         let s = sender.clone();
 
-        for_each_interface_with_properties(&name, vec![itoken], cr, move |ictx| {
+        for_each_interface_with_properties(&name, vec![itoken], cr, None, move |ictx, _| {
             let x = dbus::blocking::stdintf::org_freedesktop_dbus::ObjectManagerInterfacesAdded {
                 object: n,
                 interfaces: std::mem::replace(&mut ictx.ifaces, HashMap::new()),
