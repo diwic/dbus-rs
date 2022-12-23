@@ -251,6 +251,26 @@ impl<'a> Get<'a> for OwnedFd {
     }
 }
 
+#[cfg(all(unix, feature = "io-lifetimes"))]
+impl Arg for io_lifetimes::OwnedFd {
+    const ARG_TYPE: ArgType = ArgType::UnixFd;
+    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked("h\0") } }
+}
+#[cfg(all(unix, feature = "io-lifetimes"))]
+impl Append for io_lifetimes::OwnedFd {
+    fn append_by_ref(&self, i: &mut IterAppend) {
+        arg_append_basic(&mut i.0, ArgType::UnixFd, self.as_raw_fd())
+    }
+}
+#[cfg(all(unix, feature = "io-lifetimes"))]
+impl DictKey for io_lifetimes::OwnedFd {}
+#[cfg(all(unix, feature = "io-lifetimes"))]
+impl<'a> Get<'a> for io_lifetimes::OwnedFd {
+    fn get(i: &mut Iter) -> Option<Self> {
+        arg_get_basic(&mut i.0, ArgType::UnixFd).map(|fd| unsafe { io_lifetimes::OwnedFd::from_raw_fd(fd) })
+    }
+}
+
 #[cfg(unix)]
 refarg_impl!(OwnedFd, _i, { use std::os::unix::io::AsRawFd; Some(_i.as_raw_fd() as i64) }, None, None, None);
 
