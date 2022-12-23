@@ -246,6 +246,41 @@ fn object_manager_root() {
     service_thread.join().unwrap();
 }
 
+#[tokio::test]
+async fn object_manager_async_property() {
+    use dbus::channel::MatchingReceiver;
+
+    let (resource, bus) = dbus_tokio::connection::new_session_sync().unwrap();
+    tokio::spawn(async {resource.await;});
+    bus.request_name("com.example.dbusrs.objmgr_asyncprop", false, true, false).await.unwrap();
+
+    let mut cr = Crossroads::new();
+    let spawner = Box::new(|fut| { tokio::spawn(fut); });
+    cr.set_async_support(Some((bus.clone(), spawner)));
+
+    let token = cr.register("com.example.dbusrs.item", |b: &mut IfaceBuilder<()>| {
+        b.property("asyncprop")
+            .get_async(move |mut ctx, _| { async move { ctx.reply(Ok(42i32)) } });
+    });
+
+    cr.insert("/", &[cr.object_manager()], ());
+    cr.insert("/item", &[token], ());
+
+    bus.start_receive(
+        dbus::message::MatchRule::new_method_call(),
+        Box::new(move |msg, conn| {
+            cr.handle_message(msg, conn).unwrap();
+            true
+        })
+    );
+
+    let proxy = dbus::nonblock::Proxy::new("com.example.dbusrs.objmgr_asyncprop", "/", Duration::from_secs(5), bus);
+    let (response,): (HashMap<dbus::Path<'static>, HashMap<String, PropMap>>,) = proxy.method_call(
+        "org.freedesktop.DBus.ObjectManager", "GetManagedObjects", ()).await.unwrap();
+    let prop = &response[&"/item".into()]["com.example.dbusrs.item"]["asyncprop"];
+    assert_eq!(prop.0.as_i64().unwrap(), 42);
+}
+
 #[test]
 fn properties_get_all() {
     let bus = dbus::blocking::Connection::new_session().unwrap();
