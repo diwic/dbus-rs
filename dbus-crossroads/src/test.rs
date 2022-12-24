@@ -307,6 +307,38 @@ fn properties_get_all() {
     assert_eq!(response.len(), 2);
 }
 
+#[test]
+fn properties_multi_interface_get_all() {
+    let bus = dbus::blocking::Connection::new_session().unwrap();
+    bus.request_name("com.example.dbusrs.properties", false, false, false).unwrap();
+
+    let mut cr = Crossroads::new();
+    let iface = cr.register("com.example.dbusrs.properties", |b| {
+        b.property("One").get(|_, _| Ok(1));
+        b.property("Two").get(|_, _| Ok(2));
+    });
+    let iface2 = cr.register("com.example.dbusrs.more_properties", |b| {
+        b.property("Three").get(|_, _| Ok(3));
+        b.property("Four").get(|_, _| Ok(4));
+    });
+    cr.insert("/", &[iface, iface2], ());
+
+    let msg = Message::call_with_args(
+        "com.example.dbusrs.properties",
+        "/",
+        "org.freedesktop.DBus.Properties",
+        "GetAll",
+        ("",),
+    );
+    let r = dispatch_helper(&mut cr, msg);
+    let response: HashMap<String, Variant<Box<dyn RefArg>>> = r.read1().unwrap();
+    assert_eq!(response.get("One").unwrap().as_i64(), Some(1));
+    assert_eq!(response.get("Two").unwrap().as_i64(), Some(2));
+    assert_eq!(response.get("Three").unwrap().as_i64(), Some(3));
+    assert_eq!(response.get("Four").unwrap().as_i64(), Some(4));
+    assert_eq!(response.len(), 4);
+}
+
 #[tokio::test]
 async fn properties_get_all_async() {
     use dbus::channel::MatchingReceiver;
