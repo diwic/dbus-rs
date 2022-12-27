@@ -1,0 +1,3 @@
+[submodule "libdbus-sys/vendor/dbus"]
+	path = libdbus-sys/vendor/dbus
+	url = https://github.com/freedesktop/dbus.git

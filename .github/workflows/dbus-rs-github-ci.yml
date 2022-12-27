@@ -10,6 +10,68 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Taken from rust-lang/libz-sys CI/CD example.
+  #
+  # This job downloads and stores `cross` as an artifact, so that it can be
+  # redownloaded across all of the jobs.
+  install-cross:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: XAMPPRocky/get-github-release@v1
+        id: cross
+        with:
+          owner: rust-embedded
+          repo: cross
+          matches: ${{ matrix.platform }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v2
+        with:
+          name: cross-${{ matrix.platform }}
+          path: ${{ steps.cross.outputs.install_path }}
+    strategy:
+      matrix:
+        platform: [linux-musl]
+
+  # Cross compile vendored libdbus for multiple architectures.
+  #
+  # Cannot run the full dbus test suite since the cross docker image doesn't
+  # have dbus-daemon running.
+  libdbus-sys-linux:
+    runs-on: ubuntu-latest
+    needs: install-cross
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: 'recursive'
+    - uses: actions-rs/toolchain@v1
+      with:
+          profile: minimal
+          toolchain: stable
+          override: true
+    - name: Download Cross
+      uses: actions/download-artifact@v1
+      with:
+        name: cross-linux-musl
+        path: /tmp
+    - run: rustup toolchain install ${{ matrix.channel }}
+    - run: chmod +x /tmp/cross
+    - name: Build
+      run: /tmp/cross build --package dbus --features vendored --target ${{ matrix.target }}
+    - name: Run tests
+      run: /tmp/cross test --package libdbus-sys --features vendored --target ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [stable]
+        target:
+          - mips64-unknown-linux-muslabi64
+          - mips-unknown-linux-musl
+          - aarch64-unknown-linux-musl
+          - arm-unknown-linux-musleabihf
+          - i686-unknown-linux-musl
+          - x86_64-unknown-linux-musl
+          - x86_64-unknown-linux-gnu
+
   build:
 
     runs-on: ubuntu-latest

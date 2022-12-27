@@ -30,6 +30,7 @@ tempfile = "3"
 
 [features]
 no-string-validation = []
+vendored = ["libdbus-sys/vendored"]
 futures = ["futures-util", "futures-channel"]
 # Not ready yet
 # native-channel = ["futures-executor", "futures-util/io", "dbus-native-channel"]
