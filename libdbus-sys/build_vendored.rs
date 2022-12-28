@@ -340,7 +340,7 @@ pub fn build_libdbus() -> Result<(), Box<dyn Error>> {
     let mut config = Config::new();
 
     // Ensure submodule is checked out
-    if !Path::new("vendor/dbus").exists() {
+    if !Path::new("vendor/dbus/dbus").exists() {
         let _ = Command::new("git")
             .args(&["submodule", "update", "--init", "vendor/dbus"])
             .status()?;
