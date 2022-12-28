@@ -13,7 +13,7 @@ The examples below all assume you're trying to compile for Raspberry Pi 2 or 3 r
 Cross compiling using rust-embedded/cross
 =========================================
 
-**Update**: With the new `vendored` feature. It is not required to provide a custom docker image, or have libdbus-1-dev installed to build. Simply enable the `vendored` feature:
+The `vendored` feature is the current recommended way to cross compile dbus-rs:
 
 ```
 dbus = {version = "0.9.7", features = ["vendored"]}
@@ -22,10 +22,10 @@ dbus = {version = "0.9.7", features = ["vendored"]}
 Then simply build your project with cross:
 
 ```
-cross build --target aarch64-unknown-linux-musl
+cross build --target arm-unknown-linux-musleabihf
 ```
 
-#### Old Instructions:
+#### Legacy Instructions:
 
 Thanks to [jobale](https://github.com/jobale) for providing these instructions
 (taken from [issue 292](https://github.com/diwic/dbus-rs/issues/292)).

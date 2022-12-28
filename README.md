@@ -147,12 +147,20 @@ The `futures` feature makes `dbus` depend on the `futures` crate. This enables t
 
 The `no-string-validation` feature skips an extra check that a specific string (e g a `Path`, `ErrorName` etc) conforms to the D-Bus specification, which might also make things a tiny bit faster. But - if you do so, and then actually send invalid strings to the D-Bus library, you might get a panic instead of a proper error.
 
+The `vendored` feature links libdbus statically into the final executable.
+
 Requirements
 ============
 
+Default
+-------
 [Libdbus](https://dbus.freedesktop.org/releases/dbus/) 1.6 or higher, and latest stable release of [Rust](https://www.rust-lang.org/). If you run Ubuntu (any maintained version should be okay), this means having the `libdbus-1-dev` and `pkg-config` packages installed while building, and the `libdbus-1-3` package installed while running.
 
-Cross compiling libdbus might be tricky because it binds to a C library, there are some notes [here](https://github.com/diwic/dbus-rs/blob/master/libdbus-sys/cross_compile.md).
+Vendored
+--------
+If the `vendored` feature is enabled, none of the default requirements.
+
+The `vendored` feature is the current recommended way to cross compile dbus-rs. More information and some other methods are mentioned [here](https://github.com/diwic/dbus-rs/blob/master/libdbus-sys/cross_compile.md).
 
 Alternatives
 ============
