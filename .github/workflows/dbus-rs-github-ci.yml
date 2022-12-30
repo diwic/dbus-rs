@@ -24,7 +24,7 @@ jobs:
           repo: cross
           matches: ${{ matrix.platform }}
           token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: cross-${{ matrix.platform }}
           path: ${{ steps.cross.outputs.install_path }}
@@ -43,13 +43,11 @@ jobs:
     - uses: actions/checkout@v3
       with:
         submodules: 'recursive'
-    - uses: actions-rs/toolchain@v1
+    - uses: dtolnay/rust-toolchain@stable
       with:
-          profile: minimal
           toolchain: stable
-          override: true
     - name: Download Cross
-      uses: actions/download-artifact@v1
+      uses: actions/download-artifact@v3
       with:
         name: cross-linux-musl
         path: /tmp
@@ -77,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Install dependencies
       run: |
         sudo apt-get update
@@ -106,7 +104,7 @@ jobs:
           mingw-w64-x86_64-dbus
           mingw-w64-x86_64-pkgconf
           mingw-w64-x86_64-rust
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Run tests
       run: |
         # dbus-daemon has no '--fork' option on windows. But it will autolaunch
