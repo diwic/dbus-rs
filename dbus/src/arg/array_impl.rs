@@ -612,7 +612,10 @@ pub fn get_array_refarg(i: &mut Iter) -> Box<dyn RefArg> {
                 _ => panic!("Array with invalid dictkey ({:?})", key),
             }
         }
-        ArgType::UnixFd => get_var_array_refarg::<OwnedFd, _>(i, |si| si.get()),
+        #[cfg(unix)]
+        ArgType::UnixFd => get_var_array_refarg::<std::os::fd::OwnedFd, _>(i, |si| si.get()),
+        #[cfg(windows)]
+        ArgType::UnixFd => panic!("Fd passing not supported on windows"),
         ArgType::Struct => get_internal_array(i),
     };
 

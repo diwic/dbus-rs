@@ -7,7 +7,6 @@ use std::ffi::CStr;
 use std::os::raw::{c_void, c_char, c_int};
 use std::fs::File;
 
-
 fn arg_append_basic<T>(i: *mut ffi::DBusMessageIter, arg_type: ArgType, v: T) {
     let p = &v as *const _ as *const c_void;
     unsafe {
@@ -225,29 +224,40 @@ impl<'a> Get<'a> for &'a CStr {
     fn get(i: &mut Iter<'a>) -> Option<&'a CStr> { unsafe { arg_get_str(&mut i.0, Self::ARG_TYPE) }}
 }
 
-impl Arg for OwnedFd {
-    const ARG_TYPE: ArgType = ArgType::UnixFd;
-    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked("h\0") } }
-}
-impl Append for OwnedFd {
-    #[cfg(unix)]
-    fn append_by_ref(&self, i: &mut IterAppend) {
-        arg_append_basic(&mut i.0, ArgType::UnixFd, self.as_raw_fd())
+#[cfg(unix)]
+mod owned_fd_impl {
+    use super::*;
+    use std::os::fd::OwnedFd;
+    impl Arg for OwnedFd {
+        const ARG_TYPE: ArgType = ArgType::UnixFd;
+        fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked("h\0") } }
     }
-    #[cfg(windows)]
-    fn append_by_ref(&self, _i: &mut IterAppend) {
-        panic!("File descriptor passing not available on Windows");
+    impl Append for OwnedFd {
+        fn append_by_ref(&self, i: &mut IterAppend) {
+            arg_append_basic(&mut i.0, ArgType::UnixFd, self.as_raw_fd())
+        }
     }
-}
-impl DictKey for OwnedFd {}
-impl<'a> Get<'a> for OwnedFd {
-    #[cfg(unix)]
-    fn get(i: &mut Iter) -> Option<Self> {
-        arg_get_basic(&mut i.0, ArgType::UnixFd).map(|fd| unsafe { OwnedFd::new(fd) })
+    impl DictKey for OwnedFd {}
+    impl<'a> Get<'a> for OwnedFd {
+        fn get(i: &mut Iter) -> Option<Self> {
+            arg_get_basic(&mut i.0, ArgType::UnixFd).map(|fd| unsafe { OwnedFd::from_raw_fd(fd) })
+        }
     }
-    #[cfg(windows)]
-    fn get(_i: &mut Iter) -> Option<Self> {
-        None
+    impl RefArg for OwnedFd {
+        #[inline]
+        fn arg_type(&self) -> ArgType { <Self as Arg>::ARG_TYPE }
+        #[inline]
+        fn signature(&self) -> Signature<'static> { <Self as Arg>::signature() }
+        #[inline]
+        fn append(&self, i: &mut IterAppend) { <Self as Append>::append_by_ref(self, i) }
+        #[inline]
+        fn as_any(&self) -> &dyn any::Any { self }
+        #[inline]
+        fn as_any_mut(&mut self) -> &mut dyn any::Any { self }
+        #[inline]
+        fn as_i64(&self) -> Option<i64> { Some(self.as_raw_fd() as i64) }
+        #[inline]
+        fn box_clone(&self) -> Box<dyn RefArg + 'static> { Box::new(self.try_clone().unwrap()) }
     }
 }
 
@@ -270,13 +280,6 @@ impl<'a> Get<'a> for io_lifetimes::OwnedFd {
         arg_get_basic(&mut i.0, ArgType::UnixFd).map(|fd| unsafe { io_lifetimes::OwnedFd::from_raw_fd(fd) })
     }
 }
-
-
-#[cfg(unix)]
-refarg_impl!(OwnedFd, _i, { use std::os::unix::io::AsRawFd; Some(_i.as_raw_fd() as i64) }, None, None, None);
-
-#[cfg(windows)]
-refarg_impl!(OwnedFd, _i, None, None, None, None);
 
 impl Arg for File {
     const ARG_TYPE: ArgType = ArgType::UnixFd;

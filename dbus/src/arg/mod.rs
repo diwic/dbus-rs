@@ -24,7 +24,7 @@ use crate::{ffi, Message, Signature, Path};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_void, c_int};
 #[cfg(unix)]
-use std::os::unix::io::{RawFd, AsRawFd, FromRawFd, IntoRawFd};
+use std::os::unix::io::{AsRawFd, FromRawFd};
 use std::collections::VecDeque;
 
 fn check(f: &str, i: u32) { if i == 0 { panic!("D-Bus error: '{}' failed", f) }}
@@ -32,72 +32,6 @@ fn check(f: &str, i: u32) { if i == 0 { panic!("D-Bus error: '{}' failed", f) }}
 fn ffi_iter() -> ffi::DBusMessageIter {
     // Safe because DBusMessageIter contains only fields that are allowed to be zeroed (i e no references or similar)
     unsafe { mem::zeroed() }
-}
-
-/// An RAII wrapper around Fd to ensure that file descriptor is closed
-/// when the scope ends.
-#[derive(Debug, PartialEq, PartialOrd)]
-pub struct OwnedFd {
-    #[cfg(unix)]
-    fd: RawFd
-}
-
-#[cfg(unix)]
-impl OwnedFd {
-    /// Create a new OwnedFd from a RawFd.
-    ///
-    /// This function is unsafe, because you could potentially send in an invalid file descriptor,
-    /// or close it during the lifetime of this struct. This could potentially be unsound.
-    pub unsafe fn new(fd: RawFd) -> OwnedFd {
-        OwnedFd { fd: fd }
-    }
-
-    /// Convert an OwnedFD back into a RawFd.
-    pub fn into_fd(self) -> RawFd {
-        let s = self.fd;
-        ::std::mem::forget(self);
-        s
-    }
-}
-
-#[cfg(unix)]
-impl Drop for OwnedFd {
-    fn drop(&mut self) {
-        unsafe { libc::close(self.fd); }
-    }
-}
-
-impl Clone for OwnedFd {
-    #[cfg(unix)]
-    fn clone(&self) -> OwnedFd {
-        let x = unsafe { libc::dup(self.fd) };
-        if x == -1 { panic!("Duplicating file descriptor failed") }
-        unsafe { OwnedFd::new(x) }
-    }
-
-    #[cfg(windows)]
-    fn clone(&self) -> OwnedFd {
-        OwnedFd {}
-    }
-}
-
-#[cfg(unix)]
-impl AsRawFd for OwnedFd {
-    fn as_raw_fd(&self) -> RawFd {
-        self.fd
-    }
-}
-
-#[cfg(unix)]
-impl IntoRawFd for OwnedFd {
-    fn into_raw_fd(self) -> RawFd {
-        self.into_fd()
-    }
-}
-
-#[cfg(unix)]
-impl FromRawFd for OwnedFd {
-    unsafe fn from_raw_fd(fd: RawFd) -> Self { OwnedFd::new(fd) }
 }
 
 #[derive(Clone, Copy)]
@@ -219,7 +153,10 @@ impl<'a> Iter<'a> {
             ArgType::Int64 => Box::new(self.get::<i64>().unwrap()),
             ArgType::UInt64 => Box::new(self.get::<u64>().unwrap()),
             ArgType::Double => Box::new(self.get::<f64>().unwrap()),
-            ArgType::UnixFd => Box::new(self.get::<std::fs::File>().unwrap()),
+            #[cfg(unix)]
+            ArgType::UnixFd => Box::new(self.get::<std::os::fd::OwnedFd>().unwrap()),
+            #[cfg(windows)]
+            ArgType::UnixFd => panic!("Fd passing not supported on windows"),
             ArgType::Struct => Box::new(self.recurse(ArgType::Struct).unwrap().collect::<VecDeque<_>>()),
             ArgType::ObjectPath => Box::new(self.get::<Path>().unwrap().into_static()),
             ArgType::Signature => Box::new(self.get::<Signature>().unwrap().into_static()),
