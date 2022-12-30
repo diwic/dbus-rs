@@ -377,3 +377,49 @@ async fn properties_get_all_async() {
     assert_eq!(response.get("Async").unwrap().as_i64(), Some(2));
     assert_eq!(response.len(), 2);
 }
+
+#[tokio::test]
+async fn properties_multi_interface_get_all_async() {
+    use dbus::channel::MatchingReceiver;
+
+    let (resource, bus) = dbus_tokio::connection::new_session_sync().unwrap();
+    tokio::spawn(async {resource.await;});
+    bus.request_name("com.example.dbusrs.properties", false, false, false).await.unwrap();
+
+    let mut cr = Crossroads::new();
+    let spawner = Box::new(|fut| { tokio::spawn(fut); });
+    cr.set_async_support(Some((bus.clone(), spawner)));
+
+    let iface = cr.register("com.example.dbusrs.properties", |b| {
+        b.property("Sync").get(|_, _| Ok(1));
+        b.property("Async").get_async(|mut ctx, _| async move {
+            ctx.reply(Ok(2))
+        });
+    });
+    let iface2 = cr.register("com.example.dbusrs.more_properties", |b| {
+        b.property("OtherSync").get(|_, _| Ok(3));
+        b.property("OtherAsync").get_async(|mut ctx, _| async move {
+            ctx.reply(Ok(4))
+        });
+    });
+    cr.insert("/", &[iface, iface2], ());
+    bus.start_receive(
+        dbus::message::MatchRule::new_method_call(),
+        Box::new(move |msg, conn| {
+            cr.handle_message(msg, conn).unwrap();
+            true
+        })
+    );
+
+    let proxy = dbus::nonblock::Proxy::new("com.example.dbusrs.properties", "/", Duration::from_secs(5), bus);
+    let (response,): (HashMap<String, Variant<Box<dyn RefArg>>>,) = proxy.method_call(
+        "org.freedesktop.DBus.Properties",
+        "GetAll",
+        ("",)
+    ).await.unwrap();
+    assert_eq!(response.get("Sync").unwrap().as_i64(), Some(1));
+    assert_eq!(response.get("Async").unwrap().as_i64(), Some(2));
+    assert_eq!(response.get("OtherSync").unwrap().as_i64(), Some(3));
+    assert_eq!(response.get("OtherAsync").unwrap().as_i64(), Some(4));
+    assert_eq!(response.len(), 4);
+}
