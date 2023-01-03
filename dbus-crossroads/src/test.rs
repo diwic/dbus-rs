@@ -384,7 +384,7 @@ async fn properties_multi_interface_get_all_async() {
 
     let (resource, bus) = dbus_tokio::connection::new_session_sync().unwrap();
     tokio::spawn(async {resource.await;});
-    bus.request_name("com.example.dbusrs.properties", false, false, false).await.unwrap();
+    bus.request_name("com.example.dbusrs.properties2", false, false, false).await.unwrap();
 
     let mut cr = Crossroads::new();
     let spawner = Box::new(|fut| { tokio::spawn(fut); });
@@ -411,7 +411,7 @@ async fn properties_multi_interface_get_all_async() {
         })
     );
 
-    let proxy = dbus::nonblock::Proxy::new("com.example.dbusrs.properties", "/", Duration::from_secs(5), bus);
+    let proxy = dbus::nonblock::Proxy::new("com.example.dbusrs.properties2", "/", Duration::from_secs(5), bus);
     let (response,): (HashMap<String, Variant<Box<dyn RefArg>>>,) = proxy.method_call(
         "org.freedesktop.DBus.Properties",
         "GetAll",

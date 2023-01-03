@@ -146,6 +146,7 @@ impl PropContext {
         };
         let octx = cb(self, cr);
         cr.registry().give_prop(token, &name, cb, is_set);
+        // dbg!(&name, octx.is_some());
         octx
     }
 
@@ -324,22 +325,34 @@ fn for_each_interface_with_properties<F: FnOnce(&mut IfaceContext, &mut Option<C
     ic.remaining = all.len();
     ic.donefn = Some(Dbg(Box::new(f)));
     drop(ic);
+    let amoctx = Arc::new(Mutex::new(octx));
     for mut pctx in all.into_iter() {
         let iclone = ictx.clone();
-        pctx.context = octx.take();
+        let amoclone = amoctx.clone();
+        pctx.context = amoctx.lock().unwrap().take();
         pctx.call_all_props(cr, move |pactx| {
             let mut ic = iclone.lock().unwrap();
+            let mut amoctx = amoclone.lock().unwrap();
+            if amoctx.is_none() {
+                *amoctx = pactx.propctx.as_mut().unwrap().context.take();
+            }
             let answers = std::mem::replace(&mut pactx.answers, HashMap::new());
-            // dbg!(&pactx);
+            //dbg!(amoctx.is_some(), &answers);
             ic.ifaces.insert(pactx.propctx.as_ref().unwrap().interface.to_string(), answers);
             ic.remaining -= 1;
             if ic.remaining == 0 {
                 let donefn = ic.donefn.take().unwrap().0;
-                (donefn)(&mut *ic, &mut pactx.propctx.as_mut().unwrap().context)
+                (donefn)(&mut *ic, &mut amoctx)
             }
-        }).map(|mut pctx| octx = pctx.context.take());
+        }).map(|mut pctx| {
+            let mut amoctx = amoctx.lock().unwrap();
+            if amoctx.is_none() {
+                *amoctx = pctx.context.take();
+            }
+        });
     }
-    octx
+    let mut amoctx = amoctx.lock().unwrap();
+    amoctx.take()
 }
 
 //
