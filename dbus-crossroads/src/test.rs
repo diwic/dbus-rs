@@ -164,6 +164,7 @@ fn introspect() {
     });
     cr.insert("/com/example/sample_object0", &[token], ());
     cr.insert("/com/example/sample_object0/child_of_sample_object", &[], ());
+    cr.insert("/com/example/sample_object0/child_of_sample_object/subchild", &[], ());
     cr.insert("/com/example/sample_object0123", &[], ());
     cr.insert("/com/example/sample_object0/another_child_of_sample_object", &[], ());
 

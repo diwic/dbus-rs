@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 use crate::ifacedesc::EMITS_CHANGED;
 
 fn introspect(cr: &Crossroads, path: &dbus::Path<'static>) -> String {
-    let mut children = cr.get_children(path);
+    let mut children = cr.get_children(path, true);
     let mut childstr = String::new();
     children.sort_unstable();
     for c in children {
@@ -347,7 +347,7 @@ fn get_managed_objects(mut ctx: Context, cr: &mut Crossroads, _: ()) -> Option<C
     // HashMap<dbus::Path<'static>, IfacePropMap>
     let parent = ctx.path();
     let children: Vec<dbus::Path<'static>> =
-        cr.get_children(ctx.path()).into_iter().map(|child_path| {
+        cr.get_children(ctx.path(), false).into_iter().map(|child_path| {
             let mut x = String::from(&**parent);
             if !x.ends_with('/') {
                 x.push_str("/");

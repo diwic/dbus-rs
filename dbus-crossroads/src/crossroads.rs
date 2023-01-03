@@ -224,17 +224,19 @@ impl Crossroads {
         (&self.registry, &obj.ifaces)
     }
 
-    pub (crate) fn get_children(&self, path: &dbus::Path<'static>) -> Vec<&str> {
+    pub (crate) fn get_children(&self, path: &dbus::Path<'static>, direct_only: bool) -> Vec<&str> {
         use std::ops::Bound;
         let mut range = self.map.range((Bound::Excluded(path), Bound::Unbounded));
         let p2 = path.as_bytes();
         let substart = if &p2 == &b"/" { 0 } else { p2.len() };
-        let mut r = vec!();
+        let mut r: Vec<&str> = vec!();
         while let Some((c, _)) = range.next() {
             if !c.as_bytes().starts_with(p2) { break; }
             let csub: &str = &c[substart..];
             if csub.len() == 0 || csub.as_bytes()[0] != b'/' { continue; }
-            r.push(&csub[1..]);
+            let csub1 = &csub[1..];
+            if direct_only && r.len() > 0 && csub1.as_bytes().starts_with(r[r.len()-1].as_bytes()) { continue; }
+            r.push(csub1);
         };
         r
     }
