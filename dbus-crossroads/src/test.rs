@@ -259,13 +259,17 @@ async fn object_manager_async_property() {
     let spawner = Box::new(|fut| { tokio::spawn(fut); });
     cr.set_async_support(Some((bus.clone(), spawner)));
 
-    let token = cr.register("com.example.dbusrs.item", |b: &mut IfaceBuilder<()>| {
+    let token = cr.register("com.example.dbusrs.item", |b: &mut IfaceBuilder<i64>| {
         b.property("asyncprop")
-            .get_async(move |mut ctx, _| { async move { ctx.reply(Ok(42i32)) } });
+            .get_async(move |mut ctx, n| {
+                let n = *n;
+                async move { ctx.reply(Ok(n)) }
+            });
     });
 
     cr.insert("/", &[cr.object_manager()], ());
-    cr.insert("/item", &[token], ());
+    cr.insert("/item1", &[token], 1);
+    cr.insert("/item2", &[token], 2);
 
     bus.start_receive(
         dbus::message::MatchRule::new_method_call(),
@@ -278,8 +282,10 @@ async fn object_manager_async_property() {
     let proxy = dbus::nonblock::Proxy::new("com.example.dbusrs.objmgr_asyncprop", "/", Duration::from_secs(5), bus);
     let (response,): (HashMap<dbus::Path<'static>, HashMap<String, PropMap>>,) = proxy.method_call(
         "org.freedesktop.DBus.ObjectManager", "GetManagedObjects", ()).await.unwrap();
-    let prop = &response[&"/item".into()]["com.example.dbusrs.item"]["asyncprop"];
-    assert_eq!(prop.0.as_i64().unwrap(), 42);
+    let prop1 = &response[&"/item1".into()]["com.example.dbusrs.item"]["asyncprop"];
+    assert_eq!(prop1.0.as_i64().unwrap(), 1);
+    let prop2 = &response[&"/item2".into()]["com.example.dbusrs.item"]["asyncprop"];
+    assert_eq!(prop2.0.as_i64().unwrap(), 2);
 }
 
 #[test]
