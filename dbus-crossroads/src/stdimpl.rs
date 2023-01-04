@@ -377,32 +377,41 @@ fn get_managed_objects(mut ctx: Context, cr: &mut Crossroads, _: ()) -> Option<C
         return Some(ctx);
     }
 
-    let mut octx = Some(ctx);
     #[derive(Debug)]
     struct Temp {
         remaining: usize,
         temp_map: PathPropMap,
+        octx: Option<Context>,
     }
     let r = Arc::new(Mutex::new(Temp {
         remaining: children.len(),
         temp_map: HashMap::new(),
+        octx: Some(ctx),
     }));
     for subpath in children {
         let rclone = r.clone();
         let subpath_clone = subpath.clone();
-        octx = get_all_for_path(&subpath, cr, octx.take(), move |ictx, octx| {
+        let octx = r.lock().unwrap().octx.take();
+        get_all_for_path(&subpath, cr, octx, move |ictx, octx| {
             let mut rr = rclone.lock().unwrap();
+            if rr.octx.is_none() { rr.octx = octx.take(); }
             let ifaces = std::mem::replace(&mut ictx.ifaces, HashMap::new());
             rr.temp_map.insert(subpath_clone, ifaces);
             rr.remaining -= 1;
             // dbg!(&rr);
             if rr.remaining > 0 { return; }
-            octx.as_mut().unwrap().do_reply(|msg| {
+            let mut octx = rr.octx.take().unwrap();
+            octx.do_reply(|msg| {
                 msg.append_all((&rr.temp_map,));
             });
+            rr.octx = Some(octx);
+        }).map(|octx| {
+            let mut rr = r.lock().unwrap();
+            if rr.octx.is_none() { rr.octx = Some(octx); }
         });
     }
-    octx
+    let mut rr = r.lock().unwrap();
+    rr.octx.take()
 }
 
 pub fn object_manager(cr: &mut Crossroads) -> IfaceToken<()> {
