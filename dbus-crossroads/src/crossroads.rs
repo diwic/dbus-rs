@@ -235,7 +235,11 @@ impl Crossroads {
             let csub: &str = &c[substart..];
             if csub.len() == 0 || csub.as_bytes()[0] != b'/' { continue; }
             let csub1 = &csub[1..];
-            if direct_only && r.len() > 0 && csub1.as_bytes().starts_with(r[r.len()-1].as_bytes()) { continue; }
+            if direct_only && r.len() > 0 {
+                let prev = r[r.len()-1].as_bytes();
+                let b = csub1.as_bytes();
+                if b.len() > prev.len() && b.starts_with(prev) && b[prev.len()] == b'/' { continue; }
+            }
             r.push(csub1);
         };
         r
