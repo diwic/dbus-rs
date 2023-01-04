@@ -143,6 +143,7 @@ const INTROSPECT: &str = r###"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS O
   </interface>
   <node name="another_child_of_sample_object"/>
   <node name="child_of_sample_object"/>
+  <node name="child_of_sample_object2"/>
 </node>"###;
 
 #[test]
@@ -164,7 +165,9 @@ fn introspect() {
     });
     cr.insert("/com/example/sample_object0", &[token], ());
     cr.insert("/com/example/sample_object0/child_of_sample_object", &[], ());
+    cr.insert("/com/example/sample_object0/child_of_sample_object2", &[], ());
     cr.insert("/com/example/sample_object0/child_of_sample_object/subchild", &[], ());
+    cr.insert("/com/example/sample_object0/child_of_sample_object/another_subchild", &[], ());
     cr.insert("/com/example/sample_object0123", &[], ());
     cr.insert("/com/example/sample_object0/another_child_of_sample_object", &[], ());
 

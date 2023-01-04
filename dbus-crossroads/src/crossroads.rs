@@ -235,7 +235,7 @@ impl Crossroads {
             let csub: &str = &c[substart..];
             if csub.len() == 0 || csub.as_bytes()[0] != b'/' { continue; }
             let csub1 = &csub[1..];
-            if direct_only && r.len() > 0 && csub1.as_bytes().starts_with(r[r.len()-1].as_bytes()) { continue; }
+            if direct_only && csub1.contains('/') { continue; }
             r.push(csub1);
         };
         r
