@@ -48,7 +48,7 @@ mod messageitem_fd_impl {
 
     impl PartialOrd for MessageItemFd {
         fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-            use std::os::fd::AsRawFd;
+            use std::os::unix::io::AsRawFd;
             let a = self.0.as_raw_fd();
             let b = other.0.as_raw_fd();
             a.partial_cmp(&b)
