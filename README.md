@@ -147,7 +147,7 @@ The `futures` feature makes `dbus` depend on the `futures` crate. This enables t
 
 The `vendored` feature links libdbus statically into the final executable.
 
-The `io-lifetimes` feature adds a dependency on the `io-lifetimes` crate, enabling you to append and get std's `OwnedFd`.
+The `stdfd` feature uses std's `OwnedFd` instead of dbus own. (This will be the default in the next major release.)
 
 The `no-string-validation` feature skips an extra check that a specific string (e g a `Path`, `ErrorName` etc) conforms to the D-Bus specification, which might also make things a tiny bit faster. But - if you do so, and then actually send invalid strings to the D-Bus library, you might get a panic instead of a proper error.
 

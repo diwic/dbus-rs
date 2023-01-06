@@ -612,7 +612,7 @@ pub fn get_array_refarg(i: &mut Iter) -> Box<dyn RefArg> {
                 _ => panic!("Array with invalid dictkey ({:?})", key),
             }
         }
-        ArgType::UnixFd => get_var_array_refarg::<OwnedFd, _>(i, |si| si.get()),
+        ArgType::UnixFd => get_var_array_refarg::<std::fs::File, _>(i, |si| si.get()),
         ArgType::Struct => get_internal_array(i),
     };
 

@@ -14,7 +14,6 @@ readme = "../README.md"
 edition = "2018"
 
 [dependencies]
-io-lifetimes = { version = "1.0.3", optional = true }
 libc = "0.2.66"
 libdbus-sys = { path = "../libdbus-sys", version = "0.2.2" }
 futures-util = { version = "0.3", optional = true, default-features = false }
@@ -30,6 +29,7 @@ tempfile = "3"
 
 [features]
 no-string-validation = []
+stdfd = []
 vendored = ["libdbus-sys/vendored"]
 futures = ["futures-util", "futures-channel"]
 # Not ready yet
