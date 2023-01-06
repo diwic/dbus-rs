@@ -87,6 +87,7 @@ jobs:
         export DBUS_SESSION_BUS_ADDRESS=`dbus-daemon --session --print-address --fork`
         cargo test --all -- --nocapture --color always
         cd dbus-codegen && cargo test --all --no-default-features -- --nocapture --color always
+        cargo test --all -- --nocapture --color always --features stdfd
 
   build-mingw:
 
