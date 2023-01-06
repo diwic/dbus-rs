@@ -30,6 +30,39 @@ pub enum ArrayError {
 }
 
 
+/// OwnedFd wrapper for MessageItem
+#[cfg(feature = "stdfd")]
+#[derive(Debug)]
+pub struct MessageItemFd(pub OwnedFd);
+
+#[cfg(feature = "stdfd")]
+mod messageitem_fd_impl {
+    use super::*;
+    impl Clone for MessageItemFd {
+        fn clone(&self) -> Self { MessageItemFd(self.0.try_clone().unwrap()) }
+    }
+
+    impl PartialEq for MessageItemFd {
+        fn eq(&self, _rhs: &Self) -> bool { false }
+    }
+
+    impl PartialOrd for MessageItemFd {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            use std::os::fd::AsRawFd;
+            let a = self.0.as_raw_fd();
+            let b = other.0.as_raw_fd();
+            a.partial_cmp(&b)
+        }
+    }
+
+    impl From<OwnedFd> for MessageItem { fn from(i: OwnedFd) -> MessageItem { MessageItem::UnixFd(MessageItemFd(i)) } }
+
+    impl<'a> TryFrom<&'a MessageItem> for &'a OwnedFd {
+        type Error = ();
+        fn try_from(i: &'a MessageItem) -> Result<&'a OwnedFd,()> { if let MessageItem::UnixFd(ref b) = i { Ok(&b.0) } else { Err(()) } }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 /// An array of MessageItem where every MessageItem is of the same type.
 pub struct MessageItemArray {
@@ -182,7 +215,12 @@ pub enum MessageItem {
     Double(f64),
     /// D-Bus allows for sending file descriptors, which can be used to
     /// set up SHM, unix pipes, or other communication channels.
+    #[cfg(not(feature = "stdfd"))]
     UnixFd(OwnedFd),
+    /// D-Bus allows for sending file descriptors, which can be used to
+    /// set up SHM, unix pipes, or other communication channels.
+    #[cfg(feature = "stdfd")]
+    UnixFd(MessageItemFd),
 }
 
 impl MessageItem {
@@ -375,7 +413,17 @@ impl From<Path<'static>> for MessageItem { fn from(i: Path<'static>) -> MessageI
 
 impl From<Signature<'static>> for MessageItem { fn from(i: Signature<'static>) -> MessageItem { MessageItem::Signature(i) } }
 
+#[cfg(not(feature = "stdfd"))]
 impl From<OwnedFd> for MessageItem { fn from(i: OwnedFd) -> MessageItem { MessageItem::UnixFd(i) } }
+
+#[cfg(unix)]
+impl From<std::fs::File> for MessageItem {
+    fn from(i: std::fs::File) -> MessageItem {
+        use std::os::unix::io::{FromRawFd, IntoRawFd};
+        let fd = unsafe { OwnedFd::from_raw_fd(i.into_raw_fd()) };
+        fd.into()
+    }
+}
 
 /// Create a `MessageItem::Variant`
 impl From<Box<MessageItem>> for MessageItem {
@@ -430,6 +478,7 @@ impl<'a> TryFrom<&'a MessageItem> for &'a [MessageItem] {
     fn try_from(i: &'a MessageItem) -> Result<&'a [MessageItem],()> { i.inner::<&Vec<MessageItem>>().map(|s| &**s) }
 }
 
+#[cfg(not(feature = "stdfd"))]
 impl<'a> TryFrom<&'a MessageItem> for &'a OwnedFd {
     type Error = ();
     fn try_from(i: &'a MessageItem) -> Result<&'a OwnedFd,()> { if let MessageItem::UnixFd(ref b) = i { Ok(b) } else { Err(()) } }
@@ -466,7 +515,10 @@ impl arg::Append for MessageItem {
             MessageItem::Dict(a) => a.append_by_ref(i),
             MessageItem::ObjectPath(a) => a.append_by_ref(i),
             MessageItem::Signature(a) => a.append_by_ref(i),
+            #[cfg(not(feature = "stdfd"))]
             MessageItem::UnixFd(a) => a.append_by_ref(i),
+            #[cfg(feature = "stdfd")]
+            MessageItem::UnixFd(a) => a.0.append_by_ref(i),
         }
     }
 }
@@ -509,7 +561,10 @@ impl<'a> arg::Get<'a> for MessageItem {
             ArgType::Int64 => MessageItem::Int64(i.get::<i64>().unwrap()),
             ArgType::UInt64 => MessageItem::UInt64(i.get::<u64>().unwrap()),
             ArgType::Double => MessageItem::Double(i.get::<f64>().unwrap()),
+            #[cfg(not(feature = "stdfd"))]
             ArgType::UnixFd => MessageItem::UnixFd(i.get::<OwnedFd>().unwrap()),
+            #[cfg(feature = "stdfd")]
+            ArgType::UnixFd => MessageItem::UnixFd(MessageItemFd(i.get::<OwnedFd>().unwrap())),
             ArgType::Struct => MessageItem::Struct({
                 let mut s = i.recurse(ArgType::Struct).unwrap();
                 let mut v = vec!();
@@ -662,11 +717,7 @@ mod test {
     extern crate tempfile;
 
     use crate::{Message, MessageType, Path, Signature};
-    #[cfg(unix)]
-    use libc;
     use crate::arg::messageitem::MessageItem;
-    #[cfg(unix)]
-    use crate::arg::OwnedFd;
     use crate::ffidisp::{Connection, BusType};
 
     #[test]
@@ -674,8 +725,6 @@ mod test {
         use std::io::prelude::*;
         use std::io::SeekFrom;
         use std::fs::OpenOptions;
-        #[cfg(unix)]
-        use std::os::unix::io::{IntoRawFd, AsRawFd};
 
         let c = Connection::get_private(BusType::Session).unwrap();
         c.register_object_path("/hello").unwrap();
@@ -689,8 +738,7 @@ mod test {
         file.seek(SeekFrom::Start(0)).unwrap();
         #[cfg(unix)]
         {
-            let ofd = unsafe { OwnedFd::new(file.into_raw_fd()) };
-            m.append_items(&[MessageItem::UnixFd(ofd.clone())]);
+            m.append_items(&[file.into()]);
         }
         println!("Sending {:?}", m.get_items());
         c.send(m).unwrap();
@@ -699,7 +747,8 @@ mod test {
             if n.msg_type() == MessageType::MethodCall {
                 #[cfg(unix)]
                 {
-                    let z: OwnedFd = n.read1().unwrap();
+                    use std::os::unix::io::AsRawFd;
+                    let z: crate::arg::OwnedFd = n.read1().unwrap();
                     println!("Got {:?}", z);
                     let mut q: libc::c_char = 100;
                     assert_eq!(1, unsafe { libc::read(z.as_raw_fd(), &mut q as *mut _ as *mut libc::c_void, 1) });
