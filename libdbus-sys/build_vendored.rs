@@ -131,7 +131,6 @@ const CWARNINGS: &'static [&'static str] = &[
     "-Wmissing-format-attribute",
     "-Wmissing-include-dirs",
     "-Wmissing-noreturn",
-    "-Wnull-dereference",
     "-Wpacked",
     "-Wpointer-arith",
     "-Wredundant-decls",
