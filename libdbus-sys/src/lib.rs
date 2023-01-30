@@ -5,6 +5,7 @@ pub type DBusMessage = c_void;
 pub type DBusWatch = c_void;
 pub type DBusPendingCall = c_void;
 pub type DBusTimeout = c_void;
+pub type DBusServer = c_void;
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -142,6 +143,8 @@ pub type DBusDispatchStatusFunction = Option<extern fn(conn: *mut DBusConnection
 pub type DBusWakeupMainFunction = Option<extern fn(conn: *mut DBusConnection, user_data: *mut c_void)>;
 
 pub type DBusPendingCallNotifyFunction = Option<extern fn(pending: *mut DBusPendingCall, user_data: *mut c_void)>;
+
+pub type DBusNewConnectionFunction = Option<extern fn(server: *mut DBusServer, new_connection: *mut DBusConnection, data: *mut c_void)>;
 
 pub type DBusFreeFunction = Option<extern fn(memory: *mut c_void)>;
 
@@ -312,4 +315,25 @@ extern "C" {
 
     pub fn dbus_try_get_local_machine_id(error: *mut DBusError) -> *mut c_char;
     pub fn dbus_get_local_machine_id() -> *mut c_char;
+
+    pub fn dbus_server_listen(address: *const c_char, error: *mut DBusError) -> *mut DBusServer;
+    pub fn dbus_server_ref(server: *mut DBusServer) -> *mut DBusServer;
+    pub fn dbus_server_unref(server: *mut DBusServer);
+    pub fn dbus_server_disconnect(server: *mut DBusServer);
+    pub fn dbus_server_get_is_connected(server: *mut DBusServer) -> u32;
+    pub fn dbus_server_get_address(server: *mut DBusServer) -> *mut c_char;
+    pub fn dbus_server_get_id(server: *mut DBusServer) -> *mut c_char;
+    pub fn dbus_server_set_new_connection_function(server: *mut DBusServer, function: DBusNewConnectionFunction,
+       data: *mut c_void, free_data_function: DBusFreeFunction);
+    pub fn dbus_server_set_watch_functions(server: *mut DBusServer, add_function: DBusAddWatchFunction,
+       remove_function: DBusRemoveWatchFunction, toggled_function: DBusWatchToggledFunction, data: *mut c_void,
+       free_data_function: DBusFreeFunction) -> u32;
+    pub fn dbus_server_set_timeout_functions(server: *mut DBusServer, add_function: DBusAddTimeoutFunction,
+       remove_function: DBusRemoveTimeoutFunction, toggled_function: DBusTimeoutToggledFunction, data: *mut c_void,
+       free_data_function: DBusFreeFunction) -> u32;
+    pub fn dbus_server_set_auth_mechanisms(server: *mut DBusServer, mechanisms: *mut *const c_char) -> u32;
+    pub fn dbus_server_allocate_data_slot(slot_p: *mut i32) -> u32;
+    pub fn dbus_server_free_data_slot(slot_p: *mut i32);
+    pub fn dbus_server_set_data(server: *mut DBusServer, slot: c_int, data: *mut c_void, free_data_func: DBusFreeFunction) -> u32;
+    pub fn dbus_server_get_data(server: *mut DBusServer, slot: c_int) -> c_void;
 }
