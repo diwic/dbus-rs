@@ -40,6 +40,9 @@ pub mod blocking;
 #[cfg(feature = "futures")]
 pub mod nonblock;
 
+mod watch;
+pub mod server;
+
 pub mod strings;
 pub use crate::strings::{Signature, Path};
 

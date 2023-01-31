@@ -46,7 +46,7 @@ impl Error {
             padding1: ptr::null()
         };
         unsafe { ffi::dbus_error_init(&mut e); }
-        Error{ e: e }
+        Error{ e }
     }
 
     /// Error name/type, e g 'org.freedesktop.DBus.Error.Failed'
