@@ -381,7 +381,6 @@ pub fn build_libdbus() -> Result<(), Box<dyn Error>> {
     compiler
         .shared_flag(false)
         .static_flag(true)
-        .warnings_into_errors(true)
         .compile("libdbus.a");
 
     // Tell cargo to tell rustc to link it in
