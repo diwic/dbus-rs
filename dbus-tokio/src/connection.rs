@@ -142,6 +142,8 @@ impl<C: AsRef<Channel> + Process> IOResource<C> {
             }
         };
 
+        drop(wake_status);
+
         // If we were woken up by write ready - reset it
         let mut write_guard = watch_reg.poll_write_ready(ctx)?;
 
