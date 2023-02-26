@@ -309,6 +309,7 @@ impl Connection {
     /// Add a match rule to match messages on the message bus.
     ///
     /// See the `unity_focused_window` example for how to use this to catch signals.
+    /// You can use MatchRule to construct the "rule" string.
     /// (The syntax of the "rule" string is specified in the [D-Bus specification](https://dbus.freedesktop.org/doc/dbus-specification.html#message-bus-routing-match-rules).)
     pub fn add_match(&self, rule: &str) -> Result<(), Error> {
         let mut e = Error::empty();
