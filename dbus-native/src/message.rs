@@ -133,6 +133,8 @@ impl<'a> Message<'a> {
 
     pub fn set_serial(&mut self, value: Option<std::num::NonZeroU32>) { self.serial = value; }
 
+    pub fn set_sender(&mut self, value: Option<Cow<'a, strings::BusName>>) { self.sender = value; }
+
     pub fn serial(&self) -> Option<std::num::NonZeroU32> { self.serial }
 
     pub fn set_flags(&mut self, value: u8) { self.flags = value & 0x7; }
