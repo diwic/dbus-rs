@@ -233,6 +233,7 @@ extern "C" {
     pub fn dbus_message_get_member(message: *mut DBusMessage) -> *const c_char;
     pub fn dbus_message_get_sender(message: *mut DBusMessage) -> *const c_char;
     pub fn dbus_message_set_serial(message: *mut DBusMessage, serial: u32);
+    pub fn dbus_message_set_sender(message: *mut DBusMessage, sender: *const c_char) -> u32;
     pub fn dbus_message_set_destination(message: *mut DBusMessage, destination: *const c_char) -> u32;
     pub fn dbus_message_get_no_reply(message: *mut DBusMessage) -> u32;
     pub fn dbus_message_set_no_reply(message: *mut DBusMessage, no_reply: u32);
