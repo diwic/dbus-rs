@@ -10,7 +10,7 @@
    someone calls the "Hello" method.
    
    When you run this example, you can test it with this command:
-       dbus-send --dest=com.example.dbustest /hello com.example.dbustest.Hello string:MyName
+       dbus-send --print-reply --dest=com.example.dbustest /hello com.example.dbustest.Hello string:MyName
        
    You should see output like this:
        method return time=1667227809.834235 sender=:1.1620 -> destination=:1.1628 serial=7 reply_serial=2
