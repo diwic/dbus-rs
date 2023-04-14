@@ -197,9 +197,9 @@ impl<'a> Config<'a> {
 
 /// Config.h and dbus-arch-deps.h stubs (we generate config programatically
 /// instead to be passed directly to cc)
-fn generate_stubs() -> Result<(), Box<dyn Error>> {
-    let mut config = File::create("vendor/dbus/config.h")?;
-    let mut arch = File::create("vendor/dbus/dbus/dbus-arch-deps.h")?;
+fn generate_stubs(outdir: &str) -> Result<(), Box<dyn Error>> {
+    let mut config = File::create(format!("{}/include/config.h", outdir))?;
+    let mut arch = File::create(format!("{}/include/dbus/dbus-arch-deps.h", outdir))?;
 
     // Stub out the file. Certain flags are only for newer gcc versions.
     config.write_all(b"
@@ -339,6 +339,12 @@ pub fn build_libdbus() -> Result<(), Box<dyn Error>> {
     let mut compiler = cc::Build::new();
     let mut config = Config::new();
 
+    // Obtain the output directoryy
+    let outdir = env::var("OUT_DIR").or(Err("No output directory."))?;
+
+    // Create a directory for generated headers
+    std::fs::create_dir_all(format!("{}/include/dbus", &outdir))?;
+
     // Ensure submodule is checked out
     if !Path::new("vendor/dbus/dbus").exists() {
         let _ = Command::new("git")
@@ -350,11 +356,12 @@ pub fn build_libdbus() -> Result<(), Box<dyn Error>> {
     generate_config(&mut compiler, &mut config)?;
 
     // Generate stub files
-    generate_stubs()?;
+    generate_stubs(&outdir)?;
 
     // Generic source files
     compiler.files(SOURCE_FILES);
     compiler.files(INTERNAL_FILES);
+    compiler.include(format!("{}/include", &outdir));
     compiler.include("./vendor/dbus/");
 
     // Set the defines
@@ -384,7 +391,7 @@ pub fn build_libdbus() -> Result<(), Box<dyn Error>> {
         .compile("libdbus.a");
 
     // Tell cargo to tell rustc to link it in
-    println!("cargo:rustc-link-search=native={}", env::var("OUT_DIR").or(Err("No output directory."))?);
+    println!("cargo:rustc-link-search=native={}", outdir);
     println!("cargo:rustc-link-lib=static=dbus");
     Ok(())
 }
