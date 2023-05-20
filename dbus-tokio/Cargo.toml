@@ -5,7 +5,7 @@ version = "0.7.6"
 
 description = "Makes it possible to use Tokio with D-Bus, which is a bus commonly used on Linux for inter-process communication."
 repository = "https://github.com/diwic/dbus-rs"
-documentation = "http://docs.rs/dbus-tokio"
+documentation = "https://docs.rs/dbus-tokio"
 keywords = ["D-Bus", "DBus"]
 license = "Apache-2.0/MIT"
 categories = ["os::unix-apis", "api-bindings", "asynchronous"]
