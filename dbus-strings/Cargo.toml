@@ -6,7 +6,7 @@ edition = "2018"
 
 description = "Rust native implementation of different D-Bus string types"
 repository = "https://github.com/diwic/dbus-rs"
-documentation = "http://docs.rs/dbus-strings"
+documentation = "https://docs.rs/dbus-strings"
 keywords = ["D-Bus", "DBus", "IPC"]
 license = "Apache-2.0/MIT"
 
