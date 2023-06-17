@@ -114,6 +114,7 @@ const INTROSPECT: &str = r###"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS O
       <arg name="new_value" type="b"/>
     </signal>
     <property name="Bar" type="y" access="readwrite"/>
+    <annotation name="com.example.SampleAnnotation" value="TestValue"/>
   </interface>
   <interface name="org.freedesktop.DBus.Introspectable">
     <method name="Introspect">
@@ -163,6 +164,7 @@ fn introspect() {
         });
         b.signal::<(bool,), _>("Changed", ("new_value",));
         b.property("Bar").get(|_,_| Ok(0u8)).set(|_,_,_| Ok(None));
+        b.annotate("com.example.SampleAnnotation", "TestValue");
     });
     cr.insert("/com/example/sample_object0", &[token], ());
     cr.insert("/com/example/sample_object0/child_of_sample_object", &[], ());

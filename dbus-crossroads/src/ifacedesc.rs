@@ -116,7 +116,7 @@ impl Registry {
                     r += &format!(">\n{}    </property>\n",  x.annotations.introspect("      "));
                 }
             }
-            desc.annotations.introspect("    ");
+            r += &desc.annotations.introspect("    ");
             r += "  </interface>\n";
         };
         r
