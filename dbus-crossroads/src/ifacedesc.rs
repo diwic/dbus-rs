@@ -71,7 +71,10 @@ impl Registry {
     }
 
     pub fn introspect(&self, ifaces: &HashSet<usize>) -> String {
-        let mut v: Vec<_> = ifaces.iter().filter_map(|&t| self.0[t].name.as_ref().map(|n| (n, t))).collect();
+        let mut v: Vec<_> = ifaces.iter()
+            .filter(|&&t| !self.0[t].hidden)
+            .filter_map(|&t| self.0[t].name.as_ref().map(|n| (n, t)))
+            .collect();
         v.sort_unstable();
         let mut r = String::new();
         for (n, t) in v.into_iter() {
@@ -81,8 +84,12 @@ impl Registry {
             let mut v2: Vec<_> = desc.methods.keys().collect();
             v2.sort_unstable();
             for name in v2.into_iter() {
-                r += &format!("    <method name=\"{}\">\n", name);
                 let x = &desc.methods[name];
+                if x.hidden {
+                    continue
+                }
+
+                r += &format!("    <method name=\"{}\">\n", name);
                 r += &x.input_args.introspect(Some("in"), "      ");
                 r += &x.output_args.introspect(Some("out"), "      ");
                 r += &x.annotations.introspect("      ");
@@ -92,8 +99,12 @@ impl Registry {
             let mut v2: Vec<_> = desc.signals.keys().collect();
             v2.sort_unstable();
             for name in v2.into_iter() {
-                r += &format!("    <signal name=\"{}\">\n", name);
                 let x = &desc.signals[name];
+                if x.hidden {
+                    continue
+                }
+
+                r += &format!("    <signal name=\"{}\">\n", name);
                 r += &x.args.introspect(None, "      ");
                 r += &x.annotations.introspect("      ");
                 r += "    </signal>\n";
@@ -103,6 +114,10 @@ impl Registry {
             v2.sort_unstable();
             for name in v2.into_iter() {
                 let x = &desc.properties[name];
+                if x.hidden {
+                    continue
+                }
+
                 let a = match (x.get_cb.is_some(), x.set_cb.is_some()) {
                     (true, true) => "readwrite",
                     (true, false) => "read",
@@ -199,6 +214,7 @@ pub struct MethodDesc {
     input_args: Arguments,
     output_args: Arguments,
     annotations: Annotations,
+    hidden: bool,
 }
 
 impl MethodDesc {
@@ -207,6 +223,11 @@ impl MethodDesc {
         self
     }
     pub fn deprecated(&mut self) -> &mut Self { self.annotate(DEPRECATED, "true") }
+
+    pub fn hidden(&mut self) -> &mut Self {
+        self.hidden = true;
+        self
+    }
 }
 
 
@@ -217,6 +238,7 @@ impl MethodDesc {
 pub struct SignalDesc {
     args: Arguments,
     annotations: Annotations,
+    hidden: bool,
 }
 
 /// Struct used to describe a property when building an interface.
@@ -235,6 +257,11 @@ impl<A: 'static> SignalBuilder<'_, A> {
         self
     }
     pub fn deprecated(&mut self) -> &mut Self { self.annotate(DEPRECATED, "true") }
+
+    pub fn hidden(&mut self) -> &mut Self {
+        self.desc.hidden = true;
+        self
+    }
 }
 
 impl<A: arg::AppendAll + 'static> SignalBuilder<'_, A> {
@@ -257,6 +284,7 @@ pub struct PropDesc {
     sig: dbus::Signature<'static>,
     get_cb: Option<Dbg<PropCb>>,
     set_cb: Option<Dbg<PropCb>>,
+    hidden: bool,
 }
 
 #[derive(Debug)]
@@ -266,6 +294,7 @@ pub struct IfaceDesc {
     methods: HashMap<strings::Member<'static>, MethodDesc>,
     signals: HashMap<strings::Member<'static>, SignalDesc>,
     properties: HashMap<String, PropDesc>,
+    hidden: bool,
 }
 
 fn build_argvec<A: arg::ArgAll>(a: A::strs) -> Arguments {
@@ -480,6 +509,11 @@ impl<T: std::marker::Send, A> PropBuilder<'_, T, A> {
         self.emits_changed = EmitsChangedSignal::True;
         self.annotate(EMITS_CHANGED, "true")
     }
+
+    pub fn hidden(mut self) -> Self {
+        self.desc.hidden = true;
+        self
+    }
 }
 
 /// Struct used to build an interface.
@@ -509,6 +543,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
                 get_cb: None,
                 set_cb: None,
                 sig: A::signature(),
+                hidden: false,
             }),
             _dummy: PhantomData,
             emits_changed: EmitsChangedSignal::True,
@@ -545,6 +580,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
             input_args: build_argvec::<IA>(input_args),
             output_args: build_argvec::<OA>(output_args),
             cb: Some(CallbackDbg(boxed)),
+            hidden: false,
         })
     }
 
@@ -563,6 +599,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
             input_args: build_argvec::<IA>(input_args),
             output_args: build_argvec::<OA>(output_args),
             cb: Some(CallbackDbg(boxed)),
+            hidden: false,
         })
     }
 
@@ -603,6 +640,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
             desc: self.0.signals.entry(key).or_insert(SignalDesc {
                 annotations: Default::default(),
                 args: build_argvec::<A>(args),
+                hidden: false,
             }),
             _dummy: PhantomData,
             name,
@@ -616,6 +654,11 @@ impl<T: Send + 'static> IfaceBuilder<T> {
     }
     pub fn deprecated(&mut self) -> &mut Self { self.annotate(DEPRECATED, "true") }
 
+    pub fn hidden(&mut self) -> &mut Self {
+        self.0.hidden = true;
+        self
+    }
+
     pub (crate) fn build<F>(name: Option<strings::Interface<'static>>, f: F) -> IfaceDesc
     where F: FnOnce(&mut IfaceBuilder<T>) {
         let mut b = IfaceBuilder(IfaceDesc {
@@ -624,6 +667,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
             methods: Default::default(),
             signals: Default::default(),
             properties: Default::default(),
+            hidden: false,
         }, PhantomData);
         f(&mut b);
         b.0

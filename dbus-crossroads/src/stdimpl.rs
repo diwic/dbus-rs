@@ -34,6 +34,15 @@ pub fn introspectable(cr: &mut Crossroads) -> IfaceToken<()> {
     })
 }
 
+pub fn introspectable_hidden(cr: &mut Crossroads) -> IfaceToken<()> {
+    cr.register("org.freedesktop.DBus.Introspectable", |b| {
+        b.hidden();
+        b.method_with_cr("Introspect", (), ("xml_data",), |ctx, cr, _: ()| {
+            Ok((introspect(cr, ctx.path()),))
+        });
+    })
+}
+
 
 pub (crate) fn make_emits_message<V: dbus::arg::Arg + dbus::arg::Append>(prop_name: &str, emits_changed: &str, ctx: &Context, v: &V) -> Option<dbus::Message> {
     let arr = [prop_name];

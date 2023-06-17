@@ -13,6 +13,7 @@ use crate::utils::Dbg;
 const INTROSPECTABLE: usize = 0;
 const PROPERTIES: usize = 1;
 const OBJECT_MANAGER: usize = 2;
+const INTROSPECTABLE_HIDDEN: usize = 3;
 
 /// Contains a reference to a registered interface.
 pub struct IfaceToken<T: Send + 'static>(usize, PhantomData<&'static T>);
@@ -85,9 +86,11 @@ impl Crossroads {
         let t0 = stdimpl::introspectable(&mut cr);
         let t1 = stdimpl::properties(&mut cr);
         let t2 = stdimpl::object_manager(&mut cr);
+        let t3 = stdimpl::introspectable_hidden(&mut cr);
         debug_assert_eq!(t0.0, INTROSPECTABLE);
         debug_assert_eq!(t1.0, PROPERTIES);
         debug_assert_eq!(t2.0, OBJECT_MANAGER);
+        debug_assert_eq!(t3.0, INTROSPECTABLE_HIDDEN);
 
         // Add the root path and make it introspectable. This helps D-Bus debug tools
         cr.insert("/", &[], ());
@@ -285,6 +288,10 @@ impl Crossroads {
 
     /// The token representing the built-in implementation of "org.freedesktop.DBus.Introspectable".
     pub fn introspectable<T: Send + 'static>(&self) -> IfaceToken<T> { IfaceToken(INTROSPECTABLE, PhantomData) }
+
+    /// The token representing a built-in implementation of "org.freedesktop.DBus.Introspectable",
+    /// but including a `Hidden` property, thus it not being visible in the introspection.
+    pub fn hidden_introspectable<T: Send + 'static>(&self) -> IfaceToken<T> { IfaceToken(INTROSPECTABLE_HIDDEN, PhantomData) }
 
     /// The token representing the built-in implementation of "org.freedesktop.DBus.Properties".
     pub fn properties<T: Send + 'static>(&self) -> IfaceToken<T> { IfaceToken(PROPERTIES, PhantomData) }
