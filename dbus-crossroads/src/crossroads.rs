@@ -8,6 +8,7 @@ use crate::ifacedesc::Registry;
 use std::collections::{BTreeMap, HashSet};
 use std::any::Any;
 use std::fmt;
+use std::iter::FromIterator;
 use crate::utils::Dbg;
 
 const INTROSPECTABLE: usize = 0;
@@ -41,7 +42,17 @@ impl<T: Send + 'static> fmt::Debug for IfaceToken<T> {
 #[derive(Debug)]
 struct Object {
     ifaces: HashSet<usize>,
+    hidden_ifaces: HashSet<usize>,
     data: Box<dyn Any + Send + 'static>
+}
+
+impl Object {
+    pub(crate) fn all_interfaces(&self) -> HashSet<usize> {
+        let mut union = self.ifaces.clone();
+        union.extend(&self.hidden_ifaces);
+
+        union
+    }
 }
 
 pub type BoxedSpawn = Box<dyn Fn(Pin<Box<dyn Future<Output = ()> + Send + 'static>>) + Send + 'static>;
@@ -134,7 +145,7 @@ impl Crossroads {
             }
         }
         let name = name.into();
-        self.map.insert(name.clone(), Object { ifaces, data: Box::new(data)});
+        self.map.insert(name.clone(), Object { ifaces, hidden_ifaces: Default::default(), data: Box::new(data)});
         if let Some(oms) = self.object_manager_support.as_ref() {
             stdimpl::object_manager_path_added(oms.0.clone(), &name, self);
         }
@@ -170,26 +181,56 @@ impl Crossroads {
         false
     }
 
+    pub fn add_hidden_interface<'z, D, N>(&mut self, name: N, iface: IfaceToken<D>) -> bool
+    where D: Any + Send + 'static, N: Into<dbus::Path<'static>>
+    {
+        let name = name.into();
+        if let Some(obj) = self.map.get_mut(&name) {
+            if !obj.data.is::<D>() {
+                // Data type mismatch, return fail.
+                return false;
+            }
+
+            obj.hidden_ifaces.insert(iface.0);
+
+            if obj.ifaces.contains(&iface.0) {
+                // The interface is visible. Remove it.
+                obj.ifaces.remove(&iface.0);
+
+                // Notify users of removal of interface. It should be invisible.
+                if let Some(oms) = self.object_manager_support.as_ref() {
+                    stdimpl::object_manager_interface_added(oms.0.clone(), &name, iface.0, self);
+                }
+            }
+
+            return true;
+        }
+
+        false
+    }
+
     /// Removes an interface from an object path.
     pub fn remove_interface<'z, D, N>(&mut self, name: N, iface: IfaceToken<D>)
     where D: Any + Send + 'static, N: Into<dbus::Path<'static>>
     {
         let name = name.into();
         if let Some(obj) = self.map.get_mut(&name) {
-            if !obj.ifaces.contains(&iface.0) {
-                return;
-            }
-
-            obj.ifaces.remove(&iface.0);
-            if let Some(oms) = self.object_manager_support.as_ref() {
-                stdimpl::object_manager_interface_removed(oms.0.clone(), &name, iface.0, self);
+            if obj.ifaces.contains(&iface.0) {
+                obj.ifaces.remove(&iface.0);
+                if let Some(oms) = self.object_manager_support.as_ref() {
+                    stdimpl::object_manager_interface_removed(oms.0.clone(), &name, iface.0, self);
+                }
+            } else if obj.hidden_ifaces.contains(&iface.0) {
+                obj.hidden_ifaces.remove(&iface.0);
             }
         }
     }
 
     /// Returns true if the path exists and implements the interface
     pub fn has_interface<D: Send>(&self, name: &dbus::Path<'static>, token: IfaceToken<D>) -> bool {
-        self.map.get(name).map(|x| x.ifaces.contains(&token.0)).unwrap_or(false)
+        self.map.get(name)
+            .map(|x| x.all_interfaces().contains(&token.0))
+            .unwrap_or(false)
     }
 
     /// Removes an existing path.
@@ -213,7 +254,7 @@ impl Crossroads {
         interface: Option<&dbus::strings::Interface<'static>>)
     -> Result<usize, MethodErr> {
         let obj = self.map.get(path).ok_or_else(|| MethodErr::no_path(path))?;
-        self.registry.find_token(interface, &obj.ifaces)
+        self.registry.find_token(interface, &obj.all_interfaces())
     }
 
     pub (crate) fn registry(&mut self) -> &mut Registry { &mut self.registry }

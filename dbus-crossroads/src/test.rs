@@ -182,6 +182,27 @@ fn introspect() {
     assert_eq!(INTROSPECT, xml_data);
 }
 
+const INTROSPECT_ROOT: &str = r###"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node name="/com">
+</node>"###;
+
+#[test]
+fn introspect_hidden() {
+    let mut cr = Crossroads::new();
+    cr.insert("/com", &[], ());
+    cr.add_hidden_interface("/com", cr.introspectable::<()>());
+
+    let msg = Message::new_method_call("com.example.dbusrs.crossroads.score", "/com",
+                                       "org.freedesktop.DBus.Introspectable", "Introspect").unwrap();
+    let r = dispatch_helper(&mut cr, msg);
+    let xml_data: &str = r.read1().unwrap();
+    println!("{}", xml_data);
+    assert_eq!(INTROSPECT_ROOT, xml_data);
+}
+
+
+
 #[test]
 fn object_manager() {
     struct Apple { radius: u32, weight: u32 }

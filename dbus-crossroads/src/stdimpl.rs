@@ -16,7 +16,7 @@ fn introspect(cr: &Crossroads, path: &dbus::Path<'static>) -> String {
         childstr += &format!("  <node name=\"{}\"/>\n", c);
     }
     let (reg, ifaces) = cr.registry_and_ifaces(path);
-    let ifacestr = reg.introspect(ifaces);
+    let ifacestr = reg.introspect(&ifaces);
 
     let nodestr = format!(
 r##"<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
@@ -302,7 +302,7 @@ where F: FnOnce(&mut IfaceContext, &mut Option<Context>) + Send + 'static {
 fn for_each_interface_with_properties<F: FnOnce(&mut IfaceContext, &mut Option<Context>) + Send + 'static, I: IntoIterator<Item = usize>>
 (path: &dbus::Path<'static>, ifaces: I, cr: &mut Crossroads, mut octx: Option<Context>, f: F) -> Option<Context> {
     let ictx: Arc<Mutex<IfaceContext>> = Default::default();
-    let (reg, _all_ifaces) = cr.registry_and_ifaces(&path);
+    let (reg, _ifaces) = cr.registry_and_ifaces(&path);
     let all: Vec<_> = ifaces.into_iter().filter_map(|token| {
         let iface_name = reg.get_intf_name(token)?;
         Some(PropContext {
