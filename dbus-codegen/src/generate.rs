@@ -82,6 +82,7 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
     let mut curm = None;
     let mut cursig = None;
     let mut curprop = None;
+    let mut curarg = None;
     let parser = EventReader::new(io::Cursor::new(xmldata));
     for e in parser {
         match e? {
@@ -182,17 +183,24 @@ pub fn generate(xmldata: &str, opts: &GenOpts) -> Result<String, Box<dyn error::
                     _ => { Err("Invalid direction")?; unreachable!() }
                 };
                 let no_refs = is_out || cursig.is_some() || opts.crossroads;
+                curarg = Some(Arg { name: find_attr(attributes, "name").unwrap_or("").into(),
+                    typ: typ, no_refs, idx: 0, is_out, annotations: HashMap::new() });
+            }
+
+            XmlEvent::EndElement { ref name } if &name.local_name == "arg" => {
+                if curarg.is_none() { Err("End of arg outside arg")? };
+                let arg = curarg.as_mut().unwrap();
                 let arr = if let Some(ref mut sig) = cursig { &mut sig.args }
-                    else if is_out { &mut curm.as_mut().unwrap().oargs } else { &mut curm.as_mut().unwrap().iargs };
-                let arg = Arg { name: find_attr(attributes, "name").unwrap_or("").into(),
-                    typ: typ, no_refs, idx: arr.len() as i32 };
-                arr.push(arg);
+                else if arg.is_out { &mut curm.as_mut().unwrap().oargs } else { &mut curm.as_mut().unwrap().iargs };
+                arg.idx = arr.len() as i32;
+                arr.push(curarg.take().unwrap());
             }
 
             XmlEvent::StartElement { ref name, ref attributes, ..} if &name.local_name == "annotation" => {
                 if let Ok(key) = find_attr(attributes, "name") {
                     if let Ok(value) = find_attr(attributes, "value") {
-                        if let Some(ref mut sig) = cursig { sig.annotations.insert(key.into(), value.into()); }
+                        if let Some(ref mut arg) = curarg { arg.annotations.insert(key.into(), value.into()); }
+                        else if let Some(ref mut sig) = cursig { sig.annotations.insert(key.into(), value.into()); }
                         else if let Some(ref mut prop) = curprop { prop.annotations.insert(key.into(), value.into()); }
                         else if let Some(ref mut met) = curm { met.annotations.insert(key.into(), value.into()); }
                         else if let Some(ref mut intf) = curintf { intf.annotations.insert(key.into(), value.into()); }

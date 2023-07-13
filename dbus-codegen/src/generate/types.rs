@@ -6,6 +6,8 @@ pub (super) struct Arg {
     pub typ: String,
     pub idx: i32,
     pub no_refs: bool,
+    pub is_out: bool,
+    pub annotations: HashMap<String, String>,
 }
 
 pub (super) struct Method {
@@ -243,6 +245,9 @@ impl Arg {
         } else { self.varname() }
     }
     pub fn typename(&self, genvar: bool) -> Result<(String, Vec<String>), Box<dyn error::Error>> {
+        if let Some(u) = self.user_type() {
+            return Ok((u, vec!()));
+        }
         let mut g = if genvar { Some(GenVars {
             prefix: format!("{}{}", if self.no_refs { 'R' } else { 'I' }, self.idx),
             gen: vec!(),
@@ -253,6 +258,9 @@ impl Arg {
         ).collect()).unwrap_or(vec!())))
     }
     pub fn typename_norefs(&self) -> Result<String, Box<dyn error::Error>> {
+        if let Some(u) = self.user_type() {
+            return Ok(u);
+        }
         make_type(&self.typ, true, &mut None)
     }
     pub fn typename_maybewrap(&self, genvar: bool) -> Result<String, Box<dyn error::Error>> {
@@ -261,9 +269,29 @@ impl Arg {
             format!("arg::Variant<{}>", t)
         } else { t })
     }
+    fn user_type(&self) -> Option<String> {
+        if let Some(v) = self.annotations.get("rs.dbus.ArgType") {
+            let mut t = if self.no_refs {
+                "".to_owned()
+            } else {
+                "&".to_owned()
+            };
+            t += v;
+            Some(t)
+        } else {
+            None
+        }
+    }
 }
 
 impl Prop {
     pub fn can_get(&self) -> bool { self.access != "write" }
     pub fn can_set(&self) -> bool { self.access == "write" || self.access == "readwrite" }
+    pub fn typename(&self) -> Result<String, Box<dyn error::Error>> {
+        if let Some(v) = self.annotations.get("rs.dbus.ArgType") {
+            Ok(v.clone())
+        } else {
+            make_type(&self.typ, true, &mut None)
+        }
+    }
 }

@@ -154,6 +154,33 @@ static DEPRECATED_XML: &'static str = r#"
 </node>
 "#;
 
+static USER_TYPES_XML: &'static str = r#"
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+                      "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="com.example.MyService1.InterestingInterface">
+    <method name="Method1">
+      <arg name="arg1" direction="in" type="s">
+        <annotation name="rs.dbus.ArgType" value="codegen_tests::user_type::MyType"/>
+      </arg>
+      <arg name="outarg2" direction="out" type="u">
+        <annotation name="rs.dbus.ArgType" value="codegen_tests::user_type::MyType"/>
+      </arg>
+    </method>
+
+    <signal name="Signal1">
+      <arg name="arg1" type="s">
+        <annotation name="rs.dbus.ArgType" value="codegen_tests::user_type::MyType"/>
+      </arg>
+    </signal>
+
+    <property name="Bar" type="y" access="readwrite">
+      <annotation name="rs.dbus.ArgType" value="codegen_tests::user_type::MyType"/>
+    </property>
+  </interface>
+</node>
+"#;
+
 fn write_to_file(code: &str, path: &Path) {
     let mut f = File::create(path).unwrap();
     Write::write_all(&mut f,code.as_bytes()).unwrap();
@@ -179,6 +206,7 @@ fn main() {
         ..Default::default()
     };
     generate_code(POLICYKIT_XML, &blocking_client, "policykit_blocking.rs");
+    generate_code(USER_TYPES_XML, &blocking_client, "user_types_blocking.rs");
 
     let nonblock_client = GenOpts {
         connectiontype: ConnectionType::Nonblock,
@@ -186,6 +214,7 @@ fn main() {
         ..Default::default()
     };
     generate_code(POLICYKIT_XML, &nonblock_client, "policykit_nonblock.rs");
+    generate_code(USER_TYPES_XML, &nonblock_client, "user_types_nonblock.rs");
 
     let mut g = GenOpts {
         methodtype: Some("MTFnMut".into()),
@@ -202,10 +231,12 @@ fn main() {
     g.methodtype = None;
     g.propnewtype = true;
     generate_code(POLICYKIT_XML, &g, "policykit_client.rs");
+    generate_code(USER_TYPES_XML, &g, "user_types_client.rs");
 
     g.crossroads = true;
     g.propnewtype = false;
     g.skipprefix = Some("org.freedesktop".into());
     generate_code(POLICYKIT_XML, &g, "policykit_cr.rs");
     generate_code(DEPRECATED_XML, &g, "deprecated_cr.rs");
+    generate_code(USER_TYPES_XML, &g, "user_types_cr.rs");
 }

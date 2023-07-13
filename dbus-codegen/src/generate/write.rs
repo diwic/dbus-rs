@@ -85,10 +85,10 @@ fn write_prop_signature(s: &mut String, p: &Prop, opts: &GenOpts, context: GenCo
     }
     if set {
         *s += &format!("    fn {}(&self, value: {}) -> {}",
-            p.set_fn_name, make_type(&p.typ, true, &mut None)?, make_result("()", opts));
+            p.set_fn_name, p.typename()?, make_result("()", opts));
     } else {
         *s += &format!("    fn {}(&self) -> {}",
-            p.get_fn_name, make_result(&make_type(&p.typ, true, &mut None)?, opts));
+            p.get_fn_name, make_result(&p.typename()?, opts));
     };
     Ok(())
 }
@@ -336,7 +336,7 @@ where T: {} + Send + 'static
         *s += &format!("        }}){};\n", cr_anno(&m.annotations, "            ", ""));
     }
     for p in &i.props {
-        *s += &format!("        b.property::<{}, _>(\"{}\")", make_type(&p.typ, true, &mut None)?, p.name);
+        *s += &format!("        b.property::<{}, _>(\"{}\")", p.typename()?, p.name);
         if p.can_get() {
             *s += &format!("\n            .get(|_, t| t.{}())", p.get_fn_name);
         }
