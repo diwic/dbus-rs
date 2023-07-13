@@ -2,30 +2,35 @@ use dbus::arg::{Append, IterAppend, Iter, Arg, ArgType, Get, RefArg};
 use dbus::strings::Signature;
 use std::any;
 
-#[derive(Debug, Clone)]
-pub struct MyType;
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MyType
+{
+    f: (String, String),
+}
 
 impl MyType {
-    pub fn new() -> Self {
-        MyType{}
+    pub fn new(s1: String, s2: String) -> Self {
+        MyType{f:(s1, s2)}
     }
 }
 
 impl Append for MyType {
     fn append_by_ref(&self, i: &mut IterAppend) {
-        "123".append(i);
+        self.f.append_by_ref(i);
     }
 }
 
 impl Arg for MyType {
-    const ARG_TYPE: ArgType = ArgType::String;
-    fn signature() -> Signature<'static> { unsafe { Signature::from_slice_unchecked("s\0") } }
+    const ARG_TYPE: ArgType = ArgType::Struct;
+    fn signature() -> Signature<'static> { 
+        Signature::new("(ss)".to_string()).unwrap()
+    }
 }
 
 impl<'a> Get<'a> for MyType {
     fn get(i: &mut Iter<'a>) -> Option<MyType> { 
-        String::get(i);
-        Some(MyType{})
+        let f = <(String, String)>::get(i)?;
+        Some(MyType{f})
      }
 }
 
