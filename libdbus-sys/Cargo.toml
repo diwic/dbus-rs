@@ -13,6 +13,7 @@ categories = ["os::unix-apis", "external-ffi-bindings"]
 build = "build.rs"
 links = "dbus"
 readme = "README.md"
+exclude = ["/vendor/dbus/tools/", "/vendor/dbus/test/", "/vendor/dbus/maint/"]
 
 [features]
 # By default use pkg-config to locate the local libdbus installation
