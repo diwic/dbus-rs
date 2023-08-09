@@ -170,7 +170,7 @@ pub (super) fn xml_to_rust_type(i: &mut &[u8], no_refs: bool, genvars: &mut Opti
                 s.push(n);
             };
             *i = &i[1..];
-            format!("({})", s.join(", "))
+            format!("({},)", s.join(", "))
         },
         ('y', _) => "u8".into(),
         ('b', _) => "bool".into(),
