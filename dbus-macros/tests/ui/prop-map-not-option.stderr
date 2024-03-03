@@ -1,0 +1,15 @@
+error: dbus_derive - Will fail in case field is missing from dbus::PropMap
+ --> tests/ui/prop-map-not-option.rs:5:15
+  |
+5 |     pub arg1: String,
+  |               ^^^^^^
+  |
+  = help: Try this - Option<String>
+
+error: dbus_derive - Will fail in case field is missing from dbus::PropMap
+ --> tests/ui/prop-map-not-option.rs:6:15
+  |
+6 |     pub arg2: i32,
+  |               ^^^
+  |
+  = help: Try this - Option<i32>

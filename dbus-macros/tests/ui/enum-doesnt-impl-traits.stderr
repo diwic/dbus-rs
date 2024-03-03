@@ -1,0 +1,26 @@
+error[E0277]: the trait bound `u8: From<EnumArg>` is not satisfied
+ --> tests/ui/enum-doesnt-impl-traits.rs:4:23
+  |
+4 |   #[dbus_enum(as_type = "u8")]
+  |  _______________________^
+5 | | pub enum EnumArg {
+  | |________________^ the trait `From<EnumArg>` is not implemented for `u8`
+  |
+  = help: the following other types implement trait `From<T>`:
+            <u8 as From<bool>>
+            <u8 as From<NonZeroU8>>
+  = help: see issue #48214
+  = help: add `#![feature(trivial_bounds)]` to the crate attributes to enable
+
+error[E0277]: the trait bound `EnumArg: From<u8>` is not satisfied
+ --> tests/ui/enum-doesnt-impl-traits.rs:4:23
+  |
+4 |   #[dbus_enum(as_type = "u8")]
+  |  _______________________^
+5 | | pub enum EnumArg {
+  | |________________^ the trait `From<u8>` is not implemented for `EnumArg`
+  |
+  = note: required for `u8` to implement `Into<EnumArg>`
+  = note: required for `EnumArg` to implement `TryFrom<u8>`
+  = help: see issue #48214
+  = help: add `#![feature(trivial_bounds)]` to the crate attributes to enable
