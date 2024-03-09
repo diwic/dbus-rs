@@ -338,11 +338,11 @@ where T: {} + Send + 'static
     for p in &i.props {
         *s += &format!("        b.property::<{}, _>(\"{}\")", p.typename()?, p.name);
         if p.can_get() {
-            *s += &format!("\n            .get(|_, t| t.{}())", p.get_fn_name);
+            *s += &format!("\n            .get(|_, t: &mut T| t.{}())", p.get_fn_name);
         }
         if p.can_set() {
             // TODO: Handle EmitsChangedSignal correctly here.
-            *s += &format!("\n            .set(|_, t, value| t.{}(value).map(|_| None))", p.set_fn_name);
+            *s += &format!("\n            .set(|_, t: &mut T, value| t.{}(value).map(|_| None))", p.set_fn_name);
         }
         *s += &cr_anno(&p.annotations, "            ", "");
         *s += ";\n";
