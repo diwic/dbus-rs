@@ -167,6 +167,6 @@ The `vendored` feature is the current recommended way to cross compile dbus-rs. 
 Alternatives
 ============
 
-[zbus](https://gitlab.freedesktop.org/dbus/zbus) and [rustbus](https://github.com/KillingSpark/rustbus) (stalled?) are D-Bus crates
+[zbus](https://github.com/dbus2/zbus) and [rustbus](https://github.com/KillingSpark/rustbus) (stalled?) are D-Bus crates
 written completely in Rust (i e, no bindings to C libraries).
 Some more alternatives are listed [here](https://github.com/KillingSpark/rust-dbus-comparisons), but I'm not sure how usable they are.
