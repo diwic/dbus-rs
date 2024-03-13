@@ -304,10 +304,14 @@ fn cr_strs(args: &[Arg]) -> String {
     args.iter().fold(String::new(), |mut ss, arg| { ss += &format!("\"{}\",", arg.name); ss })
 }
 
-fn cr_anno(a: &HashMap<String, String>, prefix: &str, suffix: &str) -> String {
+fn cr_anno(a: &HashMap<String, String>, prefix: &str, suffix: &str, is_prop: bool) -> String {
     let mut r = String::new();
     for (name, value) in a.iter() {
-        r.push_str(&format!("\n{}.annotate(\"{}\", \"{}\"){}", prefix, name, value, suffix));
+        if is_prop && name == "org.freedesktop.DBus.Property.EmitsChangedSignal" {
+            r.push_str(&format!("\n{}.emits_changed_{}(){}", prefix, value, suffix));
+        } else {
+            r.push_str(&format!("\n{}.annotate(\"{}\", \"{}\"){}", prefix, name, value, suffix));
+        }
     }
     r
 }
@@ -319,10 +323,10 @@ where T: {} + Send + 'static
 {{
     cr.register("{}", |b| {{
 "#, make_snake(&i.shortname, false), make_camel(&i.shortname), i.origname);
-    *s += &cr_anno(&i.annotations, "        b", ";\n");
+    *s += &cr_anno(&i.annotations, "        b", ";\n", false);
     for z in &i.signals {
         *s += &format!("        b.signal::<({}), _>(\"{}\", ({})){};\n",
-            cr_types(&z.args)?, z.name, cr_strs(&z.args), cr_anno(&z.annotations, "            ", ""));
+            cr_types(&z.args)?, z.name, cr_strs(&z.args), cr_anno(&z.annotations, "            ", "", false));
     }
     for m in &i.methods {
         let ivars = m.iargs.iter().fold(String::new(), |mut ss, arg| { ss += &format!("{},", arg.name); ss });
@@ -333,7 +337,7 @@ where T: {} + Send + 'static
         if m.oargs.len() == 1 {
             *s += "                .map(|x| (x,))\n";
         }
-        *s += &format!("        }}){};\n", cr_anno(&m.annotations, "            ", ""));
+        *s += &format!("        }}){};\n", cr_anno(&m.annotations, "            ", "", false));
     }
     for p in &i.props {
         *s += &format!("        b.property::<{}, _>(\"{}\")", p.typename()?, p.name);
@@ -341,10 +345,9 @@ where T: {} + Send + 'static
             *s += &format!("\n            .get(|_, t: &mut T| t.{}())", p.get_fn_name);
         }
         if p.can_set() {
-            // TODO: Handle EmitsChangedSignal correctly here.
             *s += &format!("\n            .set(|_, t: &mut T, value| t.{}(value).map(|_| None))", p.set_fn_name);
         }
-        *s += &cr_anno(&p.annotations, "            ", "");
+        *s += &cr_anno(&p.annotations, "            ", "", true);
         *s += ";\n";
     }
 

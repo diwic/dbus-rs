@@ -150,6 +150,15 @@ static DEPRECATED_XML: &'static str = r#"
     <property name="property_name" type="s" access="readwrite">
       <annotation name="org.freedesktop.DBus.Deprecated" value="this property is deprecated"/>
     </property>
+    <property name="property_true" type="s" access="readwrite">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+    <property name="property_invalidates" type="s" access="readwrite">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="invalidates"/>
+    </property>
+    <property name="property_false" type="s" access="readwrite">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+    </property>
   </interface>
 </node>
 "#;
