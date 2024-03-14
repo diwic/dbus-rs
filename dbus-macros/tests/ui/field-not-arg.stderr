@@ -1,0 +1,77 @@
+error[E0277]: the trait bound `DoesntDeriveDbusStruct: Arg` is not satisfied
+ --> tests/ui/field-not-arg.rs:6:27
+  |
+6 |     pub doesnt_implement: DoesntDeriveDbusStruct,
+  |                           ^^^^^^^^^^^^^^^^^^^^^^ the trait `Arg` is not implemented for `DoesntDeriveDbusStruct`
+  |
+  = help: the following other types implement trait `Arg`:
+            bool
+            i16
+            i32
+            i64
+            u8
+            u16
+            u32
+            u64
+          and $N others
+
+error[E0277]: the trait bound `DoesntDeriveDbusStruct: Append` is not satisfied
+ --> tests/ui/field-not-arg.rs:6:27
+  |
+6 |     pub doesnt_implement: DoesntDeriveDbusStruct,
+  |                           ^^^^^^^^^^^^^^^^^^^^^^ the trait `Append` is not implemented for `DoesntDeriveDbusStruct`
+  |
+  = help: the following other types implement trait `Append`:
+            bool
+            i16
+            i32
+            i64
+            u8
+            u16
+            u32
+            u64
+          and $N others
+
+error[E0277]: the trait bound `DoesntDeriveDbusStruct: Arg` is not satisfied
+ --> tests/ui/field-not-arg.rs:6:27
+  |
+6 |     pub doesnt_implement: DoesntDeriveDbusStruct,
+  |                           ^^^^^^^^^^^^^^^^^^^^^^ the trait `Arg` is not implemented for `DoesntDeriveDbusStruct`
+  |
+  = help: the following other types implement trait `Arg`:
+            bool
+            i16
+            i32
+            i64
+            u8
+            u16
+            u32
+            u64
+          and $N others
+note: required by a bound in `dbus::arg::Iter::<'a>::read`
+ --> $WORKSPACE/dbus/src/arg/mod.rs
+  |
+  |     pub fn read<T: Arg + Get<'a>>(&mut self) -> Result<T, TypeMismatchError> {
+  |                    ^^^ required by this bound in `Iter::<'a>::read`
+
+error[E0277]: the trait bound `DoesntDeriveDbusStruct: Get<'_>` is not satisfied
+ --> tests/ui/field-not-arg.rs:6:27
+  |
+6 |     pub doesnt_implement: DoesntDeriveDbusStruct,
+  |                           ^^^^^^^^^^^^^^^^^^^^^^ the trait `Get<'_>` is not implemented for `DoesntDeriveDbusStruct`
+  |
+  = help: the following other types implement trait `Get<'a>`:
+            <bool as Get<'a>>
+            <i16 as Get<'a>>
+            <i32 as Get<'a>>
+            <i64 as Get<'a>>
+            <u8 as Get<'a>>
+            <u16 as Get<'a>>
+            <u32 as Get<'a>>
+            <u64 as Get<'a>>
+          and $N others
+note: required by a bound in `dbus::arg::Iter::<'a>::read`
+ --> $WORKSPACE/dbus/src/arg/mod.rs
+  |
+  |     pub fn read<T: Arg + Get<'a>>(&mut self) -> Result<T, TypeMismatchError> {
+  |                          ^^^^^^^ required by this bound in `Iter::<'a>::read`

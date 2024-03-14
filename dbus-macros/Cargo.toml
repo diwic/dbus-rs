@@ -1,0 +1,27 @@
+[package]
+name = "dbus-macros"
+version = "0.1.0"
+authors = ["David Henningsson <diwic@ubuntu.com>"]
+
+description = "Procedural macros for dbus crate."
+repository = "https://github.com/diwic/dbus-rs"
+documentation = "https://docs.rs/dbus-macros"
+keywords = ["D-Bus", "DBus", "derive"]
+license = "Apache-2.0/MIT"
+categories = ["os::unix-apis"]
+readme = "README.md"
+edition = "2018"
+
+[lib]
+proc-macro=true
+
+[dependencies]
+proc-macro-error = "1.0.4"
+proc-macro2 = "1.0.76"
+quote = "1.0.35"
+syn = { version = "2.0.48", features = ["full", "parsing"] }
+darling = { version = "0.20.3", features = ["diagnostics"] }
+
+[dev-dependencies]
+trybuild = { version = "1.0.89", features = ["diff"] }
+dbus = { path="../dbus" }
