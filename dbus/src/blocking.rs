@@ -235,6 +235,8 @@ impl $c {
     ///
     /// For `SyncConnection`: It is also a logic error to call this method from one thread, while
     /// calling this or other methods from other threads. This can lead to messages being lost.
+    ///
+    /// Returns true when there was a message to process, and false when time out reached.
     pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
         if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
             if self.all_signal_matches.load(Ordering::Acquire) && msg.msg_type() == MessageType::Signal {
