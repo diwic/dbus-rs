@@ -16,7 +16,6 @@ edition = "2018"
 [dependencies]
 libc = "0.2.66"
 libdbus-sys = { path = "../libdbus-sys", version = "0.2.3" }
-dbus-macros = { path = "../dbus-macros", version = "0.1.0", optional = true }
 futures-util = { version = "0.3", optional = true, default-features = false }
 futures-channel = { version = "0.3", optional = true }
 futures-executor = { version = "0.3", optional = true }
@@ -29,12 +28,10 @@ winapi = { version = "0.3.0", features = ["winsock2"] }
 tempfile = "3"
 
 [features]
-default = ["macros"]
 no-string-validation = []
 stdfd = []
 vendored = ["libdbus-sys/vendored"]
 futures = ["futures-util", "futures-channel"]
-macros = ["dep:dbus-macros"]
 # Not ready yet
 # native-channel = ["futures-executor", "futures-util/io", "dbus-native-channel"]
 

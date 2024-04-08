@@ -1,11 +1,11 @@
 [package]
-name = "dbus-macros"
+name = "dbus-derive"
 version = "0.1.0"
-authors = ["David Henningsson <diwic@ubuntu.com>"]
+authors = ["Vladimir Romashchenko <eaglesemanation@gmail.com>"]
 
 description = "Procedural macros for dbus crate."
 repository = "https://github.com/diwic/dbus-rs"
-documentation = "https://docs.rs/dbus-macros"
+documentation = "https://docs.rs/dbus-derive"
 keywords = ["D-Bus", "DBus", "derive"]
 license = "Apache-2.0/MIT"
 categories = ["os::unix-apis"]
