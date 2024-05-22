@@ -271,7 +271,8 @@ well as function arguments for `dbus-crossroads`. In addition, `&T`, `Box<T>`, `
 `Arc<T>` can (in general) be used instead of `T`, where `T` is a Rust type.
 
 If you want to to use `cast` or `prop_cast` on a `&RefArg` however, you need to use
-the RefArg type.
+the RefArg type. If the RefArg type is listed as N/A, it means that there is no stable RefArg type
+and casting is not supported.
 
 | D-Bus type | Signature | RefArg type | Other types |
 | ---------- | --------- | ----------- | ----------- |
@@ -293,5 +294,6 @@ the RefArg type.
 | DICT<STRING, VARIANT> | `a{sv}` | `PropMap` | |
 | DICT<_, _> | `a{`...`}` | N/A | `HashMap<K, V>`, `Dict<K, V, _>`, `BTreeMap<K, V>` |
 | ARRAY<ARRAY<_>> | `aa`... | N/A | `Vec<Vec<T>>`, `&[&[T]]`, `Array<Array<T>>` |
+| ARRAY<DICT<_>> | `aa{`...`}` | N/A | `Vec<HashMap<K, V>>`, `&[Dict<K, V, _>]` |
 | ARRAY<STRUCT<_>> | `a(`...`)` | N/A | `Vec<VecDeque<Box<RefArg>>>`, `Vec<`tuple`>` |
 | ARRAY<_> (all else) | `a`... | `Vec<T>` | `&[T]` `Array<T, _>` |
