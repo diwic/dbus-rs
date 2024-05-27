@@ -32,6 +32,7 @@ use std::collections::HashMap;
 
 #[allow(missing_docs)]
 mod generated_org_freedesktop_standard_interfaces;
+#[allow(dead_code)]
 mod generated_org_freedesktop_dbus;
 
 

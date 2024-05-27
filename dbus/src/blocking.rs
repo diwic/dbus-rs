@@ -12,6 +12,7 @@ use crate::filters::Filters;
 
 #[allow(missing_docs)]
 mod generated_org_freedesktop_standard_interfaces;
+#[allow(dead_code)]
 mod generated_org_freedesktop_dbus;
 
 /// This module contains some standard interfaces and an easy way to call them.
