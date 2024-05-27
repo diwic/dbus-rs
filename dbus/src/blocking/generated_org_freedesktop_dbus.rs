@@ -23,9 +23,87 @@ pub trait DBus {
     fn get_connection_selinux_security_context(&self, arg0: &str) -> Result<Vec<u8>, dbus::Error>;
     fn reload_config(&self) -> Result<(), dbus::Error>;
     fn get_id(&self) -> Result<String, dbus::Error>;
-    fn get_connection_credentials(&self, arg0: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>, dbus::Error>;
+    fn get_connection_credentials(&self, arg0: &str) -> Result<arg::PropMap, dbus::Error>;
     fn features(&self) -> Result<Vec<String>, dbus::Error>;
     fn interfaces(&self) -> Result<Vec<String>, dbus::Error>;
+}
+
+#[derive(Debug)]
+pub struct DBusNameOwnerChanged {
+    pub arg0: String,
+    pub arg1: String,
+    pub arg2: String,
+}
+
+impl arg::AppendAll for DBusNameOwnerChanged {
+    fn append(&self, i: &mut arg::IterAppend) {
+        arg::RefArg::append(&self.arg0, i);
+        arg::RefArg::append(&self.arg1, i);
+        arg::RefArg::append(&self.arg2, i);
+    }
+}
+
+impl arg::ReadAll for DBusNameOwnerChanged {
+    fn read(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
+        Ok(DBusNameOwnerChanged {
+            arg0: i.read()?,
+            arg1: i.read()?,
+            arg2: i.read()?,
+        })
+    }
+}
+
+impl dbus::message::SignalArgs for DBusNameOwnerChanged {
+    const NAME: &'static str = "NameOwnerChanged";
+    const INTERFACE: &'static str = "org.freedesktop.DBus";
+}
+
+#[derive(Debug)]
+pub struct DBusNameLost {
+    pub arg0: String,
+}
+
+impl arg::AppendAll for DBusNameLost {
+    fn append(&self, i: &mut arg::IterAppend) {
+        arg::RefArg::append(&self.arg0, i);
+    }
+}
+
+impl arg::ReadAll for DBusNameLost {
+    fn read(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
+        Ok(DBusNameLost {
+            arg0: i.read()?,
+        })
+    }
+}
+
+impl dbus::message::SignalArgs for DBusNameLost {
+    const NAME: &'static str = "NameLost";
+    const INTERFACE: &'static str = "org.freedesktop.DBus";
+}
+
+#[derive(Debug)]
+pub struct DBusNameAcquired {
+    pub arg0: String,
+}
+
+impl arg::AppendAll for DBusNameAcquired {
+    fn append(&self, i: &mut arg::IterAppend) {
+        arg::RefArg::append(&self.arg0, i);
+    }
+}
+
+impl arg::ReadAll for DBusNameAcquired {
+    fn read(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
+        Ok(DBusNameAcquired {
+            arg0: i.read()?,
+        })
+    }
+}
+
+impl dbus::message::SignalArgs for DBusNameAcquired {
+    const NAME: &'static str = "NameAcquired";
+    const INTERFACE: &'static str = "org.freedesktop.DBus";
 }
 
 impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target=T>> DBus for blocking::Proxy<'a, C> {
@@ -116,94 +194,16 @@ impl<'a, T: blocking::BlockingSender, C: ::std::ops::Deref<Target=T>> DBus for b
             .and_then(|r: (String, )| Ok(r.0, ))
     }
 
-    fn get_connection_credentials(&self, arg0: &str) -> Result<::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>, dbus::Error> {
+    fn get_connection_credentials(&self, arg0: &str) -> Result<arg::PropMap, dbus::Error> {
         self.method_call("org.freedesktop.DBus", "GetConnectionCredentials", (arg0, ))
-            .and_then(|r: (::std::collections::HashMap<String, arg::Variant<Box<dyn arg::RefArg + 'static>>>, )| Ok(r.0, ))
+            .and_then(|r: (arg::PropMap, )| Ok(r.0, ))
     }
 
     fn features(&self) -> Result<Vec<String>, dbus::Error> {
-        <Self as blocking::stdintf::org_freedesktop_dbus::Properties>::get(&self, "org.freedesktop.DBus", "Features")
+        <Self as blocking::stdintf::org_freedesktop_dbus::Properties>::get(self, "org.freedesktop.DBus", "Features")
     }
 
     fn interfaces(&self) -> Result<Vec<String>, dbus::Error> {
-        <Self as blocking::stdintf::org_freedesktop_dbus::Properties>::get(&self, "org.freedesktop.DBus", "Interfaces")
+        <Self as blocking::stdintf::org_freedesktop_dbus::Properties>::get(self, "org.freedesktop.DBus", "Interfaces")
     }
-}
-
-#[derive(Debug)]
-pub struct DBusNameOwnerChanged {
-    pub arg0: String,
-    pub arg1: String,
-    pub arg2: String,
-}
-
-impl arg::AppendAll for DBusNameOwnerChanged {
-    fn append(&self, i: &mut arg::IterAppend) {
-        arg::RefArg::append(&self.arg0, i);
-        arg::RefArg::append(&self.arg1, i);
-        arg::RefArg::append(&self.arg2, i);
-    }
-}
-
-impl arg::ReadAll for DBusNameOwnerChanged {
-    fn read(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
-        Ok(DBusNameOwnerChanged {
-            arg0: i.read()?,
-            arg1: i.read()?,
-            arg2: i.read()?,
-        })
-    }
-}
-
-impl dbus::message::SignalArgs for DBusNameOwnerChanged {
-    const NAME: &'static str = "NameOwnerChanged";
-    const INTERFACE: &'static str = "org.freedesktop.DBus";
-}
-
-#[derive(Debug)]
-pub struct DBusNameLost {
-    pub arg0: String,
-}
-
-impl arg::AppendAll for DBusNameLost {
-    fn append(&self, i: &mut arg::IterAppend) {
-        arg::RefArg::append(&self.arg0, i);
-    }
-}
-
-impl arg::ReadAll for DBusNameLost {
-    fn read(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
-        Ok(DBusNameLost {
-            arg0: i.read()?,
-        })
-    }
-}
-
-impl dbus::message::SignalArgs for DBusNameLost {
-    const NAME: &'static str = "NameLost";
-    const INTERFACE: &'static str = "org.freedesktop.DBus";
-}
-
-#[derive(Debug)]
-pub struct DBusNameAcquired {
-    pub arg0: String,
-}
-
-impl arg::AppendAll for DBusNameAcquired {
-    fn append(&self, i: &mut arg::IterAppend) {
-        arg::RefArg::append(&self.arg0, i);
-    }
-}
-
-impl arg::ReadAll for DBusNameAcquired {
-    fn read(i: &mut arg::Iter) -> Result<Self, arg::TypeMismatchError> {
-        Ok(DBusNameAcquired {
-            arg0: i.read()?,
-        })
-    }
-}
-
-impl dbus::message::SignalArgs for DBusNameAcquired {
-    const NAME: &'static str = "NameAcquired";
-    const INTERFACE: &'static str = "org.freedesktop.DBus";
 }

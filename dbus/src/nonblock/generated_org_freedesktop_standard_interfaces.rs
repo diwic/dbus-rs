@@ -10,23 +10,6 @@ pub trait Properties {
     fn set<I2: arg::Arg + arg::Append>(&self, interface_name: &str, property_name: &str, value: I2) -> nonblock::MethodReply<()>;
 }
 
-impl<'a, T: nonblock::NonblockReply, C: ::std::ops::Deref<Target=T>> Properties for nonblock::Proxy<'a, C> {
-
-    fn get<R0: for<'b> arg::Get<'b> + 'static>(&self, interface_name: &str, property_name: &str) -> nonblock::MethodReply<R0> {
-        self.method_call("org.freedesktop.DBus.Properties", "Get", (interface_name, property_name, ))
-            .and_then(|r: (arg::Variant<R0>, )| Ok((r.0).0, ))
-    }
-
-    fn get_all(&self, interface_name: &str) -> nonblock::MethodReply<arg::PropMap> {
-        self.method_call("org.freedesktop.DBus.Properties", "GetAll", (interface_name, ))
-            .and_then(|r: (arg::PropMap, )| Ok(r.0, ))
-    }
-
-    fn set<I2: arg::Arg + arg::Append>(&self, interface_name: &str, property_name: &str, value: I2) -> nonblock::MethodReply<()> {
-        self.method_call("org.freedesktop.DBus.Properties", "Set", (interface_name, property_name, arg::Variant(value), ))
-    }
-}
-
 #[derive(Debug)]
 pub struct PropertiesPropertiesChanged {
     pub interface_name: String,
@@ -55,6 +38,23 @@ impl arg::ReadAll for PropertiesPropertiesChanged {
 impl dbus::message::SignalArgs for PropertiesPropertiesChanged {
     const NAME: &'static str = "PropertiesChanged";
     const INTERFACE: &'static str = "org.freedesktop.DBus.Properties";
+}
+
+impl<'a, T: nonblock::NonblockReply, C: ::std::ops::Deref<Target=T>> Properties for nonblock::Proxy<'a, C> {
+
+    fn get<R0: for<'b> arg::Get<'b> + 'static>(&self, interface_name: &str, property_name: &str) -> nonblock::MethodReply<R0> {
+        self.method_call("org.freedesktop.DBus.Properties", "Get", (interface_name, property_name, ))
+            .and_then(|r: (arg::Variant<R0>, )| Ok((r.0).0, ))
+    }
+
+    fn get_all(&self, interface_name: &str) -> nonblock::MethodReply<arg::PropMap> {
+        self.method_call("org.freedesktop.DBus.Properties", "GetAll", (interface_name, ))
+            .and_then(|r: (arg::PropMap, )| Ok(r.0, ))
+    }
+
+    fn set<I2: arg::Arg + arg::Append>(&self, interface_name: &str, property_name: &str, value: I2) -> nonblock::MethodReply<()> {
+        self.method_call("org.freedesktop.DBus.Properties", "Set", (interface_name, property_name, arg::Variant(value), ))
+    }
 }
 
 pub trait Introspectable {
@@ -88,14 +88,6 @@ impl<'a, T: nonblock::NonblockReply, C: ::std::ops::Deref<Target=T>> Peer for no
 
 pub trait ObjectManager {
     fn get_managed_objects(&self) -> nonblock::MethodReply<::std::collections::HashMap<dbus::Path<'static>, ::std::collections::HashMap<String, arg::PropMap>>>;
-}
-
-impl<'a, T: nonblock::NonblockReply, C: ::std::ops::Deref<Target=T>> ObjectManager for nonblock::Proxy<'a, C> {
-
-    fn get_managed_objects(&self) -> nonblock::MethodReply<::std::collections::HashMap<dbus::Path<'static>, ::std::collections::HashMap<String, arg::PropMap>>> {
-        self.method_call("org.freedesktop.DBus.ObjectManager", "GetManagedObjects", ())
-            .and_then(|r: (::std::collections::HashMap<dbus::Path<'static>, ::std::collections::HashMap<String, arg::PropMap>>, )| Ok(r.0, ))
-    }
 }
 
 #[derive(Debug)]
@@ -150,4 +142,12 @@ impl arg::ReadAll for ObjectManagerInterfacesRemoved {
 impl dbus::message::SignalArgs for ObjectManagerInterfacesRemoved {
     const NAME: &'static str = "InterfacesRemoved";
     const INTERFACE: &'static str = "org.freedesktop.DBus.ObjectManager";
+}
+
+impl<'a, T: nonblock::NonblockReply, C: ::std::ops::Deref<Target=T>> ObjectManager for nonblock::Proxy<'a, C> {
+
+    fn get_managed_objects(&self) -> nonblock::MethodReply<::std::collections::HashMap<dbus::Path<'static>, ::std::collections::HashMap<String, arg::PropMap>>> {
+        self.method_call("org.freedesktop.DBus.ObjectManager", "GetManagedObjects", ())
+            .and_then(|r: (::std::collections::HashMap<dbus::Path<'static>, ::std::collections::HashMap<String, arg::PropMap>>, )| Ok(r.0, ))
+    }
 }
