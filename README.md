@@ -28,7 +28,7 @@ Additional crates
  * [dbus-tokio](http://crates.io/crates/dbus-tokio/) integrates D-Bus with [Tokio](http://tokio.rs). [![API documentation](https://docs.rs/dbus-tokio/badge.svg)](https://docs.rs/dbus-tokio)
  * [dbus-codegen](http://crates.io/crates/dbus-codegen/) installs a binary tool which generates Rust code from D-Bus XML introspection data. The [readme](https://github.com/diwic/dbus-rs/tree/master/dbus-codegen) contains an introduction to how to use it.
  * [libdbus-sys](http://crates.io/crates/libdbus-sys/) contains the raw FFI bindings to libdbus.
- * [dbus-tree](http://crates.io/crates/dbus-tree/) facitilates easy building of method
+ * [dbus-tree](http://crates.io/crates/dbus-tree/) facilitates easy building of method
     dispatching servers (legacy design). [![API documentation](https://docs.rs/dbus-tree/badge.svg)](https://docs.rs/dbus-tree)
 
 Invitation
