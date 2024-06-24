@@ -127,6 +127,16 @@ pub struct DBusMessageIter {
     pub pad3: *mut c_void,
 }
 
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct DBusSignatureIter {
+    pub dummy1: *mut c_void,
+    pub dummy2: *mut c_void,
+    pub dummy8: u32,
+    pub dummy12: c_int,
+    pub dummy17: c_int,
+}
+
 pub type DBusHandleMessageFunction = Option<extern fn(conn: *mut DBusConnection, msg: *mut DBusMessage, user_data: *mut c_void) -> DBusHandlerResult>;
 
 pub type DBusAddWatchFunction = Option<extern fn(watch: *mut DBusWatch, user_data: *mut c_void) -> u32>;
@@ -257,6 +267,13 @@ extern "C" {
     pub fn dbus_message_iter_open_container(iter: *mut DBusMessageIter, _type: c_int,
         contained_signature: *const c_char, sub: *mut DBusMessageIter) -> u32;
     pub fn dbus_message_iter_close_container(iter: *mut DBusMessageIter, sub: *mut DBusMessageIter) -> u32;
+
+    pub fn dbus_signature_iter_init(iter: *mut DBusSignatureIter, signature: *const c_char);
+    pub fn dbus_signature_iter_get_current_type(iter: *const DBusSignatureIter) -> c_int;
+    pub fn dbus_signature_iter_get_signature(iter: *const DBusSignatureIter) -> *mut c_char;
+    pub fn dbus_signature_iter_get_element_type(iter: *const DBusSignatureIter) -> c_int;
+    pub fn dbus_signature_iter_next(iter: *mut DBusSignatureIter) -> bool;
+    pub fn dbus_signature_iter_recurse(iter: *const DBusSignatureIter, subiter: *mut DBusSignatureIter);
 
     pub fn dbus_free(memory: *mut c_void);
     pub fn dbus_free_string_array(str_array: *mut *mut c_char) -> c_void;
