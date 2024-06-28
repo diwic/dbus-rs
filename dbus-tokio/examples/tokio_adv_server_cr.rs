@@ -102,15 +102,6 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Connect to the D-Bus session bus (this is blocking, unfortunately).
     let (resource, c) = connection::new_session_sync()?;
 
-    // The resource is a task that should be spawned onto a tokio compatible
-    // reactor ASAP. If the resource ever finishes, you lost connection to D-Bus.
-    //
-    // To shut down the connection, both call _handle.abort() and drop the connection.
-    let _handle = tokio::spawn(async {
-        let err = resource.await;
-        panic!("Lost connection to D-Bus: {}", err);
-    });
-
     // Create a new crossroads instance.
     //
     // We have to wrap it inside an arc/mutex because we need to modify it outside message handling,
@@ -129,14 +120,23 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    c.request_name("com.example.dbus.rs.advancedserverexample", false, true, false).await?;
-
     // We add the Crossroads instance to the connection so that incoming method calls will be handled.
     c.start_receive(MatchRule::new_method_call(), Box::new(move |msg, conn| {
         let mut cr_lock = cr.lock().unwrap();
         cr_lock.handle_message(msg, conn).unwrap();
         true
     }));
+
+    // The resource is a task that should be spawned onto a tokio compatible
+    // reactor ASAP. If the resource ever finishes, you lost connection to D-Bus.
+    //
+    // To shut down the connection, both call _handle.abort() and drop the connection.
+    let _handle = tokio::spawn(async {
+        let err = resource.await;
+        panic!("Lost connection to D-Bus: {}", err);
+    });
+
+    c.request_name("com.example.dbus.rs.advancedserverexample", false, true, false).await?;
 
     // Run forever.
     future::pending::<()>().await;

@@ -11,22 +11,6 @@ struct Hello { called_count: u32 }
 
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
-
-    // Connect to the D-Bus session bus (this is blocking, unfortunately).
-    let (resource, c) = connection::new_session_sync()?;
-
-    // The resource is a task that should be spawned onto a tokio compatible
-    // reactor ASAP. If the resource ever finishes, you lost connection to D-Bus.
-    //
-    // To shut down the connection, both call _handle.abort() and drop the connection.
-    let _handle = tokio::spawn(async {
-        let err = resource.await;
-        panic!("Lost connection to D-Bus: {}", err);
-    });
-
-    // Let's request a name on the bus, so that clients can find us.
-    c.request_name("com.example.dbustest", false, true, false).await?;
-
     // Create a new crossroads instance.
     // The instance is configured so that introspection and properties interfaces
     // are added by default on object path additions.
@@ -67,11 +51,26 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // to the crossroads instance.
     cr.insert("/hello", &[iface_token], Hello { called_count: 0});
 
+    // Connect to the D-Bus session bus (this is blocking, unfortunately).
+    let (resource, c) = connection::new_session_sync()?;
+
     // We add the Crossroads instance to the connection so that incoming method calls will be handled.
     c.start_receive(MatchRule::new_method_call(), Box::new(move |msg, conn| {
         cr.handle_message(msg, conn).unwrap();
         true
     }));
+
+    // The resource is a task that should be spawned onto a tokio compatible
+    // reactor ASAP. If the resource ever finishes, you lost connection to D-Bus.
+    //
+    // To shut down the connection, both call _handle.abort() and drop the connection.
+    let _handle = tokio::spawn(async {
+        let err = resource.await;
+        panic!("Lost connection to D-Bus: {}", err);
+    });
+
+    // Let's request a name on the bus, so that clients can find us.
+    c.request_name("com.example.dbustest", false, true, false).await?;
 
     // Run forever.
     future::pending::<()>().await;
