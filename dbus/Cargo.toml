@@ -39,4 +39,4 @@ futures = ["futures-util", "futures-channel"]
 maintenance = { status = "actively-developed" }
 
 [package.metadata.docs.rs]
-features = [ "futures" ]
+features = [ "futures", "macros" ]

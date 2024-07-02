@@ -40,8 +40,11 @@ pub mod blocking;
 #[cfg(feature = "futures")]
 pub mod nonblock;
 
+#[cfg(feature = "macros")]
+pub mod macros;
+
 pub mod strings;
-pub use crate::strings::{Signature, Path};
+pub use crate::strings::{Path, Signature};
 
 pub mod arg;
 
