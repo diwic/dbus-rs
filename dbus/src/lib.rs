@@ -29,7 +29,7 @@ pub mod message;
 pub mod ffidisp;
 
 mod error;
-pub use error::{Error, MethodErr};
+pub use error::{Error, MethodErr, Result};
 
 pub mod channel;
 

@@ -4,6 +4,12 @@ use std::{ptr, fmt};
 use crate::{arg, to_c_str, c_str_to_slice, init_dbus, Message};
 use crate::strings::ErrorName;
 use std::error::Error as stdError;
+use std::result::Result as stdResult;
+
+/// Alias for a [`Result`](stdResult) containing [`dbus::Error`](Error) by default.
+///
+/// Can still be used with different error types.
+pub type Result<T, E = Error> = stdResult<T, E>;
 
 /// D-Bus Error wrapper.
 ///
