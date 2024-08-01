@@ -11,7 +11,7 @@ use std::os::windows::io::{RawSocket, AsRawSocket};
 #[cfg(unix)]
 use libc::{POLLIN, POLLOUT, POLLERR, POLLHUP};
 #[cfg(windows)]
-use winapi::um::winsock2::{POLLIN, POLLOUT, POLLERR, POLLHUP};
+use windows_sys::Win32::Networking::WinSock::{WSAPOLLFD, POLLIN, POLLOUT, POLLERR, POLLHUP, SOCKET};
 use std::os::raw::{c_void, c_uint};
 
 /// A file descriptor to watch for incoming events (for async I/O).
@@ -91,11 +91,11 @@ impl Watch {
             if self.writable() { POLLOUT } else { 0 },
         }
     }
-    /// Returns the current watch as a winapi::um::winsock2::WSAPOLLFD, to use with winapi::um::winsock2::WSAPoll
+    /// Returns the current watch as a WSAPOLLFD, to use with WSAPoll
     #[cfg(windows)]
-    pub fn to_pollfd(&self) -> winapi::um::winsock2::WSAPOLLFD {
-        winapi::um::winsock2::WSAPOLLFD {
-            fd: self.fd as winapi::um::winsock2::SOCKET,
+    pub fn to_pollfd(&self) -> WSAPOLLFD {
+        WSAPOLLFD {
+            fd: self.fd as SOCKET,
             revents: 0, events: 0 +
             if self.readable() { POLLIN } else { 0 } +
             if self.writable() { POLLOUT } else { 0 },
@@ -216,6 +216,8 @@ extern "C" fn toggled_watch_cb(watch: *mut ffi::DBusWatch, data: *mut c_void) {
 mod test {
     #[cfg(unix)]
     use libc;
+    #[cfg(windows)]
+    use windows_sys::Win32::Networking::WinSock::WSAPoll;
     use super::super::{Connection, Message, BusType, WatchEvent, ConnectionItem, MessageType};
     use super::{POLLIN, POLLOUT};
 
@@ -241,7 +243,7 @@ mod test {
             assert!(unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, 1000) } > 0);
 
             #[cfg(windows)]
-            assert!(unsafe { winapi::um::winsock2::WSAPoll(fds.as_mut_ptr(), fds.len() as u32, 1000) } > 0);
+            assert!(unsafe { WSAPoll(fds.as_mut_ptr(), fds.len() as u32, 1000) } > 0);
 
             for f in fds.iter().filter(|pfd| pfd.revents != 0) {
                 let m = WatchEvent::from_revents(f.revents);
