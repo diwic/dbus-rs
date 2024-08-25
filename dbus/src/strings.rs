@@ -165,6 +165,18 @@ impl<'m> hash::Hash for $t<'m> {
     }
 }
 
+impl PartialEq<str> for $t<'_> {
+    fn eq(&self, other: &str) -> bool {
+        &**self == other
+    }
+}
+
+impl PartialEq<&'_ str> for $t<'_> {
+    fn eq(&self, other: &&str) -> bool {
+        &**self == *other
+    }
+}
+
 }}
 
 /// A wrapper around a string that is guaranteed to be
@@ -247,4 +259,11 @@ fn reborrow_path() {
 #[test]
 fn make_sig() {
     assert_eq!(&*Signature::make::<(&str, u8)>(), "(sy)");
+}
+
+#[test]
+fn partial_eq_str() {
+    assert_eq!(Signature::new("s").unwrap(), "s");
+    assert!(Signature::new("s").unwrap() != "s\0");
+    assert_eq!(Path::new("/hello").unwrap(), "/hello");
 }
