@@ -8,6 +8,7 @@ use std::ffi::{CString};
 use std::os::raw::{c_void, c_int};
 use std::collections::{HashMap, BTreeMap};
 use std::hash::{Hash, BuildHasher};
+use std::borrow::Cow;
 
 // Map DBus-Type -> Alignment. Copied from _dbus_marshal_write_fixed_multi in
 // http://dbus.freedesktop.org/doc/api/html/dbus-marshal-basic_8c_source.html#l01020
@@ -50,6 +51,12 @@ fn array_append<T: Arg, F: FnMut(&T, &mut IterAppend)>(z: &[T], i: &mut IterAppe
 impl<'a, T: Arg + Append + Clone> Append for &'a [T] {
     fn append_by_ref(&self, i: &mut IterAppend) {
         array_append(self, i, |arg, s| arg.clone().append(s));
+    }
+}
+
+impl<'a, T: Arg + Append + Clone> Append for Cow<'a, [T]> {
+    fn append_by_ref(&self, i: &mut IterAppend) {
+        (&*self).append_by_ref(i)
     }
 }
 
