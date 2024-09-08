@@ -6,6 +6,7 @@ use std::{ptr, any, mem};
 use std::ffi::CStr;
 use std::os::raw::{c_void, c_char, c_int};
 use std::fs::File;
+use std::borrow::Cow;
 
 
 fn arg_append_basic<T>(i: *mut ffi::DBusMessageIter, arg_type: ArgType, v: T) {
@@ -182,6 +183,12 @@ impl<'a> DictKey for &'a str {}
 impl<'a> Get<'a> for &'a str {
     fn get(i: &mut Iter<'a>) -> Option<&'a str> { unsafe { arg_get_str(&mut i.0, ArgType::String) }
         .and_then(|s| s.to_str().ok()) }
+}
+
+impl<'a> Append for Cow<'a, str> {
+    fn append_by_ref(&self, i: &mut IterAppend) {
+        (&*self).append_by_ref(i)
+    }
 }
 
 impl<'a> Arg for String {
