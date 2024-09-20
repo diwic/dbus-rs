@@ -227,7 +227,7 @@ impl Channel {
     /// Note: In case of an error reply, this is returned as an Err(), not as a Ok(Message) with the error type.
     ///
     /// Note: In case pop_message and send_with_reply_and_block is called in parallel from different threads,
-    /// they might race to retreive the reply message from the internal queue.
+    /// they might race to retrieve the reply message from the internal queue.
     pub fn send_with_reply_and_block(&self, msg: Message, timeout: Duration) -> Result<Message, Error> {
         let mut e = Error::empty();
         let response = unsafe {
@@ -291,7 +291,7 @@ impl Channel {
         Ok(self.pop_message())
     }
 
-    /// Enables watch tracking, a prequisite for calling watch.
+    /// Enables watch tracking, a prerequisite for calling watch.
     ///
     /// (In theory, this could panic in case libdbus ever changes to listen to
     /// something else than one file descriptor,

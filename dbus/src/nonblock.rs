@@ -467,7 +467,7 @@ impl MsgMatch {
         }), receiver)
     }
 
-    /// The token retreived can be used in a call to remove_match to stop matching on the data.
+    /// The token retrieved can be used in a call to remove_match to stop matching on the data.
     pub fn token(&self) -> Token { Token(self.0.token.load(Ordering::SeqCst)) }
 }
 

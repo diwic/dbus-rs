@@ -219,7 +219,7 @@ impl Channel {
     /// Note: In case of an error reply, this is returned as an Err(), not as a Ok(Message) with the error type.
     ///
     /// Note: In case pop_message and send_with_reply_and_block is called in parallel from different threads,
-    /// they might race to retreive the reply message from the internal queue.
+    /// they might race to retrieve the reply message from the internal queue.
     pub fn send_with_reply_and_block(&self, msg: Message, _timeout: Duration) -> Result<Message, Error> {
         block_on(async {
             // TODO: Timeout

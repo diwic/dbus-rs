@@ -250,7 +250,7 @@ impl<M> Interface<M> {
         p
     }
 
-    /// Add an annotation to this Inteface.
+    /// Add an annotation to this Interface.
     pub fn annotate<N: Into<String>, V: Into<String>>(mut self, name: N, value: V) -> Self {
         self.anns.insert(name, value); self
     }

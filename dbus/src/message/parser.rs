@@ -31,7 +31,7 @@ pub enum Error {
     UnknownKey,
     /// Boolean could not be parsed
     BadBoolean,
-    /// Error that occured while converting a string to a DBus format
+    /// Error that occurred while converting a string to a DBus format
     BadConversion(String),
 }
 
