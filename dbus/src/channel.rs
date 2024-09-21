@@ -115,7 +115,7 @@ fn peer(m: &Message) -> Option<Message> {
                         return Some(r)
                     }
                 }
-                return Some(m.error(&"org.freedesktop.DBus.Error.Failed".into(), &to_c_str("Failed to retreive UUID")))
+                return Some(m.error(&"org.freedesktop.DBus.Error.Failed".into(), &to_c_str("Failed to retrieve UUID")))
             }
         }
         Some(m.error(&"org.freedesktop.DBus.Error.UnknownMethod".into(), &to_c_str("Method does not exist")))

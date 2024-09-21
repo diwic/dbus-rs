@@ -361,7 +361,7 @@ impl Message {
         Ok(R::read(&mut self.iter_init())?)
     }
 
-    /// Returns a struct for retreiving the arguments from a message. Supersedes get_items().
+    /// Returns a struct for retrieving the arguments from a message. Supersedes get_items().
     pub fn iter_init(&self) -> Iter { Iter::new(&self) }
 
     /// Gets the MessageType of the Message.
@@ -493,7 +493,7 @@ impl Message {
     ///
     /// When sending a message, a sender will be automatically assigned, so you don't need to call
     /// this method. However, it can be very useful in test code that is supposed to handle a method call.
-    /// This way, you can create a method call and handle it without reciving it from a real D-Bus instance.
+    /// This way, you can create a method call and handle it without receiving it from a real D-Bus instance.
     pub fn set_sender(&mut self, sender: Option<BusName>) {
         let c_sender = sender.as_ref().map(|d| d.as_cstr().as_ptr()).unwrap_or(ptr::null());
         assert!(unsafe { ffi::dbus_message_set_sender(self.msg, c_sender) } != 0);

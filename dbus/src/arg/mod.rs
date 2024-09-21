@@ -1,4 +1,4 @@
-//! Types and traits for easily getting a message's arguments, or appening a message with arguments.
+//! Types and traits for easily getting a message's arguments, or appending a message with arguments.
 //!
 //! Also see the argument's guide (in the examples directory) for details about which Rust
 //! types correspond to which D-Bus types.
