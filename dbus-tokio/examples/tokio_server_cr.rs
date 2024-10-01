@@ -15,7 +15,8 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The instance is configured so that introspection and properties interfaces
     // are added by default on object path additions.
     let mut cr = Crossroads::new();
-    let (_, c) = connection::new_session_sync()?;
+    // Connect to the D-Bus session bus (this is blocking, unfortunately).
+    let (resource, c) = connection::new_session_sync()?;
 
 
     // Enable async support for the crossroads instance.
@@ -53,8 +54,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // to the crossroads instance.
     cr.insert("/hello", &[iface_token], Hello { called_count: 0});
 
-    // Connect to the D-Bus session bus (this is blocking, unfortunately).
-    let (resource, c) = connection::new_session_sync()?;
+
 
     // We add the Crossroads instance to the connection so that incoming method calls will be handled.
     c.start_receive(MatchRule::new_method_call(), Box::new(move |msg, conn| {
