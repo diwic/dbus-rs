@@ -18,7 +18,6 @@ use std::sync::{Arc, Mutex};
 struct Device {
     description: String,
     path: Path<'static>,
-    index: i32,
     online: bool,
     checking: bool,
 }
@@ -30,7 +29,6 @@ impl Device {
             description: format!("This is device {}, which is {}.", index,
                 ["totally awesome", "really fancy", "still going strong"][(index as usize) % 3]),
             path: format!("/Device{}", index).into(),
-            index: index,
             online: index % 2 == 0,
             checking: false,
         }
