@@ -167,7 +167,6 @@ impl<'a> Arg for &'a str {
 
 impl<'a> Append for &'a str {
     fn append_by_ref(&self, i: &mut IterAppend) {
-        use std::borrow::Cow;
         let b: &[u8] = self.as_bytes();
         let v: Cow<[u8]> = if !b.is_empty() && b[b.len()-1] == 0 { Cow::Borrowed(b) }
         else {
@@ -187,7 +186,7 @@ impl<'a> Get<'a> for &'a str {
 
 impl<'a> Append for Cow<'a, str> {
     fn append_by_ref(&self, i: &mut IterAppend) {
-        (&*self).append_by_ref(i)
+        (&**self).append_by_ref(i)
     }
 }
 

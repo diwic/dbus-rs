@@ -56,7 +56,7 @@ impl<'a, T: Arg + Append + Clone> Append for &'a [T] {
 
 impl<'a, T: Arg + Append + Clone> Append for Cow<'a, [T]> {
     fn append_by_ref(&self, i: &mut IterAppend) {
-        (&*self).append_by_ref(i)
+        (&**self).append_by_ref(i)
     }
 }
 
