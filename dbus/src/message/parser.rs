@@ -33,6 +33,8 @@ pub enum Error {
     BadBoolean,
     /// Error that occurred while converting a string to a DBus format
     BadConversion(String),
+    /// Key with no value
+    NoValue,
 }
 
 impl Display for Error {
@@ -50,6 +52,9 @@ impl Display for Error {
             }
             Error::BadConversion(err) => {
                 write!(f, "Error while converting: {}", err)
+            }
+            Error::NoValue => {
+                write!(f, "Key with no value")
             }
         }
     }
@@ -123,6 +128,8 @@ impl<'a> Tokenizer<'a> {
         while !self.text.is_empty() {
             let (key, rest) = self.key();
             self.text = rest;
+            if self.text.is_empty()
+                { return Err(Error::NoValue) }
             let (value, rest) = self.value();
             self.text = rest;
             rules.push((key, value))
