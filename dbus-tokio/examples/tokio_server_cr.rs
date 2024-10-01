@@ -15,6 +15,8 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The instance is configured so that introspection and properties interfaces
     // are added by default on object path additions.
     let mut cr = Crossroads::new();
+    let (_, c) = connection::new_session_sync()?;
+
 
     // Enable async support for the crossroads instance.
     cr.set_async_support(Some((c.clone(), Box::new(|x| { tokio::spawn(x); }))));
