@@ -1,0 +1,11 @@
+error: Unsupported shape `enum`. Expected struct with named fields or unnamed fields.
+ --> tests/ui/not-a-valid-struct.rs:4:5
+  |
+4 | pub enum Arg {
+  |     ^^^^
+
+error: Unsupported shape `no fields`. Expected named fields or unnamed fields.
+  --> tests/ui/not-a-valid-struct.rs:10:5
+   |
+10 | pub struct Arg3;
+   |     ^^^^^^
