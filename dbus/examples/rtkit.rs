@@ -29,7 +29,7 @@ fn make_realtime(prio: u32) -> Result<u32, Box<dyn std::error::Error>> {
 
     // Finally, let's ask rtkit to make us realtime
     let thread_id = unsafe { libc::syscall(libc::SYS_gettid) };
-    let r = proxy.method_call("org.freedesktop.RealtimeKit1", "MakeThreadRealtime", (thread_id as u64, prio));
+    let r: Result<(), _> = proxy.method_call("org.freedesktop.RealtimeKit1", "MakeThreadRealtime", (thread_id as u64, prio));
 
     if r.is_err() {
         unsafe { libc::setrlimit64(libc::RLIMIT_RTTIME, &old_limit) };
