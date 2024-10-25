@@ -4,7 +4,7 @@ use crate::{Signature, arg::TypeMismatchError, arg::Variant};
 use std::{fmt, any};
 use std::sync::Arc;
 // use std::rc::Rc;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use super::{Iter, IterAppend, ArgType};
 
