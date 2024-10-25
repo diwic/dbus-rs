@@ -12,7 +12,7 @@ categories = ["os::unix-apis", "api-bindings"]
 readme = "README.md"
 
 [dependencies]
-dbus = { path = "../dbus", version = "0.9.3" }
+dbus = { path = "../dbus", version = "0.9.7" }
 
 [dev-dependencies]
 tokio = { version = "1.14.0", features = ["rt", "test-util", "macros", "sync"] }
