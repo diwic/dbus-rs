@@ -17,6 +17,10 @@
 
 #![warn(missing_docs)]
 
+// We have io-lifetimes and native-channel which are not ready yet
+// so for now allow them in the codebase and silence the warning
+#![allow(unexpected_cfgs)]
+
 extern crate libc;
 
 #[allow(missing_docs)]

@@ -171,7 +171,7 @@ pub (super) fn xml_to_rust_type(i: &mut &[u8], no_refs: bool, genvars: &mut Opti
             };
             *i = &i[1..];
             if s.len() > 12 {
-                "VecDeque<Box<RefArg>>".into()
+                panic!("Structs with more than 12 items are not supported, see https://github.com/diwic/dbus-rs/issues/488")
             } else {
                 format!("({},)", s.join(", "))
             }
