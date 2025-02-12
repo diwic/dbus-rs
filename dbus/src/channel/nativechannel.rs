@@ -159,9 +159,16 @@ impl Channel {
         });
     }
 
-    /// Removes a message from the incoming queue, or waits until timeout if the queue is empty.
+    /// Removes a message from the incoming queue, or waits until timeout if the queue is empty. TODO: actually time out.
     ///
-    pub fn blocking_pop_message(&self, _timeout: Duration) -> Result<Option<Message>, Error> {
+    pub fn blocking_pop_message(&self, timeout: Duration) -> Result<Option<Message>, Error> {
+        self.blocking_pop_message_with_optional_timeout(Some(timeout))
+    }
+
+    /// Removes a message from the incoming queue, or waits until timeout if the queue is empty.
+    /// If timeout is None, it will wait forever. TODO: actually time out
+    ///
+    pub fn blocking_pop_message_with_optional_timeout(&self, _timeout: Option<Duration>) -> Result<Option<Message>, Error> {
         if let Some(msg) = self.pop_message() { return Ok(Some(msg)) }
         // TODO: Timeout
         block_on(async {
