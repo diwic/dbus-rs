@@ -239,7 +239,21 @@ impl $c {
     ///
     /// Returns true when there was a message to process, and false when time out reached.
     pub fn process(&self, timeout: Duration) -> Result<bool, Error> {
-        if let Some(msg) = self.channel.blocking_pop_message(timeout)? {
+        self.process_with_optional_timeout(Some(timeout))
+    }
+
+    /// Tries to handle an incoming message if there is one. If there isn't one,
+    /// it will wait up to timeout. If timeout is None, it will block forever.
+    ///
+    /// This method only takes "&self" instead of "&mut self", but it is a logic error to call
+    /// it recursively and might lead to panics or deadlocks.
+    ///
+    /// For `SyncConnection`: It is also a logic error to call this method from one thread, while
+    /// calling this or other methods from other threads. This can lead to messages being lost.
+    ///
+    /// Returns true when there was a message to process, and false when time out reached.
+    pub fn process_with_optional_timeout(&self, timeout: Option<Duration>) -> Result<bool, Error> {
+        if let Some(msg) = self.channel.blocking_pop_message_with_optional_timeout(timeout)? {
             if self.all_signal_matches.load(Ordering::Acquire) && msg.msg_type() == MessageType::Signal {
                 // If it's a signal and the mode is enabled, send a copy of the message to all
                 // matching filters.
