@@ -3,6 +3,7 @@
 name = "libdbus-sys"
 version = "0.2.5"
 authors = ["David Henningsson <diwic@ubuntu.com>"]
+edition = "2018"
 
 description = "FFI bindings to libdbus."
 repository = "https://github.com/diwic/dbus-rs"

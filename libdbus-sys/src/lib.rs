@@ -137,32 +137,32 @@ pub struct DBusSignatureIter {
     pub dummy17: c_int,
 }
 
-pub type DBusHandleMessageFunction = Option<extern fn(conn: *mut DBusConnection, msg: *mut DBusMessage, user_data: *mut c_void) -> DBusHandlerResult>;
+pub type DBusHandleMessageFunction = Option<extern "C" fn(conn: *mut DBusConnection, msg: *mut DBusMessage, user_data: *mut c_void) -> DBusHandlerResult>;
 
-pub type DBusAddWatchFunction = Option<extern fn(watch: *mut DBusWatch, user_data: *mut c_void) -> u32>;
-pub type DBusRemoveWatchFunction = Option<extern fn(watch: *mut DBusWatch, user_data: *mut c_void)>;
-pub type DBusWatchToggledFunction = Option<extern fn(watch: *mut DBusWatch, user_data: *mut c_void)>;
+pub type DBusAddWatchFunction = Option<extern "C" fn(watch: *mut DBusWatch, user_data: *mut c_void) -> u32>;
+pub type DBusRemoveWatchFunction = Option<extern "C" fn(watch: *mut DBusWatch, user_data: *mut c_void)>;
+pub type DBusWatchToggledFunction = Option<extern "C" fn(watch: *mut DBusWatch, user_data: *mut c_void)>;
 
-pub type DBusAddTimeoutFunction = Option<extern fn(timeout: *mut DBusTimeout, user_data: *mut c_void) -> u32>;
-pub type DBusTimeoutToggledFunction = Option<extern fn(timeout: *mut DBusTimeout, user_data: *mut c_void)>;
-pub type DBusRemoveTimeoutFunction = Option<extern fn(timeout: *mut DBusTimeout, user_data: *mut c_void)>;
+pub type DBusAddTimeoutFunction = Option<extern "C" fn(timeout: *mut DBusTimeout, user_data: *mut c_void) -> u32>;
+pub type DBusTimeoutToggledFunction = Option<extern "C" fn(timeout: *mut DBusTimeout, user_data: *mut c_void)>;
+pub type DBusRemoveTimeoutFunction = Option<extern "C" fn(timeout: *mut DBusTimeout, user_data: *mut c_void)>;
 
-pub type DBusDispatchStatusFunction = Option<extern fn(conn: *mut DBusConnection, new_status: DBusDispatchStatus, user_data: *mut c_void)>;
+pub type DBusDispatchStatusFunction = Option<extern "C" fn(conn: *mut DBusConnection, new_status: DBusDispatchStatus, user_data: *mut c_void)>;
 
-pub type DBusWakeupMainFunction = Option<extern fn(conn: *mut DBusConnection, user_data: *mut c_void)>;
+pub type DBusWakeupMainFunction = Option<extern "C" fn(conn: *mut DBusConnection, user_data: *mut c_void)>;
 
-pub type DBusPendingCallNotifyFunction = Option<extern fn(pending: *mut DBusPendingCall, user_data: *mut c_void)>;
+pub type DBusPendingCallNotifyFunction = Option<extern "C" fn(pending: *mut DBusPendingCall, user_data: *mut c_void)>;
 
-pub type DBusFreeFunction = Option<extern fn(memory: *mut c_void)>;
+pub type DBusFreeFunction = Option<extern "C" fn(memory: *mut c_void)>;
 
 #[repr(C)]
 pub struct DBusObjectPathVTable {
-    pub unregister_function: Option<extern fn(conn: *mut DBusConnection, user_data: *mut c_void)>,
+    pub unregister_function: Option<extern "C" fn(conn: *mut DBusConnection, user_data: *mut c_void)>,
     pub message_function: DBusHandleMessageFunction,
-    pub dbus_internal_pad1: Option<extern fn()>,
-    pub dbus_internal_pad2: Option<extern fn()>,
-    pub dbus_internal_pad3: Option<extern fn()>,
-    pub dbus_internal_pad4: Option<extern fn()>,
+    pub dbus_internal_pad1: Option<extern "C" fn()>,
+    pub dbus_internal_pad2: Option<extern "C" fn()>,
+    pub dbus_internal_pad3: Option<extern "C" fn()>,
+    pub dbus_internal_pad4: Option<extern "C" fn()>,
 }
 
 extern "C" {

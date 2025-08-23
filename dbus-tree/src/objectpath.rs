@@ -165,7 +165,7 @@ impl<M: MethodType<D>, D: DataType> ObjectPath<M, D> {
         nodestr
     }
 
-    fn get_iface<'a>(&'a self, iface_name: &'a str) -> Result<&Arc<Interface<M, D>>, MethodErr> {
+    fn get_iface<'a>(&'a self, iface_name: &'a str) -> Result<&'a Arc<Interface<M, D>>, MethodErr> {
         let j = IfaceName::from_slice(iface_name).map_err(|e| MethodErr::invalid_arg(&e))?;
         self.ifaces.get(&j).ok_or_else(|| MethodErr::no_interface(&j))
     }
