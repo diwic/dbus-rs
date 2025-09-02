@@ -183,6 +183,16 @@ fn introspect() {
 }
 
 #[test]
+fn peer() {
+    let mut cr = Crossroads::new();
+    let msg = Message::new_method_call("com.example.dbusrs.peer", "/",
+        "org.freedesktop.DBus.Peer", "GetMachineId").unwrap();
+    let r = dispatch_helper(&mut cr, msg);
+    let mid: &str = r.read1().unwrap();
+    println!("{}", mid);
+}
+
+#[test]
 fn object_manager() {
     struct Apple { radius: u32, weight: u32 }
 

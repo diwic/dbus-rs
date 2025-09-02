@@ -1,6 +1,6 @@
 use std::pin::Pin;
 use std::sync::Arc;
-use dbus::channel::Sender;
+use dbus::channel::{Sender, default_reply};
 use std::future::Future;
 use std::marker::PhantomData;
 use crate::{Context, MethodErr, IfaceBuilder, stdimpl};
@@ -257,8 +257,19 @@ impl Crossroads {
     }
 
     fn handle_message_inner(&mut self, mut ctx: Context) -> Option<Context> {
+        let itoken_result = match self.find_iface_token(ctx.path(), ctx.interface()) {
+            Ok(x) => Ok(x),
+            Err(merr) => {
+                if let Some(rmsg) = default_reply(ctx.message()) {
+                    ctx.push_msg(rmsg);
+                    return Some(ctx)
+                }
+                Err(merr)
+            }
+        };
+
         let (itoken, mut cb) = match ctx.check(|ctx| {
-            let itoken = self.find_iface_token(ctx.path(), ctx.interface())?;
+            let itoken = itoken_result?;
             let cb = self.registry.take_method(itoken, ctx.method())?;
             Ok((itoken, cb))
         }) {
