@@ -191,6 +191,13 @@ impl PropContext {
             },
         }
     }
+
+    /// The underlying Context, if any.
+    ///
+    /// This gives you access to additional methods (e.g., push_msg and make_signal).
+    pub fn context_mut(&mut self) -> Option<&mut Context> {
+        self.context.as_mut()
+    }
 }
 
 #[derive(Debug)]
