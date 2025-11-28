@@ -451,6 +451,15 @@ impl Message {
         unsafe { ffi::dbus_message_set_serial(self.msg, val) };
     }
 
+    /// Sets the object path this message is being sent to or the one a signal is being emitted from.
+    ///
+    /// See https://dbus.freedesktop.org/doc/api/html/group__DBusMessage.html for more details.
+    pub fn set_path(&mut self, path: &Path)  {
+        if unsafe { !ffi::dbus_message_set_path(self.msg, path.as_ptr()) } {
+            panic!("out of memory");
+        }
+    }
+
     /// Marshals a message - mostly for internal use
     ///
     /// The function f will be called one or more times with bytes to be written somewhere.
