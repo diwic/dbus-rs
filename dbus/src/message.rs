@@ -451,6 +451,15 @@ impl Message {
         unsafe { ffi::dbus_message_set_serial(self.msg, val) };
     }
 
+    /// Sets the object path of this message - you should not use this method
+    ///
+    /// Every message has a path already, and there is no good reason to change it using this method.
+    pub fn set_path(&mut self, path: &Path)  {
+        if unsafe { !ffi::dbus_message_set_path(self.msg, path.as_ptr()) } {
+            panic!("out of memory");
+        }
+    }
+
     /// Marshals a message - mostly for internal use
     ///
     /// The function f will be called one or more times with bytes to be written somewhere.

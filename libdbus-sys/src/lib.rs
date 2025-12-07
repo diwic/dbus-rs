@@ -238,6 +238,7 @@ extern "C" {
     pub fn dbus_message_get_reply_serial(message: *mut DBusMessage) -> u32;
     pub fn dbus_message_get_serial(message: *mut DBusMessage) -> u32;
     pub fn dbus_message_get_path(message: *mut DBusMessage) -> *const c_char;
+    pub fn dbus_message_set_path(message: *mut DBusMessage, path: *const c_char) -> bool;
     pub fn dbus_message_get_interface(message: *mut DBusMessage) -> *const c_char;
     pub fn dbus_message_get_destination(message: *mut DBusMessage) -> *const c_char;
     pub fn dbus_message_get_member(message: *mut DBusMessage) -> *const c_char;
