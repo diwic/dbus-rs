@@ -22,7 +22,7 @@ futures-executor = { version = "0.3", optional = true }
 # dbus-native-channel = { path = "../dbus-native-channel", version = "0.1", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59.0", features = ["Win32_Networking_WinSock"] }
+windows-sys = { version = "0.61.0", features = ["Win32_Networking_WinSock"] }
 
 [dev-dependencies]
 tempfile = "3"
