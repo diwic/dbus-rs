@@ -151,7 +151,14 @@ impl $c {
         Channel::get_private(BusType::System).map(From::from)
     }
 
-    /// Get the connection's unique name.
+    /// Create a new connection to a remote address and register it
+    pub fn new_address(address: &str) -> Result<Self, Error> {
+        let mut ch:Channel = Channel::open_private(address)?;
+        ch.register()?;
+        Ok(ch).map(From::from)
+    }
+	
+	/// Get the connection's unique name.
     ///
     /// It's usually something like ":1.54"
     pub fn unique_name(&self) -> BusName { self.channel.unique_name().unwrap().into() }
