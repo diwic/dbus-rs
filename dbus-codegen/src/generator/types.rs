@@ -1,45 +1,44 @@
 use std::error;
 use std::collections::HashMap;
 
-pub (super) struct Arg {
-    pub name: String,
-    pub typ: String,
+pub (super) struct Arg<'a> {
+    pub name: &'a str,
+    pub typ: &'a str,
     pub idx: i32,
     pub no_refs: bool,
-    pub is_out: bool,
-    pub annotations: HashMap<String, String>,
+    pub annotations: &'a HashMap<String, String>,
 }
 
-pub (super) struct Method {
-    pub name: String,
+pub (super) struct Method<'a> {
+    pub name: &'a str,
     pub fn_name: String,
-    pub iargs: Vec<Arg>,
-    pub oargs: Vec<Arg>,
-    pub annotations: HashMap<String, String>,
+    pub iargs: Vec<Arg<'a>>,
+    pub oargs: Vec<Arg<'a>>,
+    pub annotations: &'a HashMap<String, String>,
 }
 
-pub (super) struct Prop {
-    pub name: String,
+pub (super) struct Prop<'a> {
+    pub name: &'a str,
     pub get_fn_name: String,
     pub set_fn_name: String,
-    pub typ: String,
-    pub access: String,
-    pub annotations: HashMap<String, String>,
+    pub typ: &'a str,
+    pub access: &'a str,
+    pub annotations: &'a HashMap<String, String>,
 }
 
-pub (super) struct Signal {
-    pub name: String,
-    pub args: Vec<Arg>,
-    pub annotations: HashMap<String, String>,
+pub (super) struct Signal<'a> {
+    pub name: &'a str,
+    pub args: Vec<Arg<'a>>,
+    pub annotations: &'a HashMap<String, String>,
 }
 
-pub (super) struct Intf {
-    pub origname: String,
-    pub shortname: String,
-    pub methods: Vec<Method>,
-    pub props: Vec<Prop>,
-    pub signals: Vec<Signal>,
-    pub annotations: HashMap<String, String>,
+pub (super) struct Intf<'a> {
+    pub origname: &'a str,
+    pub shortname: &'a str,
+    pub methods: Vec<Method<'a>>,
+    pub props: Vec<Prop<'a>>,
+    pub signals: Vec<Signal<'a>>,
+    pub annotations: &'a HashMap<String, String>,
 }
 
 const RUST_KEYWORDS: [&str; 57] = [
@@ -236,10 +235,10 @@ pub (super) fn make_type(s: &str, no_refs: bool, genvars: &mut Option<GenVars>) 
     else { Ok(r) }
 }
 
-impl Arg {
+impl Arg<'_> {
     pub fn varname(&self) -> String {
         if self.name != "" {
-           make_snake(&self.name, true)
+           make_snake(self.name, true)
         } else { format!("arg{}", self.idx) }
     }
     pub fn can_wrap_variant(&self, genvar: bool) -> bool { genvar && self.typ.starts_with("v") }
@@ -256,7 +255,7 @@ impl Arg {
             prefix: format!("{}{}", if self.no_refs { 'R' } else { 'I' }, self.idx),
             gen: vec!(),
         }) } else { None };
-        let r = make_type(&self.typ, self.no_refs, &mut g)?;
+        let r = make_type(self.typ, self.no_refs, &mut g)?;
         Ok((r, g.map(|g| g.gen.iter().map(|s|
             if self.no_refs { format!("{}: for<'b> arg::Get<'b> + 'static", s) } else { format!("{}: arg::Arg + arg::Append", s) }
         ).collect()).unwrap_or(vec!())))
@@ -265,7 +264,7 @@ impl Arg {
         if let Some(u) = self.user_type() {
             return Ok(u);
         }
-        make_type(&self.typ, true, &mut None)
+        make_type(self.typ, true, &mut None)
     }
     pub fn typename_maybewrap(&self, genvar: bool) -> Result<String, Box<dyn error::Error>> {
         let t = self.typename(genvar)?.0;
@@ -288,14 +287,14 @@ impl Arg {
     }
 }
 
-impl Prop {
+impl Prop<'_> {
     pub fn can_get(&self) -> bool { self.access != "write" }
     pub fn can_set(&self) -> bool { self.access == "write" || self.access == "readwrite" }
     pub fn typename(&self) -> Result<String, Box<dyn error::Error>> {
         if let Some(v) = self.annotations.get("rs.dbus.ArgType") {
             Ok(v.clone())
         } else {
-            make_type(&self.typ, true, &mut None)
+            make_type(self.typ, true, &mut None)
         }
     }
 }

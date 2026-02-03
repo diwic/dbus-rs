@@ -1,32 +1,6 @@
-mod generate;
+mod generator;
 
-use crate::generate::{ServerAccess, ConnectionType};
-
-#[cfg(feature = "dbus")]
-mod connect_to_dbus {
-
-    use dbus::blocking;
-
-    // This code was copy-pasted from the output of this program. :-)
-    pub trait OrgFreedesktopDBusIntrospectable {
-        fn introspect(&self) -> Result<String, dbus::Error>;
-    }
-
-    impl<'a, C: ::std::ops::Deref<Target=blocking::Connection>> OrgFreedesktopDBusIntrospectable for blocking::Proxy<'a, C> {
-
-        fn introspect(&self) -> Result<String, dbus::Error> {
-            self.method_call("org.freedesktop.DBus.Introspectable", "Introspect", ())
-                .and_then(|r: (String, )| Ok(r.0, ))
-        }
-    }
-
-    pub fn do_introspect(dest: &str, path: &str, systembus: bool) -> String {
-        let c = if systembus { blocking::Connection::new_system() } else { blocking::Connection::new_session() };
-        let c = c.unwrap();
-        let p = c.with_proxy(dest, path, std::time::Duration::from_secs(10));
-        p.introspect().unwrap()
-    }
-}
+use crate::generator::{Generator, GenOpts, ServerAccess, ConnectionType};
 
 // Unwrapping is fine here, this is just a test program.
 
@@ -68,21 +42,20 @@ Defaults to 'RefClosure'."))
 
     let matches = app.get_matches();
 
-    let s = match (matches.get_one::<String>("destination"), matches.get_one::<String>("file")) {
+    let generator = match (matches.get_one::<String>("destination"), matches.get_one::<String>("file")) {
         (Some(_), Some(_)) => panic!("'destination' and 'file' are mutually exclusive arguments - you can't provide both"),
-        (None, Some(file_path)) => std::fs::read_to_string(file_path.clone()).unwrap(),
+        (None, Some(file_path)) => {
+            let file = std::fs::File::open(file_path.clone()).unwrap();
+            Generator::from_stream(&mut std::io::BufReader::new(file)).unwrap()
+        },
         #[cfg(feature = "dbus")]
         (Some(dest), None) => {
             let path = matches.get_one::<String>("path").map(|s| &**s).unwrap_or("/");
-            connect_to_dbus::do_introspect(dest, path, matches.get_flag("systembus"))
+            Generator::from_dbus(dest, path, matches.get_flag("systembus")).unwrap()
         },
         #[cfg(not(feature = "dbus"))]
         (Some(_), None) => unreachable!(),
-        (None, None) => {
-            let mut s = String::new();
-            std::io::Read::read_to_string(&mut std::io::stdin(),&mut s).unwrap();
-            s
-        }
+        (None, None) => Generator::from_stream(&mut std::io::stdin()).unwrap(),
     };
 
     let dbuscrate = matches.get_one::<String>("dbuscrate").map(|s| &**s).unwrap_or("dbus");
@@ -115,7 +88,7 @@ Defaults to 'RefClosure'."))
 
     let interfaces = matches.get_one::<String>("interfaces").map(|s| s.split(",").map(|e| e.trim().to_owned()).collect());
 
-    let opts = generate::GenOpts {
+    let opts = GenOpts {
         methodtype: mtype.map(|x| x.into()),
         dbuscrate: dbuscrate.into(),
         skipprefix: matches.get_one::<String>("skipprefix").map(|x| x.into()),
@@ -129,13 +102,11 @@ Defaults to 'RefClosure'."))
     };
 
     let mut h: Box<dyn std::io::Write> = match matches.get_one::<String>("output") {
-        Some(file_path) => Box::new(std::fs::File::create(file_path)
+        Some(file_path) => Box::new(std::io::BufWriter::new(std::fs::File::create(file_path)
             .unwrap_or_else(|e| {
                 panic!("Failed to open {}", e);
-            })),
+            }))),
         None => Box::new(std::io::stdout()),
     };
-
-    h.write(generate::generate(&s, &opts).unwrap().as_bytes()).unwrap();
-    h.flush().unwrap();
+    generator.output_to_stream(&opts, &mut h).unwrap();
 }

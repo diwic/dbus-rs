@@ -181,7 +181,7 @@ dbus-codegen-rust --help
 
 ```
 let opts = Default::default();
-let code = dbus_codegen::generate(xml_str, &opts)?;
+let code = dbus_codegen::Generator::from_string(xml_str)?.output_to_string(&opts)?;
 ```
 
 See [documentation](https://docs.rs/dbus-codegen/) for what options are available.
