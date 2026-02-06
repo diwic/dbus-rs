@@ -59,6 +59,9 @@ fn write_method_signature(s: &mut Stream, m: &Method, opts: &GenOpts, context: G
     } else { vec!() };
 
     if context == GenContext::Trait {
+        m.annotations.get("org.freedesktop.DBus.Description").iter().for_each(|v| {
+            *s += &format!("    /// {}\n", v);
+        });
         m.annotations.get("org.freedesktop.DBus.Deprecated").iter().for_each(|v| {
             *s += &format!("    #[deprecated(note = \"{}\")]\n", v);
         });
@@ -88,6 +91,9 @@ fn write_method_signature(s: &mut Stream, m: &Method, opts: &GenOpts, context: G
 
 fn write_prop_signature(s: &mut Stream, p: &Prop, opts: &GenOpts, context: GenContext, set: bool) -> Result<(), Box<dyn error::Error>> {
     if context == GenContext::Trait {
+        p.annotations.get("org.freedesktop.DBus.Description").iter().for_each(|v| {
+            *s += &format!("    /// {}\n", v);
+        });
         p.annotations.get("org.freedesktop.DBus.Deprecated").iter().for_each(|v| {
             *s += &format!("    #[deprecated(note = \"{}\")]\n", v);
         });
@@ -110,6 +116,9 @@ pub (super) fn intf_name(s: &mut Stream, i: &Intf) -> Result<(), Box<dyn error::
 
 pub (super) fn intf(s: &mut Stream, i: &Intf, opts: &GenOpts) -> Result<(), Box<dyn error::Error>> {
 
+    i.annotations.get("org.freedesktop.DBus.Description").iter().for_each(|v| {
+        *s += &format!("\n/// {}", v);
+    });
     i.annotations.get("org.freedesktop.DBus.Deprecated").iter().for_each(|v| {
         *s += &format!("\n#[deprecated(note = \"{}\")]", v);
     });
@@ -136,6 +145,9 @@ pub (super) fn intf(s: &mut Stream, i: &Intf, opts: &GenOpts) -> Result<(), Box<
 
 fn write_signal(s: &mut Stream, i: &Intf, ss: &Signal) -> Result<(), Box<dyn error::Error>> {
     let structname = format!("{}{}", make_camel(i.shortname), make_camel(ss.name));
+    ss.annotations.get("org.freedesktop.DBus.Description").iter().for_each(|v| {
+        *s += &format!("\n/// {}", v);
+    });
     ss.annotations.get("org.freedesktop.DBus.Deprecated").iter().for_each(|v| {
         *s += &format!("\n#[deprecated(note = \"{}\")]", v);
     });
