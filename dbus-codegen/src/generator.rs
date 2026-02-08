@@ -72,6 +72,20 @@ impl ::std::default::Default for GenOpts {
     }
 }
 
+/// The name of the generated items for an interface.
+pub struct CreatedItems {
+    /// The name of the generated trait containing the methods of the interface, if any.
+    pub trait_name: Option<String>,
+    /// The name of the generated entry point function for the interface, if any.
+    /// The entry point is the function registering the objects for `crossroads`
+    /// or the function creating the server for `dbus-tree`.
+    pub entrypoint: Option<String>,
+    /// The name of the generated struct for the properties, if any.
+    pub properties_struct_name: Option<String>,
+    /// The name of the generated struct for each signal.
+    pub signal_struct_names: HashMap<String, String>,
+}
+
 fn find_attr<'a>(a: &'a Vec<xml::attribute::OwnedAttribute>, n: &str) -> Result<&'a str, Box<dyn Error>> {
     a.into_iter()
         .find(|q| q.name.prefix.is_none() && q.name.local_name == n)
@@ -134,7 +148,7 @@ mod connect_to_dbus {
 ///     ..Default::default()
 /// };
 /// // Output code to console
-/// let code = gen.output_to_string(&opts)?;
+/// let code = gen.output_to_string(&opts)?.0;
 /// println!("{}", code);
 /// // Generate proxy and server code to a file
 /// let mut file = std::fs::File::create("dbus_proxy.rs")?;
@@ -365,10 +379,10 @@ impl Generator {
     /// # Arguments
     ///
     /// * `opts` - The generation options.
-    pub fn output_to_string(&self, opts: &GenOpts) -> Result<String, Box<dyn Error>> {
+    pub fn output_to_string(&self, opts: &GenOpts) -> Result<(String, HashMap<String, CreatedItems>), Box<dyn Error>> {
         let mut output = Vec::new();
-        self.output_to_stream(opts, &mut output)?;
-        Ok(String::from_utf8(output)?)
+        let ci = self.output_to_stream(opts, &mut output)?;
+        Ok((String::from_utf8(output)?, ci))
     }
 
     /// Output to the given stream.
@@ -377,8 +391,10 @@ impl Generator {
     ///
     /// * `opts` - The generation options.
     /// * `output` - The output stream to write the generated code to.
-    pub fn output_to_stream(&self, opts: &GenOpts, output: &mut dyn Write) -> Result<(), Box<dyn Error>> {
+    pub fn output_to_stream(&self, opts: &GenOpts, output: &mut dyn Write) -> Result<HashMap<String, CreatedItems>, Box<dyn Error>> {
         let mut s = write::Stream(output);
+        let mut ci = HashMap::new();
+
         write::module_header(&mut s, opts);
         for intf_def in &self.interfaces {
             // Create empty interface
@@ -436,25 +452,28 @@ impl Generator {
             }
 
             // Write interface
-            write::intf(&mut s, &intf, opts)?;
-            write::signals(&mut s, &intf)?;
+            let mut intf_ci =
+                CreatedItems { trait_name: None, entrypoint: None, properties_struct_name: None, signal_struct_names: HashMap::new() };
+            write::intf(&mut s, &mut intf_ci, &intf, opts)?;
+            write::signals(&mut s, &mut intf_ci, &intf)?;
             if opts.propnewtype {
                 write::intf_name(&mut s, &intf)?;
-                write::prop_struct(&mut s, &intf)?;
+                write::prop_struct(&mut s, &mut intf_ci, &intf)?;
             }
             if opts.crossroads {
-                write::intf_cr(&mut s, &intf)?;
+                write::intf_cr(&mut s, &mut intf_ci, &intf)?;
             }
             if let Some(ref mt) = opts.methodtype {
-                write::intf_tree(&mut s, &intf, &mt, opts.serveraccess, opts.genericvariant)?;
+                write::intf_tree(&mut s, &mut intf_ci, &intf, &mt, opts.serveraccess, opts.genericvariant)?;
             } else if !opts.crossroads {
                 write::intf_client(&mut s, &intf, opts)?;
             }
+            ci.insert(intf.origname.to_owned(), intf_ci);
         }
 
         // Terminate
         output.flush()?;
-        Ok(())
+        Ok(ci)
     }
 }
 
@@ -584,7 +603,8 @@ mod tests {
         let s = Generator::from_string(FROM_DBUS)
             .unwrap()
             .output_to_string(&GenOpts { methodtype: Some("MTSync".into()), ..Default::default() })
-            .unwrap();
+            .unwrap()
+            .0;
         println!("{}", s);
         //assert_eq!(s, "fdjsf");
     }

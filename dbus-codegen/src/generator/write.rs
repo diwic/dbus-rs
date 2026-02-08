@@ -114,7 +114,7 @@ pub (super) fn intf_name(s: &mut Stream, i: &Intf) -> Result<(), Box<dyn error::
     Ok(())
 }
 
-pub (super) fn intf(s: &mut Stream, i: &Intf, opts: &GenOpts) -> Result<(), Box<dyn error::Error>> {
+pub (super) fn intf(s: &mut Stream, ci: &mut CreatedItems, i: &Intf, opts: &GenOpts) -> Result<(), Box<dyn error::Error>> {
 
     i.annotations.get("org.freedesktop.DBus.Description").iter().for_each(|v| {
         *s += &format!("\n/// {}", v);
@@ -139,11 +139,12 @@ pub (super) fn intf(s: &mut Stream, i: &Intf, opts: &GenOpts) -> Result<(), Box<
         }
     }
     *s += "}\n";
+    ci.trait_name = Some(iname);
     Ok(())
 }
 
 
-fn write_signal(s: &mut Stream, i: &Intf, ss: &Signal) -> Result<(), Box<dyn error::Error>> {
+fn write_signal(s: &mut Stream, ci: &mut CreatedItems, i: &Intf, ss: &Signal) -> Result<(), Box<dyn error::Error>> {
     let structname = format!("{}{}", make_camel(i.shortname), make_camel(ss.name));
     ss.annotations.get("org.freedesktop.DBus.Description").iter().for_each(|v| {
         *s += &format!("\n/// {}", v);
@@ -180,15 +181,17 @@ fn write_signal(s: &mut Stream, i: &Intf, ss: &Signal) -> Result<(), Box<dyn err
     *s += &format!("    const NAME: &'static str = \"{}\";\n", ss.name);
     *s += &format!("    const INTERFACE: &'static str = \"{}\";\n", i.origname);
     *s += "}\n";
+
+    ci.signal_struct_names.insert(ss.name.to_owned(), structname);
     Ok(())
 }
 
-pub (super) fn signals(s: &mut Stream, i: &Intf) -> Result<(), Box<dyn error::Error>> {
-    for ss in i.signals.iter() { write_signal(s, i, ss)?; }
+pub (super) fn signals(s: &mut Stream, ci: &mut CreatedItems, i: &Intf) -> Result<(), Box<dyn error::Error>> {
+    for ss in i.signals.iter() { write_signal(s, ci, i, ss)?; }
     Ok(())
 }
 
-pub (super) fn prop_struct(s: &mut Stream, i: &Intf) -> Result<(), Box<dyn error::Error>> {
+pub (super) fn prop_struct(s: &mut Stream, ci: &mut CreatedItems, i: &Intf) -> Result<(), Box<dyn error::Error>> {
     // No point generating the properties struct if the interface has no gettable properties.
     if !i.props.iter().any(|property| property.can_get()) {
         return Ok(())
@@ -226,6 +229,7 @@ impl<'a> {0}<'a> {{
         }
     }
     *s += "}\n";
+    ci.properties_struct_name = Some(struct_name);
     Ok(())
 }
 
@@ -337,13 +341,14 @@ fn cr_anno(a: &HashMap<String, String>, prefix: &str, suffix: &str, is_prop: boo
     r
 }
 
-pub (super) fn intf_cr(s: &mut Stream, i: &Intf) -> Result<(), Box<dyn error::Error>> {
+pub (super) fn intf_cr(s: &mut Stream, ci: &mut CreatedItems, i: &Intf) -> Result<(), Box<dyn error::Error>> {
+    let function_name = format!("register_{}", make_snake(i.shortname, false));
     *s += &format!(r#"
-pub fn register_{}<T>(cr: &mut crossroads::Crossroads) -> crossroads::IfaceToken<T>
+pub fn {}<T>(cr: &mut crossroads::Crossroads) -> crossroads::IfaceToken<T>
 where T: {} + Send + 'static
 {{
     cr.register("{}", |b| {{
-"#, make_snake(i.shortname, false), make_camel(i.shortname), i.origname);
+"#, function_name, make_camel(i.shortname), i.origname);
     *s += &cr_anno(&i.annotations, "        b", ";\n", false);
     for z in &i.signals {
         *s += &format!("        b.signal::<({}), _>(\"{}\", ({})){};\n",
@@ -373,6 +378,7 @@ where T: {} + Send + 'static
     }
 
     *s += "    })\n}\n";
+    ci.entrypoint = Some(function_name);
     Ok(())
 }
 
@@ -382,14 +388,15 @@ where T: {} + Send + 'static
 // 3) A user supplied struct?
 // 4) Something reachable from minfo - ServerAccess::RefClosure
 
-pub (super) fn intf_tree(s: &mut Stream, i: &Intf, mtype: &str, saccess: ServerAccess, genvar: bool) -> Result<(), Box<dyn error::Error>> {
+pub (super) fn intf_tree(s: &mut Stream, ci: &mut CreatedItems, i: &Intf, mtype: &str, saccess: ServerAccess, genvar: bool) -> Result<(), Box<dyn error::Error>> {
+    let function_name = format!("{}_server", make_snake(i.shortname, false));
     let hasf = saccess != ServerAccess::MethodInfo;
     let hasm = mtype == "MethodType";
 
     let treem: String = if hasm { "M".into() } else { format!("tree::{}<D>", mtype) };
 
-    *s += &format!("\npub fn {}_server<{}{}D>(factory: &tree::Factory<{}, D>, data: D::Interface{}) -> tree::Interface<{}, D>\n",
-        make_snake(i.shortname, false), if hasf {"F, T, "} else {""}, if hasm {"M, "} else {""}, treem, if hasf {", f: F"} else {""}, treem);
+    *s += &format!("\npub fn {}<{}{}D>(factory: &tree::Factory<{}, D>, data: D::Interface{}) -> tree::Interface<{}, D>\n",
+        function_name, if hasf {"F, T, "} else {""}, if hasm {"M, "} else {""}, treem, if hasf {", f: F"} else {""}, treem);
 
     let mut wheres: Vec<String> = vec!["D: tree::DataType".into(), "D::Method: Default".into()];
     if i.props.len() > 0 {
@@ -501,5 +508,6 @@ pub (super) fn intf_tree(s: &mut Stream, i: &Intf, mtype: &str, saccess: ServerA
     }
     *s +=          "    i\n";
     *s +=          "}\n";
+    ci.entrypoint = Some(function_name);
     Ok(())
 }
