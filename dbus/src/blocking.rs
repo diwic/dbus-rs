@@ -154,7 +154,7 @@ impl $c {
     /// Get the connection's unique name.
     ///
     /// It's usually something like ":1.54"
-    pub fn unique_name(&self) -> BusName { self.channel.unique_name().unwrap().into() }
+    pub fn unique_name(&self) -> BusName<'_> { self.channel.unique_name().unwrap().into() }
 
     /// Create a convenience struct for easier calling of many methods on the same destination and path.
     pub fn with_proxy<'a, 'b, D: Into<BusName<'a>>, P: Into<Path<'a>>>(&'b self, dest: D, path: P, timeout: Duration) ->
@@ -332,15 +332,15 @@ connimpl!(LocalConnection, LocalFilterCb);
 connimpl!(SyncConnection, SyncFilterCb, Send, Sync);
 
 impl Connection {
-    fn filters_mut(&self) -> std::cell::RefMut<Filters<FilterCb>> { self.filters.borrow_mut() }
+    fn filters_mut(&self) -> std::cell::RefMut<'_, Filters<FilterCb>> { self.filters.borrow_mut() }
 }
 
 impl LocalConnection {
-    fn filters_mut(&self) -> std::cell::RefMut<Filters<LocalFilterCb>> { self.filters.borrow_mut() }
+    fn filters_mut(&self) -> std::cell::RefMut<'_, Filters<LocalFilterCb>> { self.filters.borrow_mut() }
 }
 
 impl SyncConnection {
-    fn filters_mut(&self) -> std::sync::MutexGuard<Filters<SyncFilterCb>> { self.filters.lock().unwrap() }
+    fn filters_mut(&self) -> std::sync::MutexGuard<'_, Filters<SyncFilterCb>> { self.filters.lock().unwrap() }
 }
 
 /// Abstraction over different connections

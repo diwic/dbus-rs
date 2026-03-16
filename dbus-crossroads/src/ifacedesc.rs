@@ -500,7 +500,7 @@ impl<T: std::marker::Send, A> PropBuilder<'_, T, A> {
 pub struct IfaceBuilder<T: Send + 'static>(IfaceDesc, PhantomData<&'static T>);
 
 impl<T: Send + 'static> IfaceBuilder<T> {
-    pub fn property<A: arg::Arg, N: Into<String>>(&mut self, name: N) -> PropBuilder<T, A> {
+    pub fn property<A: arg::Arg, N: Into<String>>(&mut self, name: N) -> PropBuilder<'_, T, A> {
         let key = name.into();
         let prop_name = key.clone();
         PropBuilder {
@@ -595,7 +595,7 @@ impl<T: Send + 'static> IfaceBuilder<T> {
     }
 */
 
-    pub fn signal<A, N>(&mut self, name: N, args: A::strs) -> SignalBuilder<A>
+    pub fn signal<A, N>(&mut self, name: N, args: A::strs) -> SignalBuilder<'_, A>
     where A: arg::ArgAll, N: Into<strings::Member<'static>> {
         let name = name.into();
         let key = name.clone();

@@ -225,14 +225,14 @@ impl Process for $c {
 }
 
 impl $c {
-    fn dbus_proxy(&self) -> Proxy<&Self> {
+    fn dbus_proxy(&self) -> Proxy<'_, &Self> {
         Proxy::new("org.freedesktop.DBus", "/org/freedesktop/DBus", Duration::from_secs(10), self)
     }
 
     /// Get the connection's unique name.
     ///
     /// It's usually something like ":1.54"
-    pub fn unique_name(&self) -> BusName { self.channel.unique_name().unwrap().into() }
+    pub fn unique_name(&self) -> BusName<'_> { self.channel.unique_name().unwrap().into() }
 
     /// Request a name on the D-Bus.
     ///
@@ -325,18 +325,18 @@ connimpl!(LocalConnection, LocalFilterCb, LocalRepliesCb);
 connimpl!(SyncConnection, SyncFilterCb, SyncRepliesCb, Send);
 
 impl Connection {
-    fn filters_mut(&self) -> std::cell::RefMut<Filters<FilterCb>> { self.filters.borrow_mut() }
-    fn replies_mut(&self) -> std::cell::RefMut<Replies<RepliesCb>> { self.replies.borrow_mut() }
+    fn filters_mut(&self) -> std::cell::RefMut<'_, Filters<FilterCb>> { self.filters.borrow_mut() }
+    fn replies_mut(&self) -> std::cell::RefMut<'_, Replies<RepliesCb>> { self.replies.borrow_mut() }
 }
 
 impl LocalConnection {
-    fn filters_mut(&self) -> std::cell::RefMut<Filters<LocalFilterCb>> { self.filters.borrow_mut() }
-    fn replies_mut(&self) -> std::cell::RefMut<Replies<LocalRepliesCb>> { self.replies.borrow_mut() }
+    fn filters_mut(&self) -> std::cell::RefMut<'_, Filters<LocalFilterCb>> { self.filters.borrow_mut() }
+    fn replies_mut(&self) -> std::cell::RefMut<'_, Replies<LocalRepliesCb>> { self.replies.borrow_mut() }
 }
 
 impl SyncConnection {
-    fn filters_mut(&self) -> std::sync::MutexGuard<Filters<SyncFilterCb>> { self.filters.lock().unwrap() }
-    fn replies_mut(&self) -> std::sync::MutexGuard<Replies<SyncRepliesCb>> { self.replies.lock().unwrap() }
+    fn filters_mut(&self) -> std::sync::MutexGuard<'_, Filters<SyncFilterCb>> { self.filters.lock().unwrap() }
+    fn replies_mut(&self) -> std::sync::MutexGuard<'_, Replies<SyncRepliesCb>> { self.replies.lock().unwrap() }
 }
 
 /// Internal callback for the executor when a timeout needs to be made.

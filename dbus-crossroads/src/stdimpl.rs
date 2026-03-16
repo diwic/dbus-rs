@@ -94,7 +94,7 @@ impl PropContext {
             emit_msg.map(|emit_msg| self.context.as_mut().map(|ctx| { ctx.push_msg(emit_msg) }));
         } else {
             if let Some(ga) = &self.get_all {
-                ga.lock().unwrap().add_reply(self.name.clone(), reply.ok().map(|a| Box::new(a) as Box<(dyn RefArg + Send)>));
+                ga.lock().unwrap().add_reply(self.name.clone(), reply.ok().map(|a| Box::new(a) as Box<dyn RefArg + Send>));
             } else {
                 self.context.as_mut().map(|ctx| ctx.reply(reply.map(|a| (Variant(a),))));
             }
