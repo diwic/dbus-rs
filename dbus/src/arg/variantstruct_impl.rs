@@ -6,7 +6,8 @@ use std::collections::VecDeque;
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 /// A simple wrapper to specify a D-Bus variant.
 ///
-/// See the argument guide and module level documentation for details and examples.
+/// Since it's inner value is public, you can just get/set it with `.0`.
+/// See the argument guide for details and examples.
 pub struct Variant<T>(pub T);
 
 impl Variant<Box<dyn RefArg>> {
