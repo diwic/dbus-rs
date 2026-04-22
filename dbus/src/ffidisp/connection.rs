@@ -232,7 +232,7 @@ impl Connection {
     ///
     /// If there are no incoming events, ConnectionItems::Nothing will be returned.
     /// See ConnectionItems::new if you want to customize this behaviour.
-    pub fn iter(&self, timeout_ms: i32) -> ConnectionItems {
+    pub fn iter(&self, timeout_ms: i32) -> ConnectionItems<'_> {
         ConnectionItems::new(self, Some(timeout_ms), false)
     }
 
@@ -338,7 +338,7 @@ impl Connection {
     /// The returned iterator will return pending items only, never block for new events.
     ///
     /// See the `Watch` struct for an example.
-    pub fn watch_handle(&self, fd: WatchFd, flags: c_uint) -> ConnectionItems {
+    pub fn watch_handle(&self, fd: WatchFd, flags: c_uint) -> ConnectionItems<'_> {
         self.i.watches.as_ref().unwrap().watch_handle(fd, flags);
         ConnectionItems::new(self, None, true)
     }

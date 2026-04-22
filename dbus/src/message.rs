@@ -362,7 +362,7 @@ impl Message {
     }
 
     /// Returns a struct for retrieving the arguments from a message. Supersedes get_items().
-    pub fn iter_init(&self) -> Iter { Iter::new(&self) }
+    pub fn iter_init(&self) -> Iter<'_> { Iter::new(&self) }
 
     /// Gets the MessageType of the Message.
     pub fn msg_type(&self) -> MessageType {
@@ -382,19 +382,19 @@ impl Message {
     }
 
     /// Gets the name of the connection that originated this message.
-    pub fn sender(&self) -> Option<BusName> {
+    pub fn sender(&self) -> Option<BusName<'_>> {
         self.msg_internal_str(unsafe { ffi::dbus_message_get_sender(self.msg) })
             .map(|s| unsafe { BusName::from_slice_unchecked(s) })
     }
 
     /// Gets the object path this Message is being sent to.
-    pub fn path(&self) -> Option<Path> {
+    pub fn path(&self) -> Option<Path<'_>> {
         self.msg_internal_str(unsafe { ffi::dbus_message_get_path(self.msg) })
             .map(|s| unsafe { Path::from_slice_unchecked(s) })
     }
 
     /// Gets the destination this Message is being sent to.
-    pub fn destination(&self) -> Option<BusName> {
+    pub fn destination(&self) -> Option<BusName<'_>> {
         self.msg_internal_str(unsafe { ffi::dbus_message_get_destination(self.msg) })
             .map(|s| unsafe { BusName::from_slice_unchecked(s) })
     }
@@ -408,13 +408,13 @@ impl Message {
     }
 
     /// Gets the interface this Message is being sent to.
-    pub fn interface(&self) -> Option<Interface> {
+    pub fn interface(&self) -> Option<Interface<'_>> {
         self.msg_internal_str(unsafe { ffi::dbus_message_get_interface(self.msg) })
             .map(|s| unsafe { Interface::from_slice_unchecked(s) })
     }
 
     /// Gets the interface member being called.
-    pub fn member(&self) -> Option<Member> {
+    pub fn member(&self) -> Option<Member<'_>> {
         self.msg_internal_str(unsafe { ffi::dbus_message_get_member(self.msg) })
             .map(|s| unsafe { Member::from_slice_unchecked(s) })
     }
