@@ -528,7 +528,7 @@ pub struct MultiBuf {
 
 impl MultiBuf {
     pub fn new() -> Self { Default::default() }
-    pub fn multi(&self) -> Multi {
+    pub fn multi(&self) -> Multi<'_> {
         Multi { sig: &self.sig, data: &self.data, is_big_endian: IS_BIG_ENDIAN }
     }
     pub fn append<T: Marshal + ?Sized>(&mut self, value: &T) -> Result<(), DemarshalError> {
