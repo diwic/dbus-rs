@@ -123,6 +123,7 @@ pub struct DBusMessageIter {
     // Rust reserves the right not to copy the padding when cloning a struct,
     // but the D-Bus library uses this part of the struct too.
     // Hence, add a field as big as the padding to ensure Rust copies all data.
+    #[cfg(target_pointer_width = "64")]
     pub pad2_added_by_rust: c_int,
     pub pad3: *mut c_void,
 }
@@ -261,7 +262,7 @@ extern "C" {
     pub fn dbus_message_iter_get_basic(iter: *mut DBusMessageIter, value: *mut c_void);
     pub fn dbus_message_iter_get_element_type(iter: *mut DBusMessageIter) -> c_int;
     pub fn dbus_message_iter_get_fixed_array(iter: *mut DBusMessageIter,
-        value: *mut c_void, n_elements: *mut c_int) -> u32;
+        value: *mut c_void, n_elements: *mut c_int);
     pub fn dbus_message_iter_get_signature(iter: *mut DBusMessageIter) -> *mut c_char;
     pub fn dbus_message_iter_next(iter: *mut DBusMessageIter) -> u32;
     pub fn dbus_message_iter_recurse(iter: *mut DBusMessageIter, subiter: *mut DBusMessageIter);
@@ -273,11 +274,11 @@ extern "C" {
     pub fn dbus_signature_iter_get_current_type(iter: *const DBusSignatureIter) -> c_int;
     pub fn dbus_signature_iter_get_signature(iter: *const DBusSignatureIter) -> *mut c_char;
     pub fn dbus_signature_iter_get_element_type(iter: *const DBusSignatureIter) -> c_int;
-    pub fn dbus_signature_iter_next(iter: *mut DBusSignatureIter) -> bool;
+    pub fn dbus_signature_iter_next(iter: *mut DBusSignatureIter) -> u32;
     pub fn dbus_signature_iter_recurse(iter: *const DBusSignatureIter, subiter: *mut DBusSignatureIter);
 
     pub fn dbus_free(memory: *mut c_void);
-    pub fn dbus_free_string_array(str_array: *mut *mut c_char) -> c_void;
+    pub fn dbus_free_string_array(str_array: *mut *mut c_char);
 
     pub fn dbus_signature_validate_single(signature: *const c_char, error: *mut DBusError) -> u32;
 
