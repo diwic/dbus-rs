@@ -302,6 +302,7 @@ fn generate_config(cc: &mut cc::Build, config: &mut Config) -> Result<(), Box<dy
             config.enable("DBUS_UNIX");
             config.enable("DBUS_HAVE_LINUX_EPOLL");
             config.enable("HAVE_EPOLL");
+            config.enable("HAVE_POLL");
             config.enable("HAVE_ERRNO_H");
             config.enable("HAVE_SOCKLEN_T");
             config.enable("HAVE_GETPWNAM_R");
