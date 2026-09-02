@@ -1,3 +1,7 @@
+// Tell rustc to link to libdbus-src
+#[cfg(feature = "vendored")]
+extern crate libdbus_src;
+
 use std::os::raw::{c_void, c_char, c_uint, c_int, c_long};
 
 pub type DBusConnection = c_void;
