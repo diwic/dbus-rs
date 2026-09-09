@@ -162,7 +162,7 @@ Vendored
 --------
 If the `vendored` feature is enabled, none of the default requirements.
 
-The `vendored` feature is the current recommended way to cross compile dbus-rs. More information and some other methods are mentioned [here](https://github.com/diwic/dbus-rs/blob/master/libdbus-sys/cross_compile.md).
+The `vendored` feature is the current recommended way to cross compile dbus-rs. More information and some other methods are mentioned [here](https://github.com/diwic/dbus-rs/blob/master/libdbus-src/README.md).
 
 Alternatives
 ============

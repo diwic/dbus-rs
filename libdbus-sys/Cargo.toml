@@ -14,17 +14,18 @@ categories = ["os::unix-apis", "external-ffi-bindings"]
 build = "build.rs"
 links = "dbus"
 readme = "README.md"
-exclude = ["/vendor/dbus/tools/", "/vendor/dbus/test/", "/vendor/dbus/maint/"]
 
 [features]
 # By default use pkg-config to locate the local libdbus installation
 default = ["pkg-config"]
 # Provide vendoring as an option, which will compile libdbus from source for the target
-vendored = ["cc"]
+vendored = ["dep:libdbus-src"]
+
+[dependencies]
+libdbus-src = { path = "../libdbus-src", version = "0.1.0", optional = true }
 
 [build-dependencies]
 pkg-config = {version = "0.3", optional = true}
-cc = {version = "1.0.78", optional = true }
 
 [package.metadata.pkg-config]
 dbus-1 = "1.6"
