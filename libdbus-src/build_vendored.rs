@@ -1,7 +1,7 @@
 //! Vendored Libdbus build.
 //! 
 //! Configures + Compiles + Statically Links a pinned libdbus release.
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::env;
 use std::fs::File;
 use std::io::Write;
@@ -9,7 +9,7 @@ use std::process::Command;
 use std::path::Path;
 use std::error::Error;
 use std::string::ToString;
-use std::collections::hash_map::Iter;
+use std::collections::btree_map::Iter;
 
 // Version of vendored libdbus
 const DBUS_VERSION: &str = "\"1.14.4\"";
@@ -160,14 +160,14 @@ const CWARNINGS: &'static [&'static str] = &[
 ///
 /// Boils down to a set of C defs/undefs.
 struct Config<'a> {
-    defs: HashMap<&'a str, Option<String>>,
+    defs: BTreeMap<&'a str, Option<String>>,
     undefs: Vec<&'a str>,
 }
 
 impl<'a> Config<'a> {
     fn new() -> Self {
         Self {
-            defs: HashMap::new(),
+            defs: BTreeMap::new(),
             undefs: Vec::new(),
         }
     }
