@@ -1,7 +1,7 @@
 use crate::*;
 use dbus::Message;
 use std::cell::RefCell;
-use dbus::arg::{Variant, RefArg, PropMap};
+use dbus::arg::{Dict, Variant, RefArg, PropMap};
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -234,6 +234,25 @@ fn object_manager() {
     dbg!(&mo);
     let v = &mo[&"/list/grannysmith".into()]["com.example.dbusrs.weight"]["Weight"];
     assert_eq!(v.0.as_u64().unwrap(), 20);
+}
+
+#[test]
+fn object_manager_order() {
+    let paths: Vec<String> = (0..8).map(|i| format!("/list/item{}", i)).collect();
+    let mut cr = Crossroads::new();
+    cr.insert("/list", &[cr.object_manager()], ());
+    for p in paths.iter().rev() {
+        cr.insert(p.clone(), &[], ());
+    }
+
+    let msg = Message::new_method_call("com.example.dbusrs.objmgr_order", "/list",
+        "org.freedesktop.DBus.ObjectManager", "GetManagedObjects").unwrap();
+    let r = dispatch_helper(&mut cr, msg);
+
+    // Read as a Dict rather than a map, to see the order in the message.
+    let objects: Dict<dbus::Path, HashMap<String, PropMap>, _> = r.read1().unwrap();
+    let listed: Vec<String> = objects.map(|(path, _)| path.to_string()).collect();
+    assert_eq!(listed, paths);
 }
 
 #[test]

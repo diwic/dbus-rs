@@ -2,7 +2,7 @@ use crate::utils::Dbg;
 use std::sync::Mutex;
 use std::sync::Arc;
 use dbus::channel::Sender;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use crate::{IfaceToken, Crossroads, Context, MethodErr};
 use dbus::arg::{Variant, RefArg, Arg, Append, PropMap};
 use std::marker::PhantomData;
@@ -297,7 +297,8 @@ struct IfaceContext {
 }
 
 type IfacePropMap = HashMap<String, PropMap>;
-type PathPropMap = HashMap<dbus::Path<'static>, IfacePropMap>;
+// Sorted, so that GetManagedObjects lists objects in a stable order.
+type PathPropMap = BTreeMap<dbus::Path<'static>, IfacePropMap>;
 
 fn get_all_for_path<F>(path: &dbus::Path<'static>, cr: &mut Crossroads, octx: Option<Context>, f: F) -> Option<Context>
 where F: FnOnce(&mut IfaceContext, &mut Option<Context>) + Send + 'static {
@@ -364,7 +365,7 @@ fn for_each_interface_with_properties<F: FnOnce(&mut IfaceContext, &mut Option<C
 
 //
 fn get_managed_objects(mut ctx: Context, cr: &mut Crossroads, _: ()) -> Option<Context> {
-    // HashMap<dbus::Path<'static>, IfacePropMap>
+    // BTreeMap<dbus::Path<'static>, IfacePropMap>
     let parent = ctx.path();
     let children: Vec<dbus::Path<'static>> =
         cr.get_children(ctx.path(), false).into_iter().map(|child_path| {
@@ -392,7 +393,7 @@ fn get_managed_objects(mut ctx: Context, cr: &mut Crossroads, _: ()) -> Option<C
     }
     let r = Arc::new(Mutex::new(Temp {
         remaining: children.len(),
-        temp_map: HashMap::new(),
+        temp_map: BTreeMap::new(),
         octx: Some(ctx),
     }));
     for subpath in children {
