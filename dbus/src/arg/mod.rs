@@ -238,15 +238,18 @@ impl<'a> Iter<'a> {
         })
     }
 
-    /// Returns the type signature for the current argument.
+    /// Returns the type signature for the current argument, or the empty signature when
+    /// the position does not hold a single complete type (e.g. a dict entry or the end of
+    /// the arguments).
     pub fn signature(&mut self) -> Signature<'static> {
         unsafe {
             let c = ffi::dbus_message_iter_get_signature(&mut self.0);
             assert!(c != ptr::null_mut());
             let cc = CStr::from_ptr(c);
-            let r = Signature::new(std::str::from_utf8(cc.to_bytes()).unwrap());
+            let r = Signature::new(std::str::from_utf8(cc.to_bytes()).unwrap())
+                .unwrap_or_else(|_| Signature::new("").expect("empty signature is valid"));
             ffi::dbus_free(c as *mut c_void);
-            r.unwrap()
+            r
         }
     }
 
