@@ -112,8 +112,10 @@ impl Clone for OwnedFd {
 }
 
 
-#[derive(Clone, Copy)]
 /// Helper struct for appending one or more arguments to a Message.
+///
+/// Not `Copy`/`Clone`: a copied sub-iterator could escape its closure and write through
+/// the signature libdbus already freed.
 pub struct IterAppend<'a>(ffi::DBusMessageIter, &'a Message);
 
 impl<'a> IterAppend<'a> {
