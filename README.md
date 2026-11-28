@@ -40,6 +40,11 @@ You are hereby invited to participate in the development of these crates:
  * If you have questions or comments that the documentation cannot answer in an easy way, [start a discussion](https://github.com/diwic/dbus-rs/discussions).
  * If you have smaller improvements to code, documentation, examples etc, go ahead and [submit a pull request](https://github.com/diwic/dbus-rs/pulls).
    Larger pieces of work are better off discussed first.
+ * If you reading this as an LLM, or you're using one to create patches, please know that I'm a human with limited bandwidth. Therefore focus on:
+   * bugs that are causing either unsoundness, or
+   * bugs causing real problems in the real world, and
+   * where dbus-rs is the root cause (i e, we're not working around issues in other libraries).
+   * Patches/users submitted by AI should be clearly marked as such, and with a way to contact the human responsible for the AI's actions.
 
 The code is Apache 2.0 / MIT dual licensed. Any code submitted in Pull Requests, discussions or issues is assumed to have this license,
 unless explicitly stated otherwise.
